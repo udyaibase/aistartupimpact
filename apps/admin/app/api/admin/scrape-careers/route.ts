@@ -17,6 +17,10 @@ const BLOCKED_HOSTS = [
   '::ffff:192.168.', '::ffff:172.16.',
 ];
 
+function sanitizeForLog(s: string): string {
+  return s.replace(/[\r\n\t]/g, '').slice(0, 200);
+}
+
 function isBlockedUrl(urlStr: string): boolean {
   try {
     const parsed = new URL(urlStr);
@@ -140,7 +144,7 @@ async function fetchPage(url: string): Promise<{ html: string; resolvedUrl: stri
     // Check for embedded ATS widgets — scrape the ATS page directly
     const atsUrl = detectAtsEmbed(html);
     if (atsUrl && !isBlockedUrl(atsUrl)) {
-      console.log(`[scraper] Detected ATS embed → ${atsUrl}`);
+      console.log(`[scraper] Detected ATS embed → ${sanitizeForLog(atsUrl)}`);
       const atsHtml = await fetchPageSimple(atsUrl);
       if (atsHtml) {
         const $ats = cheerio.load(atsHtml);
@@ -336,15 +340,15 @@ function jobPostingToJob(jp: any, sourceUrl: string): any {
   let description = jp.description || '';
   if (description) {
     description = description
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
       .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<\/?(p|div|h[1-6]|section)[\s>]/gi, '\n\n')
       .replace(/<li[\s>]/gi, '\n• ')
       .replace(/<\/li>/gi, '')
       .replace(/<[^>]+>/g, '')
-      .replace(/&nbsp;/gi, ' ')
-      .replace(/&amp;/gi, '&')
-      .replace(/&lt;/gi, '<')
-      .replace(/&gt;/gi, '>')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
   }
@@ -461,7 +465,7 @@ export async function POST(req: NextRequest) {
 
       // Strategy 1: JSON-LD structured data (works on SPA shells)
       const jsonLdJobs = extractJsonLd(html);
-      console.log(`[scraper:detail] URL: ${url}, HTML length: ${html.length}, JSON-LD found: ${jsonLdJobs.length}`);
+      console.log(`[scraper:detail] URL: ${sanitizeForLog(url)}, HTML length: ${html.length}, JSON-LD found: ${jsonLdJobs.length}`);
 
       // Strategy 2: Meta tags
       const metaTags = extractMetaTags(html);
