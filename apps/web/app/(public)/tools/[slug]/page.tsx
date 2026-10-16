@@ -9,6 +9,7 @@ import EmbedBadge from '@/components/EmbedBadge';
 import WriteReviewClient from '@/components/WriteReviewClient';
 import ReviewHelpfulButton from '@/components/ReviewHelpfulButton';
 import ScreenshotGallery from '@/components/ScreenshotGallery';
+import ToolDetailTabs from '@/components/tools/ToolDetailTabs';
 import BookmarkButton from '@/components/BookmarkButton';
 import { ToolCTAButton } from '@/components/tools/ToolCTAButton';
 import UpvoteButton from '@/components/tools/UpvoteButton';
@@ -436,74 +437,13 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
             <ScreenshotGallery screenshots={tool.screenshotUrls} toolName={tool.name} />
           )}
 
-          {/* Pros & Cons */}
-          {(toolPros.length > 0 || toolCons.length > 0) && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {toolPros.length > 0 && (
-                <div className="card p-5">
-                  <h3 className="font-sora font-bold text-sm text-green-700 dark:text-green-400 mb-3">Strengths</h3>
-                  <div className="space-y-2">
-                    {toolPros.map((pro: any) => (
-                      <div key={pro.id} className="flex items-start gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5 shrink-0" />
-                        <p className="text-sm text-gray-600 dark:text-gray-300 font-jakarta">{pro.text}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {toolCons.length > 0 && (
-                <div className="card p-5">
-                  <h3 className="font-sora font-bold text-sm text-orange-600 dark:text-orange-400 mb-3">Limitations</h3>
-                  <div className="space-y-2">
-                    {toolCons.map((con: any) => (
-                      <div key={con.id} className="flex items-start gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-orange-500 mt-1.5 shrink-0" />
-                        <p className="text-sm text-gray-600 dark:text-gray-300 font-jakarta">{con.text}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Key Features & Use Cases */}
-          {((tool.keyFeatures && tool.keyFeatures.length > 0) || (tool.useCases && tool.useCases.length > 0)) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {tool.keyFeatures && tool.keyFeatures.length > 0 && (
-                <div className="card p-5 sm:p-6">
-                  <h2 className="section-title mb-4">Key Features</h2>
-                  <div className="space-y-2">
-                    {tool.keyFeatures.map((item: any) => (
-                      <div key={item.id} className="flex items-start gap-2">
-                        <Check className="w-4 h-4 text-brand mt-0.5 shrink-0" />
-                        <p className="text-sm text-gray-600 dark:text-gray-300 font-jakarta">
-                          {item.text.replace(/^[•\-\*]\s*/, '')}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {tool.useCases && tool.useCases.length > 0 && (
-                <div className="card p-5 sm:p-6">
-                  <h2 className="section-title mb-4">Use Cases</h2>
-                  <div className="space-y-2">
-                    {tool.useCases.map((item: any) => (
-                      <div key={item.id} className="flex items-start gap-2">
-                        <Check className="w-4 h-4 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
-                        <p className="text-sm text-gray-600 dark:text-gray-300 font-jakarta">
-                          {item.text.replace(/^[•\-\*]\s*/, '')}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+          {/* Key Features, Use Cases, Strengths & Limitations — Tabbed */}
+          <ToolDetailTabs
+            features={tool.keyFeatures || []}
+            useCases={tool.useCases || []}
+            pros={toolPros}
+            cons={toolCons}
+          />
 
           {/* Ideal Use Case + Not a Fit */}
           {(tool.idealUseCase || tool.notAFitFor) && (

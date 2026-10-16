@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { ArrowLeft, Upload, Loader2, Save, Crown } from 'lucide-react';
+import { ArrowLeft, Upload, Loader2, Save, Crown, Briefcase, Plus, CheckCircle, XCircle } from 'lucide-react';
+import Link from 'next/link';
 import { getStartupsAction, getStartupFAQsAction, getStartupFundingRoundsAction, updateStartupAction } from '../../actions';
 import { uploadLogoAction } from '../../../media/actions';
 import { FAQManager, type FAQ } from '@/components/shared/FAQManager';
@@ -12,6 +13,7 @@ import SocialLinksManager, { SocialLink } from '@/components/shared/SocialLinksM
 import CityCombobox from '@/components/shared/CityCombobox';
 import { getCanonicalCategoriesAction, getCanonicalTypesAction } from '../../manage/actions';
 import SlugEditor from '@/components/shared/SlugEditor';
+import { getStartupJobsAction } from '@/app/(dashboard)/jobs-board/actions';
 
 
 const stages = ['BOOTSTRAPPED', 'IDEA', 'PRE_SEED', 'SEED', 'PRE_SERIES_A', 'SERIES_A', 'PRE_SERIES_B', 'SERIES_B', 'PRE_SERIES_C', 'SERIES_C', 'PRE_SERIES_D', 'SERIES_D', 'SERIES_E', 'SERIES_F', 'SERIES_G', 'SERIES_I', 'SERIES_J', 'GROWTH', 'PUBLIC'];
@@ -63,6 +65,8 @@ export default function EditStartupPage() {
   
   const [formData, setFormData] = useState<Startup | null>(null);
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const [startupJobs, setStartupJobs] = useState<any[]>([]);
+  const [loadingJobs, setLoadingJobs] = useState(false);
 
   // Load canonical categories and types
   useEffect(() => {
@@ -132,6 +136,14 @@ export default function EditStartupPage() {
       } finally {
         setLoadingFundingRounds(false);
       }
+
+      // Load linked jobs
+      setLoadingJobs(true);
+      try {
+        const jobsRes = await getStartupJobsAction(startupId);
+        if (jobsRes.success && jobsRes.jobs) setStartupJobs(jobsRes.jobs as any[]);
+      } catch { setStartupJobs([]); }
+      finally { setLoadingJobs(false); }
 
       // Check for drafts after database load finishes successfully
       const draftKey = `draft_admin_edit_startup_${startupId}`;
@@ -619,6 +631,63 @@ export default function EditStartupPage() {
           )}
         </div>
 
+
+        {/* Jobs */}
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-sora font-bold text-lg text-navy dark:text-white flex items-center gap-2">
+              <Briefcase className="w-5 h-5 text-brand" /> Job Listings
+            </h2>
+            <Link href={`/jobs-board/new?startupId=${startupId}`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-brand/10 text-brand hover:bg-brand/20 rounded-lg transition-colors">
+              <Plus className="w-3.5 h-3.5" /> Post Job
+            </Link>
+          </div>
+          {loadingJobs ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-5 h-5 animate-spin text-brand" />
+              <span className="ml-2 text-sm text-gray-500">Loading jobs...</span>
+            </div>
+          ) : startupJobs.length === 0 ? (
+            <div className="text-center py-8">
+              <Briefcase className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+              <p className="text-sm text-gray-400 font-jakarta">No job listings yet</p>
+              <Link href={`/jobs-board/new?startupId=${startupId}`}
+                className="inline-flex items-center gap-1.5 mt-3 px-4 py-2 text-sm font-medium text-brand bg-brand/10 hover:bg-brand/20 rounded-lg transition-colors">
+                <Plus className="w-4 h-4" /> Create First Job
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {startupJobs.map((job: any) => (
+                <div key={job.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-sora font-semibold text-sm text-navy dark:text-white truncate">{job.title}</h4>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 font-jakarta">
+                        {job.category?.replace(/_/g, ' ')}
+                      </span>
+                      <span className="text-xs text-gray-400 font-jakarta">{job.workType?.replace(/_/g, ' ')}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 ml-3">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      job.isActive
+                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-500'
+                    }`}>
+                      {job.isActive ? <><CheckCircle className="w-2.5 h-2.5" /> Active</> : 'Draft'}
+                    </span>
+                    <Link href={`/jobs-board/${job.id}/edit`}
+                      className="text-xs text-brand hover:underline font-jakarta">
+                      Edit
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-3 sticky bottom-0 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 p-4 rounded-xl">

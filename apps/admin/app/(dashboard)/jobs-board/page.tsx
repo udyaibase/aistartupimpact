@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Briefcase, Search, Eye, Users, Trash2, ExternalLink, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import Link from 'next/link';
+import { Briefcase, Search, Eye, Users, Trash2, ExternalLink, CheckCircle, XCircle, Loader2, Plus, Pencil } from 'lucide-react';
 import { getJobsAction, toggleJobActiveAction, deleteJobAction } from './actions';
 import { Pagination } from '@/components/Pagination';
 
@@ -105,6 +106,10 @@ export default function AdminJobsBoardPage() {
             {jobs.length} total listings &bull; {activeCount} active
           </p>
         </div>
+        <Link href="/jobs-board/new"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand hover:bg-brand/90 text-white text-sm font-semibold rounded-xl transition-colors">
+          <Plus className="w-4 h-4" /> Post Job
+        </Link>
       </div>
 
       {/* Filter Tabs */}
@@ -202,28 +207,28 @@ export default function AdminJobsBoardPage() {
                   </span>
                 </td>
                 <td className="px-6 py-4">
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
-                    job.isActive
-                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
-                  }`}>
-                    {job.isActive ? <><CheckCircle className="w-3 h-3" /> Active</> : 'Inactive'}
-                  </span>
+                  <button
+                    onClick={() => toggleActive(job.id, job.isActive)}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold cursor-pointer transition-colors ${
+                      job.isActive
+                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                    title={job.isActive ? 'Click to deactivate' : 'Click to activate'}
+                  >
+                    {job.isActive ? <><CheckCircle className="w-3 h-3" /> Active</> : <><XCircle className="w-3 h-3" /> Inactive</>}
+                  </button>
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-1">
+                    <Link href={`/jobs-board/${job.id}/edit`}
+                      className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" title="Edit">
+                      <Pencil className="w-3.5 h-3.5 text-gray-400" />
+                    </Link>
                     <a href={`/jobs/${job.slug}`} target="_blank" rel="noopener noreferrer"
                       className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" title="View">
                       <ExternalLink className="w-3.5 h-3.5 text-gray-400" />
                     </a>
-                    <button onClick={() => toggleActive(job.id, job.isActive)}
-                      className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
-                      title={job.isActive ? 'Deactivate' : 'Activate'}>
-                      {job.isActive
-                        ? <XCircle className="w-3.5 h-3.5 text-orange-500" />
-                        : <CheckCircle className="w-3.5 h-3.5 text-green-500" />
-                      }
-                    </button>
                     <button onClick={() => setDeleteConfirm(job.id)}
                       className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20">
                       <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-500" />

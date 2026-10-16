@@ -43,6 +43,7 @@ interface Tool {
   founderNames?: string[];
   headquartersCountry?: string;
   screenshotUrls?: string[];
+  screenshotMeta?: Record<string, any>;
   twitterUrl?: string;
   linkedinUrl?: string;
   socialLinks?: Array<{ platform: string; url: string }>;
@@ -73,6 +74,7 @@ export default function EditToolPage() {
   const [faqs, setFaqs] = useState<FAQ[]>([]);
   const [loadingFaqs, setLoadingFaqs] = useState(false);
   const [screenshots, setScreenshots] = useState<string[]>([]);
+  const [screenshotMeta, setScreenshotMeta] = useState<Record<string, { source: 'auto' | 'manual'; createdAt: string }>>({});
   const [tagGroups, setTagGroups] = useState<any[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [pros, setPros] = useState<string[]>([]);
@@ -112,6 +114,7 @@ export default function EditToolPage() {
       } as Tool);
       setCategories(cats as Category[]);
       setScreenshots(tool.screenshotUrls || []);
+      setScreenshotMeta(tool.screenshotMeta || {});
       setSocialLinks(Array.isArray(tool.socialLinks) ? tool.socialLinks : []);
       setTagGroups(tagGroupsData as any[]);
       
@@ -260,6 +263,7 @@ export default function EditToolPage() {
         listingTier: formData.listingTier,
         status: formData.status,
         screenshotUrls: screenshots,
+        screenshotMeta: Object.keys(screenshotMeta).length > 0 ? screenshotMeta : undefined,
         faqs: faqs.length > 0 ? faqs : undefined,
         twitterUrl: formData.twitterUrl || undefined,
         linkedinUrl: formData.linkedinUrl || undefined,
@@ -858,7 +862,14 @@ export default function EditToolPage() {
 
         {/* Screenshots */}
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-6">
-          <ScreenshotManager screenshots={screenshots} onChange={setScreenshots} />
+          <ScreenshotManager
+            screenshots={screenshots}
+            onChange={setScreenshots}
+            toolId={toolId}
+            websiteUrl={formData?.websiteUrl}
+            screenshotMeta={screenshotMeta}
+            onMetaChange={setScreenshotMeta}
+          />
         </div>
 
         {/* FAQs */}

@@ -20,7 +20,7 @@ export async function getToolsAction() {
         t."pricingModel", t."avgRating", t."listingTier", t.status, t."claimStatus", t."contentReviewed",
         t."founderNames", t."headquartersCountry", t."hasApi", t."hasMobileApp",
         t."pricingUrl", t."startingPrice", t."freeTrialDays", t."demoVideoUrl", t."ownerId",
-        t."launchYear", t."screenshotUrls", t."affiliateUrl",
+        t."launchYear", t."screenshotUrls", t."screenshotMeta", t."affiliateUrl",
         t."twitterUrl", t."linkedinUrl", t."socialLinks",
         t."createdAt", t."updatedAt",
         c.name AS "categoryName", c.id AS "categoryId",
@@ -326,6 +326,7 @@ export async function updateToolAction(id: string, data: {
   listingTier: string;
   status: string;
   screenshotUrls?: string[];
+  screenshotMeta?: Record<string, any>;
   faqs?: Array<{ id?: string; question: string; answer: string; order: number }>;
   twitterUrl?: string;
   linkedinUrl?: string;
@@ -365,6 +366,7 @@ export async function updateToolAction(id: string, data: {
         "listingTier" = ${data.listingTier}::"ListingTier",
         status = ${data.status}::"ToolApprovalStatus",
         "screenshotUrls" = ${data.screenshotUrls || []},
+        "screenshotMeta" = ${data.screenshotMeta ? JSON.stringify(data.screenshotMeta) : null}::jsonb,
         "twitterUrl" = ${data.twitterUrl || null},
         "linkedinUrl" = ${data.linkedinUrl || null},
         "socialLinks" = ${socialLinksJson}::jsonb,
@@ -987,6 +989,62 @@ export async function toggleToolContentReviewedAction(id: string, currentValue: 
     return { success: true };
   } catch (error: any) {
     console.error('toggleToolContentReviewedAction error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+
+// ─── Screenshot Operations ─────────────────────────────────────────────────
+
+export async function getToolsForBulkScreenshotsAction(filter: 'no_screenshots' | 'under_max' | 'all' = 'no_screenshots') {
+  const { error } = await requireActionAuth();
+  if (error) return { success: false, error };
+  try {
+    let query;
+    if (filter === 'all') {
+      query = sql`
+        SELECT t.id, t.name, t.slug, t."websiteUrl", t."screenshotUrls", t."screenshotMeta",
+               t."logoUrl", t.status
+        FROM "AiTool" t
+        WHERE t."deletedAt" IS NULL
+          AND t.status = 'APPROVED'
+          AND t."websiteUrl" IS NOT NULL
+          AND t."websiteUrl" != ''
+        ORDER BY
+          CASE WHEN array_length(t."screenshotUrls", 1) IS NULL OR array_length(t."screenshotUrls", 1) = 0 THEN 0 ELSE 1 END ASC,
+          t.name ASC
+      `;
+    } else if (filter === 'under_max') {
+      query = sql`
+        SELECT t.id, t.name, t.slug, t."websiteUrl", t."screenshotUrls", t."screenshotMeta",
+               t."logoUrl", t.status
+        FROM "AiTool" t
+        WHERE t."deletedAt" IS NULL
+          AND t.status = 'APPROVED'
+          AND t."websiteUrl" IS NOT NULL
+          AND t."websiteUrl" != ''
+          AND (array_length(t."screenshotUrls", 1) IS NULL OR array_length(t."screenshotUrls", 1) < 5)
+        ORDER BY
+          CASE WHEN array_length(t."screenshotUrls", 1) IS NULL OR array_length(t."screenshotUrls", 1) = 0 THEN 0 ELSE 1 END ASC,
+          t.name ASC
+      `;
+    } else {
+      query = sql`
+        SELECT t.id, t.name, t.slug, t."websiteUrl", t."screenshotUrls", t."screenshotMeta",
+               t."logoUrl", t.status
+        FROM "AiTool" t
+        WHERE t."deletedAt" IS NULL
+          AND t.status = 'APPROVED'
+          AND t."websiteUrl" IS NOT NULL
+          AND t."websiteUrl" != ''
+          AND (array_length(t."screenshotUrls", 1) IS NULL OR array_length(t."screenshotUrls", 1) = 0)
+        ORDER BY t.name ASC
+      `;
+    }
+    const tools = await query;
+    return { success: true, tools };
+  } catch (error: any) {
+    console.error('getToolsForBulkScreenshotsAction error:', error);
     return { success: false, error: error.message };
   }
 }

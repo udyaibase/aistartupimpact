@@ -133,6 +133,7 @@ model AiTool {
   socialLinks         Json?
   logoUrl             String?
   screenshotUrls      String[]
+  screenshotMeta      Json?
   demoVideoUrl        String?
   categoryId          String
   pricingModel        PricingModel             @default(FREEMIUM)
@@ -2933,6 +2934,14 @@ model ToolSystemTagMapping {
 // Separate from /careers (internal hiring) and old Job model
 // ============================================================
 
+enum JobBoardEmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+  FREELANCE
+}
+
 enum JobBoardWorkType {
   REMOTE
   HYBRID
@@ -3055,6 +3064,7 @@ model JobBoardListing {
   city              String?
   country           String?
   workType          JobBoardWorkType    @default(REMOTE)
+  employmentType    JobBoardEmploymentType @default(FULL_TIME)
   visaSponsorship   Boolean             @default(false)
   salaryMin         Int?
   salaryMax         Int?

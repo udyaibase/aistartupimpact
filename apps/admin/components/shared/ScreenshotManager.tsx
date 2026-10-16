@@ -1,13 +1,22 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
-import { X, Plus, Loader2, GripVertical, ImagePlus } from 'lucide-react';
+import { X, Plus, Loader2, GripVertical, ImagePlus, Globe, Check, RotateCcw } from 'lucide-react';
+
+interface ScreenshotMeta {
+  source: 'auto' | 'manual';
+  createdAt: string;
+}
 
 interface ScreenshotManagerProps {
   screenshots: string[];
   onChange: (screenshots: string[]) => void;
   maxScreenshots?: number;
   uploadEndpoint?: string;
+  toolId?: string;
+  websiteUrl?: string;
+  screenshotMeta?: Record<string, ScreenshotMeta>;
+  onMetaChange?: (meta: Record<string, ScreenshotMeta>) => void;
 }
 
 export default function ScreenshotManager({
@@ -15,12 +24,19 @@ export default function ScreenshotManager({
   onChange,
   maxScreenshots = 5,
   uploadEndpoint = '/api/media/upload',
+  toolId,
+  websiteUrl,
+  screenshotMeta = {},
+  onMetaChange,
 }: ScreenshotManagerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [dragOverZone, setDragOverZone] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [fetching, setFetching] = useState(false);
+  const [fetchPreview, setFetchPreview] = useState<{ url: string; sizeBytes: number; needsReview: boolean; allUrls: string[] } | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const uploadFiles = useCallback(async (files: File[]) => {
     const imageFiles = files.filter(f => f.type.startsWith('image/'));
@@ -50,10 +66,17 @@ export default function ScreenshotManager({
 
     if (newUrls.length > 0) {
       onChange([...screenshots, ...newUrls]);
+      if (onMetaChange) {
+        const updated = { ...screenshotMeta };
+        for (const url of newUrls) {
+          updated[url] = { source: 'manual', createdAt: new Date().toISOString() };
+        }
+        onMetaChange(updated);
+      }
     }
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
-  }, [screenshots, onChange, maxScreenshots, uploadEndpoint]);
+  }, [screenshots, onChange, maxScreenshots, uploadEndpoint, screenshotMeta, onMetaChange]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     uploadFiles(Array.from(e.target.files || []));
@@ -73,7 +96,13 @@ export default function ScreenshotManager({
   };
 
   const remove = (index: number) => {
+    const removedUrl = screenshots[index];
     onChange(screenshots.filter((_, i) => i !== index));
+    if (onMetaChange && removedUrl) {
+      const updated = { ...screenshotMeta };
+      delete updated[removedUrl];
+      onMetaChange(updated);
+    }
   };
 
   const handleDragStart = (index: number) => {
@@ -107,16 +136,161 @@ export default function ScreenshotManager({
     setDragOverIndex(null);
   };
 
+  const handleFetchScreenshot = async () => {
+    if (!toolId) return;
+    setFetching(true);
+    setFetchError(null);
+    setFetchPreview(null);
+
+    try {
+      const res = await fetch(`/api/admin/tools/${toolId}/screenshot`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setFetchError(data.error || 'Failed to capture screenshot');
+        return;
+      }
+
+      setFetchPreview({
+        url: data.url,
+        sizeBytes: data.sizeBytes,
+        needsReview: data.needsReview,
+        allUrls: data.screenshotUrls,
+      });
+    } catch (err: any) {
+      setFetchError(err.message || 'Network error');
+    } finally {
+      setFetching(false);
+    }
+  };
+
+  const confirmFetchedScreenshot = () => {
+    if (!fetchPreview) return;
+    onChange(fetchPreview.allUrls);
+    if (onMetaChange) {
+      const updated = { ...screenshotMeta };
+      updated[fetchPreview.url] = { source: 'auto', createdAt: new Date().toISOString() };
+      onMetaChange(updated);
+    }
+    setFetchPreview(null);
+  };
+
+  const discardFetchedScreenshot = () => {
+    setFetchPreview(null);
+  };
+
+  const getSource = (url: string): 'auto' | 'manual' | undefined => {
+    return screenshotMeta[url]?.source;
+  };
+
+  const autoCount = Object.values(screenshotMeta).filter(m => m.source === 'auto').length;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="font-sora font-bold text-lg text-navy dark:text-white">
           Screenshots ({screenshots.length}/{maxScreenshots})
         </h2>
-        {screenshots.length > 1 && (
-          <span className="text-xs text-gray-400 font-jakarta">Drag to reorder</span>
-        )}
+        <div className="flex items-center gap-3">
+          {screenshots.length > 1 && (
+            <span className="text-xs text-gray-400 font-jakarta">Drag to reorder</span>
+          )}
+        </div>
       </div>
+
+      {/* Auto-fetch button */}
+      {toolId && websiteUrl && (
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleFetchScreenshot}
+            disabled={fetching || screenshots.length >= maxScreenshots}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            {fetching ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Capturing...
+              </>
+            ) : (
+              <>
+                <Globe className="w-4 h-4" />
+                {autoCount > 0 ? `Fetch another (${autoCount} auto)` : 'Fetch from website'}
+              </>
+            )}
+          </button>
+          <span className="text-xs text-gray-500 font-jakarta truncate max-w-xs">
+            {websiteUrl}
+          </span>
+        </div>
+      )}
+
+      {/* Fetch error */}
+      {fetchError && (
+        <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+          <p className="text-sm text-red-700 dark:text-red-400">{fetchError}</p>
+        </div>
+      )}
+
+      {/* Fetch preview — admin confirms before saving */}
+      {fetchPreview && (
+        <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-blue-800 dark:text-blue-300">
+              Preview — confirm or discard
+            </span>
+            <span className="text-xs text-gray-500 font-jakarta">
+              {(fetchPreview.sizeBytes / 1024).toFixed(0)} KB
+            </span>
+          </div>
+
+          {fetchPreview.needsReview && (
+            <div className="p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg">
+              <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                This file is suspiciously small — it may be a bot challenge or blank page. Please check carefully.
+              </p>
+            </div>
+          )}
+
+          <div className="relative aspect-video max-w-lg rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+            <img
+              src={fetchPreview.url}
+              alt="Captured screenshot preview"
+              className="w-full h-full object-cover"
+            />
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={confirmFetchedScreenshot}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              <Check className="w-4 h-4" />
+              Confirm & Save
+            </button>
+            <button
+              type="button"
+              onClick={discardFetchedScreenshot}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg transition-colors"
+            >
+              <X className="w-4 h-4" />
+              Discard
+            </button>
+            <button
+              type="button"
+              onClick={handleFetchScreenshot}
+              disabled={fetching}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-sm font-medium rounded-lg transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Drop zone */}
       <div
@@ -182,10 +356,17 @@ export default function ScreenshotManager({
                 className="w-full h-full object-cover pointer-events-none"
               />
 
-              {/* Order badge */}
-              <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] font-bold px-1.5 py-0.5 rounded font-jakarta">
-                {index + 1}
-              </span>
+              {/* Source + order badge */}
+              <div className="absolute bottom-1 left-1 flex items-center gap-1">
+                <span className="bg-black/60 text-white text-[10px] font-bold px-1.5 py-0.5 rounded font-jakarta">
+                  {index + 1}
+                </span>
+                {getSource(url) === 'auto' && (
+                  <span className="bg-blue-600/80 text-white text-[9px] font-bold px-1.5 py-0.5 rounded font-jakarta">
+                    AUTO
+                  </span>
+                )}
+              </div>
 
               {/* Drag handle */}
               <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 bg-black/50 p-0.5 rounded transition-opacity">
