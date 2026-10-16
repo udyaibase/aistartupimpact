@@ -9,6 +9,26 @@ const sql = neon(process.env.DATABASE_URL!);
 const SCREENSHOTONE_API_KEY = process.env.SCREENSHOTONE_API_KEY;
 const MIN_VALID_SIZE = 15 * 1024;
 const MAX_SCREENSHOTS = 5;
+const ALLOWED_SCHEMES = new Set(["http:", "https:"]);
+const BLOCKED_HOSTS = [
+  "localhost", "127.0.0.1", "0.0.0.0", "[::1]",
+  "169.254.", "10.", "172.16.", "172.17.", "172.18.", "172.19.",
+  "172.20.", "172.21.", "172.22.", "172.23.", "172.24.", "172.25.",
+  "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.",
+  "192.168.",
+];
+
+function isBlockedUrl(urlStr: string): boolean {
+  try {
+    const parsed = new URL(urlStr);
+    if (!ALLOWED_SCHEMES.has(parsed.protocol)) return true;
+    const host = parsed.hostname.toLowerCase();
+    if (host.endsWith(".localhost") || host.endsWith(".local")) return true;
+    return BLOCKED_HOSTS.some(h => host === h || host.startsWith(h));
+  } catch {
+    return true;
+  }
+}
 
 export const maxDuration = 120;
 
@@ -53,9 +73,9 @@ export async function POST(
     }
 
     const tool = tools[0] as any;
-    if (!tool.websiteUrl) {
+    if (!tool.websiteUrl || isBlockedUrl(tool.websiteUrl)) {
       return NextResponse.json(
-        { error: "Tool has no website URL" },
+        { error: "Tool has no valid website URL" },
         { status: 400 }
       );
     }

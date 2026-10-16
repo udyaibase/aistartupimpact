@@ -6,12 +6,24 @@ import puppeteer from 'puppeteer-core';
 
 export const maxDuration = 120;
 
-const BLOCKED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', '[::1]', '169.254.', '10.', '172.16.', '192.168.'];
+const ALLOWED_SCHEMES = new Set(['http:', 'https:']);
+
+const BLOCKED_HOSTS = [
+  'localhost', '127.0.0.1', '0.0.0.0', '[::1]',
+  '169.254.', '10.', '172.16.', '172.17.', '172.18.', '172.19.',
+  '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.',
+  '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.',
+  '192.168.', 'fd', 'fc', 'fe80:', '::ffff:127.', '::ffff:10.',
+  '::ffff:192.168.', '::ffff:172.16.',
+];
 
 function isBlockedUrl(urlStr: string): boolean {
   try {
     const parsed = new URL(urlStr);
-    return BLOCKED_HOSTS.some(h => parsed.hostname === h || parsed.hostname.startsWith(h));
+    if (!ALLOWED_SCHEMES.has(parsed.protocol)) return true;
+    const host = parsed.hostname.toLowerCase();
+    if (host.endsWith('.localhost') || host.endsWith('.local')) return true;
+    return BLOCKED_HOSTS.some(h => host === h || host.startsWith(h));
   } catch {
     return true;
   }
@@ -127,7 +139,7 @@ async function fetchPage(url: string): Promise<{ html: string; resolvedUrl: stri
   if (html) {
     // Check for embedded ATS widgets — scrape the ATS page directly
     const atsUrl = detectAtsEmbed(html);
-    if (atsUrl) {
+    if (atsUrl && !isBlockedUrl(atsUrl)) {
       console.log(`[scraper] Detected ATS embed → ${atsUrl}`);
       const atsHtml = await fetchPageSimple(atsUrl);
       if (atsHtml) {
