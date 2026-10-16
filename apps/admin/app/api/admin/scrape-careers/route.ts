@@ -336,19 +336,19 @@ function jobPostingToJob(jp: any, sourceUrl: string): any {
     }
   }
 
-  // Convert HTML description to readable text with structure
+  // Convert HTML description to readable text with structure using cheerio
   let description = jp.description || '';
   if (description) {
-    description = description
-      .replace(/&nbsp;/gi, ' ')
-      .replace(/&amp;/gi, '&')
-      .replace(/&lt;/gi, '<')
-      .replace(/&gt;/gi, '>')
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<\/?(p|div|h[1-6]|section)[\s>]/gi, '\n\n')
-      .replace(/<li[\s>]/gi, '\n• ')
-      .replace(/<\/li>/gi, '')
-      .replace(/<[^>]+>/g, '')
+    const $desc = cheerio.load(`<div>${description}</div>`);
+    $desc('script, style, noscript').remove();
+    $desc('br').replaceWith('\n');
+    $desc('p, div, h1, h2, h3, h4, h5, h6, section').each((_: number, el: any) => {
+      $desc(el).prepend('\n\n').append('\n\n');
+    });
+    $desc('li').each((_: number, el: any) => {
+      $desc(el).prepend('\n• ');
+    });
+    description = $desc.text()
       .replace(/\n{3,}/g, '\n\n')
       .trim();
   }
