@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Loader2, CheckCircle } from 'lucide-react';
 
 
-type AllowedSource = 'footer' | 'sidebar' | 'newsletter' | 'website';
+type AllowedSource = 'footer' | 'sidebar' | 'newsletter' | 'website' | 'jobs-alert' | 'jobs-bottom';
 
 interface SubscribeFormProps {
   buttonText?: string;
@@ -13,7 +13,7 @@ interface SubscribeFormProps {
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const ALLOWED_SOURCES: AllowedSource[] = ['footer', 'sidebar', 'newsletter', 'website'];
+const ALLOWED_SOURCES: AllowedSource[] = ['footer', 'sidebar', 'newsletter', 'website', 'jobs-alert', 'jobs-bottom'];
 
 // Internal Next.js API route — no external backend needed
 const SUBSCRIBE_URL = '/api/newsletter/subscribe';

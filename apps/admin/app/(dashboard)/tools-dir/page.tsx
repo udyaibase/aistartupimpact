@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Plus, Search, Wrench, Edit3, Trash2, Crown, CheckCircle, XCircle, Calendar, X, Clock,
+  Plus, Search, Wrench, Edit3, Trash2, Crown, CheckCircle, XCircle, Calendar, X, Clock, Camera,
 } from 'lucide-react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { Pagination } from '@/components/Pagination';
@@ -253,6 +253,9 @@ export default function ToolsDirPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => router.push('/tools-dir/bulk-screenshots')} className="btn-outline text-xs flex items-center gap-1.5 px-3 py-2">
+            <Camera className="w-3.5 h-3.5" /> Screenshots
+          </button>
           <button onClick={() => router.push('/tools-dir/collections')} className="btn-outline text-xs flex items-center gap-1.5 px-3 py-2">
             Collections
           </button>
