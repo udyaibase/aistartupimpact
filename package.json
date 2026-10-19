@@ -13,7 +13,7 @@
     "clean": "turbo run clean"
   },
   "devDependencies": {
-    "turbo": "^2.3.0",
+    "turbo": "^2.11.8",
     "typescript": "^5.5.0"
   },
   "packageManager": "npm@10.8.0",
@@ -33,6 +33,6 @@
     }
   },
   "dependencies": {
-    "@prisma/driver-adapter-utils": "^7.10.0"
+    "@prisma/driver-adapter-utils": "^7.10.1"
   }
 }

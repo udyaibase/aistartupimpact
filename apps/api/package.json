@@ -11,8 +11,8 @@
   "dependencies": {
     "@udyaibase/types": "*",
     "@udyaibase/utils": "*",
-    "@aws-sdk/client-s3": "^3.1135.0",
-    "@aws-sdk/s3-request-presigner": "^3.1135.0",
+    "@aws-sdk/client-s3": "^3.1152.0",
+    "@aws-sdk/s3-request-presigner": "^3.1152.0",
     "@prisma/client": "^5.20.0",
     "@react-email/components": "^1.0.8",
     "@upstash/redis": "^1.36.4",
@@ -29,8 +29,8 @@
     "multer": "^1.4.5-lts.1",
     "razorpay": "^2.9.6",
     "react-email": "^5.2.9",
-    "resend": "^6.12.2",
-    "svix": "^2.3.0",
+    "resend": "^6.33.0",
+    "svix": "^2.8.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
