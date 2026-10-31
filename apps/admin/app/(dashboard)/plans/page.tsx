@@ -72,7 +72,7 @@ export default function PlansAdminPage() {
 }
 
 function GrantDialog({ account, onClose, onDone }: { account: PlanAccount; onClose: () => void; onDone: () => void }) {
-  const plans = account.kind === 'EMPLOYER' ? ['FEATURED', 'PREMIUM'] : ['PRO'];
+  const plans = account.kind === 'EMPLOYER' ? ['GROWTH', 'PRO', 'SCALE'] : ['PRO'];
   const [plan, setPlan] = useState(active(account) && plans.includes(account.plan) ? account.plan : plans[0]);
   const [days, setDays] = useState(30);
   const [amount, setAmount] = useState('');

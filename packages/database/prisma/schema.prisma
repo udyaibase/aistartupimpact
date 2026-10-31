@@ -2250,6 +2250,12 @@ model EventOrganizer {
   /// The free Event Boost on the first published event.
   freeBoostUsedAt     DateTime?
   planGraceNoticeAt   DateTime?
+  /// Billing cycle of the current Pro plan.
+  planCycle           JobBoardBillingCycle @default(MONTHLY)
+  /// First yearly Pro purchase at the founding price (first 20 hosts); the price holds for 24 months.
+  foundingMemberAt    DateTime?
+  /// Set when Pro lapsed to Free after becoming a founding host: the founding price no longer applies.
+  foundingLostAt      DateTime?
 
   // Payouts for paid tickets (Razorpay Route linked account). Bank details go to Razorpay only.
   payoutAccountId   String?
@@ -3163,10 +3169,20 @@ enum JobBoardEmailStatus {
   FAILED
 }
 
+/// FEATURED and PREMIUM are the pre-Nov 2026 names (read as PRO and SCALE); new purchases use the others.
 enum JobBoardPlan {
   FREE
   FEATURED
   PREMIUM
+  GROWTH
+  PRO
+  SCALE
+}
+
+/// Billing cycle for employer plans and event host Pro.
+enum JobBoardBillingCycle {
+  MONTHLY
+  ANNUAL
 }
 
 model JobBoardEmployer {
@@ -3197,6 +3213,12 @@ model JobBoardEmployer {
   trialStartedAt      DateTime?
   /// "Your plan has ended, renew within 3 days" email, once per lapse.
   planGraceNoticeAt   DateTime?
+  /// Billing cycle of the current paid plan.
+  planCycle           JobBoardBillingCycle @default(MONTHLY)
+  /// First annual purchase at the founding price (first 50 workspaces); the price holds for 24 months.
+  foundingMemberAt    DateTime?
+  /// Set when the plan lapsed to Free after becoming a founding member: the founding price no longer applies.
+  foundingLostAt      DateTime?
   /// GST invoice details (optional; B2B buyers add a GSTIN).
   billingName         String?
   billingGstin        String?
@@ -3872,6 +3894,9 @@ model JobBoardPayment {
   id                  String                @id @default(cuid())
   employerId          String
   plan                JobBoardPlan
+  cycle               JobBoardBillingCycle  @default(MONTHLY)
+  /// Paid at the founding-member price (annual only).
+  foundingPrice       Boolean               @default(false)
   amountPaise         Int
   gstPaise            Int
   totalPaise          Int
@@ -3962,6 +3987,10 @@ model OrganizerPayment {
   id                  String                @id @default(cuid())
   organizerId         String
   kind                String // "PRO" | "BOOST"
+  /// Pro only: 30 days or a year.
+  cycle               JobBoardBillingCycle @default(MONTHLY)
+  /// Paid at the founding-host price (yearly Pro only).
+  foundingPrice       Boolean              @default(false)
   eventId             String?
   amountPaise         Int
   gstPaise            Int

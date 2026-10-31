@@ -50,7 +50,7 @@ export default function PromotionsPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2"><Megaphone className="w-5 h-5 text-brand" /> Premium promotions</h1>
-          <p className="text-xs text-gray-500 mt-0.5">Open jobs from employers on an active Premium plan. Premium includes a newsletter mention and a social post for each role.</p>
+          <p className="text-xs text-gray-500 mt-0.5">Open jobs from employers on an active Scale plan (or older Premium). Scale includes a newsletter mention and a social post for each role.</p>
         </div>
         <div className="flex gap-1">
           {(['todo', 'all'] as const).map((f) => (

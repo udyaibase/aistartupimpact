@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto';
 import { prisma } from '@udyaibase/database';
 import { requireActionAuth } from '@/lib/api-auth';
 import { logAuditEvent } from '@/lib/audit-log';
-import { GRACE_DAYS, GST_RATE, PLANS } from '@udyaibase/utils/employer-plans';
+import { GRACE_DAYS, GST_RATE, isPaidPlan, planKeyOf, PLANS } from '@udyaibase/utils/employer-plans';
 import { refreshPublic } from '@/lib/refresh-public';
 
 /**
@@ -62,17 +62,20 @@ export async function grantPlanAction(input: { kind: 'EMPLOYER' | 'HOST'; id: st
   const by = session?.user?.email ?? 'admin';
 
   if (input.kind === 'EMPLOYER') {
-    if (input.plan !== 'FEATURED' && input.plan !== 'PREMIUM') return { success: false as const, error: 'Choose Featured or Premium.' };
+    const plan = input.plan;
+    if (!isPaidPlan(plan)) return { success: false as const, error: 'Choose Growth, Pro or Scale.' };
+    const def = PLANS[plan];
+    const cycle = days >= 365 ? 'ANNUAL' as const : 'MONTHLY' as const;
     const e = await prisma.jobBoardEmployer.findUnique({ where: { id: input.id }, select: { companyName: true, plan: true, planExpiresAt: true } });
     if (!e) return { success: false as const, error: 'Employer not found.' };
-    const sameActive = e.plan === input.plan && e.planExpiresAt && e.planExpiresAt.getTime() > now;
+    const sameActive = planKeyOf(e.plan) === plan && e.planExpiresAt && e.planExpiresAt.getTime() > now;
     const base = sameActive ? e.planExpiresAt!.getTime() : now;
     const end = new Date(base + days * DAY);
     await prisma.$transaction([
-      prisma.jobBoardEmployer.update({ where: { id: input.id }, data: { plan: input.plan as 'FEATURED' | 'PREMIUM', planExpiresAt: end, maxActiveJobs: PLANS[input.plan as 'FEATURED' | 'PREMIUM'].maxActiveJobs, planIsTrial: false, planReminderSentAt: null, planGraceNoticeAt: null } }),
-      prisma.jobBoardListing.updateMany({ where: { employerId: input.id, status: 'OPEN', deletedAt: null }, data: { isFeatured: true, featuredUntil: new Date(end.getTime() + GRACE_DAYS * DAY) } }),
+      prisma.jobBoardEmployer.update({ where: { id: input.id }, data: { plan, planCycle: cycle, planExpiresAt: end, maxActiveJobs: def.maxActiveJobs, planIsTrial: false, planReminderSentAt: null, planGraceNoticeAt: null } }),
+      ...(def.featured ? [prisma.jobBoardListing.updateMany({ where: { employerId: input.id, status: 'OPEN', deletedAt: null }, data: { isFeatured: true, featuredUntil: new Date(end.getTime() + GRACE_DAYS * DAY) } })] : []),
       prisma.jobBoardPayment.create({ data: {
-        employerId: input.id, plan: input.plan as 'FEATURED' | 'PREMIUM', amountPaise, gstPaise: totalPaise - amountPaise, totalPaise,
+        employerId: input.id, plan, cycle, amountPaise, gstPaise: totalPaise - amountPaise, totalPaise,
         razorpayOrderId: orderRef, razorpayPaymentId: `${orderRef}:${reference}`, status: 'SUCCESS', periodStart: new Date(base), periodEnd: end, paidByEmail: by, paidAt: new Date(),
       } }),
     ]);
@@ -88,13 +91,13 @@ export async function grantPlanAction(input: { kind: 'EMPLOYER' | 'HOST'; id: st
   const end = new Date(base + days * DAY);
   const upcoming = await prisma.event.findMany({ where: { organizerId: input.id, status: 'PUBLISHED', deletedAt: null, endAt: { gt: new Date() } }, select: { id: true, endAt: true, featuredUntil: true } });
   await prisma.$transaction([
-    prisma.eventOrganizer.update({ where: { id: input.id }, data: { plan: 'PRO', planExpiresAt: end, planReminderSentAt: null, planGraceNoticeAt: null } }),
+    prisma.eventOrganizer.update({ where: { id: input.id }, data: { plan: 'PRO', planCycle: days >= 365 ? 'ANNUAL' : 'MONTHLY', planExpiresAt: end, planReminderSentAt: null, planGraceNoticeAt: null } }),
     ...upcoming.map((ev) => {
       const until = new Date(Math.min(ev.endAt.getTime(), end.getTime() + GRACE_DAYS * DAY)); // featured through Pro's grace days
       return prisma.event.update({ where: { id: ev.id }, data: { featuredUntil: ev.featuredUntil && ev.featuredUntil > until ? ev.featuredUntil : until } });
     }),
     prisma.organizerPayment.create({ data: {
-      organizerId: input.id, kind: 'PRO', amountPaise, gstPaise: totalPaise - amountPaise, totalPaise,
+      organizerId: input.id, kind: 'PRO', cycle: days >= 365 ? 'ANNUAL' : 'MONTHLY', amountPaise, gstPaise: totalPaise - amountPaise, totalPaise,
       razorpayOrderId: orderRef, razorpayPaymentId: `${orderRef}:${reference}`, status: 'SUCCESS', periodStart: new Date(base), periodEnd: end, paidByEmail: by, paidAt: new Date(),
     } }),
   ]);

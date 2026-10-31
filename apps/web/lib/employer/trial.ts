@@ -1,10 +1,10 @@
 import { prisma } from '@udyaibase/database';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 import { button, esc, shell } from '@/lib/jobs/apply-emails';
-import { PLANS, TRIAL_AI_SCREENS, TRIAL_DAYS, planFeaturedUntil } from '@/lib/employer/plans';
+import { PLANS, TRIAL_AI_SCREENS, TRIAL_DAYS, TRIAL_PLAN, planFeaturedUntil } from '@/lib/employer/plans';
 
 /**
- * Free 7-day Featured trial, started automatically by a workspace's first published job. No card needed.
+ * Free 7-day trial of the Pro plan (TRIAL_PLAN), started automatically by a workspace's first published job. No card needed.
  * One per workspace, and one per verified startup and per verified company domain, so new accounts for the
  * same company don't get another. Udyaibase's own (admin-run) workspaces never get one.
  * Returns the trial end when one was started.
@@ -30,12 +30,12 @@ export async function maybeStartTrial(employerId: string, now = new Date()): Pro
   // Claim atomically so two publishes at once can't both start it.
   const claimed = await prisma.jobBoardEmployer.updateMany({
     where: { id: e.id, trialStartedAt: null },
-    data: { plan: 'FEATURED', planExpiresAt: end, planIsTrial: true, trialStartedAt: now, maxActiveJobs: PLANS.FEATURED.maxActiveJobs, planReminderSentAt: null, planGraceNoticeAt: null },
+    data: { plan: TRIAL_PLAN, planCycle: 'MONTHLY', planExpiresAt: end, planIsTrial: true, trialStartedAt: now, maxActiveJobs: PLANS[TRIAL_PLAN].maxActiveJobs, planReminderSentAt: null, planGraceNoticeAt: null },
   });
   if (!claimed.count) return null;
   await prisma.jobBoardListing.updateMany({
     where: { employerId: e.id, status: 'OPEN', deletedAt: null },
-    data: { isFeatured: true, featuredUntil: planFeaturedUntil({ plan: 'FEATURED', planExpiresAt: end, planIsTrial: true }) },
+    data: { isFeatured: true, featuredUntil: planFeaturedUntil({ plan: TRIAL_PLAN, planExpiresAt: end, planIsTrial: true }) },
   });
 
   if (e.passwordHash !== '') {
@@ -43,14 +43,14 @@ export async function maybeStartTrial(employerId: string, now = new Date()): Pro
     const date = end.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', timeZone: 'Asia/Kolkata' });
     sendEmailFireAndForget({
       to: e.email,
-      subject: `Your job is live, with a free ${TRIAL_DAYS}-day Featured trial`,
+      subject: `Your job is live, with a free ${TRIAL_DAYS}-day ${PLANS[TRIAL_PLAN].name} trial`,
       type: 'employer_trial_started',
       html: shell(`
 <h1 style="font-size:20px;margin:0 0 8px">Your job is live, and featured for free</h1>
-<p style="margin:0 0 16px;font-size:15px;line-height:1.6">To help your first hire, you get the Featured plan free until <strong>${esc(date)}</strong>:</p>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.6">To help your first hire, you get the ${PLANS[TRIAL_PLAN].name} plan free until <strong>${esc(date)}</strong>:</p>
 <ul style="margin:0 0 20px;padding-left:20px;font-size:14px;line-height:1.7">
 <li>Featured badge and higher placement on Udyaibase AI Jobs</li>
-<li>Up to ${PLANS.FEATURED.maxActiveJobs} open jobs</li>
+<li>Up to ${PLANS[TRIAL_PLAN].maxActiveJobs} open jobs</li>
 <li>AI review for up to ${TRIAL_AI_SCREENS} candidates</li>
 </ul>
 <p style="margin:0 0 24px">${button(`${site}/employer/dashboard`, 'Go to your dashboard')}</p>

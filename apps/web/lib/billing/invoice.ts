@@ -3,7 +3,7 @@ import { prisma } from '@udyaibase/database';
 import { sendEmail } from '@/lib/email/send';
 import { BILLING_SELECT, GSTIN_RE, formatBillingAddress, panFromGstin, profileFromRow, type BillingProfile } from '@/lib/billing/details';
 import { GST_STATES } from '@/lib/billing/gst-states';
-import { PLANS, type PlanKey } from '@/lib/employer/plans';
+import { planSoldName } from '@/lib/employer/plans';
 
 /**
  * GST tax invoices for employer plans and event-host purchases (Pro, Event Boost).
@@ -90,12 +90,12 @@ async function loadPayment(table: InvoiceTable, id: string) {
     if (!p) return null;
     return {
       pay: p as PaymentRow, ownerId: p.employerId, accountName: p.Employer.companyName, account: p.Employer,
-      description: `Udyaibase Jobs ${PLANS[p.plan as PlanKey]?.name ?? p.plan} plan`,
+      description: `Udyaibase Jobs ${planSoldName(p.plan)} plan${p.cycle === 'ANNUAL' ? ' (annual)' : ''}`,
     };
   }
   const p = await prisma.organizerPayment.findUnique({ where: { id }, include: { organizer: { select: { id: true, name: true, company: true, ...ACCOUNT_SELECT } } } });
   if (!p) return null;
-  let description = 'Udyaibase Events Pro plan';
+  let description = `Udyaibase Events Pro plan${p.cycle === 'ANNUAL' ? ' (annual)' : ''}`;
   if (p.kind === 'BOOST') {
     const ev = p.eventId ? await prisma.event.findUnique({ where: { id: p.eventId }, select: { title: true } }) : null;
     description = `Event Boost${ev ? `: ${ev.title}` : ''}`;

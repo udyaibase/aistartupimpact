@@ -245,7 +245,7 @@ const ONE_OF: Record<string, readonly string[]> = {
   cardStyle: ['bordered', 'elevated', 'flat'],
   spacing: ['compact', 'comfortable', 'spacious'],
 };
-const BOOLS = ['showLogo', 'showDepartment', 'showSalary', 'showSkills', 'active'] as const;
+const BOOLS = ['showLogo', 'showDepartment', 'showSalary', 'showSkills', 'showPoweredBy', 'active'] as const;
 
 /** Validates a partial update from the customize panel. Unknown keys are ignored. */
 export function parseJobsWidgetInput(b: Record<string, unknown>) {

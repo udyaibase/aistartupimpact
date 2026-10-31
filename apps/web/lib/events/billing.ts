@@ -1,7 +1,7 @@
 import { prisma } from '@udyaibase/database';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 import { button, esc, shell } from '@/lib/jobs/apply-emails';
-import { effectiveHostPlan, HOST_GRACE_DAYS, HOST_PERIOD_DAYS, HOST_PLANS, hostPeriodStart, hostPlanPhase, isPlatformOrganizer } from '@/lib/events/plans';
+import { effectiveHostPlan, HOST_GRACE_DAYS, HOST_PLANS, hostCycleDays, hostPeriodStart, hostPlanPhase, isPlatformOrganizer } from '@/lib/events/plans';
 import { promoteWaitlist, promoteWaitlistsForOrganizer } from '@/lib/events/waitlist';
 import { emailInvoice } from '@/lib/billing/invoice';
 
@@ -11,7 +11,7 @@ export const upcomingWhere = (organizerId: string, now = new Date()) => ({
 });
 
 export async function hostPlanStatus(organizerId: string) {
-  const o = await prisma.eventOrganizer.findUnique({ where: { id: organizerId }, select: { plan: true, planExpiresAt: true, email: true } });
+  const o = await prisma.eventOrganizer.findUnique({ where: { id: organizerId }, select: { plan: true, planExpiresAt: true, email: true, planCycle: true } });
   if (!o) return null;
   const plan = effectiveHostPlan(o);
   const { phase, graceEndsAt } = hostPlanPhase(o);
@@ -27,6 +27,7 @@ export async function hostPlanStatus(organizerId: string) {
     plan,
     phase: isPlatformOrganizer(o.email) ? 'active' as const : phase,
     expiresAt: plan.key === 'PRO' ? o.planExpiresAt : null,
+    cycle: o.planCycle,
     graceEndsAt: phase === 'grace' ? graceEndsAt : null,
     upcoming,
     team,
@@ -52,11 +53,17 @@ export async function activateOrganizerPayment(orderId: string, paymentId: strin
     const now = Date.now();
 
     if (pay.kind === 'PRO') {
-      const o = await tx.eventOrganizer.findUniqueOrThrow({ where: { id: pay.organizerId }, select: { plan: true, planExpiresAt: true, email: true } });
+      const o = await tx.eventOrganizer.findUniqueOrThrow({ where: { id: pay.organizerId }, select: { plan: true, planExpiresAt: true, email: true, foundingMemberAt: true } });
       const active = effectiveHostPlan(o, now).key === 'PRO';
       const base = active && o.planExpiresAt ? Math.max(now, o.planExpiresAt.getTime()) : now;
-      const end = new Date(base + HOST_PERIOD_DAYS * 864e5);
-      await tx.eventOrganizer.update({ where: { id: pay.organizerId }, data: { plan: 'PRO', planExpiresAt: end, planReminderSentAt: null, planGraceNoticeAt: null } });
+      const end = new Date(base + hostCycleDays(pay.cycle) * 864e5);
+      await tx.eventOrganizer.update({
+        where: { id: pay.organizerId },
+        data: {
+          plan: 'PRO', planCycle: pay.cycle, planExpiresAt: end, planReminderSentAt: null, planGraceNoticeAt: null,
+          ...(pay.foundingPrice && !o.foundingMemberAt ? { foundingMemberAt: new Date(now) } : {}),
+        },
+      });
       await tx.organizerPayment.update({ where: { id: pay.id }, data: { periodStart: new Date(base), periodEnd: end } });
       await featureUpcoming(tx, pay.organizerId, new Date(end.getTime() + HOST_GRACE_DAYS * 864e5));
     } else if (pay.kind === 'BOOST' && pay.eventId) {
@@ -117,7 +124,7 @@ export async function runHostPlanMaintenance(now = new Date(), opts: { onlyOrgan
       html: shell(`
 <h1 style="font-size:20px;margin:0 0 8px">Your Pro plan ends on ${esc(date)}</h1>
 <p style="margin:0 0 20px;font-size:15px;line-height:1.6">After that you move to Free: up to ${HOST_PLANS.FREE.maxUpcomingEvents} upcoming events and ${HOST_PLANS.FREE.registrationsPerEvent} registrations per event, and your events stop being featured. Everything you’ve published stays live.</p>
-<p style="margin:0 0 24px">${button(`${site}/organizer/billing`, 'Add 30 days')}</p>
+<p style="margin:0 0 24px">${button(`${site}/organizer/billing`, 'Renew Pro')}</p>
 <p style="margin:0;font-size:13px;color:#6b7280">Plans never renew automatically, so nothing is charged unless you pay.</p>`),
     });
     await prisma.eventOrganizer.update({ where: { id: o.id }, data: { planReminderSentAt: now } });
@@ -143,7 +150,10 @@ export async function runHostPlanMaintenance(now = new Date(), opts: { onlyOrgan
     });
     await prisma.eventOrganizer.update({ where: { id: o.id }, data: { planGraceNoticeAt: now } });
   }
-  const lapsed = await prisma.eventOrganizer.updateMany({ where: { plan: 'PRO', planExpiresAt: { lte: new Date(now.getTime() - HOST_GRACE_DAYS * 864e5) }, ...only }, data: { plan: 'FREE' } });
+  const lapseWhere = { plan: 'PRO' as const, planExpiresAt: { lte: new Date(now.getTime() - HOST_GRACE_DAYS * 864e5) }, ...only };
+  // A lapse to Free ends founding pricing for good (it holds only while Pro is unbroken).
+  await prisma.eventOrganizer.updateMany({ where: { ...lapseWhere, foundingMemberAt: { not: null }, foundingLostAt: null }, data: { foundingLostAt: now } });
+  const lapsed = await prisma.eventOrganizer.updateMany({ where: lapseWhere, data: { plan: 'FREE' } });
   return { hostRemindersSent: due.length, hostGraceNoticesSent: ended.length, hostPlansLapsed: lapsed.count };
 }
 

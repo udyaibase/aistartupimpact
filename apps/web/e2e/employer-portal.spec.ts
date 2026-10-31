@@ -45,6 +45,6 @@ test.describe('Employer portal (signed out)', () => {
 
   test('billing and invoice APIs refuse anonymous calls', async ({ request }) => {
     expect((await request.get('/api/employer/billing/invoice/x')).status()).toBe(401);
-    expect([401, 403]).toContain((await request.post('/api/employer/billing/checkout', { data: { plan: 'FEATURED' } })).status());
+    expect([401, 403]).toContain((await request.post('/api/employer/billing/checkout', { data: { plan: 'PRO' } })).status());
   });
 });

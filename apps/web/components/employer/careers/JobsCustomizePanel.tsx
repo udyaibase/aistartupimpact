@@ -14,6 +14,7 @@ import {
 interface Props {
   widget: JobsPortalWidget;
   departments: string[];
+  canHideBranding: boolean;
   saveState: SaveState;
   saveError: string;
   onChange: (patch: Partial<JobsPortalWidget>) => void;
@@ -25,7 +26,7 @@ const TITLE_SUGGESTIONS = ["Open roles", "Join our team", "We're hiring", "Caree
 const BUTTON_LABELS = ["View role", "Apply now", "See details", "View job", "Learn more", "Apply"];
 
 /** Customize drawer for the careers widget; same sections and controls as the events widget. */
-export default function JobsCustomizePanel({ widget, departments, saveState, saveError, onChange, onRetry, onClose }: Props) {
+export default function JobsCustomizePanel({ widget, departments, canHideBranding, saveState, saveError, onChange, onRetry, onClose }: Props) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState<string | null>(null);
 
@@ -130,6 +131,17 @@ export default function JobsCustomizePanel({ widget, departments, saveState, sav
                     <Switch checked={widget[k]} label={l} onChange={(v) => onChange({ [k]: v } as Partial<JobsPortalWidget>)} />
                   </div>
                 ))}
+              </div>
+            </Field>
+            <Field label="Branding" info="A small “Powered by Udyaibase” link under your jobs. Paid plans can turn it off.">
+              <div className="flex items-center justify-between gap-3 rounded-[10px] border border-gray-200 dark:border-gray-800 pl-3 pr-2">
+                <span className="py-2">
+                  <span className="block text-sm text-gray-800 dark:text-gray-200">Show “Powered by Udyaibase”</span>
+                  {!canHideBranding && <span className="block text-xs text-gray-500"><a href="/employer/billing" className="underline">Upgrade</a> to remove it</span>}
+                </span>
+                {canHideBranding
+                  ? <Switch checked={widget.showPoweredBy} label="Show Powered by Udyaibase" onChange={(v) => onChange({ showPoweredBy: v })} />
+                  : <span className="text-xs font-semibold text-gray-500 pr-1">On</span>}
               </div>
             </Field>
           </Group>

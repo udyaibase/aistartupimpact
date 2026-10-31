@@ -19,7 +19,7 @@ export interface PromotionRow {
   socialUrl: string | null;
 }
 
-/** Open jobs from employers on an active Premium plan: the newsletter and social shares Premium includes. */
+/** Open jobs from employers on an active Scale plan (or legacy Premium): the newsletter and social shares it includes. */
 export async function getPromotionQueueAction() {
   const { error } = await requireActionAuth(ROLES);
   if (error) return { success: false as const, error };
@@ -27,7 +27,7 @@ export async function getPromotionQueueAction() {
   const jobs = await prisma.jobBoardListing.findMany({
     where: {
       status: 'OPEN', deletedAt: null, moderationHold: false, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-      Employer: { plan: 'PREMIUM', planExpiresAt: { gt: now } },
+      Employer: { plan: { in: ['SCALE', 'PREMIUM'] }, planIsTrial: false, planExpiresAt: { gt: now } },
     },
     orderBy: [{ publishedAt: 'asc' }],
     take: 300,

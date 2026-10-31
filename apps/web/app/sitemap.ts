@@ -19,6 +19,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${domain}/india-ai/schemes`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.6 },
     { url: `${domain}/opinions`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.9 },
     { url: `${domain}/jobs`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.8 },
+    { url: `${domain}/hire/pricing`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.6 },
     { url: `${domain}/about`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.5 },
     { url: `${domain}/newsletter`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.6 },
     { url: `${domain}/advertise`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.5 },

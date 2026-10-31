@@ -25,6 +25,8 @@ interface Props {
   origin: string;
   openJobs: number;
   departments: string[];
+  /** Paid plans can hide "Powered by Udyaibase". */
+  canHideBranding: boolean;
 }
 
 const API = "/api/employer/careers/widget";
@@ -34,7 +36,7 @@ const DETECTION_KEYS: (keyof JobsPortalWidget)[] = [
 ];
 
 /** Careers widget setup: the same flow and layout as the events widget page. */
-export default function JobsWidgetSetup({ widget: initial, stats, referrers, origin, openJobs, departments }: Props) {
+export default function JobsWidgetSetup({ widget: initial, stats, referrers, origin, openJobs, departments, canHideBranding }: Props) {
   const router = useRouter();
   const previewRef = useRef<PreviewHandle>(null);
   const [widget, setWidget] = useState(initial);
@@ -263,6 +265,7 @@ export default function JobsWidgetSetup({ widget: initial, stats, referrers, ori
         <JobsCustomizePanel
           widget={widget}
           departments={departments}
+          canHideBranding={canHideBranding}
           saveState={saveState}
           saveError={saveError}
           onChange={update}

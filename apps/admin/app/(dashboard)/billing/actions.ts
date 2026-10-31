@@ -83,12 +83,14 @@ export async function billingOverviewAction() {
     listPayments(),
   ]);
 
+  const count = (plans: string[]) => activeEmployers.filter((g) => plans.includes(g.plan)).reduce((n, g) => n + g._count._all, 0);
   return {
     success: true as const,
     revenue: { thisMonth, lastMonth, fy },
     active: {
-      featured: activeEmployers.find((g) => g.plan === 'FEATURED')?._count._all ?? 0,
-      premium: activeEmployers.find((g) => g.plan === 'PREMIUM')?._count._all ?? 0,
+      growth: count(['GROWTH']),
+      pro: count(['PRO', 'FEATURED']),
+      scale: count(['SCALE', 'PREMIUM']),
       hostPro: activeHosts,
     },
     expiring: [

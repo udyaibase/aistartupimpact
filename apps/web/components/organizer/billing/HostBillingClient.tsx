@@ -6,7 +6,7 @@ import { Check, Loader2, Sparkles, Star } from "lucide-react";
 import { payWithRazorpay } from "@/lib/billing/checkout-client";
 import BillingDetailsForm from "@/components/billing/BillingDetailsForm";
 import type { BillingProfile } from "@/lib/billing/details";
-import type { HostPlan, HostPlanKey } from "@/lib/events/plans";
+import { HOST_FOUNDING_DISCOUNT, HOST_FOUNDING_LIMIT, HOST_FOUNDING_LOCK_MONTHS, type HostBillingCycle, type HostPlan, type HostPlanKey } from "@/lib/events/plans";
 import InvoicesTable, { type InvoiceRow } from "@/components/billing/InvoicesTable";
 
 type Price = { amount: number; gst: number; total: number };
@@ -16,10 +16,13 @@ const card = "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-
 const rupees = (p: number) => `₹${(p / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const fmt = (iso: string) => new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 
-export default function HostBillingClient({ current, expiresAt, usage, plans, boost, events, payments, highlight, paymentsReady, billing, invoices }: {
+export default function HostBillingClient({ current, expiresAt, usage, cycle: currentCycle, pro, founding, plans, boost, events, payments, highlight, paymentsReady, billing, invoices }: {
   current: HostPlanKey;
   expiresAt: string | null;
   usage: { upcoming: number; team: number; promo: { used: number; limit: number; left: number } };
+  cycle: HostBillingCycle;
+  pro: { monthly: Price; yearly: Price; yearlyFounding: Price };
+  founding: { eligible: boolean; member: boolean; placesLeft: number };
   plans: (HostPlan & { price: Price })[];
   boost: { pricePaise: number; registrationsPerEvent: number; features: string[]; price: Price };
   events: EventRow[];
@@ -33,7 +36,11 @@ export default function HostBillingClient({ current, expiresAt, usage, plans, bo
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [cycle, setCycle] = useState<HostBillingCycle>(current === "PRO" ? currentCycle : "MONTHLY");
   const plan = plans.find((p) => p.key === current)!;
+  const yearly = cycle === "ANNUAL";
+  const proPrice = yearly ? (founding.eligible ? pro.yearlyFounding : pro.yearly) : pro.monthly;
+  const yearlySavePct = Math.round((1 - pro.yearly.amount / (pro.monthly.amount * 12)) * 100);
   const daysLeft = expiresAt ? Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 864e5)) : null;
 
   async function buy(kind: "PRO" | "BOOST", eventId?: string) {
@@ -41,7 +48,7 @@ export default function HostBillingClient({ current, expiresAt, usage, plans, bo
     setError("");
     setNotice("");
     try {
-      const res = await fetch("/api/organizer/billing/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, eventId }) });
+      const res = await fetch("/api/organizer/billing/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, eventId, ...(kind === "PRO" ? { cycle } : {}) }) });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) { setError(d.error || "Couldn’t start the payment."); setBusy(null); return; }
       const out = await payWithRazorpay(d, "/api/organizer/billing/verify");
@@ -65,7 +72,7 @@ export default function HostBillingClient({ current, expiresAt, usage, plans, bo
     <div className="font-jakarta space-y-5">
       <div>
         <h1 className="portal-title">Plans &amp; billing</h1>
-        <p className="portal-subtitle">Free covers most events. Boost one event when you need reach, or go Pro if you host often. No auto-renewal.</p>
+        <p className="portal-subtitle">Free covers small meetups. Boost one event when you need reach, or go Pro if you host often. No auto-renewal.</p>
       </div>
 
       {(error || notice) && (
@@ -73,11 +80,28 @@ export default function HostBillingClient({ current, expiresAt, usage, plans, bo
       )}
 
       <section aria-label="Current plan" className={`${card} p-4 sm:p-5 grid gap-4 grid-cols-2 lg:grid-cols-4`}>
-        {stat("Current plan", plan.name, expiresAt ? `Until ${fmt(expiresAt)} · ${daysLeft} day${daysLeft === 1 ? "" : "s"} left` : "Free forever")}
+        {stat("Current plan", plan.name, expiresAt ? `${currentCycle === "ANNUAL" ? "Yearly · " : ""}Until ${fmt(expiresAt)} · ${daysLeft} day${daysLeft === 1 ? "" : "s"} left${founding.member ? " · founding price" : ""}` : "Free forever")}
         {stat("Upcoming events", <>{usage.upcoming} <span className="text-sm font-normal text-gray-500">{plan.maxUpcomingEvents >= 1000 ? "· unlimited" : `of ${plan.maxUpcomingEvents}`}</span></>)}
         {stat("Teammates", <>{usage.team} <span className="text-sm font-normal text-gray-500">of {plan.teamMembers}</span></>)}
-        {stat("Promo emails", plan.promoEmailsPerPeriod ? <>{usage.promo.left} <span className="text-sm font-normal text-gray-500">left of {usage.promo.limit}</span></> : "—", plan.promoEmailsPerPeriod ? "this month" : "Boost an event for 1")}
+        {stat("Promo emails", plan.promoEmailsPerPeriod ? <>{usage.promo.left} <span className="text-sm font-normal text-gray-500">left of {usage.promo.limit}</span></> : "—", plan.promoEmailsPerPeriod ? "this month" : "Boost an event to include it")}
       </section>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div role="radiogroup" aria-label="Pro billing period" className="inline-flex rounded-[10px] border border-gray-200 dark:border-gray-800 p-1 bg-white dark:bg-gray-900">
+          {(["MONTHLY", "ANNUAL"] as const).map((c) => (
+            <button key={c} type="button" role="radio" aria-checked={cycle === c} onClick={() => setCycle(c)}
+              className={`min-h-[36px] px-3 rounded-[8px] text-sm font-semibold ${cycle === c ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"}`}>
+              {c === "MONTHLY" ? "Monthly" : `Yearly · save ${yearlySavePct}%`}
+            </button>
+          ))}
+        </div>
+        {yearly && founding.eligible && (
+          <p className="text-[13px] text-gray-700 dark:text-gray-300">
+            <span className="font-semibold text-[#A50F15] dark:text-red-300">Founding host price: {Math.round(HOST_FOUNDING_DISCOUNT * 100)}% off yearly Pro</span>
+            {" "}for {HOST_FOUNDING_LOCK_MONTHS} months{founding.member ? "" : ` · ${founding.placesLeft} of ${HOST_FOUNDING_LIMIT} places left`}
+          </p>
+        )}
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         {plans.map((p) => {
@@ -89,15 +113,28 @@ export default function HostBillingClient({ current, expiresAt, usage, plans, bo
                 {isCurrent && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">Current</span>}
                 {!isCurrent && p.key === "PRO" && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#A50F15]/10 text-[#A50F15] dark:text-red-300">For regular hosts</span>}
               </div>
-              <p className="mt-2"><span className="text-2xl font-extrabold text-gray-900 dark:text-white">{rupees(p.price.amount)}</span><span className="text-sm text-gray-500">{p.pricePaise ? " / month" : ""}</span></p>
-              {p.pricePaise > 0 && <p className="text-xs text-gray-500">+ 18% GST · {rupees(p.price.total)} total</p>}
+              {p.key === "PRO" ? (
+                <>
+                  <p className="mt-2">
+                    {yearly && founding.eligible && <span className="mr-1.5 text-sm text-gray-400 line-through tabular-nums">{rupees(pro.yearly.amount)}</span>}
+                    <span className="text-2xl font-extrabold text-gray-900 dark:text-white tabular-nums">{rupees(proPrice.amount)}</span>
+                    <span className="text-sm text-gray-500">{yearly ? " / year" : " / month"}</span>
+                  </p>
+                  <p className="text-xs text-gray-500">+ 18% GST · {rupees(proPrice.total)} total{yearly ? ` · ${rupees(Math.round(proPrice.amount / 12))}/mo` : ""}</p>
+                </>
+              ) : (
+                <>
+                  <p className="mt-2"><span className="text-2xl font-extrabold text-gray-900 dark:text-white">₹0</span></p>
+                  <p className="text-xs text-gray-500">Free forever</p>
+                </>
+              )}
               <ul className="mt-4 space-y-2 flex-1">
                 {p.features.map((f) => <li key={f} className="flex items-start gap-2 text-[13.5px] text-gray-700 dark:text-gray-300"><Check className="w-4 h-4 mt-0.5 text-green-600 shrink-0" aria-hidden /> {f}</li>)}
               </ul>
               {p.key === "PRO" && (
                 <button type="button" onClick={() => buy("PRO")} disabled={!!busy || !paymentsReady}
                   className={`mt-5 w-full min-h-[44px] rounded-[10px] text-sm font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-50 ${isCurrent ? "border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white" : "bg-gray-900 dark:bg-white text-white dark:text-gray-900"}`}>
-                  {busy === "PRO" && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} {isCurrent ? "Add 30 days" : "Upgrade to Pro"}
+                  {busy === "PRO" && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} {isCurrent ? (cycle === currentCycle ? (yearly ? "Add 1 year" : "Add 30 days") : `Switch to ${yearly ? "yearly" : "monthly"}`) : "Upgrade to Pro"}
                 </button>
               )}
             </section>
@@ -111,6 +148,7 @@ export default function HostBillingClient({ current, expiresAt, usage, plans, bo
           <span className="text-xs text-gray-500">+ 18% GST · {rupees(boost.price.total)} total · one-time</span>
         </div>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{boost.features.join(" · ")}.</p>
+        <p className="mt-1 text-[13px] text-gray-500">A Boost raises the limit for that one event only; your other events keep your plan&apos;s limit.</p>
         {events.length === 0 ? (
           <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">Publish an event to boost it.</p>
         ) : (

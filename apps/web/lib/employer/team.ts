@@ -1,10 +1,14 @@
 import crypto from 'crypto';
+import { effectivePlan } from '@/lib/employer/plans';
 import { prisma } from '@udyaibase/database';
 import type { EmployerRole } from '@/lib/employer-auth';
 import { sendEmail } from '@/lib/email/send';
 import { ROLE_LABEL } from '@/lib/employer/roles';
 import { employerContext } from '@/lib/employer/applications';
 import { emailDomain, emailMatchesDomain, isFreeMailDomain, websiteDomain } from '@/lib/jobs/trust';
+
+/** Safety cap for plans with unlimited seats. */
+const MAX_SEATS_CAP = 200;
 
 const SITE = (process.env.NEXT_PUBLIC_SITE_URL || 'https://udyaibase.com').replace(/\/$/, '');
 export const INVITE_TTL_DAYS = 7;
@@ -119,7 +123,7 @@ export async function teamCompanyDomain(employerId: string): Promise<string | nu
 
 export type InviteResult =
   | { ok: true; memberId: string }
-  | { ok: false; status: number; error: string; field?: string; code?: 'outside_domain'; domain?: string };
+  | { ok: false; status: number; error: string; field?: string; code?: 'outside_domain' | 'seat_limit'; domain?: string };
 
 /**
  * The one place teammates are invited (employer Team page and founder portal both call it).
@@ -150,13 +154,23 @@ export async function inviteTeammate(opts: {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) || email.length > 254) {
     return { ok: false, status: 400, error: 'Enter a valid email address.', field: 'email' };
   }
-  const employer = await prisma.jobBoardEmployer.findUnique({ where: { id: opts.employerId }, select: { email: true } });
+  const employer = await prisma.jobBoardEmployer.findUnique({ where: { id: opts.employerId }, select: { email: true, plan: true, planExpiresAt: true, planIsTrial: true } });
   if (!employer) return { ok: false, status: 404, error: 'Workspace not found.' };
   if (employer.email.toLowerCase() === email) return { ok: false, status: 409, error: 'That’s the workspace owner’s email already.', field: 'email' };
   const existing = await prisma.jobBoardTeamMember.findUnique({ where: { employerId_email: { employerId: opts.employerId, email } } });
   if (existing?.status === 'ACTIVE') return { ok: false, status: 409, error: `${email} is already on your team.`, field: 'email' };
-  const seats = await prisma.jobBoardTeamMember.count({ where: { employerId: opts.employerId, status: { in: ['PENDING', 'ACTIVE'] } } });
-  if (!existing && seats >= 25) return { ok: false, status: 403, error: 'You’ve reached 25 teammates. Remove someone or contact us.' };
+  // Seats include the workspace owner. Over the limit after a downgrade, existing people keep access; only new invites stop.
+  const plan = effectivePlan(employer);
+  const maxSeats = plan.maxSeats ?? MAX_SEATS_CAP;
+  const seats = 1 + await prisma.jobBoardTeamMember.count({ where: { employerId: opts.employerId, status: { in: ['PENDING', 'ACTIVE'] } } });
+  if (!existing && seats >= maxSeats) {
+    return {
+      ok: false, status: 403, code: 'seat_limit',
+      error: plan.maxSeats === null
+        ? `You’ve reached ${MAX_SEATS_CAP} people. Contact us to add more.`
+        : `The ${plan.name} plan includes ${plan.maxSeats} seats, including you. Remove someone or upgrade for more.`,
+    };
+  }
 
   if (opts.role === 'RECRUITER' && !opts.confirmOutsideDomain) {
     const domain = await teamCompanyDomain(opts.employerId);
