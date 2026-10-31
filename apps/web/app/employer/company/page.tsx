@@ -77,7 +77,8 @@ export default function EmployerCompanyPage() {
   if (loading) return <div className="p-10 text-center text-gray-400 font-jakarta">Loading...</div>;
 
   const isConnected = !!company?.startupId;
-  const isVerifiedClaim = isConnected && (company?.startupClaimMethod === 'DOMAIN_OTP' || company?.startupClaimMethod === 'ADMIN');
+  // Same rule as canPublish (lib/jobs/trust.ts VERIFIED_CLAIM_METHODS): a founder-opened workspace is verified too.
+  const isVerifiedClaim = isConnected && ['DOMAIN_OTP', 'ADMIN', 'FOUNDER'].includes(company?.startupClaimMethod ?? '');
 
   return (
     <div>

@@ -66,7 +66,8 @@ export async function openFounderWorkspace(founderUserId: string, startupId: str
     // A founder may already have an employer login under their email (e.g. signed up earlier): link it.
     const byEmail = await prisma.jobBoardEmployer.findUnique({ where: { email: founder.email.toLowerCase() } });
     if (byEmail && byEmail.startupId && byEmail.startupId !== startup.id) {
-      throw new WorkspaceError('Your email already runs hiring for another startup. Sign in to the employer portal with that account instead.', 409, 'email_in_use');
+      // One workspace per owner email until owners become team members (multi-workspace support is next).
+      throw new WorkspaceError('Your account already runs hiring for another startup. Hiring for more than one startup from one account is coming soon; until then, email contact@udyaibase.com and we will set it up for you.', 409, 'email_in_use');
     }
     const data = {
       founderUserId,

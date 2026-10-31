@@ -3,9 +3,9 @@ import crypto from 'crypto';
 import { prisma } from '@udyaibase/database';
 import { sql } from '@/lib/db';
 import { setEmployerSession } from '@/lib/employer-auth';
-import { authRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
+import { authRateLimit, checkRateLimit, emailCodeAllowed, getClientIdentifier } from '@/lib/rate-limit';
 import { checkDomainCode } from '@/lib/startups/domain-otp';
-import { sendMemberLoginCode } from '@/lib/employer/team';
+import { resendPendingInvites, sendMemberLoginCode } from '@/lib/employer/team';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +29,11 @@ export async function POST(request: NextRequest) {
   });
 
   if (b.step !== 'verify') {
+    // Checked for every address (member or not), so the answer never reveals who is on a team.
+    if (!(await emailCodeAllowed(email, PURPOSE))) {
+      return NextResponse.json({ error: 'Too many codes requested for this email. Try again in 15 minutes.' }, { status: 429 });
+    }
+    if (!memberships.length) await resendPendingInvites(email);
     if (memberships.length) {
       const recent = await sql`SELECT EXTRACT(EPOCH FROM (NOW() - "createdAt"))::int AS age FROM "EmailOtp" WHERE email = ${email} AND purpose = ${PURPOSE} ORDER BY "createdAt" DESC LIMIT 1`;
       const age = (recent[0] as { age: number } | undefined)?.age;
@@ -40,7 +45,7 @@ export async function POST(request: NextRequest) {
         await sendMemberLoginCode(email, code);
       }
     }
-    return NextResponse.json({ success: true, message: 'If this email is on a hiring team, we sent it a 6-digit code.' });
+    return NextResponse.json({ success: true, message: 'If this email is on a hiring team, we sent it a 6-digit code. If you were invited but haven’t joined yet, we sent your invitation again.' });
   }
 
   const code = String(b.code ?? '').replace(/\D/g, '');

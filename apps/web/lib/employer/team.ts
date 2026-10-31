@@ -196,6 +196,27 @@ export async function inviteTeammate(opts: {
   return { ok: true, memberId: member.id };
 }
 
+/**
+ * Lost or expired invite link: when someone asks for a sign-in code but has only pending invites, send each
+ * invitation again with a new link (the old link stops working). Callers rate-limit per email.
+ */
+export async function resendPendingInvites(email: string): Promise<number> {
+  const pending = await prisma.jobBoardTeamMember.findMany({
+    where: { email: email.trim().toLowerCase(), status: 'PENDING', Employer: { isActive: true, deactivatedAt: null } },
+    select: { id: true, employerId: true, role: true, invitedByEmail: true },
+    take: 5,
+  });
+  for (const m of pending) {
+    const token = newInviteToken();
+    await prisma.jobBoardTeamMember.update({
+      where: { id: m.id },
+      data: { inviteTokenHash: hashToken(token), inviteExpiresAt: new Date(Date.now() + INVITE_TTL_DAYS * 86_400_000) },
+    });
+    await sendInviteEmail({ employerId: m.employerId, to: email, role: m.role as EmployerRole, inviterEmail: m.invitedByEmail, inviterName: null, token });
+  }
+  return pending.length;
+}
+
 /** Owner alert: a teammate published a job under the workspace's name. */
 export function sendTeammatePublishedEmail(opts: { to: string; who: string; jobTitle: string; slug: string; jobId: string }) {
   void sendEmail({

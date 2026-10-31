@@ -4,7 +4,7 @@ import { prisma } from '@udyaibase/database';
 import { sql } from '@/lib/db';
 import { getEmployerSession } from '@/lib/employer-auth';
 import { sendEmail } from '@/lib/email/send';
-import { authRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
+import { authRateLimit, checkRateLimit, getClientIdentifier, emailCodeAllowed } from '@/lib/rate-limit';
 import { emailDomain, emailMatchesDomain, isFreeMailDomain, websiteDomain, VERIFIED_CLAIM_METHODS } from '@/lib/jobs/trust';
 import { can, forbidden } from '@/lib/employer/permissions';
 
@@ -66,6 +66,9 @@ export async function POST(request: NextRequest) {
   }
 
   const purpose = `employer_claim:${startup.id}`;
+  if (!(await emailCodeAllowed(workEmail, purpose))) {
+    return NextResponse.json({ error: 'Too many codes requested for this email. Try again in 15 minutes.' }, { status: 429 });
+  }
   const recent = await sql`
     SELECT EXTRACT(EPOCH FROM (NOW() - "createdAt"))::int AS age FROM "EmailOtp"
     WHERE email = ${workEmail} AND purpose = ${purpose} ORDER BY "createdAt" DESC LIMIT 1
