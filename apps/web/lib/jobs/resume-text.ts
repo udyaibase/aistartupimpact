@@ -39,7 +39,7 @@ export async function resumeText(bytes: Uint8Array, kind: ResumeKind): Promise<s
   } else {
     const files = unzipSync(bytes, { filter: (f) => f.name === 'word/document.xml' && f.originalSize <= MAX_UNZIPPED });
     const xml = files['word/document.xml'] ? strFromU8(files['word/document.xml']) : '';
-    text = xml.replace(/<\/w:p>/g, '\n').replace(/<w:tab\/>/g, ' ').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+    text = xml.replace(/<\/w:p>/g, '\n').replace(/<w:tab\/>/g, ' ').replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'); // &amp; last, so "&amp;lt;" stays "&lt;"
   }
   return text.replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim().slice(0, MAX_CHARS);
 }

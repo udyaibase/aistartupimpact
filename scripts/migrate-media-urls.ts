@@ -104,8 +104,10 @@ async function main() {
   for (const [t, c] of TEXT_COLS) {
     for (const r of backup[`${t}.${c}`] as { id: string; v: string }[]) {
       const url = r.v;
-      if (url.startsWith(MAIN_DEV) || url.startsWith(SECOND_DEV) || url.includes('localhost')) continue;
-      const host = new URL(url).hostname;
+      if (url.startsWith(MAIN_DEV) || url.startsWith(SECOND_DEV)) continue;
+      let host: string;
+      try { host = new URL(url).hostname; } catch { continue; }
+      if (host === 'localhost' || host === '127.0.0.1') continue;
       const importable = IMPORT_HOSTS.test(host);
       if (!importable && !url.startsWith('https://images.unsplash.com')) continue; // sign-in avatars stay
       if (imported.has(url)) continue;

@@ -20,6 +20,10 @@ const ALLOWED = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "SENIOR_WRITER"];
 
 // ── Stats ────────────────────────────────────────────────────────────────────
 
+
+/** Preview text goes inside HTML, so escape it like any other text. */
+const escapePreview = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
 export async function getNewsletterStatsAction() {
   const session: any = await getServerSession(authOptions);
   if (!session?.user || !ALLOWED.includes(session.user.role))
@@ -224,11 +228,10 @@ export async function sendCampaignAction(id: string) {
       const fullHtml = generateNewsletterHtml(templateId, campaign.subject, trackedBody);
       
       // Inject tracking pixel and preview text before closing </body>
-      const previewDiv = `<div style="display:none;font-size:1px;color:#f4f7fa;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden">${campaign.previewText || campaign.subject}</div>`;
+      const previewDiv = `<div style="display:none;font-size:1px;color:#f4f7fa;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden">${escapePreview(campaign.previewText || campaign.subject)}</div>`;
       const pixel = `<img src="${trackingPixel}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0" />`;
       
       return fullHtml
-        .replace('<body', `<body`)
         .replace('</body>', `${pixel}</body>`)
         .replace(/<body([^>]*)>/, `<body$1>${previewDiv}`)
         // Replace unsubscribe placeholder with actual email

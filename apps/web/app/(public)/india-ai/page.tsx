@@ -11,6 +11,7 @@ import {
   FileText,
   Newspaper
 } from 'lucide-react';
+import { buildFallback } from '@/lib/build-fallback';
 import { sql } from '@/lib/db';
 import FundingTracker from '@/components/india-ai/FundingTracker';
 import NewsletterCapture from '@/components/india-ai/NewsletterCapture';
@@ -122,6 +123,13 @@ export const metadata: Metadata = {
 
 // Fetch all data server-side
 async function getIndiaAIData() {
+  return loadIndiaAIData().catch(buildFallback({
+    stats: [] as StatItem[], cities: [] as CityRow[], mission: [] as MissionPillar[],
+    missionDisbursement: [] as DisbursementStat[], recentFunding: [] as FundingRow[], allStartups: [] as (StartupRow & { sector: string })[],
+  }, 'india-ai'));
+}
+
+async function loadIndiaAIData() {
   const [computedStartupCount, thisMonthStartups, totalFundingResult, thisMonthFundingResult, manualStats, cities, mission, missionDisbursement, , recentFunding, allStartups] = await Promise.all([
     // Live computed: total startups
     sql`

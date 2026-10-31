@@ -43,7 +43,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    // Length cap plus dot-separated domain labels: the pattern can't backtrack on long input.
+    if (email.length > 254 || !/^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/.test(email)) {
       return NextResponse.json(
         { success: false, error: "Invalid email address." },
         { status: 400 }

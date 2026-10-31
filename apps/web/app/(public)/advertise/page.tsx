@@ -6,6 +6,7 @@ import {
   ChevronDown, X, CreditCard, HelpCircle, Clock, Shield, Package, Eye,
 } from 'lucide-react';
 import { sql } from '@/lib/db';
+import { buildFallback } from '@/lib/build-fallback';
 
 function LinkedInIcon({ className }: { className?: string }) {
   return (
@@ -233,9 +234,9 @@ function zoneTable(rate: number): Omit<ZoneRow, 'name'> {
 
 export default async function AdvertisePage() {
   const [startupCountResult, articleCountResult, toolCountResult, newsletterCountResult] = await Promise.all([
-    sql`SELECT COUNT(*)::int as count FROM "Startup" WHERE "isIndian" = true AND "deletedAt" IS NULL AND "isApproved" = true`,
-    sql`SELECT COUNT(*)::int as count FROM "Article" WHERE status = 'PUBLISHED'`,
-    sql`SELECT COUNT(*)::int as count FROM "AiTool" WHERE status IN ('APPROVED', 'FEATURED') AND "deletedAt" IS NULL`,
+    sql`SELECT COUNT(*)::int as count FROM "Startup" WHERE "isIndian" = true AND "deletedAt" IS NULL AND "isApproved" = true`.catch(buildFallback([{ count: 0 }], 'advertise counts')),
+    sql`SELECT COUNT(*)::int as count FROM "Article" WHERE status = 'PUBLISHED'`.catch(buildFallback([{ count: 0 }], 'advertise counts')),
+    sql`SELECT COUNT(*)::int as count FROM "AiTool" WHERE status IN ('APPROVED', 'FEATURED') AND "deletedAt" IS NULL`.catch(buildFallback([{ count: 0 }], 'advertise counts')),
     sql`SELECT COUNT(*)::int as count FROM "NewsletterSubscriber" WHERE "isActive" = true`.catch(() => [{ count: 0 }]),
   ]);
 
@@ -246,7 +247,7 @@ export default async function AdvertisePage() {
 
   const stats = [
     { value: '50K+', label: 'LinkedIn Followers', icon: LinkedInIcon },
-    { value: `${startupCount.toLocaleString('en-IN')}+`, label: 'AI Startups Listed', icon: BarChart3 },
+    { value: `${startupCount > 0 ? startupCount.toLocaleString('en-IN') : '800'}+`, label: 'AI Startups Listed', icon: BarChart3 },
     { value: `${articleCount > 0 ? articleCount.toLocaleString('en-IN') : '200'}+`, label: 'Published Stories', icon: Newspaper },
     { value: `${toolCount > 0 ? toolCount.toLocaleString('en-IN') : '500'}+`, label: 'AI Tools Reviewed', icon: Star },
     { value: newsletterCount > 1000 ? `${(newsletterCount / 1000).toFixed(1)}K+` : `${newsletterCount.toLocaleString('en-IN')}+`, label: 'Newsletter Subscribers', icon: Mail },

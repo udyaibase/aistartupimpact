@@ -93,7 +93,7 @@ describe('Security headers — next.config.mjs', () => {
     expect(coep).toBeDefined();
     expect(coep!.headers.find((h) => h.key === 'Cross-Origin-Embedder-Policy')!.value).toBe('credentialless');
     // Next.js path patterns are regex-like; test the pattern against sample paths.
-    const re = new RegExp(`^${coep!.source.replace(/^\//, '\\/').replace(/\(\?!/, '(?!')}$`);
+    const re = new RegExp(`^${coep!.source.replace(/^\//, '\\/')}$`);
     expect(re.test('/news/some-article')).toBe(true);
     for (const path of ['/embed/abc', '/events/ai-meetup', '/organizer/billing', '/employer/billing', '/employer/careers']) {
       expect(re.test(path), path).toBe(false);

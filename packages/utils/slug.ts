@@ -3,13 +3,19 @@
  * Example: "Best AI Tools for 2025" → "best-ai-tools-for-2025"
  */
 export function generateSlug(text: string): string {
-  return text
+  const slug = text
+    .slice(0, 500)
     .toLowerCase()
     .trim()
     .replace(/[^\w\s-]/g, '')
     .replace(/[\s_]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(/-+/g, '-');
+  // Trim edge dashes without a regex (an anchored `-+$` can backtrack badly on long dash runs).
+  let start = 0;
+  let end = slug.length;
+  while (start < end && slug[start] === '-') start++;
+  while (end > start && slug[end - 1] === '-') end--;
+  return slug.slice(start, end);
 }
 
 /**

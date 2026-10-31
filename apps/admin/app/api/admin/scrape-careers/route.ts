@@ -245,21 +245,28 @@ function detectAtsEmbed(html: string): AtsInfo | null {
   return null;
 }
 
-// Detect ATS platform from any URL
+// Detect ATS platform from any URL, by its host name (never by a substring of the whole URL).
+const ATS_HOSTS: [string, string][] = [
+  ['greenhouse.io', 'greenhouse'],
+  ['jobs.lever.co', 'lever'],
+  ['jobs.ashbyhq.com', 'ashby'],
+  ['bamboohr.com', 'bamboohr'],
+  ['apply.workable.com', 'workable'],
+  ['jobs.smartrecruiters.com', 'smartrecruiters'],
+  ['wellfound.com', 'wellfound'],
+  ['freshteam.com', 'freshteam'],
+  ['ats.rippling.com', 'rippling'],
+  ['recruitee.com', 'recruitee'],
+  ['breezy.hr', 'breezy'],
+  ['jobs.jobvite.com', 'jobvite'],
+  ['keka.com', 'keka'],
+];
 function detectAtsPlatform(url: string): string | null {
-  if (/boards\.greenhouse\.io|greenhouse\.io/i.test(url)) return 'greenhouse';
-  if (/jobs\.lever\.co/i.test(url)) return 'lever';
-  if (/jobs\.ashbyhq\.com/i.test(url)) return 'ashby';
-  if (/bamboohr\.com/i.test(url)) return 'bamboohr';
-  if (/apply\.workable\.com/i.test(url)) return 'workable';
-  if (/jobs\.smartrecruiters\.com/i.test(url)) return 'smartrecruiters';
-  if (/wellfound\.com/i.test(url)) return 'wellfound';
-  if (/freshteam\.com/i.test(url)) return 'freshteam';
-  if (/ats\.rippling\.com/i.test(url)) return 'rippling';
-  if (/recruitee\.com/i.test(url)) return 'recruitee';
-  if (/breezy\.hr/i.test(url)) return 'breezy';
-  if (/jobs\.jobvite\.com/i.test(url)) return 'jobvite';
-  if (/\.keka\.com/i.test(url)) return 'keka';
+  let host: string;
+  try { host = new URL(url).hostname.toLowerCase(); } catch { return null; }
+  for (const [domain, platform] of ATS_HOSTS) {
+    if (host === domain || host.endsWith(`.${domain}`)) return platform;
+  }
   return null;
 }
 
@@ -568,11 +575,14 @@ function extractAllLinks(html: string, baseUrl: string): Array<{ text: string; u
     const text = $(el).text().trim().replace(/\s+/g, ' ');
     const ariaLabel = $(el).attr('aria-label') || '';
     const classes = $(el).attr('class') || '';
-    if (!href || href === '#' || href.startsWith('javascript:') || href.startsWith('mailto:')) return;
+    if (!href || href === '#') return;
     if (!text && !ariaLabel) return;
 
     try {
-      const fullUrl = href.startsWith('http') ? href : new URL(href, baseUrl).toString();
+      const parsed = new URL(href, baseUrl);
+      // Only web links: drops javascript:, data:, vbscript:, mailto: and the like.
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
+      const fullUrl = parsed.toString();
       if (seen.has(fullUrl) || isBlockedUrl(fullUrl)) return;
       seen.add(fullUrl);
 
@@ -1062,7 +1072,8 @@ function postProcessJob(job: any, pageText: string, sourceUrl: string): any {
   // Validate applicationEmail — remove obviously fake emails
   if (job.applicationEmail) {
     const email = String(job.applicationEmail).toLowerCase();
-    if (email.includes('example.com') || email.includes('test.com') || email.includes('sample.com') || !email.includes('@')) {
+    const domain = email.split('@')[1] ?? '';
+    if (!domain || ['example.com', 'test.com', 'sample.com'].includes(domain)) {
       // Check if this email actually appears in the page text
       if (!pageText.toLowerCase().includes(email)) {
         job.applicationEmail = null;

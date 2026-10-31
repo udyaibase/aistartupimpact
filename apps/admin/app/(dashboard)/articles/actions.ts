@@ -110,7 +110,7 @@ export async function saveArticleAction(payload: any, articleId?: string | null)
       }
     }
 
-    console.log('[saveArticleAction] Final slug:', finalSlug);
+    console.log('[saveArticleAction] Final slug:', JSON.stringify(finalSlug));
 
     // Handle category - find or use null
     let categoryId: string | null = null;
@@ -295,7 +295,7 @@ export async function saveArticleAction(payload: any, articleId?: string | null)
       await prisma.$executeRaw`DELETE FROM "ArticleTag" WHERE "articleId" = ${articleId}`;
     }
 
-    console.log('[saveArticleAction] Article saved successfully:', article.id);
+    console.log('[saveArticleAction] Article saved successfully:', JSON.stringify(article.id));
 
     // Refresh dashboard feeds
     revalidatePath("/articles");
