@@ -34,3 +34,11 @@ describe('buildFallback', () => {
     if (prev === undefined) delete process.env.NEXT_PHASE; else process.env.NEXT_PHASE = prev;
   });
 });
+
+describe('docxText', () => {
+  it('keeps text, paragraphs and tabs, and decodes entities once', async () => {
+    const { docxText } = await import('@/lib/jobs/resume-text');
+    const xml = '<w:body><w:p><w:r><w:t>Jane &amp; Co</w:t><w:tab/><w:t>a &amp;lt; b</w:t></w:r></w:p><w:p><w:t>&lt;script&gt;</w:t></w:p></w:body>';
+    expect(docxText(xml)).toBe('Jane & Co a &lt; b\n<script>\n');
+  });
+});

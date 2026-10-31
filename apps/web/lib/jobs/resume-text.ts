@@ -39,7 +39,27 @@ export async function resumeText(bytes: Uint8Array, kind: ResumeKind): Promise<s
   } else {
     const files = unzipSync(bytes, { filter: (f) => f.name === 'word/document.xml' && f.originalSize <= MAX_UNZIPPED });
     const xml = files['word/document.xml'] ? strFromU8(files['word/document.xml']) : '';
-    text = xml.replace(/<\/w:p>/g, '\n').replace(/<w:tab\/>/g, ' ').replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'); // &amp; last, so "&amp;lt;" stays "&lt;"
+    text = docxText(xml);
   }
   return text.replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim().slice(0, MAX_CHARS);
+}
+
+const XML_ENTITIES: Record<string, string> = { '&lt;': '<', '&gt;': '>', '&amp;': '&', '&quot;': '"', '&apos;': "'" };
+
+/**
+ * Plain text of a DOCX body: walks the XML once, keeping text between tags and turning paragraph ends and tabs
+ * into line breaks and spaces. Entities are decoded in a single pass, so nothing is unescaped twice.
+ */
+export function docxText(xml: string): string {
+  let out = '';
+  for (const part of xml.split(/(<[^>]*>)/)) {
+    if (!part) continue;
+    if (part[0] === '<') {
+      if (part === '</w:p>') out += '\n';
+      else if (part === '<w:tab/>') out += ' ';
+      continue;
+    }
+    out += part.replace(/&(?:lt|gt|amp|quot|apos);/g, (e) => XML_ENTITIES[e]);
+  }
+  return out;
 }
