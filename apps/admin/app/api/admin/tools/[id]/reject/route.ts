@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { neon } from '@neondatabase/serverless';
 import { requireApiAuth } from '@/lib/api-auth';
 import { logAuditEvent } from '@/lib/audit-log';
+import { withPublicRefresh } from '@/lib/refresh-public';
 
 const sql = neon(process.env.DATABASE_URL!);
 
-export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function postHandler(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const { error } = await requireApiAuth(['SUPER_ADMIN', 'EDITOR_IN_CHIEF']);
   if (error) return error;
@@ -33,3 +34,5 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     );
   }
 }
+
+export const POST = withPublicRefresh(['tools', 'home'], postHandler);

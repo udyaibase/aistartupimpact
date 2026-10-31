@@ -1,4 +1,5 @@
 import { Ratelimit } from "@upstash/ratelimit";
+import { clientIp } from "./client-ip";
 import { Redis } from "@upstash/redis";
 
 // Create Redis client with error handling
@@ -42,14 +43,30 @@ export const strictRateLimit = redis ? new Ratelimit({
   prefix: "ratelimit:strict",
 }) : null;
 
-// Helper to get client identifier (IP or user ID)
+export const twoFactorRateLimit = redis ? new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(5, "30 m"), // 5 attempts per 30 minutes per account
+  analytics: true,
+  prefix: "ratelimit:2fa",
+}) : null;
+
+export const jdParseRateLimit = redis ? new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(20, "1 h"), // AI job-description parsing, per employer
+  analytics: true,
+  prefix: "ratelimit:jdparse",
+}) : null;
+
+export const gstinLookupRateLimit = redis ? new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(20, "1 h"), // GSTIN register lookups (paid API), per account
+  analytics: true,
+  prefix: "ratelimit:gstin",
+}) : null;
+
+// Client IP for rate limiting (spoof-resistant; see lib/client-ip.ts)
 export function getClientIdentifier(request: Request): string {
-  // Try to get IP from various headers
-  const forwarded = request.headers.get("x-forwarded-for");
-  const realIp = request.headers.get("x-real-ip");
-  const cfConnectingIp = request.headers.get("cf-connecting-ip");
-  
-  return cfConnectingIp || realIp || forwarded?.split(",")[0] || "unknown";
+  return clientIp(request);
 }
 
 // Rate limit check helper with fallback

@@ -1,3 +1,4 @@
+import { jsonLd } from "@/lib/json-ld";
 /**
  * IndiaAI Government Scheme Schema Component
  * Unified @graph with GovernmentService + FAQPage + BreadcrumbList
@@ -156,7 +157,7 @@ export function IndiaAISchemeSchema({ scheme, faqs }: IndiaAISchemeSchemaProps) 
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+      dangerouslySetInnerHTML={{ __html: jsonLd(schema) }}
     />
   );
 }

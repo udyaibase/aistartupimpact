@@ -108,30 +108,36 @@ export default function CheckInPage() {
     if (d.success) { setStats(s => ({ ...s, checkedIn: Math.max(0, s.checkedIn - 1) })); setRecentScans(prev => prev.filter(s => s.id !== attendee.id)); }
   };
 
+  // Haptic feedback so door staff don't need to look at the screen.
+  useEffect(() => {
+    if (!result || typeof navigator === "undefined" || !("vibrate" in navigator)) return;
+    navigator.vibrate(result.status === "CHECKED_IN" ? 40 : [60, 50, 60]);
+  }, [result]);
+
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="font-sora font-bold text-lg text-navy dark:text-white flex items-center gap-2"><QrCode className="w-5 h-5 text-brand"/> Check-In</h1>
-          <p className="text-xs text-gray-500 font-jakarta">Scan QR or search to check in attendees</p>
+          <h1 className="portal-title flex items-center gap-2"><QrCode className="w-5 h-5 text-brand"/> Check-In</h1>
+          <p className="portal-subtitle">Scan QR or search to check in attendees</p>
         </div>
         {/* Mode Toggle */}
         {selectedEvent && (
-          <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
-            <button onClick={() => setMode("manual")} className={`px-3 py-1.5 rounded-md text-xs font-jakarta font-medium transition-colors flex items-center gap-1 ${mode === "manual" ? "bg-white dark:bg-gray-700 shadow-sm text-gray-700 dark:text-white" : "text-gray-500"}`}>
-              <Keyboard className="w-3 h-3"/> Manual
+          <div data-tour="checkin-mode" role="radiogroup" aria-label="Check-in mode" className="grid grid-cols-2 sm:flex sm:items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+            <button role="radio" aria-checked={mode === "manual"} onClick={() => setMode("manual")} className={`min-h-[44px] px-4 rounded-md text-sm font-jakarta font-semibold transition-colors flex items-center justify-center gap-1.5 ${mode === "manual" ? "bg-white dark:bg-gray-700 shadow-sm text-gray-700 dark:text-white" : "text-gray-500"}`}>
+              <Keyboard className="w-4 h-4"/> Manual
             </button>
-            <button onClick={() => setMode("camera")} className={`px-3 py-1.5 rounded-md text-xs font-jakarta font-medium transition-colors flex items-center gap-1 ${mode === "camera" ? "bg-white dark:bg-gray-700 shadow-sm text-gray-700 dark:text-white" : "text-gray-500"}`}>
-              <Camera className="w-3 h-3"/> Camera
+            <button role="radio" aria-checked={mode === "camera"} onClick={() => setMode("camera")} className={`min-h-[44px] px-4 rounded-md text-sm font-jakarta font-semibold transition-colors flex items-center justify-center gap-1.5 ${mode === "camera" ? "bg-white dark:bg-gray-700 shadow-sm text-gray-700 dark:text-white" : "text-gray-500"}`}>
+              <Camera className="w-4 h-4"/> Camera
             </button>
           </div>
         )}
       </div>
 
       {/* Event Selector */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
-        <select value={selectedEvent} onChange={e => setSelectedEvent(e.target.value)} className="w-full px-3 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-jakarta focus:outline-none focus:ring-2 focus:ring-brand/20">
-          <option value="">Select event...</option>
+      <div data-tour="checkin-event" className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+        <select aria-label="Event" value={selectedEvent} onChange={e => setSelectedEvent(e.target.value)} className="w-full min-h-[48px] px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-base sm:text-sm font-jakarta focus:outline-none focus:ring-2 focus:ring-brand/20">
+          <option value="">Choose an event…</option>
           {events.map((e: any) => <option key={e.id} value={e.id}>{e.title}</option>)}
         </select>
       </div>
@@ -167,17 +173,22 @@ export default function CheckInPage() {
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"/>
                   <input
+                    data-tour="checkin-search"
+                    aria-label="Phone, name or email"
+                    inputMode="search"
+                    enterKeyHint="go"
+                    autoComplete="off"
                     value={input}
                     onChange={e => { setInput(e.target.value); setResult(null); }}
                     onKeyDown={e => e.key === "Enter" && doCheckIn()}
-                    placeholder="Phone, name, or email..."
-                    className="w-full pl-9 pr-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-jakarta focus:outline-none focus:ring-2 focus:ring-brand/20"
+                    placeholder="Phone, name or email"
+                    className="w-full min-h-[48px] pl-9 pr-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-base sm:text-sm font-jakarta focus:outline-none focus:ring-2 focus:ring-brand/20"
                     autoFocus
                   />
                 </div>
-                <button onClick={() => doCheckIn()} disabled={loading || !input.trim()} className="px-4 py-3 bg-brand hover:bg-brand-600 text-white font-bold text-sm font-jakarta rounded-lg disabled:opacity-40 flex items-center gap-1.5">
+                <button onClick={() => doCheckIn()} disabled={loading || !input.trim()} className="min-h-[48px] px-4 bg-brand hover:bg-brand-600 active:bg-brand-700 text-white font-bold text-sm font-jakarta rounded-lg disabled:opacity-40 flex items-center gap-1.5 shrink-0">
                   {loading ? <Loader2 className="w-4 h-4 animate-spin"/> : <CheckCircle className="w-4 h-4"/>}
-                  <span className="hidden sm:inline">Check In</span>
+                  <span>Check in</span>
                 </button>
               </div>
             </div>
@@ -185,7 +196,7 @@ export default function CheckInPage() {
 
           {/* Result */}
           {result && (
-            <div className={`p-4 rounded-xl flex items-start gap-3 ${
+            <div role="status" aria-live="assertive" className={`p-4 rounded-xl flex items-start gap-3 ${
               result.status === "CHECKED_IN" ? "bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900/30" :
               result.status === "ALREADY_CHECKED_IN" ? "bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-900/30" :
               "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30"
@@ -194,12 +205,12 @@ export default function CheckInPage() {
               {result.status === "ALREADY_CHECKED_IN" && <AlertTriangle className="w-6 h-6 text-yellow-600 shrink-0"/>}
               {["NOT_FOUND","CANCELLED","WAITLISTED","ERROR"].includes(result.status) && <XCircle className="w-6 h-6 text-red-600 shrink-0"/>}
               <div className="flex-1">
-                <p className={`text-sm font-bold font-jakarta ${result.status === "CHECKED_IN" ? "text-green-700" : result.status === "ALREADY_CHECKED_IN" ? "text-yellow-700" : "text-red-700"}`}>
-                  {result.status === "CHECKED_IN" && "✓ Checked In"}
-                  {result.status === "ALREADY_CHECKED_IN" && "⚠ Already Checked In"}
-                  {result.status === "NOT_FOUND" && "✕ Not Found"}
-                  {result.status === "CANCELLED" && "✕ Cancelled"}
-                  {result.status === "WAITLISTED" && "✕ Waitlisted"}
+                <p className={`text-base font-bold font-jakarta ${result.status === "CHECKED_IN" ? "text-green-700" : result.status === "ALREADY_CHECKED_IN" ? "text-yellow-700" : "text-red-700"}`}>
+                  {result.status === "CHECKED_IN" && "Checked in"}
+                  {result.status === "ALREADY_CHECKED_IN" && "Already checked in"}
+                  {result.status === "NOT_FOUND" && "No matching registration"}
+                  {result.status === "CANCELLED" && "Registration cancelled"}
+                  {result.status === "WAITLISTED" && "On the waitlist, not confirmed"}
                   {result.status === "ERROR" && result.message}
                 </p>
                 {result.attendee && (
@@ -228,14 +239,14 @@ export default function CheckInPage() {
           {recentScans.length > 0 && (
             <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
               <p className="px-4 py-2 text-xs font-bold text-gray-400 uppercase font-jakarta border-b border-gray-100 dark:border-gray-800">Recent</p>
-              <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-48 overflow-y-auto">
+              <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-72 overflow-y-auto overscroll-contain">
                 {recentScans.map((s, i) => (
-                  <div key={i} className="px-4 py-2.5 flex items-center justify-between">
+                  <div key={i} className="px-4 py-2 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <span className={`w-2 h-2 rounded-full ${s.scanStatus === "CHECKED_IN" ? "bg-green-500" : s.scanStatus === "ALREADY_CHECKED_IN" ? "bg-yellow-500" : "bg-red-500"}`}/>
-                      <div><p className="text-xs text-gray-700 dark:text-gray-200 font-jakarta">{s.guestName}</p><p className="text-xs text-gray-400">{s.time}</p></div>
+                      <div className="min-w-0"><p className="text-sm text-gray-800 dark:text-gray-200 font-jakarta truncate">{s.guestName}</p><p className="text-xs text-gray-400">{s.time}</p></div>
                     </div>
-                    {s.scanStatus === "CHECKED_IN" && <button onClick={() => handleUndo(s)} className="text-xs text-gray-400 hover:text-red-500 font-jakarta"><RotateCcw className="w-3 h-3"/></button>}
+                    {s.scanStatus === "CHECKED_IN" && <button onClick={() => handleUndo(s)} aria-label={`Undo check-in for ${s.guestName}`} className="inline-flex items-center gap-1.5 min-h-[40px] px-3 rounded-lg text-sm text-gray-500 hover:text-red-600 active:bg-gray-100 dark:active:bg-gray-800 font-jakarta"><RotateCcw className="w-4 h-4"/> Undo</button>}
                   </div>
                 ))}
               </div>

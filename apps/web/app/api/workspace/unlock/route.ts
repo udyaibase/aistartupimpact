@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { clientIp } from '@/lib/client-ip';
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 import { prisma } from "@udyaibase/database";
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: "Invalid workspace" }, { status: 400 });
   }
 
-  const ipAddress = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
+  const ipAddress = clientIp(request);
 
   try {
     const result = await unlockWorkspace(unifiedUserId, workspace, ipAddress);

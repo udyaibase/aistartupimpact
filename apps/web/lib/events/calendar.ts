@@ -122,3 +122,16 @@ function escapeICS(text: string): string {
     .replace(/,/g, "\\,")
     .replace(/\n/g, "\\n");
 }
+
+export function generateOutlookCalendarUrl(data: CalendarEventData): string {
+  const params = new URLSearchParams({
+    path: "/calendar/action/compose",
+    rru: "addevent",
+    subject: data.title,
+    startdt: new Date(data.startAt).toISOString(),
+    enddt: new Date(data.endAt).toISOString(),
+    body: `${data.description}\n\nEvent page: ${data.url}`,
+  });
+  if (data.location) params.set("location", data.location);
+  return `https://outlook.live.com/calendar/0/deeplink/compose?${params.toString()}`;
+}

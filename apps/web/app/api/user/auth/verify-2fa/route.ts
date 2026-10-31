@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { clientIp } from '@/lib/client-ip';
 import { jwtVerify, SignJWT } from 'jose';
 import { sql } from '@/lib/db';
 import { verifyTOTPToken, decryptSecret, verifyBackupCode } from '@/lib/two-factor';
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest) {
     await sql`
       INSERT INTO "WebUserSession" (id, "webUserId", "refreshToken", "expiresAt", "ipAddress", "userAgent", "createdAt")
       VALUES (${sessionId}, ${user.id}, ${jwtToken}, ${expiresAt.toISOString()},
-        ${request.headers.get('x-forwarded-for') || 'unknown'},
+        ${clientIp(request)},
         ${request.headers.get('user-agent') || 'unknown'}, NOW())
     `;
     await sql`UPDATE "WebUser" SET "lastLoginAt" = NOW() WHERE id = ${user.id}`;
@@ -159,7 +160,7 @@ async function verifyOrganizerAndCreateSession(userId: string, token: string, is
   await sql`
     INSERT INTO "WebUserSession" (id, "webUserId", "refreshToken", "expiresAt", "ipAddress", "userAgent", "createdAt")
     VALUES (${sessionId}, ${webUser.id}, ${jwtToken}, ${expiresAt.toISOString()},
-      ${request.headers.get('x-forwarded-for') || 'unknown'},
+      ${clientIp(request)},
       ${request.headers.get('user-agent') || 'unknown'}, NOW())
   `;
 

@@ -54,6 +54,13 @@ export default function EmployerSignupPage() {
     companyName: '', email: '', password: '', websiteUrl: '', industry: '', companySize: '',
   });
   const [otpCode, setOtpCode] = useState('');
+  const [resendIn, setResendIn] = useState(0);
+
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -87,12 +94,17 @@ export default function EmployerSignupPage() {
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Signup failed'); return; }
 
-      // Send OTP
-      await fetch('/api/employer/auth/send-otp', {
+      // Send OTP. The account exists now, so go to the verify step either way; resend is available there.
+      const otpRes = await fetch('/api/employer/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: formData.email }),
       });
+      const otpData = await otpRes.json().catch(() => ({}));
+      if (!otpRes.ok) {
+        setError(otpData.error || "We couldn't send the verification email. Use “Resend code” to try again.");
+      }
+      setResendIn(otpData.cooldown ?? otpData.retryAfter ?? 60);
 
       setStep('verify');
     } catch { setError('Something went wrong'); }
@@ -121,12 +133,18 @@ export default function EmployerSignupPage() {
 
   const resendOtp = async () => {
     setError('');
-    await fetch('/api/employer/auth/send-otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: formData.email }),
-    });
-    setError('New code sent to your email');
+    try {
+      const res = await fetch('/api/employer/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: formData.email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      setError(res.ok ? 'New code sent to your email' : data.error || "We couldn't send a new code. Please try again.");
+      setResendIn(data.cooldown ?? data.retryAfter ?? (res.ok ? 60 : 0));
+    } catch {
+      setError("You seem to be offline. Check your connection and try again.");
+    }
   };
 
   // OTP Verification Step — stays a centered card (transitional step)
@@ -156,6 +174,10 @@ export default function EmployerSignupPage() {
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 font-jakarta mb-1.5">Verification Code</label>
                 <input
                   type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="[0-9]*"
+                  aria-label="Verification code"
                   value={otpCode}
                   onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   placeholder="000000"
@@ -172,13 +194,13 @@ export default function EmployerSignupPage() {
             </form>
 
             <div className="text-center mt-4">
-              <button onClick={resendOtp} className="text-xs text-blue-600 font-semibold font-jakarta hover:underline">
-                Didn&apos;t receive the code? Resend
+              <button onClick={resendOtp} disabled={resendIn > 0} className="min-h-[44px] px-3 text-sm text-blue-600 font-semibold font-jakarta hover:underline disabled:text-gray-400 disabled:no-underline">
+                {resendIn > 0 ? `Resend code in ${resendIn}s` : "Didn't receive the code? Resend"}
               </button>
             </div>
           </div>
 
-          <p className="text-center text-xs text-gray-400 font-jakarta mt-4">Code expires in 10 minutes. Max 3 attempts.</p>
+          <p className="text-center text-xs text-gray-500 font-jakarta mt-4">Code expires in 10 minutes. Max 3 attempts. Check your spam folder if it doesn&apos;t arrive. You can also verify later from your dashboard.</p>
         </div>
       </div>
     );

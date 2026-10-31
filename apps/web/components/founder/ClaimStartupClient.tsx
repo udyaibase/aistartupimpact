@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Shield, CheckCircle, Copy, ExternalLink, Loader2, AlertCircle } from 'lucide-react';
+import { EmailVerify } from './FounderHiringClient';
 
 function extractDomain(url: string): string {
   try {
@@ -194,8 +195,16 @@ export default function ClaimStartupClient({ startup, startupId }: ClaimStartupC
                     <Shield className="w-8 h-8 text-blue-600 dark:text-blue-400" />
                   </div>
                   <h1 className="text-3xl font-bold mb-2 text-navy dark:text-white">Verify Domain Ownership</h1>
-                  <p className="text-gray-600 dark:text-gray-400">Add a DNS TXT record to verify you own {domain}</p>
+                  <p className="text-gray-600 dark:text-gray-400">Prove you work at {startup.name} with a work email, or add a DNS record to {domain}</p>
                 </div>
+
+            {/* Faster option: work email on the startup's domain */}
+            <div className="bg-white dark:bg-gray-900 border-2 border-green-200 dark:border-green-900/50 rounded-xl p-6 mb-6">
+              <h3 className="font-bold text-lg mb-1 text-navy dark:text-white">Quickest: verify with your work email</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">We send a 6-digit code to an email on {domain}. Takes about a minute.</p>
+              <EmailVerify startupId={startupId} startupName={startup.name} domain={domain} suggestedEmail="" onDone={() => setStep('success')} />
+            </div>
+            <p className="text-center text-sm font-semibold text-gray-500 mb-6">Or verify with DNS</p>
 
             {/* Instructions */}
             <div className="bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800 rounded-xl p-6 mb-6">
@@ -376,6 +385,10 @@ export default function ClaimStartupClient({ startup, startupId }: ClaimStartupC
                 <div className="flex items-center gap-3 justify-center">
                   <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
                   <span className="font-medium text-navy dark:text-white">Analytics dashboard unlocked</span>
+                </div>
+                <div className="flex items-center gap-3 justify-center">
+                  <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                  <span className="font-medium text-navy dark:text-white">Hiring unlocked: post jobs from <a href="/founder/hiring" className="text-blue-600 underline">Hiring</a></span>
                 </div>
               </div>
             </div>

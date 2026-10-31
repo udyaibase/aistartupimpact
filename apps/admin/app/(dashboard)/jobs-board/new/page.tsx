@@ -1,12 +1,29 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Briefcase, Loader2, Globe, CheckCircle, XCircle } from 'lucide-react';
+import { ArrowLeft, Briefcase, Loader2, Globe, CheckCircle, XCircle, Eye, PenLine } from 'lucide-react';
 import StartupSearchCombobox from '@/components/shared/StartupSearchCombobox';
 import CareerScraperModal from '@/components/shared/CareerScraperModal';
 import { createJobAction, getStartupByIdForSelectAction } from '../actions';
+
+function renderDescriptionPreview(text: string): string {
+  if (!text) return '';
+  const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return escaped
+    .split('\n')
+    .map(line => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('### ')) return `<h3 class="text-base font-bold mt-4 mb-1 text-navy dark:text-white">${trimmed.slice(4)}</h3>`;
+      if (trimmed.startsWith('## ')) return `<h2 class="text-lg font-bold mt-4 mb-1 text-navy dark:text-white">${trimmed.slice(3)}</h2>`;
+      if (trimmed.startsWith('# ')) return `<h1 class="text-xl font-bold mt-4 mb-1 text-navy dark:text-white">${trimmed.slice(2)}</h1>`;
+      if (trimmed.startsWith('• ') || trimmed.startsWith('- ')) return `<li class="ml-4 list-disc text-sm text-gray-700 dark:text-gray-300">${trimmed.slice(2)}</li>`;
+      if (trimmed === '') return '<br/>';
+      return `<p class="text-sm text-gray-700 dark:text-gray-300">${trimmed}</p>`;
+    })
+    .join('\n');
+}
 
 const DEPARTMENTS = [
   'Engineering',
@@ -118,6 +135,8 @@ export default function NewJobPage() {
       });
     }
   }, [initialStartupId]);
+
+  const [descTab, setDescTab] = useState<'write' | 'preview'>('write');
 
   const [form, setForm] = useState({
     title: '',
@@ -273,10 +292,20 @@ export default function NewJobPage() {
   });
 
   const handleScrapedImport = (job: any) => {
-    const str = (v: any) => v != null && v !== '' ? String(v) : '';
+    const str = (v: any) => v != null && v !== '' && v !== 0 ? String(v) : '';
     const workType = normalizeWorkType(job.workType);
     const category = normalizeCategory(job.category);
     const employmentType = normalizeEmploymentType(job.employmentType);
+
+    // Parse location into city and full location
+    let city = '';
+    let location = '';
+    if (job.location) {
+      location = job.location;
+      // Extract city (first part before comma)
+      const parts = job.location.split(',').map((p: string) => p.trim());
+      city = parts[0] || job.location;
+    }
 
     setForm(prev => ({
       ...prev,
@@ -286,7 +315,8 @@ export default function NewJobPage() {
       department: job.department || prev.department,
       workType: workType || prev.workType,
       employmentType: employmentType || prev.employmentType,
-      city: job.location || prev.city,
+      location: location || prev.location,
+      city: city || prev.city,
       skills: Array.isArray(job.skills) && job.skills.length > 0
         ? job.skills.join(', ')
         : prev.skills,
@@ -295,7 +325,7 @@ export default function NewJobPage() {
       salaryMin: str(job.salaryMin) || prev.salaryMin,
       salaryMax: str(job.salaryMax) || prev.salaryMax,
       salaryCurrency: job.salaryCurrency || prev.salaryCurrency,
-      showSalary: job.salaryMin != null || job.salaryMax != null ? true : prev.showSalary,
+      showSalary: (job.salaryMin != null && job.salaryMin > 0) || (job.salaryMax != null && job.salaryMax > 0) ? true : prev.showSalary,
       applicationType: job.applicationUrl ? 'EXTERNAL' : prev.applicationType,
       applicationUrl: job.applicationUrl || prev.applicationUrl,
       applicationEmail: job.applicationEmail || prev.applicationEmail,
@@ -311,11 +341,21 @@ export default function NewJobPage() {
     const results: Array<{ title: string; success: boolean; error?: string }> = [];
     setBulkImport({ active: true, current: 0, total: detailedJobs.length, title: '', results: [] });
 
+    // Deduplicate within this batch (skip same title within one import)
+    const seenTitles = new Set<string>();
+
     for (let i = 0; i < detailedJobs.length; i++) {
       const job = detailedJobs[i];
       setBulkImport({ active: true, current: i + 1, total: detailedJobs.length, title: job.title || `Job ${i + 1}`, results });
 
       try {
+        const titleKey = (job.title || '').trim().toLowerCase();
+        if (seenTitles.has(titleKey)) {
+          results.push({ title: job.title || `Job ${i + 1}`, success: false, error: 'Duplicate title in this batch' });
+          continue;
+        }
+        seenTitles.add(titleKey);
+
         const formData = jobToFormData(job);
         const result = await createJobAction(formData);
         results.push({ title: job.title || `Job ${i + 1}`, success: result.success, error: result.error });
@@ -445,9 +485,30 @@ export default function NewJobPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 font-jakarta">Description *</label>
-            <textarea required value={form.description} onChange={e => updateField('description', e.target.value)}
-              rows={8} className="input-field" placeholder="Full job description..." />
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 font-jakarta">Description *</label>
+              <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+                <button type="button" onClick={() => setDescTab('write')}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                    descTab === 'write' ? 'bg-white dark:bg-gray-700 text-navy dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  }`}>
+                  <PenLine className="w-3 h-3" /> Write
+                </button>
+                <button type="button" onClick={() => setDescTab('preview')}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                    descTab === 'preview' ? 'bg-white dark:bg-gray-700 text-navy dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  }`}>
+                  <Eye className="w-3 h-3" /> Preview
+                </button>
+              </div>
+            </div>
+            {descTab === 'write' ? (
+              <textarea required value={form.description} onChange={e => updateField('description', e.target.value)}
+                rows={12} className="input-field font-mono text-sm" placeholder="Full job description..." />
+            ) : (
+              <div className="input-field min-h-[200px] max-h-[500px] overflow-y-auto p-4 prose-sm"
+                dangerouslySetInnerHTML={{ __html: renderDescriptionPreview(form.description) || '<p class="text-gray-400 italic">No description yet...</p>' }} />
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

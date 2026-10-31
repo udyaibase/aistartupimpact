@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Loader2, CheckCircle } from 'lucide-react';
 
 
-type AllowedSource = 'footer' | 'sidebar' | 'newsletter' | 'website' | 'jobs-alert' | 'jobs-bottom';
+type AllowedSource = 'footer' | 'sidebar' | 'newsletter' | 'website' | 'jobs-alert' | 'jobs-bottom' | 'events-alert';
 
 interface SubscribeFormProps {
   buttonText?: string;
@@ -13,7 +13,7 @@ interface SubscribeFormProps {
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const ALLOWED_SOURCES: AllowedSource[] = ['footer', 'sidebar', 'newsletter', 'website', 'jobs-alert', 'jobs-bottom'];
+const ALLOWED_SOURCES: AllowedSource[] = ['footer', 'sidebar', 'newsletter', 'website', 'jobs-alert', 'jobs-bottom', 'events-alert'];
 
 // Internal Next.js API route — no external backend needed
 const SUBSCRIBE_URL = '/api/newsletter/subscribe';
@@ -78,7 +78,7 @@ export default function SubscribeForm({ buttonText = 'Subscribe', source = 'webs
 
   return (
     <form onSubmit={handleSubscribe} className={`w-full ${className}`}>
-      <div className={`flex flex-col ${source === 'footer' ? 'sm:flex-row' : ''} gap-3 w-full`}>
+      <div className={`flex flex-col ${source === 'footer' || source === 'jobs-alert' || source === 'events-alert' ? 'sm:flex-row' : ''} gap-3 w-full`}>
         <input
           type="email"
           placeholder="your@email.com"
@@ -86,7 +86,7 @@ export default function SubscribeForm({ buttonText = 'Subscribe', source = 'webs
           onChange={(e) => setEmail(e.target.value)}
           required
           disabled={loading}
-          className="flex-1 px-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-navy dark:text-white placeholder:text-gray-400 focus:outline-none focus:border-brand font-jakarta text-sm min-h-[44px] disabled:opacity-50"
+          className={`flex-1 px-4 rounded-lg font-jakarta text-sm disabled:opacity-50 focus:outline-none ${source === 'jobs-alert' || source === 'events-alert' ? 'py-2.5 bg-gray-800 dark:bg-gray-800 border border-gray-700 text-white placeholder:text-gray-400 focus:border-gray-500' : 'py-3 min-h-[44px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-navy dark:text-white placeholder:text-gray-400 focus:border-brand'}`}
         />
         <button
           type="submit"
@@ -96,10 +96,12 @@ export default function SubscribeForm({ buttonText = 'Subscribe', source = 'webs
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : buttonText}
         </button>
       </div>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 font-jakarta text-center sm:text-left leading-relaxed">
-        By subscribing, you agree to receive the Udyaibase newsletter. You can{' '}
-        <a href="/privacy" className="underline hover:text-gray-700 dark:hover:text-gray-300">unsubscribe</a> at any time.
-      </p>
+      {source !== 'jobs-alert' && source !== 'events-alert' && (
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 font-jakarta text-center sm:text-left leading-relaxed">
+          By subscribing, you agree to receive the Udyaibase newsletter. You can{' '}
+          <a href="/privacy" className="underline hover:text-gray-700 dark:hover:text-gray-300">unsubscribe</a> at any time.
+        </p>
+      )}
       {status === 'error' && (
         <p className="text-xs text-red-500 mt-1 font-jakarta text-center sm:text-left">{message}</p>
       )}

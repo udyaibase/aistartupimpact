@@ -20,13 +20,14 @@ try {
 }
 
 /**
- * Registration endpoint — 10 requests per 15 minutes per IP.
- * Prevents spam registrations while allowing legitimate multi-event signups.
+ * Registration endpoint — 100 requests per 15 minutes per IP.
+ * High limit: Indian campus Wi-Fi, corporate NAT, and carrier-grade NAT
+ * share one IP across hundreds of users. Turnstile is the primary bot defense.
  */
 export const registrationRateLimit = redis
   ? new Ratelimit({
       redis,
-      limiter: Ratelimit.slidingWindow(10, "15 m"),
+      limiter: Ratelimit.slidingWindow(100, "15 m"),
       analytics: true,
       prefix: "ratelimit:event:registration",
     })
@@ -80,5 +81,98 @@ export const campaignSendRateLimit = redis
       limiter: Ratelimit.slidingWindow(5, "24 h"),
       analytics: true,
       prefix: "ratelimit:event:campaign",
+    })
+  : null;
+
+/**
+ * Embed events listing — 120 requests per minute per widget.
+ * Keyed by widgetId. Generous for normal browsing across many visitors.
+ */
+export const embedEventsRateLimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(120, "1 m"),
+      analytics: true,
+      prefix: "ratelimit:embed:events",
+    })
+  : null;
+
+/**
+ * Embed registration — 1000 requests per hour per widget.
+ * High circuit-breaker only; per-IP + Turnstile are the real controls.
+ */
+export const embedRegistrationRateLimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(1000, "1 h"),
+      analytics: true,
+      prefix: "ratelimit:embed:registration",
+    })
+  : null;
+
+export const embedSendInstructionsRateLimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(10, "1 h"),
+      analytics: true,
+      prefix: "ratelimit:embed:send-instructions",
+    })
+  : null;
+
+export const embedTrackRateLimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(300, "1 m"),
+      analytics: true,
+      prefix: "ratelimit:embed:track",
+    })
+  : null;
+
+export const embedVerifyRateLimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(30, "1 h"),
+      analytics: true,
+      prefix: "ratelimit:embed:verify",
+    })
+  : null;
+
+/** Job applications: resume uploads per IP (each also needs a Turnstile pass). */
+export const resumeUploadRateLimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(10, "1 h"),
+      analytics: true,
+      prefix: "ratelimit:jobs:resume-upload",
+    })
+  : null;
+
+/** Job applications: resume autofill (AI) per IP. */
+export const resumeParseRateLimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(10, "1 h"),
+      analytics: true,
+      prefix: "ratelimit:jobs:resume-parse",
+    })
+  : null;
+
+/** Job applications: submissions per IP. */
+export const jobApplyRateLimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(20, "1 h"),
+      analytics: true,
+      prefix: "ratelimit:jobs:apply",
+    })
+  : null;
+
+/** Candidate status page lookups and actions per IP. */
+export const applicationStatusRateLimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(60, "10 m"),
+      analytics: true,
+      prefix: "ratelimit:jobs:status",
     })
   : null;

@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { neon } from "@neondatabase/serverless";
 import { revalidatePath } from "next/cache";
+import { refreshPublic } from '@/lib/refresh-public';
 
 type ActionResponse<T = void> = { success: true; data?: T } | { success: false; error: string };
 
@@ -33,7 +34,7 @@ export async function updateReviewStatusAction(
     `;
 
     revalidatePath("/startup-reviews");
-    return { success: true };
+    await refreshPublic(['startups']); return { success: true };
   } catch (err: any) {
     console.error("Failed to update status:", err);
     return { success: false, error: err.message || "Failed to update review status" };
@@ -51,7 +52,7 @@ export async function deleteReviewAction(reviewId: string): Promise<ActionRespon
     `;
 
     revalidatePath("/startup-reviews");
-    return { success: true };
+    await refreshPublic(['startups']); return { success: true };
   } catch (err: any) {
     console.error("Failed to delete review:", err);
     return { success: false, error: err.message || "Failed to delete review" };
@@ -76,7 +77,7 @@ export async function bulkUpdateReviewStatusAction(
     }
 
     revalidatePath("/startup-reviews");
-    return { success: true };
+    await refreshPublic(['startups']); return { success: true };
   } catch (err: any) {
     console.error("Failed to bulk update status:", err);
     return { success: false, error: err.message || "Failed to update review statuses" };
@@ -96,7 +97,7 @@ export async function bulkDeleteReviewAction(reviewIds: string[]): Promise<Actio
     }
 
     revalidatePath("/startup-reviews");
-    return { success: true };
+    await refreshPublic(['startups']); return { success: true };
   } catch (err: any) {
     console.error("Failed to bulk delete reviews:", err);
     return { success: false, error: err.message || "Failed to delete reviews" };

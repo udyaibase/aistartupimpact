@@ -5,7 +5,7 @@ export default function RefundPage() {
         Refund & Cancellation Policy
       </h1>
       <div className="prose prose-lg dark:prose-invert prose-blue max-w-none">
-        <p className="text-sm text-gray-500 mb-8"><strong>Last updated:</strong> August 10, 2026</p>
+        <p className="text-sm text-gray-500 mb-8"><strong>Last updated:</strong> October 31, 2026</p>
 
         <p>
           Udyaibase provides various digital services, including premium tool listings, sponsored directory placements, job board postings, event tickets, and advertising slots. This Refund & Cancellation Policy outlines the financial terms governing purchases made on our platform.
@@ -16,9 +16,8 @@ export default function RefundPage() {
           All payments on Udyaibase are processed securely through <strong>Razorpay</strong>, a PCI-DSS compliant payment gateway regulated by the Reserve Bank of India (RBI). We do not store your credit/debit card details on our servers. All payment data is handled directly by Razorpay in accordance with their security standards.
         </p>
         <ul>
-          <li>All prices are displayed in Indian Rupees (INR).</li>
-          <li>Applicable taxes (GST) are included or shown separately at checkout.</li>
-          <li>You will receive a payment confirmation email upon successful transaction.</li>
+          <li>All prices are in Indian Rupees (INR). Plan prices are shown <strong>before GST</strong>; 18% GST is added and shown separately at checkout.</li>
+          <li>You receive a payment confirmation from Razorpay, and a GST tax invoice from us by email (see section 4.6).</li>
         </ul>
 
         <h2>2. Premium Tool Listings</h2>
@@ -36,15 +35,63 @@ export default function RefundPage() {
           <li>Cancellations requested less than 5 business days before the scheduled date will not be refunded, though we may allow rescheduling at our discretion.</li>
         </ul>
 
-        <h2>4. Job Board Postings</h2>
-        <p>
-          All purchases for job listings on the Udyaibase Job Board are considered final once the job is published on our platform. No refunds will be provided for positions filled before listing expiration or if the listing does not generate a desired number of applicants.
-        </p>
+        <h2>4. Employer Plans (Featured, Premium) and Event Host Plans (Pro, Event Boost)</h2>
+
+        <h3>4.1 How plans work</h3>
+        <ul>
+          <li>Plans are <strong>prepaid for 30 days</strong> and <strong>do not renew automatically</strong>. Nothing is charged unless you choose to pay again.</li>
+          <li>We email you 3 days before a plan ends. Renewing early adds 30 days to your current end date, so you never lose days.</li>
+          <li>An <strong>Event Boost</strong> is a one-time purchase for one event and lasts until that event ends.</li>
+        </ul>
+
+        <h3>4.2 Free trial and free Event Boost</h3>
+        <ul>
+          <li>A new employer workspace gets a <strong>7-day Featured trial</strong> when it publishes its first job. No card is needed and nothing is charged. When the trial ends, the workspace moves to the Free plan unless you choose a plan.</li>
+          <li>An event host&apos;s <strong>first published event gets a free Event Boost</strong>.</li>
+          <li>Trials and free Boosts are one per account and one per company or startup. As nothing is paid for them, they are not refundable or exchangeable for credit.</li>
+        </ul>
+
+        <h3>4.3 When a paid plan ends</h3>
+        <ul>
+          <li>You get <strong>3 grace days</strong> after a paid plan ends. Your featured jobs and events, limits, careers page and website widgets keep working; only new AI candidate reviews and new event promo emails pause. Renew during grace to carry on without any change.</li>
+          <li>After grace, the account moves to the Free plan. <strong>Nothing is deleted.</strong> Candidates, notes and past AI reviews stay. If more jobs are open than the Free plan allows, the most recently published stay open and the rest are paused, which you can change at any time.</li>
+          <li>Trials end on their end date, with no grace days.</li>
+        </ul>
+
+        <h3>4.4 Refunds for plans</h3>
+        <ul>
+          <li><strong>Charged by mistake or twice:</strong> full refund. Tell us within 7 days of the payment.</li>
+          <li><strong>Paid but didn&apos;t use it:</strong> full refund if you ask within <strong>7 days of payment</strong> and haven&apos;t used a paid feature in that time. For employer plans, that means no AI candidate reviews run and no jobs published or reopened beyond the Free plan limit. For Pro, no promo email sent and no event published beyond the Free plan limit. Available once per account.</li>
+          <li><strong>Cancelling during a plan:</strong> there are no partial or pro-rata refunds. The plan stays active until the end of the period you paid for.</li>
+          <li><strong>When something went wrong on our side</strong> (for example, a job held by mistake during a moderation review, or the platform being unavailable for more than 24 hours): we add the lost days to your plan, or more, as a goodwill credit.</li>
+          <li>No refunds are given because a role was filled early, an event sold out, or a listing received fewer applicants or registrations than hoped.</li>
+          <li>If we suspend an account, close jobs or remove events for breaking our <a href="/terms">Terms</a> (for example fake or misleading jobs, or asking candidates for money), the remaining plan period or Boost is not refunded.</li>
+        </ul>
+
+        <h3>4.5 Event Boost refunds</h3>
+        <ul>
+          <li>A paid Event Boost can be refunded in full within 7 days of payment, as long as <strong>its promo email has not been sent</strong> and the event has not started.</li>
+          <li>If you cancel the event before the promo email is sent, the Boost is refunded in full.</li>
+        </ul>
+
+        <h3>4.6 GST invoices and credit notes</h3>
+        <ul>
+          <li>Every paid plan and Boost gets a <strong>GST tax invoice</strong>, emailed to the invoice email (and any CC addresses) in your Billing details. You can also download it from <strong>Plans &amp; billing</strong>.</li>
+          <li>Invoices are issued with the billing details saved at the time of payment. Keep them correct, including your GSTIN, as changes apply to future invoices only.</li>
+          <li>Need a past invoice corrected (for example a wrong GSTIN)? Contact us within the same financial year. We issue a credit note and a corrected invoice.</li>
+          <li>Every refund comes with a <strong>GST credit note</strong> against the original invoice, emailed to you and available on the billing page.</li>
+        </ul>
 
         <h2>5. Event Tickets</h2>
         <p>
-          Event ticket purchases are subject to the individual event&apos;s cancellation policy as set by the event organizer. If an event is cancelled by the organizer, registered attendees will receive a full refund.
+          Paid tickets are sold by the event host and paid through Razorpay. Udyaibase keeps a small platform fee per ticket; the rest is paid out to the host after the event.
         </p>
+        <ul>
+          <li>If the host cancels the event, every paid ticket is refunded in full automatically.</li>
+          <li>Hosts can also refund an individual ticket in full; the refund goes back to the original payment method.</li>
+          <li>Other refund requests follow the host&apos;s own policy, shown on the event page. Contact the host first; if they don&apos;t respond, email us.</li>
+          <li>Refunds usually reach your bank within 5–7 working days.</li>
+        </ul>
 
         <h2>6. Failed Transactions</h2>
         <p>
@@ -68,7 +115,7 @@ export default function RefundPage() {
 
         <h2>8. Refund Process</h2>
         <p>
-          Approved refunds will be processed within <strong>5 to 7 business days</strong> and credited back to the original payment method. Depending on your bank or card issuer, it may take additional days for the amount to reflect in your account. Refunds are processed through Razorpay&apos;s refund system for full traceability.
+          Approved refunds are processed within <strong>5 to 7 business days</strong> and credited back to the original payment method (or by bank transfer for payments made by bank transfer or UPI outside Razorpay). Depending on your bank or card issuer, it may take a few more days to show in your account. Refunds are processed through Razorpay&apos;s refund system for full traceability, and plan and Boost refunds come with a GST credit note (section 4.6).
         </p>
 
         <h2>9. Contact for Billing</h2>

@@ -1,5 +1,6 @@
 // app/api/consent-log/route.ts
 import { NextRequest, NextResponse } from 'next/server';
+import { clientIp } from '@/lib/client-ip';
 import { createHash } from 'crypto';
 import { sql } from '@/lib/db';
 import { ConsentLogPayload } from '@/types/consent';
@@ -15,18 +16,8 @@ function hashIp(ip: string): string {
 }
 
 function getClientIp(request: NextRequest): string | null {
-  const forwarded = request.headers.get('x-forwarded-for');
-  const realIp = request.headers.get('x-real-ip');
-  
-  if (forwarded) {
-    return forwarded.split(',')[0].trim();
-  }
-  
-  if (realIp) {
-    return realIp;
-  }
-  
-  return null;
+  const ip = clientIp(request);
+  return ip === 'unknown' ? null : ip;
 }
 
 export async function POST(request: NextRequest) {

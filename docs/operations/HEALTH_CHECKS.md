@@ -11,7 +11,6 @@ Endpoints and services to monitor for uptime.
 | `https://udyaibase.com` | 200, HTML | 1 min | > 5s or non-200 |
 | `https://udyaibase.com/tools` | 200, HTML | 5 min | > 5s or non-200 |
 | `https://udyaibase.com/api/user/session` | 200, JSON | 5 min | > 2s or non-200 |
-| `http://localhost:4000/health` (API) | 200, `{ status: "ok" }` | 1 min | Non-200 |
 | Admin dashboard | 200 (redirect to login) | 5 min | Non-200/302 |
 
 ---

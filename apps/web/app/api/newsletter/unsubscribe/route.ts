@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { clientIp } from '@/lib/client-ip';
 import { prisma } from "@udyaibase/database";
-import { jwtVerify } from "jose";
+import { verifyEventUnsubscribeToken } from "@udyaibase/utils/event-campaigns";
 import crypto from "crypto";
 
 function hashIp(ip: string): string {
@@ -9,25 +10,24 @@ function hashIp(ip: string): string {
 
 export const dynamic = 'force-dynamic';
 
-const UNSUBSCRIBE_SECRET = new TextEncoder().encode(
-  process.env.NEXTAUTH_SECRET!
-);
-
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { email: rawEmail, token, campaignId, reason, feedback } = body;
+    // Mail providers' one-click unsubscribe (RFC 8058) posts form data to the signed URL in the
+    // List-Unsubscribe header; the site's unsubscribe page posts JSON.
+    const isJson = (request.headers.get('content-type') ?? '').includes('application/json');
+    const body = isJson ? await request.json().catch(() => ({})) : {};
+    const { email: rawEmail, campaignId, reason, feedback } = body;
+    const token = request.nextUrl.searchParams.get('token') ?? body.token;
 
     let decodedEmail: string | null = null;
 
     // Prefer signed token over raw email
     if (token) {
-      try {
-        const { payload } = await jwtVerify(token, UNSUBSCRIBE_SECRET);
-        decodedEmail = (payload as any).email;
-      } catch {
+      const payload = verifyEventUnsubscribeToken(String(token));
+      if (!payload) {
         return NextResponse.json({ success: false, error: "Invalid or expired unsubscribe link" }, { status: 401 });
       }
+      decodedEmail = payload.email;
     } else if (rawEmail) {
       decodedEmail = decodeURIComponent(rawEmail);
     }
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     if (!decodedEmail) {
       return NextResponse.json({ success: false, error: "Email is required" }, { status: 400 });
     }
-    const rawIp = request.headers.get("x-forwarded-for")?.split(',')[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
+    const rawIp = clientIp(request);
     const ipAddress = hashIp(rawIp);
 
     // Check if subscriber exists

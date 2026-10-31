@@ -3,6 +3,7 @@ import { neon } from "@neondatabase/serverless";
 import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { requireApiAuth } from "@/lib/api-auth";
 import { r2, R2_BUCKET, getPublicUrl } from "@/lib/media";
+import { withPublicRefresh } from '@/lib/refresh-public';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -40,7 +41,7 @@ const CAPTURE_VARIATIONS = [
   { delay: "5", scrollY: "2800" },
 ];
 
-export async function POST(
+async function postHandler(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -188,3 +189,5 @@ export async function POST(
     );
   }
 }
+
+export const POST = withPublicRefresh(['tools'], postHandler);

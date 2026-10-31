@@ -23,7 +23,10 @@ function getRedis(): Redis | null {
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) return null;
-  redis = new Redis({ url, token });
+  // Upstash defaults every call to fetch(cache: 'no-store'), which makes Next.js render any page that reads
+  // this cache on every request (its `revalidate` is ignored). 'default' keeps pages cacheable; Upstash calls
+  // are POSTs, which Next never stores in its own fetch cache, so values still come fresh from Redis.
+  redis = new Redis({ url, token, cache: 'default' });
   return redis;
 }
 

@@ -11,7 +11,8 @@ interface ClaimStartupCardProps {
   startupSlug: string;
   isVerified?: boolean;
   isClaimed?: boolean;
-  isOwner?: boolean;
+  /** User id that claimed the startup; ownership is checked in the browser so the page stays cacheable. */
+  claimedBy?: string | null;
 }
 
 export default function ClaimStartupCard({
@@ -19,10 +20,11 @@ export default function ClaimStartupCard({
   startupSlug,
   isVerified = false,
   isClaimed = false,
-  isOwner = false,
+  claimedBy = null,
 }: ClaimStartupCardProps) {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
+  const isOwner = !!user && !!claimedBy && user.id === claimedBy;
   const [loading, setLoading] = useState(true);
   const [showUnlock, setShowUnlock] = useState(false);
   const [showSignIn, setShowSignIn] = useState(false);

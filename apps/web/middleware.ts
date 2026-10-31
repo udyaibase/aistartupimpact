@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 import { neon } from '@neondatabase/serverless';
+import { Redis } from '@upstash/redis';
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.FOUNDER_JWT_SECRET!
@@ -17,8 +18,68 @@ function getSql() {
   return _sql;
 }
 
+let _redis: Redis | undefined;
+function getRedis(): Redis | null {
+  if (_redis) return _redis;
+  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    _redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    });
+    return _redis;
+  }
+  return null;
+}
+
+function buildEmbedCsp(frameAncestors: string): string {
+  const isDev = process.env.NODE_ENV !== 'production';
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''} https://www.googletagmanager.com https://www.google-analytics.com https://va.vercel-scripts.com https://challenges.cloudflare.com https://checkout.razorpay.com`,
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data: blob: https:",
+    "connect-src 'self' https://udyaibase.com https://media.udyaibase.com https://www.google-analytics.com https://vitals.vercel-insights.com https://va.vercel-scripts.com https://challenges.cloudflare.com https://api.razorpay.com https://lumberjack.razorpay.com",
+    `frame-ancestors ${frameAncestors}`,
+    "frame-src https://challenges.cloudflare.com https://api.razorpay.com https://checkout.razorpay.com",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+    "upgrade-insecure-requests",
+  ].join('; ');
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Embed pages: set per-widget CSP frame-ancestors from Redis (no DB lookup)
+  if (pathname.startsWith('/embed/')) {
+    const segments = pathname.split('/');
+    // /embed/<id> is the events widget, /embed/jobs/<id> the careers (jobs) widget.
+    const isJobs = segments[2] === 'jobs';
+    const widgetId = isJobs ? segments[3] : segments[2];
+    let frameAncestors = '*';
+
+    if (widgetId) {
+      try {
+        const redis = getRedis();
+        if (redis) {
+          const domains = await redis.get<string>(isJobs ? `embed:csp:jobs:${widgetId}` : `embed:csp:${widgetId}`);
+          if (domains && domains.trim()) {
+            frameAncestors = domains.trim();
+          }
+        }
+      } catch {
+        // Redis unavailable — allow framing as fallback
+      }
+    }
+
+    const response = NextResponse.next();
+    response.headers.set('Content-Security-Policy', buildEmbedCsp(frameAncestors));
+    response.headers.set('Cross-Origin-Opener-Policy', 'unsafe-none');
+    response.headers.delete('X-Frame-Options');
+    return response;
+  }
 
   // CSRF protection: validate Origin/Referer on state-changing requests to API routes
   if (pathname.startsWith('/api/') && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method)) {
@@ -30,7 +91,7 @@ export async function middleware(request: NextRequest) {
       process.env.NEXT_PUBLIC_ADMIN_URL,
     ].filter(Boolean) as string[];
     if (process.env.NODE_ENV !== 'production') {
-      allowedOrigins.push('http://localhost:3000', 'http://localhost:3001', 'http://localhost:4000');
+      allowedOrigins.push('http://localhost:3000', 'http://localhost:3001');
     }
 
     if (origin) {
@@ -47,7 +108,10 @@ export async function middleware(request: NextRequest) {
       const isCronOrWebhook = pathname.startsWith('/api/admin/daily-digest') ||
         pathname.startsWith('/api/admin/data-retention') ||
         pathname.startsWith('/api/webhook');
-      if (!isCronOrWebhook) {
+      // RFC 8058 one-click unsubscribe: mail providers POST server-to-server. The route verifies the signed token.
+      const isSignedUnsubscribe = (pathname === '/api/events/unsubscribe' || pathname === '/api/newsletter/unsubscribe') &&
+        request.nextUrl.searchParams.has('token');
+      if (!isCronOrWebhook && !isSignedUnsubscribe) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
     }
@@ -147,6 +211,7 @@ export const config = {
     '/founder/:path*',
     '/onboarding',
     '/api/:path*',
+    '/embed/:path*',
   ],
 };
 

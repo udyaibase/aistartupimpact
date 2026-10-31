@@ -90,7 +90,7 @@ export async function GET(req: NextRequest) {
         SELECT jl.id, jl.title as name, jl.slug, e."logoUrl", jl."shortDescription" as tagline, 'job' as "entityType"
         FROM "JobBoardListing" jl
         JOIN "JobBoardEmployer" e ON e.id = jl."employerId"
-        WHERE jl.status = 'ACTIVE' AND jl."deletedAt" IS NULL AND (jl."expiresAt" IS NULL OR jl."expiresAt" > NOW())
+        WHERE jl.status = 'OPEN' AND jl."deletedAt" IS NULL AND jl."moderationHold" = false AND (jl."expiresAt" IS NULL OR jl."expiresAt" > NOW()) AND jl."showOnJobsPage" = true
         ORDER BY jl."createdAt" DESC
         LIMIT 3
       `;

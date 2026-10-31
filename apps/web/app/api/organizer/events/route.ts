@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
-import { getOrganizerSession } from "@/lib/organizer-auth";
+import { requirePermission } from "@/lib/organizer-auth/require-permission";
+import { featuredUntilFor, upcomingLimitProblem } from "@/lib/events/billing";
 import { generateShortCode, isSlugReserved } from "@/lib/events/short-code";
+import { sanitizeUserHtml, htmlToPlainText } from "@/lib/sanitize";
+import { refreshPaths, refreshSections } from '@/lib/revalidate';
+import { applyFirstEventBoost } from "@/lib/events/free-boost";
 
 export const dynamic = "force-dynamic";
 
@@ -9,10 +13,9 @@ export const dynamic = "force-dynamic";
  * POST /api/organizer/events — Create a new event (organizer must be logged in)
  */
 export async function POST(request: NextRequest) {
-  const session = await getOrganizerSession();
-  if (!session) {
-    return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 });
-  }
+  const result = await requirePermission("events.create");
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   try {
     const data = await request.json();
@@ -24,6 +27,11 @@ export async function POST(request: NextRequest) {
 
     if (!title || !startAt || !endAt) {
       return NextResponse.json({ success: false, error: "Title, start date, and end date are required." }, { status: 400 });
+    }
+    // New events publish immediately, so the plan's upcoming-events limit applies here.
+    if (new Date(endAt) > new Date()) {
+      const limit = await upcomingLimitProblem(session.organizerId);
+      if (limit) return NextResponse.json({ success: false, code: "plan_limit", error: limit }, { status: 403 });
     }
 
     // Validate reserved slugs
@@ -61,7 +69,7 @@ export async function POST(request: NextRequest) {
 
     const event = await prisma.event.create({
       data: {
-        organizerId: session.id,
+        organizerId: session.organizerId,
         title,
         slug: slugCandidate,
         shortCode,
@@ -71,13 +79,14 @@ export async function POST(request: NextRequest) {
         status: "PUBLISHED",
         startAt: new Date(startAt),
         endAt: new Date(endAt),
+        featuredUntil: await featuredUntilFor(session.organizerId, new Date(endAt)),
         timezone: "Asia/Kolkata",
         venueName: venueName || null,
         address: address || null,
         // Store venue map URL in the address field with a separator, or we use meetingLink field creatively
         // Actually let's store the map URL in the existing latitude/longitude or address
         meetingLink: format === "VIRTUAL" || format === "HYBRID" ? (meetingLink || null) : null,
-        description: description ? { text: String(description) } : undefined,
+        description: description ? { html: sanitizeUserHtml(String(description)), text: htmlToPlainText(String(description)) } : undefined,
         capacity: capacity ? parseInt(capacity) : null,
         coverImageUrl: coverImageUrl || null,
         visibility: "PUBLIC",
@@ -103,6 +112,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    await applyFirstEventBoost(session.organizerId, event.id).catch((e) => console.error('[free boost]', e));
+    refreshSections(['events', 'home']);
     return NextResponse.json({ success: true, data: { id: event.id, slug: event.slug, shortCode: event.shortCode } });
   } catch (error: any) {
     console.error("Organizer create event error:", error);
@@ -117,14 +128,18 @@ export async function POST(request: NextRequest) {
  * GET /api/organizer/events — List organizer's own events
  */
 export async function GET() {
-  const session = await getOrganizerSession();
-  if (!session) {
-    return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 });
-  }
+  const result = await requirePermission("events.view");
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   try {
+    const eventWhere: any = { organizerId: session.organizerId, deletedAt: null };
+    if (session.assignedEventIds) {
+      eventWhere.id = { in: session.assignedEventIds };
+    }
+
     const events = await prisma.event.findMany({
-      where: { organizerId: session.id, deletedAt: null },
+      where: eventWhere,
       orderBy: { createdAt: "desc" },
       select: {
         id: true,

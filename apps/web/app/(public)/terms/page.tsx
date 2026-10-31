@@ -5,7 +5,7 @@ export default function TermsPage() {
         Terms & Conditions
       </h1>
       <div className="prose prose-sm dark:prose-invert prose-blue max-w-none">
-        <p className="text-sm text-gray-500 mb-8"><strong>Last updated:</strong> August 10, 2026</p>
+        <p className="text-sm text-gray-500 mb-8"><strong>Last updated:</strong> October 31, 2026</p>
 
         <p>
           Welcome to Udyaibase. By accessing or using our website, newsletters, funding resources, directories, event platform, job board, and related services (collectively, &quot;Services&quot;), you agree to abide by and be bound by the following Terms & Conditions. If you do not agree with any of these terms, please do not use our Services.
@@ -55,10 +55,23 @@ export default function TermsPage() {
           Certain features of our Services (such as premium tool listings, job postings, and event promotions) require payment. All payments are processed securely through <strong>Razorpay</strong>, a PCI-DSS compliant payment gateway. We do not store your credit/debit card information on our servers.
         </p>
         <ul>
-          <li>All prices are displayed in Indian Rupees (INR) and are inclusive of applicable taxes unless stated otherwise.</li>
+          <li>All prices are in Indian Rupees (INR). Plan and Event Boost prices are shown before GST; 18% GST is added at checkout and shown separately on your invoice.</li>
           <li>Payment is due at the time of purchase. Access to paid features is granted upon successful payment confirmation.</li>
-          <li>For recurring subscriptions, you will be billed at the start of each billing cycle. You may cancel at any time through your account dashboard; cancellation takes effect at the end of the current billing period.</li>
-          <li>Refunds are governed by our <a href="/refund">Refund Policy</a>.</li>
+          <li>Employer plans (Featured, Premium) and event host Pro are prepaid for 30 days and do not renew automatically.</li>
+          <li>When a paid plan ends, it keeps working for 3 grace days, except that new AI candidate reviews and new event promo emails pause. After that the account moves to the Free plan. Nothing is deleted; if more jobs are open than the Free plan allows, the most recently published stay open and the rest are paused.</li>
+          <li>New employer workspaces get a free 7-day Featured trial from their first published job, and a host&apos;s first published event gets a free Event Boost. These are one per account and one per company or startup, need no payment, and end without grace days. We may change or end free trials for new accounts at any time.</li>
+          <li>An Event Boost is a one-time purchase for a single event and lasts until that event ends.</li>
+          <li>Plan limits (open jobs, upcoming events, registrations per event, teammates, AI reviews and promo emails) are shown on your Plans &amp; billing page and may change with notice for future periods.</li>
+          <li>You are responsible for keeping your billing details (legal name, GSTIN, address and invoice email) correct. GST invoices are issued with the details saved at the time of payment and emailed to your invoice email.</li>
+          <li>Refunds, and the GST credit notes issued for them, are governed by our <a href="/refund">Refund Policy</a>.</li>
+        </ul>
+
+        <h2>7A. Hiring and Event Workspaces</h2>
+        <ul>
+          <li>The verified owner of a startup or event account is responsible for every job and event published from it, including those published by teammates they invite. Owners are notified when a teammate publishes a job and can remove a teammate at any time.</li>
+          <li>Jobs must be real, open roles. Employers must never ask candidates to pay for a job, training or equipment. Reported jobs may be hidden while we review them, and jobs that break these rules are closed.</li>
+          <li>Paid plans may include AI screening that summarises a candidate&apos;s resume against the job. It is a suggestion for the hiring team; it never rejects or moves a candidate on its own, and every hiring decision is made by a person.</li>
+          <li>Promo emails for events are sent by Udyaibase, in our layout, only to people who asked to hear about events in their area, and always include an unsubscribe link.</li>
         </ul>
 
         <h2>8. Newsletter and Marketing Communications</h2>

@@ -4,7 +4,9 @@ import { NextRequest } from 'next/server';
 const mockGetOrganizerSession = vi.fn();
 const mockSql = vi.fn();
 const mockPrisma = {
-  event: { findUnique: vi.fn(), findMany: vi.fn() },
+  event: { findUnique: vi.fn(), findMany: vi.fn(async () => []) },
+  // requirePermission: no team membership elsewhere means the session owns its own workspace.
+  eventTeamMember: { findFirst: vi.fn(async () => null) },
   eventRegistration: { findMany: vi.fn() },
   eventOrganizer: { findUnique: vi.fn() },
   $queryRaw: vi.fn(() => Promise.resolve([])),
@@ -40,6 +42,9 @@ vi.mock('@/lib/rate-limit', () => ({
 
 vi.mock('@neondatabase/serverless', () => ({
   neon: vi.fn(() => vi.fn(() => Promise.resolve([]))),
+  neonConfig: {},
+  Pool: vi.fn(),
+  types: { setTypeParser: vi.fn(), builtins: {} },
 }));
 
 function makeRequest(url: string, method = 'GET', body?: any) {
@@ -71,10 +76,11 @@ describe('IDOR — Organizer A cannot access Organizer B resources', () => {
 
     it('returns events for authenticated organizer', async () => {
       mockGetOrganizerSession.mockResolvedValue(ORGANIZER_A);
-      mockSql.mockResolvedValueOnce([{ id: 'event-1', title: 'Event A' }]);
       const { GET } = await import('@/app/api/organizer/events/route');
       const res = await call(GET, makeRequest('/api/organizer/events'));
       expect(res.status).toBe(200);
+      // The query must be scoped to the signed-in organizer.
+      expect((mockPrisma.event.findMany.mock.calls.at(-1) as any[] | undefined)?.[0]?.where?.organizerId).toBe(ORGANIZER_A.id);
     });
   });
 

@@ -356,6 +356,8 @@ export interface EventEmailData {
   format: string;
   qrToken: string;
   googleCalendarUrl: string;
+  startAtIso?: string;
+  endAtIso?: string;
 }
 
 export function eventRegistrationHtml(name: string, data: EventEmailData): string {
@@ -424,6 +426,69 @@ export function eventNewsletterWelcomeHtml(name: string, unsubUrl: string): stri
   <p style="color: #9ca3af; font-size: 11px;">
     <a href="${unsubUrl}" style="color: #9ca3af; text-decoration: underline;">Unsubscribe</a> if you no longer want these updates.
   </p>`);
+}
+
+// ── Event: Registration Approved ─────────────────────────────────────────
+
+export function registrationApprovedHtml(name: string, eventTitle: string, eventDate: string, eventSlug: string): string {
+  const siteUrl = getSiteUrl();
+
+  return eventsWrapper(`
+  <p style="color: #374151; font-size: 16px; line-height: 1.6;">Hi ${name},</p>
+  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
+    Great news! Your registration for <strong>"${eventTitle}"</strong> on <strong>${eventDate}</strong> has been <strong>approved</strong>.
+  </p>
+
+  <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+    <p style="color: #166534; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">✓ Registration Confirmed</p>
+    <p style="color: #374151; font-size: 14px; line-height: 1.5; margin: 0;">
+      You're all set. We'll send you a confirmation email with your QR ticket closer to the event date.
+    </p>
+  </div>
+
+  <div style="margin: 24px 0; text-align: center;">
+    ${eventsButton(siteUrl + '/events/' + eventSlug, 'View Event Details')}
+  </div>`);
+}
+
+// ── Event: Registration Rejected ─────────────────────────────────────────
+
+export function registrationRejectedHtml(name: string, eventTitle: string, eventDate: string, reason?: string): string {
+  return eventsWrapper(`
+  <p style="color: #374151; font-size: 16px; line-height: 1.6;">Hi ${name},</p>
+  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
+    We're sorry, but your registration for <strong>"${eventTitle}"</strong> on <strong>${eventDate}</strong> was not approved.
+  </p>
+
+  <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+    <p style="color: #991b1b; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">Registration Not Approved</p>
+    <p style="color: #374151; font-size: 14px; line-height: 1.5; margin: 0;">
+      ${reason || 'The organizer has limited spots and was unable to approve your registration at this time. Please reach out to the organizer if you have questions.'}
+    </p>
+  </div>`);
+}
+
+// ── Event: Waitlist Promoted ─────────────────────────────────────────────
+
+export function waitlistPromotedHtml(name: string, eventTitle: string, eventDate: string, eventSlug: string): string {
+  const siteUrl = getSiteUrl();
+
+  return eventsWrapper(`
+  <p style="color: #374151; font-size: 16px; line-height: 1.6;">Hi ${name},</p>
+  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
+    A spot has opened up! You've been moved off the waitlist for <strong>"${eventTitle}"</strong> on <strong>${eventDate}</strong> and your registration is now <strong>confirmed</strong>.
+  </p>
+
+  <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+    <p style="color: #166534; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">✓ You're In!</p>
+    <p style="color: #374151; font-size: 14px; line-height: 1.5; margin: 0;">
+      Your waitlist registration has been promoted to confirmed. See you at the event!
+    </p>
+  </div>
+
+  <div style="margin: 24px 0; text-align: center;">
+    ${eventsButton(siteUrl + '/events/' + eventSlug, 'View Event Details')}
+  </div>`);
 }
 
 // ── Event: Cancellation Notice ───────────────────────────────────────────

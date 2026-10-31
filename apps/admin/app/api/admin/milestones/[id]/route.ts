@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@udyaibase/database";
+import { withPublicRefresh } from '@/lib/refresh-public';
 
-export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function putHandler(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   try {
     const session: any = await getServerSession(authOptions);
@@ -56,3 +57,5 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
 }
+
+export const PUT = withPublicRefresh(['milestones', 'home'], putHandler);

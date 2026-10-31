@@ -20,5 +20,9 @@ export default async function ReportsPage() {
     total: reports.length,
   };
 
-  return <ReportsClient reports={reports.map(r => ({ ...r, createdAt: r.createdAt.toISOString(), resolvedAt: r.resolvedAt?.toISOString() || null }))} stats={stats} />;
+  const jobIds = [...new Set(reports.filter(r => r.entityType === "JOB").map(r => r.entityId))];
+  const jobs = jobIds.length ? await prisma.jobBoardListing.findMany({ where: { id: { in: jobIds } }, select: { id: true, status: true, moderationHold: true, publishedByEmail: true, Employer: { select: { companyName: true, email: true } } } }) : [];
+  const jobMap = Object.fromEntries(jobs.map(j => [j.id, { status: j.status, hold: j.moderationHold, company: j.Employer.companyName, publishedBy: j.publishedByEmail ?? j.Employer.email }]));
+
+  return <ReportsClient reports={reports.map(r => ({ ...r, reporterHash: undefined, job: jobMap[r.entityId] ?? null, createdAt: r.createdAt.toISOString(), resolvedAt: r.resolvedAt?.toISOString() || null }))} stats={stats} />;
 }

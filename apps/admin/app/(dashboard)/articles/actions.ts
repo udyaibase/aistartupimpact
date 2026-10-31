@@ -1,4 +1,5 @@
 "use server";
+import { getPublicUrl } from "@/lib/media";
 
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -6,6 +7,7 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { prisma } from "@udyaibase/database";
 import { revalidatePath } from "next/cache";
 import { logAuditEvent, canDelete } from '@/lib/audit-log';
+import { refreshPublic } from '@/lib/refresh-public';
 
 const s3Client = new S3Client({
   region: "auto",
@@ -52,11 +54,7 @@ export async function uploadMediaAction(formData: FormData) {
 
     await s3Client.send(command);
 
-    // The frontend Next.js App proxy handles `/v1/media/[key]`, but we can also use R2 Public Domain
-    const publicDomain = process.env.R2_PUBLIC_URL || (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000");
-    const url = process.env.R2_PUBLIC_URL
-      ? `${process.env.R2_PUBLIC_URL}/${fileKey}`
-      : `${publicDomain}/v1/media/${fileKey}`;
+    const url = getPublicUrl(fileKey);
 
     return {
       success: true,
@@ -311,7 +309,7 @@ export async function saveArticleAction(payload: any, articleId?: string | null)
       after: { title: payload.title, slug: payload.slug, status: payload.status },
     });
 
-    return { success: true, data: article };
+    await refreshPublic(['news', 'stories', 'opinions', 'authors', 'home']); return { success: true, data: article };
   } catch (error: any) {
     console.error("[saveArticleAction] Error:", {
       message: error.message,
@@ -433,7 +431,7 @@ export async function updateArticleStatusAction(id: string, status: string) {
     }
     revalidatePath("/articles");
     revalidatePath("/dashboard");
-    return { success: true };
+    await refreshPublic(['news', 'stories', 'opinions', 'authors', 'home']); return { success: true };
   } catch (error: any) {
     console.error("Update Article Status Error:", error);
     return { success: false, error: error.message || "Failed to update status" };
@@ -465,7 +463,7 @@ export async function deleteArticleAction(id: string) {
 
     revalidatePath("/articles");
     revalidatePath("/dashboard");
-    return { success: true };
+    await refreshPublic(['news', 'stories', 'opinions', 'authors', 'home']); return { success: true };
   } catch (error: any) {
     console.error("Delete Article Error:", error);
     return { success: false, error: error.message || "Failed to delete article" };

@@ -42,10 +42,10 @@ const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+/** Public URL of an uploaded object. R2_PUBLIC_URL is required (the old apps/api media proxy is retired). */
 export function getPublicUrl(key: string): string {
-  if (process.env.R2_PUBLIC_URL)
-    return `${process.env.R2_PUBLIC_URL.replace(/\/$/, "")}/${key}`;
-  return `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/v1/media/${key}`;
+  if (!process.env.R2_PUBLIC_URL) throw new Error("R2_PUBLIC_URL is not configured");
+  return `${process.env.R2_PUBLIC_URL.replace(/\/$/, "")}/${key}`;
 }
 
 export function slugifyName(name: string): string {

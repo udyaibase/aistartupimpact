@@ -1,10 +1,11 @@
+import { jsonLd } from "@/lib/json-ld";
 import Link from 'next/link';
 import Image from 'next/image';
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { Clock, Calendar, ChevronRight, Users } from 'lucide-react';
 import StorySaveButton from '@/components/StorySaveButton';
-import { sql, getArticleBySlugDirect, getArticlesDirect } from '@/lib/db';
+import { sql, getArticleBySlugDirect, getRelatedArticlesDirect } from '@/lib/db';
 import { defaultFounderSpotlights } from '@/lib/fallbacks';
 import { buildArticleMetadata, generateArticleSchema, generateBreadcrumbSchema } from '@/lib/seo';
 import { sanitizeHtml } from '@/lib/sanitize';
@@ -38,7 +39,6 @@ export async function generateStaticParams() {
 export default async function StoryDetailPage(props: { params: Promise<{ slug: string }> }) {
   const params = await props.params;
   let story = await getArticleBySlugDirect(params.slug);
-  const related = await getArticlesDirect({ type: 'STORY', limit: 4 });
 
   if (!story) {
     if (defaultFounderSpotlights.find(s => s.slug === params.slug)) {
@@ -57,7 +57,7 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
       : String(story.content || story.excerpt || '')
   );
 
-  const relatedStories = (related || []).filter((s: any) => s.slug !== params.slug).slice(0, 3);
+  const relatedStories = await getRelatedArticlesDirect(story.id, ['STORY', 'FOUNDER_STORY'], 3);
 
   const siteUrl = 'https://udyaibase.com';
   const storyUrl = `${siteUrl}/stories/${story.slug}`;
@@ -87,8 +87,8 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(articleSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbSchema) }} />
 
       <nav className="flex items-center gap-1.5 text-xs sm:text-sm font-jakarta text-gray-400 dark:text-gray-500 mb-6">
         <Link href="/" className="hover:text-brand">Home</Link>

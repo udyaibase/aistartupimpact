@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { requireEmployerAuth } from '@/lib/employer-auth';
+import { can, forbidden } from '@/lib/employer/permissions';
 import {
   generateTOTPSecret, generateQRCode, generateBackupCodes,
   hashBackupCodes, encryptSecret, verifyTOTPToken, decryptSecret,
@@ -11,6 +12,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   try {
     const session = await requireEmployerAuth();
+    if (!can(session.role, 'account.manage')) return forbidden();
     const { action, token } = await request.json();
 
     const employer = await prisma.jobBoardEmployer.findUnique({

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Briefcase, Mail, Lock, ArrowRight, Eye, EyeOff, Shield, Users, BarChart3, Building2, Globe, Zap, UserPlus } from 'lucide-react';
 import TurnstileWidget from '@/components/shared/TurnstileWidget';
+import TeamCodeSignIn from '@/components/employer/team/TeamCodeSignIn';
 
 const benefits = [
   {
@@ -306,6 +307,22 @@ export default function EmployerLoginPage() {
                     {!loading && <ArrowRight className="w-4 h-4" />}
                   </button>
                 </form>
+
+                <div className="flex items-center gap-3 my-5" aria-hidden>
+                  <span className="flex-1 h-px bg-gray-200 dark:bg-gray-800" />
+                  <span className="text-xs text-gray-400 font-jakarta">or</span>
+                  <span className="flex-1 h-px bg-gray-200 dark:bg-gray-800" />
+                </div>
+                <a
+                  href="/api/employer/auth/founder"
+                  className="w-full min-h-[48px] flex items-center justify-center gap-2 rounded-xl border border-gray-300 dark:border-gray-700 text-sm font-semibold font-jakarta text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                >
+                  Continue with your founder account
+                </a>
+                <p className="text-center text-xs text-gray-500 dark:text-gray-400 font-jakarta mt-2">
+                  Founders with a verified startup can hire without a separate login.
+                </p>
+                <TeamCodeSignIn />
 
                 <p className="text-center text-sm text-gray-500 dark:text-gray-400 font-jakarta mt-5">
                   Don&apos;t have an account?{' '}

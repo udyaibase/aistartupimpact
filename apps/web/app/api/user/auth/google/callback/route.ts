@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { clientIp } from '@/lib/client-ip';
 import { sql } from '@/lib/db';
 import { SignJWT } from 'jose';
 import { randomBytes } from 'crypto';
@@ -135,7 +136,7 @@ export async function GET(request: NextRequest) {
         ${user.id},
         ${token},
         ${expiresAt.toISOString()},
-        ${request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'},
+        ${clientIp(request)},
         ${request.headers.get('user-agent') || 'unknown'},
         NOW()
       )

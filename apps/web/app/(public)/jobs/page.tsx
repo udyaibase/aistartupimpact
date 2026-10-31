@@ -1,3 +1,4 @@
+import { jsonLd } from "@/lib/json-ld";
 import { sql } from '@/lib/db';
 import type { Metadata } from 'next';
 import Link from 'next/link';
@@ -70,9 +71,9 @@ export default async function JobsPage(props: PageProps) {
                  ) AS company_rank
           FROM "JobBoardListing" jl
           JOIN "JobBoardEmployer" e ON e.id = jl."employerId"
-          WHERE jl."isActive" = true
+          WHERE jl.status = 'OPEN' AND jl."moderationHold" = false
             AND jl."deletedAt" IS NULL
-            AND (jl."expiresAt" IS NULL OR jl."expiresAt" > NOW())
+            AND (jl."expiresAt" IS NULL OR jl."expiresAt" > NOW()) AND jl."showOnJobsPage" = true
             AND (${filterCategory}::text IS NULL OR jl.category::text = ${filterCategory})
             AND (${filterWorkType}::text IS NULL OR jl."workType"::text = ${filterWorkType})
             AND (${filterCountry}::text IS NULL OR jl.country = ${filterCountry})
@@ -101,8 +102,8 @@ export default async function JobsPage(props: PageProps) {
         SELECT COUNT(*)::int AS total
         FROM "JobBoardListing" jl
         JOIN "JobBoardEmployer" e ON e.id = jl."employerId"
-        WHERE jl."isActive" = true AND jl."deletedAt" IS NULL
-          AND (jl."expiresAt" IS NULL OR jl."expiresAt" > NOW())
+        WHERE jl.status = 'OPEN' AND jl."moderationHold" = false AND jl."deletedAt" IS NULL
+          AND (jl."expiresAt" IS NULL OR jl."expiresAt" > NOW()) AND jl."showOnJobsPage" = true
           AND (${filterCategory}::text IS NULL OR jl.category::text = ${filterCategory})
           AND (${filterWorkType}::text IS NULL OR jl."workType"::text = ${filterWorkType})
           AND (${filterCountry}::text IS NULL OR jl.country = ${filterCountry})
@@ -119,8 +120,8 @@ export default async function JobsPage(props: PageProps) {
       sql`
         SELECT jl."workType", COUNT(*)::int as count
         FROM "JobBoardListing" jl
-        WHERE jl."isActive" = true AND jl."deletedAt" IS NULL
-          AND (jl."expiresAt" IS NULL OR jl."expiresAt" > NOW())
+        WHERE jl.status = 'OPEN' AND jl."moderationHold" = false AND jl."deletedAt" IS NULL
+          AND (jl."expiresAt" IS NULL OR jl."expiresAt" > NOW()) AND jl."showOnJobsPage" = true
         GROUP BY jl."workType"
       `,
     ]);
@@ -145,7 +146,7 @@ export default async function JobsPage(props: PageProps) {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbJsonLd) }} />
 
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-xs font-jakarta text-gray-400 dark:text-gray-500 mb-4">
@@ -221,19 +222,18 @@ export default async function JobsPage(props: PageProps) {
           )}
 
           {/* Job Alert CTA */}
-          <div id="job-alert" className="mt-10 rounded-2xl bg-gray-900 dark:bg-gray-800 p-6 sm:p-8 scroll-mt-24">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <h2 className="font-sora font-bold text-lg text-white flex items-center gap-2">
-                  <Bell className="w-5 h-5 text-brand" />
-                  Create a job alert
+          <div id="job-alert" className="mt-10 rounded-xl bg-gray-900 dark:bg-gray-800 px-6 py-4 sm:px-8 sm:py-5 scroll-mt-24">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="shrink-0">
+                <h2 className="font-sora font-bold text-base text-white">
+                  Never miss an AI role
                 </h2>
-                <p className="text-sm text-gray-400 font-jakarta mt-1">
+                <p className="text-sm text-gray-400 font-jakarta mt-0.5">
                   Get new AI jobs matching your search in your inbox, once a day.
                 </p>
               </div>
-              <div className="sm:w-80">
-                <SubscribeForm source="jobs-alert" buttonText="Create alert" />
+              <div className="sm:flex-1 sm:max-w-md">
+                <SubscribeForm source="jobs-alert" buttonText="Subscribe" />
               </div>
             </div>
           </div>

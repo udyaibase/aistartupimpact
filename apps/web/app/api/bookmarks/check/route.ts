@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const toolIds = searchParams.get('toolIds')?.split(',').filter(Boolean) || [];
     const startupIds = searchParams.get('startupIds')?.split(',').filter(Boolean) || [];
+    const jobSlugs = searchParams.get('jobSlugs')?.split(',').filter(Boolean) || [];
 
     const saved: Record<string, boolean> = {};
 
@@ -39,6 +40,19 @@ export async function GET(request: NextRequest) {
       `;
       savedStartups.forEach((row: any) => {
         saved[`startup-${row.startupSlug}`] = true;
+      });
+    }
+
+    // Check saved jobs
+    if (jobSlugs.length > 0) {
+      const savedJobs = await sql`
+        SELECT jl.slug FROM "JobBoardSaved" s
+        INNER JOIN "JobBoardListing" jl ON jl.id = s."listingId"
+        WHERE s."userId" = ${session.id}
+          AND jl.slug = ANY(${jobSlugs})
+      `;
+      savedJobs.forEach((row: any) => {
+        saved[`job-${row.slug}`] = true;
       });
     }
 

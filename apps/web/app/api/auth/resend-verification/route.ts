@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
-import { generateToken } from "@/lib/unified-auth";
+import { createOtp } from "@/lib/otp";
+import { otpEmailHtml } from "@udyaibase/utils";
+import { sendEmail } from "@/lib/email/send";
 import { checkRateLimit, getClientIdentifier, authRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -20,15 +22,13 @@ export async function POST(request: NextRequest) {
   }
 
   if (user.emailVerified) {
-    return NextResponse.json({ success: true, message: "Email already verified." });
+    return NextResponse.json({ success: true, message: "If account exists, verification email sent." });
   }
 
-  // Generate new verify token
-  const verifyToken = generateToken();
-  await prisma.unifiedUser.update({ where: { id: user.id }, data: { verifyToken } });
-
-  // TODO: Send verification email with verifyToken
-  // await sendVerificationEmail(user.email, verifyToken);
-
-  return NextResponse.json({ success: true, message: "Verification email sent." });
+  // Email a fresh 6-digit code (the same code flow signup uses).
+  const { otp } = await createOtp(user.email, "verify");
+  if (otp) {
+    await sendEmail({ to: user.email.toLowerCase(), subject: `${otp} is your verification code`, html: otpEmailHtml(otp), type: "otp" });
+  }
+  return NextResponse.json({ success: true, message: "If account exists, verification email sent." });
 }

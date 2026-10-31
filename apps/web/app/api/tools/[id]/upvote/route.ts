@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { jwtVerify } from 'jose';
+import { refreshPaths } from '@/lib/revalidate';
 
 export const dynamic = 'force-dynamic';
 const JWT_SECRET = new TextEncoder().encode(
@@ -59,11 +60,13 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       await sql`DELETE FROM "ToolUpvote" WHERE "toolId" = ${toolId} AND "userId" = ${user.id}`;
       await sql`UPDATE "AiTool" SET "upvoteCount" = GREATEST("upvoteCount" - 1, 0) WHERE id = ${toolId}`;
       const updated = await sql`SELECT "upvoteCount" FROM "AiTool" WHERE id = ${toolId}`;
+      refreshPaths([`/tools/${toolSlug}`]);
       return NextResponse.json({ upvoted: false, count: (updated[0] as any).upvoteCount });
     } else {
       await sql`INSERT INTO "ToolUpvote" (id, "toolId", "userId") VALUES (gen_random_uuid(), ${toolId}, ${user.id})`;
       await sql`UPDATE "AiTool" SET "upvoteCount" = "upvoteCount" + 1 WHERE id = ${toolId}`;
       const updated = await sql`SELECT "upvoteCount" FROM "AiTool" WHERE id = ${toolId}`;
+      refreshPaths([`/tools/${toolSlug}`]);
       return NextResponse.json({ upvoted: true, count: (updated[0] as any).upvoteCount });
     }
   } catch (error: any) {

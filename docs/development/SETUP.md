@@ -1,5 +1,7 @@
 # Local Development Setup
 
+> **Note (Oct 2026):** the Express server `apps/api` has been retired. The web and admin apps query the database directly, media URLs come from `R2_PUBLIC_URL`, and the Resend bounce/complaint webhook moved to `apps/web/app/api/webhooks/resend` (see `docs/infrastructure/RESEND.md`). Sections below that mention `apps/api`, port 4000 or `/api/v1` rewrites are historical.
+
 Get the project running locally in under 10 minutes.
 
 ---
@@ -129,6 +131,9 @@ Recommended settings (`.vscode/settings.json`):
 |---------|----------|
 | `MODULE_NOT_FOUND` on startup | Delete `apps/web/.next` and restart |
 | Prisma client errors | Run `npx prisma generate` again |
+| `Unknown argument` / 500s right after a schema change | The running dev server still holds the old Prisma client. Run `npx prisma db push` from `packages/database` (never `--accept-data-loss`), then restart the dev server |
+| Every `/api/*` route returns 404 (often after deleting or moving a route folder) | Turbopack's route cache is stale: stop the dev server, `rm -rf apps/web/.next`, start again |
+| Dev server hangs or pages time out after an interrupted test run | Restart the dev server; aborted Playwright runs can leave it stuck in `ECONNRESET` loops |
 | Port already in use | Kill process: `lsof -ti:3000 \| xargs kill` |
 | DB connection refused | Check `DATABASE_URL` is correct in `.env` |
 | ENV vars not loading | Ensure `dotenv-cli` is installed (comes with `npm install`) |

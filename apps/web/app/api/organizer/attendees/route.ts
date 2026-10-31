@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
-import { getOrganizerSession } from "@/lib/organizer-auth";
+import { requirePermission } from "@/lib/organizer-auth/require-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -8,11 +8,17 @@ export const dynamic = "force-dynamic";
  * GET /api/organizer/attendees — Export organizer's attendees as CSV
  */
 export async function GET() {
-  const session = await getOrganizerSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const result = await requirePermission("registrations.view");
+  if (result instanceof NextResponse) return result;
+  const session = result;
+
+  const eventFilter: any = { organizerId: session.organizerId };
+  if (session.assignedEventIds) {
+    eventFilter.id = { in: session.assignedEventIds };
+  }
 
   const registrations = await prisma.eventRegistration.findMany({
-    where: { event: { organizerId: session.id }, deletedAt: null },
+    where: { event: eventFilter, deletedAt: null },
     orderBy: { registeredAt: "desc" },
     select: {
       guestName: true, guestEmail: true, guestPhone: true,

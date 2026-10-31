@@ -4,6 +4,7 @@ import { neon } from '@neondatabase/serverless';
 import { revalidatePath } from 'next/cache';
 import { requireActionAuth } from '@/lib/api-auth';
 import { invalidateToolCache, invalidateTaxonomyCache, invalidateToolTagsCache } from '@/lib/cache-invalidate';
+import { refreshPublic } from '@/lib/refresh-public';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -114,7 +115,7 @@ export async function updateToolTagsAction(toolId: string, tagIds: string[]) {
     invalidateToolCache();
     invalidateTaxonomyCache();
     invalidateToolTagsCache(toolId);
-    return { success: true, count: cappedTagIds.length };
+    await refreshPublic(['tools', 'home']); return { success: true, count: cappedTagIds.length };
   } catch (error: any) {
     console.error('updateToolTagsAction error:', error);
     return { success: false, error: error.message || 'Failed to update tags' };
@@ -155,7 +156,7 @@ export async function createTagAction(data: {
     `;
 
     revalidatePath('/tools-dir/tags');
-    return { success: true };
+    await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('createTagAction error:', error);
     return { success: false, error: error.message || 'Failed to create tag' };
@@ -204,7 +205,7 @@ export async function createTagsBulkAction(data: {
     revalidatePath('/tools-dir/tags');
     const created = results.filter(r => r.success).length;
     const failed = results.filter(r => !r.success);
-    return { success: true, created, failed };
+    await refreshPublic(['tools', 'home']); return { success: true, created, failed };
   } catch (error: any) {
     console.error('createTagsBulkAction error:', error);
     return { success: false, error: error.message || 'Failed to create tags' };
@@ -227,7 +228,7 @@ export async function updateTagAction(id: string, data: { name?: string; emoji?:
     }
 
     revalidatePath('/tools-dir/tags');
-    return { success: true };
+    await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('updateTagAction error:', error);
     return { success: false, error: error.message || 'Failed to update tag' };
@@ -242,7 +243,7 @@ export async function deleteTagAction(id: string) {
     await sql`DELETE FROM "ToolSystemTag" WHERE id = ${id}`;
 
     revalidatePath('/tools-dir/tags');
-    return { success: true };
+    await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('deleteTagAction error:', error);
     return { success: false, error: error.message || 'Failed to delete tag' };
@@ -277,7 +278,7 @@ export async function createTagGroupAction(data: {
     `;
 
     revalidatePath('/tools-dir/tags');
-    return { success: true };
+    await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('createTagGroupAction error:', error);
     return { success: false, error: error.message || 'Failed to create tag group' };
@@ -294,7 +295,7 @@ export async function refreshTagCountsAction() {
       "updatedAt" = NOW()
     `;
     revalidatePath('/tools-dir/tags');
-    return { success: true };
+    await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('refreshTagCountsAction error:', error);
     return { success: false, error: error.message || 'Failed to refresh counts' };

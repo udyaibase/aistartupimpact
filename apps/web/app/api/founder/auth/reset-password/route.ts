@@ -10,11 +10,12 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { token, password } = body;
-    if (body.turnstileToken) {
-      const isHuman = await verifyTurnstileToken(body.turnstileToken);
-      if (!isHuman) {
-        return NextResponse.json({ error: 'Human verification failed. Please try again.' }, { status: 403 });
-      }
+    if (!body.turnstileToken) {
+      return NextResponse.json({ error: 'CAPTCHA verification required. Please complete the challenge.' }, { status: 403 });
+    }
+    const isHuman = await verifyTurnstileToken(body.turnstileToken);
+    if (!isHuman) {
+      return NextResponse.json({ error: 'Human verification failed. Please try again.' }, { status: 403 });
     }
 
     if (!token || !password) {

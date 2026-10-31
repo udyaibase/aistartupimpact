@@ -1,6 +1,10 @@
 import { PrismaClient, Prisma } from '@prisma/client';
-import { neon, types } from '@neondatabase/serverless';
-import { PrismaNeonHTTP } from '@prisma/adapter-neon';
+import { Pool, neonConfig, types } from '@neondatabase/serverless';
+import { PrismaNeon } from '@prisma/adapter-neon';
+import ws from 'ws';
+
+// Node < 22 has no global WebSocket.
+if (typeof WebSocket === 'undefined') neonConfig.webSocketConstructor = ws;
 
 // Override default date/timestamp parsing behavior to return strings.
 // This is required to prevent "Inconsistent column data: Conversion failed" errors
@@ -16,8 +20,10 @@ function createPrismaClient(): PrismaClient {
   if (!connectionString) {
     throw new Error('DATABASE_URL environment variable is not set');
   }
-  const sql = neon(connectionString) as any;
-  const adapter = new PrismaNeonHTTP(sql);
+  // WebSocket pool, not the HTTP driver: HTTP mode can't run transactions, updateMany,
+  // createMany or upsert, all of which Prisma needs.
+  const pool = new Pool({ connectionString });
+  const adapter = new PrismaNeon(pool);
   return new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],

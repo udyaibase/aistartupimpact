@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { neon } from '@neondatabase/serverless';
 import { requireApiAuth } from '@/lib/api-auth';
+import { withPublicRefresh } from '@/lib/refresh-public';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -26,7 +27,7 @@ export async function GET() {
 }
 
 // POST - Create new highlight
-export async function POST(request: NextRequest) {
+async function postHandler(request: NextRequest) {
   const { error } = await requireApiAuth();
   if (error) return error;
   try {
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
 }
 
 // PUT - Update highlight
-export async function PUT(request: NextRequest) {
+async function putHandler(request: NextRequest) {
   const { error } = await requireApiAuth();
   if (error) return error;
   try {
@@ -103,7 +104,7 @@ export async function PUT(request: NextRequest) {
 }
 
 // DELETE - Delete highlight
-export async function DELETE(request: NextRequest) {
+async function deleteHandler(request: NextRequest) {
   const { error } = await requireApiAuth(['SUPER_ADMIN']);
   if (error) return error;
   try {
@@ -131,3 +132,7 @@ export async function DELETE(request: NextRequest) {
     );
   }
 }
+
+export const POST = withPublicRefresh(['home'], postHandler);
+export const PUT = withPublicRefresh(['home'], putHandler);
+export const DELETE = withPublicRefresh(['home'], deleteHandler);

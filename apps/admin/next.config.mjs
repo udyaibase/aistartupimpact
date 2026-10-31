@@ -15,25 +15,9 @@ const nextConfig = {
     BUILD_COMMIT_SHA: gitValue("git rev-parse HEAD"),
     BUILD_COMMIT_REF: gitValue("git rev-parse --abbrev-ref HEAD"),
   },
+  // The admin app has no next/image; turn the optimiser off so /_next/image can't be used (or billed).
   images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '**.r2.cloudflarestorage.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'images.unsplash.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'lh3.googleusercontent.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'avatars.githubusercontent.com',
-      },
-    ],
+    unoptimized: true,
   },
   async redirects() {
     return [
@@ -41,14 +25,6 @@ const nextConfig = {
         source: '/',
         destination: '/dashboard',
         permanent: true,
-      },
-    ];
-  },
-  async rewrites() {
-    return [
-      {
-        source: '/api/v1/:path*',
-        destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/v1/:path*`,
       },
     ];
   },

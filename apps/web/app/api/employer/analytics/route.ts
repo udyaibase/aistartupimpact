@@ -1,17 +1,19 @@
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getEmployerSession } from '@/lib/employer-auth';
+import { can, forbidden } from '@/lib/employer/permissions';
 
 export const dynamic = 'force-dynamic';
 export async function GET() {
   try {
     const session = await getEmployerSession();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!can(session.role, 'insights.view')) return forbidden();
 
     // Overall stats
     const stats = await sql`
       SELECT
-        COUNT(*) FILTER (WHERE "isActive" = true AND "deletedAt" IS NULL) AS "activeJobs",
+        COUNT(*) FILTER (WHERE status = 'OPEN' AND "deletedAt" IS NULL) AS "activeJobs",
         COUNT(*) FILTER (WHERE "deletedAt" IS NULL) AS "totalJobs",
         COALESCE(SUM("viewsCount"), 0) AS "totalViews",
         COALESCE(SUM("applicationsCount"), 0) AS "totalApplications",
@@ -24,7 +26,7 @@ export async function GET() {
     // Per-job breakdown
     const jobStats = await sql`
       SELECT id, slug, title, "viewsCount", "applicationsCount", "savedCount", "clicksCount",
-             "publishedAt"::text, "isActive"
+             "publishedAt"::text, (status = 'OPEN') AS "isActive", status
       FROM "JobBoardListing"
       WHERE "employerId" = ${session.id} AND "deletedAt" IS NULL
       ORDER BY "viewsCount" DESC

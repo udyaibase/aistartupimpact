@@ -53,9 +53,9 @@ export default function CreateEventButton() {
       <button
         onClick={handleClick}
         disabled={loading}
-        className="px-4 py-2 text-sm font-bold font-jakarta text-white bg-brand hover:bg-brand-600 rounded-xl transition-colors shadow-sm disabled:opacity-60"
+        className="text-sm font-semibold font-jakarta text-gray-600 dark:text-gray-400 hover:text-brand transition-colors underline underline-offset-2 disabled:opacity-60"
       >
-        + Create Event
+        Hosting? Create event
       </button>
 
       <WorkspaceUnlockModal

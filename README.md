@@ -41,11 +41,6 @@ Udyaibase is a full-stack platform for discovering AI startups, tools, founders,
 │   Port 3000               │ │                           │
 └───────────────┬───────────┘ └───────────┬───────────────┘
                 │                         │
-┌───────────────▼─────────────────────────▼───────────────┐
-│                    apps/api (Express)                     │
-│                    Port 4000                              │
-└───────────────┬─────────────────────────┬───────────────┘
-                │                         │
 ┌───────────────▼───────────┐ ┌───────────▼───────────────┐
 │   Neon PostgreSQL         │ │   Upstash Redis           │
 │   (ap-southeast-1)        │ │   (Caching + Rate Limit)  │
@@ -108,7 +103,8 @@ npm run dev
 This starts all apps:
 - **Web** → http://localhost:3000
 - **Admin** → http://localhost:3001
-- **API** → http://localhost:4000
+
+Both apps talk to the database directly (Prisma / Neon). The old Express server (`apps/api`) was retired; its Resend webhook now lives at `apps/web/app/api/webhooks/resend`.
 
 ---
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getEmployerSession } from '@/lib/employer-auth';
+import { can, forbidden, canSeeJob } from '@/lib/employer/permissions';
 
 export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -8,6 +9,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
   try {
     const session = await getEmployerSession();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!can(session.role, 'candidates.view')) return forbidden();
 
     const { id } = params;
 
@@ -18,13 +20,13 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
       LIMIT 1
     `;
 
-    if (jobCheck.length === 0) {
+    if (jobCheck.length === 0 || !canSeeJob(session, id)) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
 
     const applications = await sql`
       SELECT id, "fullName", email, phone, "linkedinUrl", "portfolioUrl",
-             "githubUrl", "resumeUrl", "coverLetter", status, notes, rating,
+             "githubUrl", "resumeUrl", "resumeKey", "coverLetter", status, notes, rating,
              "appliedAt"::text, "reviewedAt"::text, "statusChangedAt"::text
       FROM "JobBoardApplication"
       WHERE "listingId" = ${id}

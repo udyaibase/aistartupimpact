@@ -22,7 +22,21 @@ export default function ReportsClient({ reports: initialReports, stats }: Props)
     setReports(prev => prev.map(r => r.id === id ? { ...r, status } : r));
   };
 
+  const jobAction = async (r: any, action: "close" | "release") => {
+    let adminNotes: string | undefined;
+    if (action === "close") {
+      if (!confirm(`Close "${r.entityName}"? It disappears from every public page and the employer is emailed.`)) return;
+      adminNotes = prompt("Reason to share with the employer (optional)")?.trim() || undefined;
+    }
+    const res = await fetch(`/api/admin/reports/${r.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobAction: action, adminNotes }) });
+    if (!res.ok) { alert("Couldn't update the job."); return; }
+    const status = action === "close" ? "RESOLVED" : "DISMISSED";
+    setReports(prev => prev.map(x => x.entityType === "JOB" && x.entityId === r.entityId && (x.status === "PENDING" || x.status === "REVIEWING")
+      ? { ...x, status, job: x.job ? { ...x.job, hold: false, status: action === "close" ? "CLOSED" : x.job.status } : x.job } : x));
+  };
+
   const TYPES: Record<string, string> = {
+    scam: "Fake job / scam", asks_money: "Asks for money", misleading: "Misleading details", filled: "Already filled", discriminatory: "Discriminatory",
     incorrect_info: "Incorrect Info", duplicate: "Duplicate", trademark: "Trademark",
     copyright: "Copyright", broken_links: "Broken Links", spam: "Spam", other: "Other",
   };
@@ -60,10 +74,11 @@ export default function ReportsClient({ reports: initialReports, stats }: Props)
                 <Flag className="w-4 h-4 text-red-400 shrink-0"/>
                 <div>
                   <p className="text-sm font-medium text-gray-800 dark:text-gray-200 font-jakarta">{r.entityName}</p>
-                  <p className="text-[10px] text-gray-400 font-jakarta">{r.entityType.toLowerCase()} · {TYPES[r.reportType] || r.reportType} · {new Date(r.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</p>
+                  <p className="text-[10px] text-gray-400 font-jakarta">{r.entityType.toLowerCase()}{r.job ? ` · ${r.job.company}` : ""} · {TYPES[r.reportType] || r.reportType} · {new Date(r.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                {r.job?.hold && <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-red-100 text-red-700">Hidden · on hold</span>}
                 <StatusBadge status={r.status}/>
                 <Eye className="w-3.5 h-3.5 text-gray-400"/>
               </div>
@@ -72,10 +87,15 @@ export default function ReportsClient({ reports: initialReports, stats }: Props)
               <div className="px-4 pb-4 border-t border-gray-100 dark:border-gray-800 pt-3 space-y-3">
                 <p className="text-sm text-gray-600 dark:text-gray-300 font-jakarta">{r.description}</p>
                 {r.reporterEmail && <p className="text-[10px] text-gray-400 font-jakarta">Reporter: {r.reporterEmail}</p>}
+                {r.job?.publishedBy && <p className="text-[10px] text-gray-400 font-jakarta">Published by: {r.job.publishedBy}</p>}
                 <div className="flex items-center gap-2">
-                  <a href={`${typeof window !== "undefined" ? window.location.origin.replace(":3001", ":3000") : "http://localhost:3000"}/${r.entityType === "STARTUP" ? "startups" : r.entityType === "TOOL" ? "tools" : "events"}/${r.entitySlug}`} target="_blank" className="text-xs text-brand font-jakarta hover:underline flex items-center gap-1"><ExternalLink className="w-3 h-3"/> View</a>
+                  <a href={`${typeof window !== "undefined" ? window.location.origin.replace(":3001", ":3000") : "http://localhost:3000"}/${r.entityType === "STARTUP" ? "startups" : r.entityType === "TOOL" ? "tools" : r.entityType === "JOB" ? "jobs" : "events"}/${r.entitySlug}`} target="_blank" className="text-xs text-brand font-jakarta hover:underline flex items-center gap-1"><ExternalLink className="w-3 h-3"/> View</a>
                   {r.status === "PENDING" && <button onClick={() => updateStatus(r.id, "REVIEWING")} className="px-2.5 py-1 text-[10px] bg-blue-100 text-blue-700 rounded font-semibold">Mark Reviewing</button>}
-                  {(r.status === "PENDING" || r.status === "REVIEWING") && <>
+                  {r.entityType === "JOB" && (r.status === "PENDING" || r.status === "REVIEWING") && <>
+                    {r.job?.status !== "CLOSED" && <button onClick={() => jobAction(r, "close")} className="px-2.5 py-1 text-[10px] bg-red-100 text-red-700 rounded font-semibold">Close job</button>}
+                    <button onClick={() => jobAction(r, "release")} className="px-2.5 py-1 text-[10px] bg-gray-100 text-gray-700 rounded font-semibold">{r.job?.hold ? "Looks fine · release" : "Looks fine · dismiss all"}</button>
+                  </>}
+                  {r.entityType !== "JOB" && (r.status === "PENDING" || r.status === "REVIEWING") && <>
                     <button onClick={() => updateStatus(r.id, "RESOLVED")} className="px-2.5 py-1 text-[10px] bg-green-100 text-green-700 rounded font-semibold">Resolve</button>
                     <button onClick={() => updateStatus(r.id, "DISMISSED")} className="px-2.5 py-1 text-[10px] bg-gray-100 text-gray-600 rounded font-semibold">Dismiss</button>
                   </>}

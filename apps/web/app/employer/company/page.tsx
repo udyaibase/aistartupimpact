@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
-import { Building2, Save, Link2, Unlink, Search, ExternalLink, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Building2, Save, Link2, Unlink, ExternalLink, CheckCircle2, AlertTriangle } from 'lucide-react';
+import ClaimStartup from '@/components/employer/ClaimStartup';
 import Link from 'next/link';
 
 export default function EmployerCompanyPage() {
@@ -14,11 +15,6 @@ export default function EmployerCompanyPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-
   useEffect(() => {
     fetch('/api/employer/company')
       .then(r => r.json())
@@ -41,40 +37,10 @@ export default function EmployerCompanyPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const handleSearch = async (q: string) => {
-    setSearchQuery(q);
-    if (q.length < 2) { setSearchResults([]); return; }
-    setSearching(true);
-    try {
-      const res = await fetch(`/api/employer/startups/search?q=${encodeURIComponent(q)}`);
-      const data = await res.json();
-      setSearchResults(data.startups || []);
-    } catch {}
-    setSearching(false);
-  };
-
-  const connectStartup = async (startupId: string) => {
-    setConnecting(true);
-    try {
-      const res = await fetch('/api/employer/company', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'connect_startup', startupId }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setMessage('Startup connected! Jobs will now appear on your startup profile.');
-        // Refresh page data
-        const refreshRes = await fetch('/api/employer/company');
-        const refreshData = await refreshRes.json();
-        setCompany(refreshData.company);
-        setSearchQuery('');
-        setSearchResults([]);
-      } else {
-        setMessage(data.error || 'Failed to connect');
-      }
-    } catch {}
-    setConnecting(false);
+  const refreshCompany = async () => {
+    const res = await fetch('/api/employer/company');
+    const data = await res.json();
+    setCompany(data.company);
   };
 
   const disconnectStartup = async () => {
@@ -86,7 +52,7 @@ export default function EmployerCompanyPage() {
         body: JSON.stringify({ action: 'disconnect_startup' }),
       });
       if (res.ok) {
-        setCompany((prev: any) => ({ ...prev, startupId: null, startupName: null, startupSlug: null, startupLogo: null }));
+        setCompany((prev: any) => ({ ...prev, startupId: null, startupName: null, startupSlug: null, startupLogo: null, startupClaimMethod: null }));
         setMessage('Startup disconnected.');
       }
     } catch {}
@@ -111,16 +77,17 @@ export default function EmployerCompanyPage() {
   if (loading) return <div className="p-10 text-center text-gray-400 font-jakarta">Loading...</div>;
 
   const isConnected = !!company?.startupId;
+  const isVerifiedClaim = isConnected && (company?.startupClaimMethod === 'DOMAIN_OTP' || company?.startupClaimMethod === 'ADMIN');
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div>
       <div className="flex items-center gap-3 mb-6">
         <Building2 className="w-5 h-5 text-brand" />
         <h1 className="font-sora font-extrabold text-xl text-navy dark:text-white">Company Profile</h1>
       </div>
 
       {message && (
-        <div className={`rounded-lg p-3 text-sm mb-5 ${message.includes('success') || message.includes('connected') || message.includes('Connected') ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border border-green-200 dark:border-green-800' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400 border border-red-200 dark:border-red-800'}`}>
+        <div className={`rounded-lg p-3 text-sm mb-5 ${message.includes('success') || message.includes('Verified') || message.includes('disconnected') ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border border-green-200 dark:border-green-800' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400 border border-red-200 dark:border-red-800'}`}>
           {message}
         </div>
       )}
@@ -135,13 +102,30 @@ export default function EmployerCompanyPage() {
         {isConnected ? (
           /* Connected State */
           <div>
-            <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-xl mb-3">
-              <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-green-800 dark:text-green-300 font-jakarta">Connected to startup profile</p>
-                <p className="text-xs text-green-600 dark:text-green-400 font-jakarta">Jobs you post appear on this startup&apos;s page automatically.</p>
+            {isVerifiedClaim ? (
+              <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-xl mb-3">
+                <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-green-800 dark:text-green-300 font-jakarta">Verified owner{company.verifiedCompanyDomain ? ` · ${company.verifiedCompanyDomain}` : ''}</p>
+                  <p className="text-xs text-green-700 dark:text-green-400 font-jakarta">Jobs you post appear on AI Jobs, this startup&apos;s profile, your website widget and Google job search.</p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="p-3 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl mb-3">
+                <div className="flex items-start gap-3 mb-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-amber-900 dark:text-amber-200 font-jakarta">Confirm you work at {company.startupName}</p>
+                    <p className="text-xs text-amber-800 dark:text-amber-300 font-jakarta">Verify a work email on the startup&apos;s domain to publish jobs. It takes a minute.</p>
+                  </div>
+                </div>
+                <ClaimStartup
+                  initialStartup={{ id: company.startupId, name: company.startupName, logoUrl: company.startupLogo, websiteUrl: company.startupWebsite }}
+                  defaultEmail={company.email}
+                  onClaimed={() => { setMessage('Verified. Jobs now appear on your startup profile.'); refreshCompany(); }}
+                />
+              </div>
+            )}
 
             <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
               <div className="w-11 h-11 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center overflow-hidden shrink-0">
@@ -173,57 +157,17 @@ export default function EmployerCompanyPage() {
             </p>
           </div>
         ) : (
-          /* Not Connected — Search */
+          /* Not connected: claim with company-domain verification */
           <div>
             <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta mb-3">
-              If your company is listed on Udyaibase, connect it to automatically sync your profile and show jobs on your startup page.
+              Jobs are always posted under a verified startup. Find yours, or add it, then confirm with a code sent to your work email.
             </p>
-
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={e => handleSearch(e.target.value)}
-                inputMode="search" enterKeyHint="search" placeholder="Search your startup by name..."
-                className="input-field w-full pl-10"
-              />
-            </div>
-
-            {/* Search Results */}
-            {searchResults.length > 0 && (
-              <div className="mt-2 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
-                {searchResults.map((s: any) => (
-                  <button
-                    key={s.id}
-                    onClick={() => connectStartup(s.id)}
-                    disabled={connecting}
-                    className="flex items-center gap-3 w-full px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800 text-left transition-colors disabled:opacity-50 border-b border-gray-100 dark:border-gray-800 last:border-0"
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden shrink-0">
-                      {s.logoUrl ? <Image src={s.logoUrl} alt="" width={32} height={32} sizes="32px" className="w-full h-full object-cover" /> : <Building2 className="w-4 h-4 text-gray-400" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-navy dark:text-white font-jakarta truncate">{s.name}</p>
-                      <p className="text-xs text-gray-400 font-jakarta">{s.headquartersCity || 'AI Startup'} {s.stage ? `• ${s.stage}` : ''}</p>
-                    </div>
-                    <ArrowRight className="w-3.5 h-3.5 text-brand shrink-0" />
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {searchQuery.length >= 2 && searchResults.length === 0 && !searching && (
-              <div className="mt-2 p-3 text-center border border-dashed border-gray-200 dark:border-gray-700 rounded-xl">
-                <p className="text-xs text-gray-400 font-jakarta mb-2">Not found in our directory</p>
-                <Link href="/submit-startup" target="_blank" className="text-xs text-brand font-semibold font-jakarta hover:underline inline-flex items-center gap-1">
-                  Submit your startup <ExternalLink className="w-3 h-3" />
-                </Link>
-              </div>
-            )}
-
-            <p className="text-xs text-gray-400 font-jakarta mt-3">
-              Not an AI startup? No problem — just fill in the company details below.
+            <ClaimStartup
+              defaultEmail={company?.email ?? ''}
+              onClaimed={() => { setMessage('Verified. Jobs now appear on your startup profile.'); refreshCompany(); }}
+            />
+            <p className="text-xs text-gray-500 font-jakarta mt-3">
+              Already verified your startup as a founder? <a href="/api/employer/auth/founder" className="text-brand font-semibold hover:underline">Continue with your founder account</a> instead.
             </p>
           </div>
         )}

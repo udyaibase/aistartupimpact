@@ -1,14 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
+import { setListingStatus } from '@/lib/jobs/listing-status';
+import { deleteResume } from '@/lib/jobs/resume-storage';
+import { runPlanMaintenance } from '@/lib/employer/billing';
+import { runHiringMaintenance } from '@/lib/employer/lifecycle';
+import { runHostPlanMaintenance } from '@/lib/events/billing';
+import { expireTicketHolds } from '@/lib/events/tickets';
+import { trackCronRoute } from '@/lib/ops/cron';
+import { sizePendingLogos } from '@/lib/media/logo-sizes';
+import { refreshPaths, refreshSections } from '@/lib/revalidate';
+import { sendPendingCreditNotes, sendPendingInvoices } from '@/lib/billing/invoice';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
-  return runCleanup(request);
+  return trackCronRoute('data-retention', () => runCleanup(request));
 }
 
 export async function POST(request: NextRequest) {
-  return runCleanup(request);
+  return trackCronRoute('data-retention', () => runCleanup(request));
 }
 
 async function runCleanup(request: NextRequest) {
@@ -29,6 +39,26 @@ async function runCleanup(request: NextRequest) {
       where: { sentAt: { lt: emailLogCutoff } },
     });
     results.emailLogsDeleted = emailLogs.count;
+
+    // Monitoring history: job runs 90 days, AI call records 180 days (cost trends).
+    results.cronRunsDeleted = (await prisma.opsCronRun.deleteMany({ where: { startedAt: { lt: new Date(now.getTime() - 90 * 864e5) } } })).count;
+    results.aiCallsDeleted = (await prisma.opsAiCall.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 180 * 864e5) } } })).count;
+
+    // Cached pages show jobs and events as of when they were built: drop expired jobs and past events daily.
+    refreshSections(['jobs', 'events', 'home']);
+
+    // Invoices for paid payments not emailed yet (manual admin grants, or a send that failed).
+    try { results.invoicesSent = await sendPendingInvoices(50); } catch (err) { console.error('[data-retention] invoices', err); }
+    try { results.creditNotesSent = await sendPendingCreditNotes(50); } catch (err) { console.error('[data-retention] credit notes', err); }
+
+    // New logos get their ready-made sizes (64/128/256 WebP) so Cloudflare serves small files.
+    try {
+      const sizing = await sizePendingLogos(150);
+      results.logosSized = sizing.sized;
+      if (sizing.rowsUpdated) refreshSections(['startups', 'tools', 'home']);
+    } catch (err) {
+      console.error('[data-retention] logo sizing failed', err);
+    }
 
     // Soft-deleted event registrations older than 30 days
     const softDeleteCutoff = new Date(now);
@@ -81,6 +111,42 @@ async function runCleanup(request: NextRequest) {
       },
     });
     results.unverifiedSubscribersDeleted = unverified.count;
+
+    // Job listings past their closing date. Public pages already hide them via
+    // publicListingCondition(); this only keeps dashboards and status in step.
+    const expired = await prisma.jobBoardListing.findMany({
+      where: { status: 'OPEN', expiresAt: { lte: now }, deletedAt: null },
+      select: { id: true },
+    });
+    results.expiredListingsClosed = await setListingStatus(expired.map(l => l.id), 'CLOSED', 'EXPIRED');
+
+    // Resumes uploaded but never submitted: deleted within 24 hours (promised in the apply consent text).
+    const orphanCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const orphans = await prisma.jobBoardResumeUpload.findMany({
+      where: { applicationId: null, createdAt: { lt: orphanCutoff } },
+      select: { id: true, key: true },
+      take: 500,
+    });
+    let orphansDeleted = 0;
+    for (const o of orphans) {
+      try {
+        await deleteResume(o.key);
+        await prisma.jobBoardResumeUpload.delete({ where: { id: o.id } });
+        orphansDeleted++;
+      } catch (err) {
+        console.error('Orphan resume cleanup failed:', o.id, err instanceof Error ? err.message : err);
+      }
+    }
+    results.orphanResumesDeleted = orphansDeleted;
+
+    // Employer plans: reminders, lapses, featured placement.
+    Object.assign(results, await runPlanMaintenance(now));
+    // Hiring nudges and candidate data retention (DPDP).
+    Object.assign(results, await runHiringMaintenance(now));
+    // Event host plans: reminders and lapses.
+    Object.assign(results, await runHostPlanMaintenance(now));
+    // Unpaid ticket holds (they stop counting after 15 minutes anyway; this tidies their status).
+    Object.assign(results, await expireTicketHolds(now));
 
     // Audit logs older than 1 year
     const auditCutoff = new Date(now);

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { clientIp } from '@/lib/client-ip';
 import { requireFounderAuth } from '@/lib/founder-auth';
 import { prisma } from '@udyaibase/database';
 import { verifyDNS } from '@udyaibase/utils/src/verification/dns';
@@ -107,7 +108,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
           ${startup.verificationToken},
           ${'udyaibase-verify=' + startup.verificationToken},
           true,
-          ${request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null},
+          ${clientIp(request)},
           ${request.headers.get('user-agent') || null},
           NOW()
         )
@@ -135,7 +136,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
           ${'udyaibase-verify=' + startup.verificationToken},
           false,
           'DNS record not found',
-          ${request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null},
+          ${clientIp(request)},
           ${request.headers.get('user-agent') || null},
           NOW()
         )

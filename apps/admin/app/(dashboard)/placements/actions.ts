@@ -3,6 +3,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@udyaibase/database";
+import { refreshPublic } from '@/lib/refresh-public';
 
 const ALLOWED = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "AD_MANAGER"];
 
@@ -99,7 +100,7 @@ export async function savePlacementAction(payload: {
             "updatedAt" = NOW()
         WHERE id = ${id}
       `;
-      return { success: true, id };
+      await refreshPublic(['all']); return { success: true, id };
     } else {
       const rows = await prisma.$queryRaw<any[]>`
         INSERT INTO "AdCampaign"
@@ -113,7 +114,7 @@ export async function savePlacementAction(payload: {
         )
         RETURNING id
       `;
-      return { success: true, id: rows[0]?.id };
+      await refreshPublic(['all']); return { success: true, id: rows[0]?.id };
     }
   } catch (e: any) {
     return { success: false, error: e.message };
@@ -160,7 +161,7 @@ export async function saveCreativeAction(payload: {
         )
       `;
     }
-    return { success: true };
+    await refreshPublic(['all']); return { success: true };
   } catch (e: any) {
     return { success: false, error: e.message };
   }
@@ -179,7 +180,7 @@ export async function updatePlacementStatusAction(id: string, status: string) {
       SET status = ${status}::"CampaignStatus", "updatedAt" = NOW()
       WHERE id = ${id}
     `;
-    return { success: true };
+    await refreshPublic(['all']); return { success: true };
   } catch (e: any) {
     return { success: false, error: e.message };
   }
@@ -195,7 +196,7 @@ export async function deletePlacementAction(id: string) {
   try {
     await prisma.$executeRaw`DELETE FROM "AdCreative" WHERE "campaignId" = ${id}`;
     await prisma.$executeRaw`DELETE FROM "AdCampaign" WHERE id = ${id}`;
-    return { success: true };
+    await refreshPublic(['all']); return { success: true };
   } catch (e: any) {
     return { success: false, error: e.message };
   }

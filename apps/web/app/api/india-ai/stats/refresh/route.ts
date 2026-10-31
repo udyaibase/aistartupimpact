@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
+import { trackCronRoute } from '@/lib/ops/cron';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,22 +13,21 @@ export const dynamic = 'force-dynamic';
  * - Cron job (Vercel cron, external scheduler)
  * - After bulk data imports
  * 
- * Protected by a simple secret token for cron access.
+ * Requires CRON_SECRET (Bearer). Vercel cron calls GET; POST is kept for manual triggers.
  */
+export async function GET(req: NextRequest) {
+  return trackCronRoute('india-ai-stats', () => refresh(req));
+}
+
 export async function POST(req: NextRequest) {
+  return trackCronRoute('india-ai-stats', () => refresh(req));
+}
+
+async function refresh(req: NextRequest) {
   try {
-    // Optional: verify cron secret for automated triggers
-    const authHeader = req.headers.get('authorization');
     const cronSecret = process.env.CRON_SECRET;
-    
-    // Allow if no CRON_SECRET set (dev mode) or if token matches
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-      // Also allow if called from admin (check referer)
-      const referer = req.headers.get('referer') || '';
-      const isAdminCall = referer.includes('localhost:3001') || referer.includes('/admin');
-      if (!isAdminCall) {
-        return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-      }
+    if (!cronSecret || req.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
     // Compute real stats
     const [

@@ -377,15 +377,15 @@ export async function getRelatedContentForOpinion(articleId: string, tagIds: str
       ` as Promise<any[]>,
 
       sql`
-        SELECT j.id, j.title, j.location, j.type,
-               j."salaryRangeMin", j."salaryRangeMax",
-               s.name AS "companyName", s.slug AS "companySlug", s."logoUrl" AS "companyLogo"
-        FROM "Job" j
-        JOIN "Startup" s ON s.id = j."startupId"
-        WHERE j."isActive" = true AND j."deletedAt" IS NULL
-          AND (j."expiresAt" IS NULL OR j."expiresAt" > NOW())
-          AND s."deletedAt" IS NULL
-        ORDER BY j."isFeatured" DESC, j."createdAt" DESC
+        SELECT jl.id, jl.slug, jl.title, COALESCE(jl.city, jl.location) AS location, jl."workType"::text AS type,
+               CASE WHEN jl."showSalary" AND jl."salaryCurrency" = 'INR' THEN jl."salaryMin" END AS "salaryRangeMin",
+               CASE WHEN jl."showSalary" AND jl."salaryCurrency" = 'INR' THEN jl."salaryMax" END AS "salaryRangeMax",
+               e."companyName", e.slug AS "companySlug", e."logoUrl" AS "companyLogo"
+        FROM "JobBoardListing" jl
+        JOIN "JobBoardEmployer" e ON e.id = jl."employerId"
+        WHERE jl.status = 'OPEN' AND jl."moderationHold" = false AND jl."deletedAt" IS NULL
+          AND (jl."expiresAt" IS NULL OR jl."expiresAt" > NOW()) AND jl."showOnJobsPage" = true
+        ORDER BY jl."isFeatured" DESC, jl."publishedAt" DESC NULLS LAST
         LIMIT 3
       ` as Promise<any[]>,
     ]);
@@ -1030,6 +1030,46 @@ export async function getDirectoryToolsDirect(categorySlug?: string) {
   });
 }
 
+/**
+ * Related articles, ranked by how much they share with this one:
+ *   shared primary tag +3 · each shared tag +2 · same startup or tool +2 · same category +1 · same type +1,
+ * newest first on ties. Limited to the given article types so links stay in the right section;
+ * articles sharing nothing fill the remaining slots by recency.
+ */
+export async function getRelatedArticlesDirect(articleId: string, types: string[], limit = 3) {
+  try {
+    const rows: any[] = await sql`
+      WITH cur AS (
+        SELECT id, type, "primaryTagId", "categoryId", "startupId", "toolId" FROM "Article" WHERE id = ${articleId}
+      ), curtags AS (
+        SELECT "tagId" FROM "ArticleTag" WHERE "articleId" = ${articleId}
+      )
+      SELECT a.id, a.title, a.slug, a.type, a."readTimeMinutes", a."coverImage", a."thumbnailImage",
+             a."publishedAt"::text AS "publishedAt", c.name AS "categoryName",
+             (
+               CASE WHEN a."primaryTagId" IS NOT NULL
+                     AND (a."primaryTagId" = cur."primaryTagId" OR a."primaryTagId" IN (SELECT "tagId" FROM curtags)) THEN 3 ELSE 0 END
+               + 2 * (SELECT COUNT(*) FROM "ArticleTag" at2 WHERE at2."articleId" = a.id AND at2."tagId" IN (SELECT "tagId" FROM curtags))
+               + CASE WHEN (a."startupId" IS NOT NULL AND a."startupId" = cur."startupId")
+                        OR (a."toolId" IS NOT NULL AND a."toolId" = cur."toolId") THEN 2 ELSE 0 END
+               + CASE WHEN a."categoryId" IS NOT NULL AND a."categoryId" = cur."categoryId" THEN 1 ELSE 0 END
+               + CASE WHEN a.type = cur.type THEN 1 ELSE 0 END
+             )::int AS score
+      FROM "Article" a
+      CROSS JOIN cur
+      LEFT JOIN "Category" c ON c.id = a."categoryId"
+      WHERE a.status = 'PUBLISHED' AND a."deletedAt" IS NULL AND a.id <> cur.id
+        AND a.type::text = ANY(${types}::text[])
+      ORDER BY score DESC, a."publishedAt" DESC NULLS LAST
+      LIMIT ${limit}
+    `;
+    return rows.map((a: any) => ({ ...a, category: { name: a.categoryName } }));
+  } catch (e) {
+    console.error('getRelatedArticlesDirect error:', e);
+    return [];
+  }
+}
+
 export async function getArticlesDirect(params: { type?: string; limit?: number; isFeatured?: boolean } = {}) {
   try {
     const limit = params.limit || 10;
@@ -1129,6 +1169,22 @@ export async function getHeroArticleDirect() {
     const latest = await getArticlesDirect({ limit: 1 });
     return latest.length ? latest[0] : null;
   });
+}
+
+/** Titles of the most-read published articles, for the homepage ticker fallback. */
+export async function getTrendingNewsDirect(limit = 10): Promise<string[]> {
+  try {
+    const rows = await sql`
+      SELECT title FROM "Article"
+      WHERE status = 'PUBLISHED' AND "deletedAt" IS NULL
+      ORDER BY "viewCount" DESC
+      LIMIT ${limit}
+    `;
+    return (rows as { title: string }[]).map((r) => r.title);
+  } catch (e) {
+    console.error('getTrendingNewsDirect error:', e);
+    return [];
+  }
 }
 
 export async function getLatestStoriesDirect(limit = 3) {
@@ -1599,9 +1655,9 @@ export async function getLatestJobsDirect(limit = 6) {
              e."companyName", e.slug AS "companySlug", e."logoUrl"
       FROM "JobBoardListing" jl
       JOIN "JobBoardEmployer" e ON e.id = jl."employerId"
-      WHERE jl."isActive" = true
+      WHERE jl.status = 'OPEN' AND jl."moderationHold" = false
         AND jl."deletedAt" IS NULL
-        AND (jl."expiresAt" IS NULL OR jl."expiresAt" > NOW())
+        AND (jl."expiresAt" IS NULL OR jl."expiresAt" > NOW()) AND jl."showOnJobsPage" = true
       ORDER BY jl."isFeatured" DESC, jl."publishedAt" DESC NULLS LAST
       LIMIT ${limit}
     `;

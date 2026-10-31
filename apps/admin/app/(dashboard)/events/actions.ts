@@ -1,13 +1,18 @@
 "use server";
+import { getPublicUrl } from "@/lib/media";
 
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@udyaibase/database";
+import { neon } from "@neondatabase/serverless";
+import { requireActionAuth } from "@/lib/api-auth";
 import { revalidatePath } from "next/cache";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { logAuditEvent, canDelete } from '@/lib/audit-log';
+import { refreshPublic } from '@/lib/refresh-public';
 
 const EVENT_ROLES = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "EVENT_ORGANIZER"];
+const adminSql = neon(process.env.DATABASE_URL!);
 
 const s3Client = new S3Client({
   region: "auto",
@@ -51,9 +56,7 @@ export async function uploadEventImageAction(formData: FormData) {
       })
     );
 
-    const url = process.env.R2_PUBLIC_URL
-      ? `${process.env.R2_PUBLIC_URL}/${fileKey}`
-      : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/v1/media/${fileKey}`;
+    const url = getPublicUrl(fileKey);
 
     return { success: true, data: { url } };
   } catch (error: any) {
@@ -230,7 +233,7 @@ export async function saveEventAction(data: any) {
       after: { title: data.title, slug: event.slug },
     });
 
-    return { success: true, data: { id: event.id, slug: event.slug } };
+    await refreshPublic(['events', 'home']); return { success: true, data: { id: event.id, slug: event.slug } };
   } catch (error: any) {
     console.error("Save event error:", error);
     if (error.code === "P2002" && error.meta?.target?.includes("slug")) {
@@ -272,7 +275,7 @@ export async function publishEventAction(eventId: string) {
     });
 
     revalidatePath("/events");
-    return { success: true };
+    await refreshPublic(['events', 'home']); return { success: true };
   } catch (error: any) {
     console.error("Publish event error:", error);
     return { success: false, error: error.message || "Failed to publish" };
@@ -312,7 +315,7 @@ export async function deleteEventAction(eventId: string) {
     });
 
     revalidatePath("/events");
-    return { success: true };
+    await refreshPublic(['events', 'home']); return { success: true };
   } catch (error: any) {
     console.error("Delete event error:", error);
     return { success: false, error: error.message || "Failed to delete" };
@@ -351,5 +354,202 @@ export async function checkSlugAction(slug: string, excludeId?: string) {
     return { available: true };
   } catch {
     return { available: false };
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// Bulk import scraped events as drafts
+// ─────────────────────────────────────────────────────────
+
+export async function importScrapedEventsAction(events: {
+  title: string;
+  url: string;
+  date: string | null;
+  endDate?: string | null;
+  location: string | null;
+  description: string | null;
+  imageUrl?: string | null;
+  organizer?: string | null;
+  source?: string;
+  suggestedCategory: string;
+  suggestedFormat: string;
+}[]) {
+  const session: any = await getServerSession(authOptions);
+  if (!session?.user || !EVENT_ROLES.includes(session.user.role)) {
+    return { success: false, error: "Unauthorized" };
+  }
+
+  // Find or create a system organizer for auto-fetched events
+  const SYSTEM_EMAIL = 'events@udyaibase.com';
+  let systemOrganizer = await prisma.eventOrganizer.findUnique({
+    where: { email: SYSTEM_EMAIL },
+    select: { id: true },
+  });
+  if (!systemOrganizer) {
+    systemOrganizer = await prisma.eventOrganizer.create({
+      data: {
+        email: SYSTEM_EMAIL,
+        name: 'Udyaibase Events',
+        company: 'Udyaibase',
+        emailVerified: true,
+      },
+    });
+  }
+
+  const results: { title: string; status: 'created' | 'skipped'; reason?: string }[] = [];
+
+  for (const event of events) {
+    try {
+      // Generate slug from title
+      const baseSlug = event.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 80);
+
+      // Check for duplicate slug
+      const existing = await prisma.event.findUnique({
+        where: { slug: baseSlug },
+        select: { id: true },
+      });
+
+      if (existing) {
+        // Check title similarity to avoid importing the same event
+        const existingByTitle = await adminSql`
+          SELECT id FROM "Event"
+          WHERE LOWER(title) = ${event.title.toLowerCase()} AND "deletedAt" IS NULL
+          LIMIT 1
+        `;
+        if (existingByTitle.length > 0) {
+          results.push({ title: event.title, status: 'skipped', reason: 'Duplicate event' });
+          continue;
+        }
+      }
+
+      const slug = existing ? `${baseSlug}-${Date.now().toString(36)}` : baseSlug;
+      const shortCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+      const startAt = event.date ? new Date(event.date) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const endAt = event.endDate ? new Date(event.endDate) : new Date(startAt.getTime() + 3 * 60 * 60 * 1000);
+
+      // Build description as Tiptap-compatible JSON
+      const descText = event.description || '';
+      const descJson = {
+        type: 'doc',
+        content: [
+          ...(descText ? [{ type: 'paragraph', content: [{ type: 'text', text: descText.slice(0, 2000) }] }] : []),
+          ...(event.url ? [{ type: 'paragraph', content: [{ type: 'text', text: `Source: ${event.url}` }] }] : []),
+        ],
+      };
+
+      const sourceName = event.source
+        ? event.source.charAt(0).toUpperCase() + event.source.slice(1)
+        : null;
+
+      await prisma.event.create({
+        data: {
+          slug,
+          shortCode,
+          organizerId: systemOrganizer.id,
+          title: event.title,
+          subtitle: event.organizer ? `Hosted by ${event.organizer}` : null,
+          category: event.suggestedCategory as any,
+          format: event.suggestedFormat as any,
+          status: 'DRAFT',
+          startAt,
+          endAt,
+          timezone: 'Asia/Kolkata',
+          venueName: event.location || null,
+          address: event.location || null,
+          coverImageUrl: event.imageUrl || null,
+          description: descJson,
+          metaDescription: descText.slice(0, 160) || null,
+          sourceUrl: event.url || null,
+          sourceName,
+        },
+      });
+
+      results.push({ title: event.title, status: 'created' });
+    } catch (err: any) {
+      results.push({ title: event.title, status: 'skipped', reason: err.message?.slice(0, 100) || 'Error' });
+    }
+  }
+
+  await logAuditEvent({
+    action: 'CREATE',
+    resourceType: 'EVENT',
+    resourceId: 'bulk-import',
+    after: { count: results.filter(r => r.status === 'created').length, source: 'auto-fetch' },
+  });
+
+  revalidatePath('/events');
+
+  return {
+    success: true,
+    data: {
+      created: results.filter(r => r.status === 'created').length,
+      skipped: results.filter(r => r.status === 'skipped').length,
+      results,
+    },
+  };
+}
+
+// ─────────────────────────────────────────────────────────
+// Get all events for admin listing (client-side)
+// ─────────────────────────────────────────────────────────
+
+export async function getEventsAction() {
+  const { error } = await requireActionAuth();
+  if (error) return { success: false, error };
+
+  try {
+    const events = await adminSql`
+      SELECT e.id, e.title, e.slug, e.status, e.category, e.format,
+             e."startAt"::text AS "startAt", e."endAt"::text AS "endAt",
+             e."registrationCount", e.capacity, e."coverImageUrl",
+             e."createdAt"::text AS "createdAt",
+             o.name AS "organizerName", o.email AS "organizerEmail"
+      FROM "Event" e
+      LEFT JOIN "EventOrganizer" o ON o.id = e."organizerId"
+      WHERE e."deletedAt" IS NULL
+      ORDER BY e."createdAt" DESC
+      LIMIT 200
+    `;
+    return { success: true, data: events };
+  } catch (error: any) {
+    console.error("[Admin Events]", error);
+    return { success: false, error: "Failed to load events" };
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// Toggle event status (PUBLISHED <-> DRAFT)
+// ─────────────────────────────────────────────────────────
+
+export async function toggleEventStatusAction(id: string, newStatus: "PUBLISHED" | "DRAFT") {
+  const { error } = await requireActionAuth();
+  if (error) return { success: false, error };
+
+  try {
+    await adminSql`
+      UPDATE "Event"
+      SET status = ${newStatus},
+          "publishedAt" = ${newStatus === "PUBLISHED" ? new Date() : null},
+          "updatedAt" = NOW()
+      WHERE id = ${id}
+    `;
+
+    await logAuditEvent({
+      action: "UPDATE",
+      resourceType: "EVENT",
+      resourceId: id,
+      after: { status: newStatus },
+    });
+
+    revalidatePath("/events");
+    await refreshPublic(['events', 'home']); return { success: true };
+  } catch (error: any) {
+    console.error("[Admin Events Toggle]", error);
+    return { success: false, error: "Failed to update status" };
   }
 }

@@ -2,8 +2,26 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Bookmark, Building2, Wrench, ExternalLink, Star, MapPin, Clock, ArrowUpRight } from 'lucide-react';
+import { Bookmark, Building2, Wrench, Briefcase, ExternalLink, Star, MapPin, Clock, ArrowUpRight } from 'lucide-react';
 import BookmarkButton from '../BookmarkButton';
+
+interface SavedJob {
+  savedId: string;
+  savedAt: string;
+  id: string;
+  slug: string;
+  title: string;
+  workType: string;
+  city: string | null;
+  country: string | null;
+  employmentType: string | null;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  showSalary: boolean;
+  publishedAt: string | null;
+  companyName: string;
+  logoUrl: string | null;
+}
 
 interface SavedTool {
   savedId: string;
@@ -45,9 +63,10 @@ function formatDate(dateStr: string) {
 }
 
 export default function SavedItems() {
-  const [activeTab, setActiveTab] = useState<'tools' | 'startups'>('tools');
+  const [activeTab, setActiveTab] = useState<'tools' | 'startups' | 'jobs'>('tools');
   const [tools, setTools] = useState<SavedTool[]>([]);
   const [startups, setStartups] = useState<SavedStartup[]>([]);
+  const [savedJobs, setSavedJobs] = useState<SavedJob[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -57,9 +76,10 @@ export default function SavedItems() {
   const fetchSavedItems = async () => {
     setLoading(true);
     try {
-      const [toolsRes, startupsRes] = await Promise.all([
+      const [toolsRes, startupsRes, jobsRes] = await Promise.all([
         fetch('/api/bookmarks/tools'),
         fetch('/api/bookmarks/startups'),
+        fetch('/api/bookmarks/jobs'),
       ]);
 
       if (toolsRes.ok) {
@@ -71,11 +91,25 @@ export default function SavedItems() {
         const startupsData = await startupsRes.json();
         setStartups(startupsData.startups || []);
       }
+
+      if (jobsRes.ok) {
+        const jobsData = await jobsRes.json();
+        setSavedJobs(jobsData.jobs || []);
+      }
     } catch (error) {
       console.error('Error fetching saved items:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRemoveJob = async (slug: string) => {
+    try {
+      const res = await fetch(`/api/jobs/${slug}/save`, { method: 'POST' });
+      if (res.ok) {
+        setSavedJobs(savedJobs.filter(j => j.slug !== slug));
+      }
+    } catch {}
   };
 
   const handleRemove = (type: 'tool' | 'startup', id: string) => {
@@ -86,7 +120,7 @@ export default function SavedItems() {
     }
   };
 
-  const totalCount = tools.length + startups.length;
+  const totalCount = tools.length + startups.length + savedJobs.length;
 
   if (loading) {
     return (
@@ -157,6 +191,24 @@ export default function SavedItems() {
                 : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
             }`}>
               {startups.length}
+            </span>
+          </button>
+          <button
+            onClick={() => setActiveTab('jobs')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium text-xs transition-all duration-200 ${
+              activeTab === 'jobs'
+                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            <Briefcase className="w-3.5 h-3.5" />
+            Jobs
+            <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-xs font-semibold ${
+              activeTab === 'jobs'
+                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+            }`}>
+              {savedJobs.length}
             </span>
           </button>
         </div>
@@ -326,6 +378,82 @@ export default function SavedItems() {
                         size="sm"
                       />
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {activeTab === 'jobs' && (
+          <>
+            {savedJobs.length === 0 ? (
+              <EmptyState
+                icon={<Briefcase className="w-10 h-10 text-gray-300 dark:text-gray-600" />}
+                title="No saved jobs"
+                description="Save AI jobs you're interested in to access them later."
+                href="/jobs"
+                linkText="Browse Jobs"
+              />
+            ) : (
+              <div className="space-y-2">
+                {savedJobs.map((job) => (
+                  <div
+                    key={job.savedId}
+                    className="group relative flex items-center gap-3 p-3 rounded-lg border border-transparent hover:border-gray-200 dark:hover:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all duration-150"
+                  >
+                    <Link href={`/jobs/${job.slug}`} className="shrink-0">
+                      {job.logoUrl ? (
+                        <img
+                          src={job.logoUrl}
+                          alt={job.companyName}
+                          className="w-10 h-10 rounded-lg object-cover border border-gray-100 dark:border-gray-700"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-100 dark:border-blue-800/30 flex items-center justify-center">
+                          <Briefcase className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                        </div>
+                      )}
+                    </Link>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/jobs/${job.slug}`}
+                          className="font-medium text-sm text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors truncate"
+                        >
+                          {job.title}
+                        </Link>
+                        <ArrowUpRight className="w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                        {job.companyName}
+                      </p>
+                    </div>
+
+                    <div className="hidden sm:flex items-center gap-3 shrink-0">
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border border-blue-100 dark:border-blue-800/30">
+                        {job.workType === 'REMOTE' ? 'Remote' : job.workType === 'HYBRID' ? 'Hybrid' : 'On-site'}
+                      </span>
+                      {(job.city || job.country) && (
+                        <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                          <MapPin className="w-3 h-3" />
+                          <span className="truncate max-w-[80px]">{job.city || job.country}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
+                        <Clock className="w-3 h-3" />
+                        <span>{formatDate(job.savedAt)}</span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleRemoveJob(job.slug)}
+                      className="shrink-0 p-1.5 rounded-lg text-brand hover:bg-brand/10 transition-colors"
+                      title="Unsave job"
+                    >
+                      <Bookmark className="w-4 h-4 fill-current" />
+                    </button>
                   </div>
                 ))}
               </div>

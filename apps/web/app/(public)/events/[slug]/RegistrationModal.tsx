@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Image from "next/image";
-import { X, CheckCircle, Loader2, Calendar, MapPin, Video } from "lucide-react";
+import { Clock, X, CheckCircle, Loader2, Calendar, MapPin, Video } from "lucide-react";
 import CitySelect from "@/components/events/CitySelect";
+import TurnstileWidget from "@/components/shared/TurnstileWidget";
+import { payWithRazorpay } from "@/lib/billing/checkout-client";
 
 const OCCUPATIONS = [
   "Founder / CEO",
@@ -30,6 +32,8 @@ interface Props {
 
 export default function RegistrationModal({ event, customQuestions, ticketTiers, onClose }: Props) {
   const [step, setStep] = useState<"form" | "success">("form");
+  // What registration actually resulted in; the success screen must never say "confirmed" for a waitlist place.
+  const [outcome, setOutcome] = useState<{ status: string; position?: number; reason?: "capacity" | "plan_limit" }>({ status: "CONFIRMED" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -44,6 +48,12 @@ export default function RegistrationModal({ event, customQuestions, ticketTiers,
   const [whatsappConsent, setWhatsappConsent] = useState(false);
   const [ticketTierId, setTicketTierId] = useState(ticketTiers.length > 0 ? ticketTiers[0].id : "");
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [turnstileToken, setTurnstileToken] = useState("");
+  // Bot-check tokens are single-use: remount the widget for a fresh one after each attempt.
+  const [captchaKey, setCaptchaKey] = useState(0);
+  const [paid, setPaid] = useState(false);
+  const tier = ticketTiers.find((t: any) => t.id === ticketTierId);
+  const price = tier?.priceCents > 0 ? tier.priceCents : 0;
 
   const validateEmail = (val: string) => {
     const lower = val.toLowerCase();
@@ -60,23 +70,33 @@ export default function RegistrationModal({ event, customQuestions, ticketTiers,
     setError("");
     if (emailError) return;
     setLoading(true);
+    const payload = {
+      eventId: event.id, name, email, phone: phone || null,
+      company: company || null, role: null, occupation: occupation || null,
+      locationCity: locationCity || null, newsletterConsent, whatsappConsent,
+      ticketTierId: ticketTierId || null,
+      answers: Object.entries(answers).map(([questionId, answerText]) => ({ questionId, answerText })),
+      turnstileToken,
+    };
     try {
-      const res = await fetch("/api/events/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          eventId: event.id, name, email, phone: phone || null,
-          company: company || null, role: null, occupation: occupation || null,
-          locationCity: locationCity || null, newsletterConsent, whatsappConsent,
-          ticketTierId: ticketTierId || null,
-          answers: Object.entries(answers).map(([questionId, answerText]) => ({ questionId, answerText })),
-        }),
-      });
+      if (price > 0) {
+        // Paid ticket: hold a seat, pay through Razorpay, then the ticket is confirmed by email.
+        const res = await fetch("/api/events/tickets/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        const data = await res.json();
+        if (!res.ok || !data.success) { setError(data.error || "Couldn’t start the payment."); return; }
+        const out = await payWithRazorpay(data.data, "/api/events/tickets/verify");
+        if (out.ok) { setPaid(true); setStep("success"); }
+        else if (out.cancelled) setError(`Payment not completed. Your seat is held for ${data.data.holdMinutes} minutes. Try again to finish.`);
+        else setError(out.error);
+        return;
+      }
+      const res = await fetch("/api/events/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const data = await res.json();
-      if (!res.ok || !data.success) { setError(data.error || "Registration failed."); setLoading(false); return; }
+      if (!res.ok || !data.success) { setError(data.error || "Registration failed."); return; }
+      setOutcome({ status: data.data?.status ?? "CONFIRMED", position: data.data?.waitlistPosition, reason: data.data?.waitlistReason });
       setStep("success");
     } catch { setError("Something went wrong."); }
-    finally { setLoading(false); }
+    finally { setLoading(false); setTurnstileToken(""); setCaptchaKey((k) => k + 1); }
   };
 
   return (
@@ -85,21 +105,37 @@ export default function RegistrationModal({ event, customQuestions, ticketTiers,
         {/* Header */}
         <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
           <h2 className="font-sora font-bold text-lg text-navy dark:text-white">
-            {step === "success" ? "You're In!" : "Register"}
+            {step !== "success" ? "Register" : outcome.status === "WAITLISTED" ? "You're on the waitlist" : outcome.status === "PENDING_APPROVAL" ? "Request sent" : "You're In!"}
           </h2>
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
             <X className="w-5 h-5 text-gray-400" />
           </button>
         </div>
 
-        {step === "success" ? (
+        {step === "success" && (outcome.status === "WAITLISTED" || outcome.status === "PENDING_APPROVAL") ? (
+          <div className="p-6 text-center space-y-4">
+            <div className="w-16 h-16 mx-auto bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center">
+              <Clock className="w-8 h-8 text-amber-600" />
+            </div>
+            <h3 className="font-sora font-bold text-xl text-navy dark:text-white">
+              {outcome.status === "WAITLISTED" ? (outcome.position ? `You're number ${outcome.position} on the waitlist` : "You're on the waitlist") : "Waiting for the host"}
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-300 font-jakarta">
+              {outcome.status === "WAITLISTED"
+                ? <><strong>{event.title}</strong> is full right now.{outcome.reason === "plan_limit" ? " The host has been told and may open more spots." : ""} If a spot opens you get it automatically, and we&apos;ll email your ticket to <strong>{email}</strong>.</>
+                : <>The host reviews every request for <strong>{event.title}</strong>. We&apos;ll email <strong>{email}</strong> with your ticket as soon as you&apos;re approved.</>}
+            </p>
+            <p className="text-xs text-gray-500 font-jakarta">This isn&apos;t a ticket yet, so please don&apos;t go to the venue until you hear from us.</p>
+            <button onClick={onClose} className="w-full py-3 bg-brand hover:bg-brand-600 text-white font-bold font-jakarta text-sm rounded-xl transition-colors">Done</button>
+          </div>
+        ) : step === "success" ? (
           <div className="p-6 text-center space-y-4">
             <div className="w-16 h-16 mx-auto bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
               <CheckCircle className="w-8 h-8 text-green-600" />
             </div>
             <h3 className="font-sora font-bold text-xl text-navy dark:text-white">Registration Confirmed!</h3>
             <p className="text-sm text-gray-500 font-jakarta">
-              You&apos;re registered for <strong>{event.title}</strong>. A confirmation email with your QR code has been sent to <strong>{email}</strong>.
+              {paid && <>Payment received. </>}You&apos;re registered for <strong>{event.title}</strong>. A confirmation email with your QR code has been sent to <strong>{email}</strong>.
             </p>
             <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 text-left">
               <p className="text-xs font-bold uppercase text-gray-400 font-jakarta mb-2">What&apos;s next</p>
@@ -189,6 +225,12 @@ export default function RegistrationModal({ event, customQuestions, ticketTiers,
             </div>
 
             {/* Ticket Tier */}
+            {ticketTiers.length === 1 && price > 0 && (
+              <p className="text-sm font-jakarta text-gray-700 dark:text-gray-300 rounded-xl bg-gray-50 dark:bg-gray-800 px-4 py-2.5">
+                <span className="font-semibold">{tier.name}</span> · ₹{(price / 100).toLocaleString("en-IN")}
+                <span className="block text-xs text-gray-500">Paid securely via Razorpay. Refunded in full if the host cancels.</span>
+              </p>
+            )}
             {ticketTiers.length > 1 && (
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase mb-1 font-jakarta">Ticket Type</label>
@@ -239,10 +281,13 @@ export default function RegistrationModal({ event, customQuestions, ticketTiers,
               </label>
             </div>
 
+            {/* Turnstile CAPTCHA */}
+            <TurnstileWidget key={captchaKey} onSuccess={setTurnstileToken} />
+
             {error && <p className="text-sm text-red-500 font-jakarta bg-red-50 dark:bg-red-900/20 p-3 rounded-xl">{error}</p>}
 
-            <button type="submit" disabled={loading || !name || !email || !occupation || !!emailError} className="w-full py-3 bg-brand hover:bg-brand-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold font-jakarta text-sm rounded-xl transition-colors flex items-center justify-center gap-2">
-              {loading ? <><Loader2 className="w-4 h-4 animate-spin" />Registering...</> : "Complete Registration"}
+            <button type="submit" disabled={loading || !name || !email || !occupation || !!emailError || !turnstileToken} className="w-full py-3 bg-brand hover:bg-brand-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold font-jakarta text-sm rounded-xl transition-colors flex items-center justify-center gap-2">
+              {loading ? <><Loader2 className="w-4 h-4 animate-spin" />{price > 0 ? "Opening payment…" : "Registering..."}</> : price > 0 ? `Pay ₹${(price / 100).toLocaleString("en-IN")} and register` : "Complete Registration"}
             </button>
 
             <p className="text-xs text-gray-400 font-jakarta text-center">By registering, you agree to our terms of service and privacy policy.</p>

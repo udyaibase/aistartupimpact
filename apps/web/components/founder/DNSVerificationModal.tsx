@@ -64,7 +64,7 @@ export default function DNSVerificationModal({ unverifiedStartups }: DNSVerifica
             </div>
             <div>
               <h3 className="font-sora font-bold text-lg text-gray-900 dark:text-white">
-                Verify DNS Ownership
+                Verify your startup
               </h3>
               <p className="text-xs text-yellow-800 dark:text-yellow-400 font-medium mt-0.5">
                 Verification Required for Green Tick Badge
@@ -76,7 +76,7 @@ export default function DNSVerificationModal({ unverifiedStartups }: DNSVerifica
         {/* Body */}
         <div className="p-6 space-y-4">
           <p className="text-sm text-gray-600 dark:text-gray-400 font-jakarta leading-relaxed">
-            You have startup listing(s) that are claimed but not yet verified via DNS. Verify ownership today to get a <span className="font-bold text-green-600 dark:text-green-400 inline-flex items-center gap-0.5"><ShieldCheck className="w-3.5 h-3.5" /> green tick badge</span> on your profile.
+            You have startup listing(s) that are claimed but not yet verified. Verify ownership to post jobs and get a <span className="font-bold text-green-600 dark:text-green-400 inline-flex items-center gap-0.5"><ShieldCheck className="w-3.5 h-3.5" /> green tick badge</span> on your profile.
           </p>
 
           <div className="bg-gray-50 dark:bg-gray-800/40 rounded-xl p-4 border border-gray-100 dark:border-gray-800/60 font-jakarta">
@@ -103,7 +103,7 @@ export default function DNSVerificationModal({ unverifiedStartups }: DNSVerifica
 
           <div className="text-xs text-gray-500 dark:text-gray-400 font-jakarta flex items-start gap-2">
             <CheckCircle className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
-            <span>Verifying takes only 5 minutes by adding a TXT record to your domain DNS settings.</span>
+            <span>Takes about a minute with a code sent to your work email, or add a DNS TXT record instead.</span>
           </div>
         </div>
 

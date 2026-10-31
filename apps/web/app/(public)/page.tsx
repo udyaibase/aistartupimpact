@@ -14,6 +14,7 @@ export const revalidate = 60;
 
 import {
   getHeroArticleDirect as getHeroArticle,
+  getTrendingNewsDirect as getTrendingNews,
   getLatestStoriesDirect as getLatestStories,
   getFounderSpotlightDirect as getFounderSpotlights,
   getIndiaAIEcosystemDirect as getIndiaAIEcosystem,
@@ -30,9 +31,6 @@ import {
   getLatestJobsDirect,
   getUpcomingEventsDirect,
 } from '@/lib/db';
-import {
-  getTrendingNews,
-} from '@/lib/api';
 
 // Fallbacks in a separate file — keeps this bundle lean
 import {

@@ -1,3 +1,4 @@
+import { jsonLd } from "@/lib/json-ld";
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Mail, MapPin, Clock, MessageSquare, Phone, Building2, Handshake, Newspaper, BriefcaseBusiness } from 'lucide-react';
@@ -120,7 +121,7 @@ function ContactJsonLd() {
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+      dangerouslySetInnerHTML={{ __html: jsonLd(schema) }}
     />
   );
 }

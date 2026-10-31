@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { clientIp } from '@/lib/client-ip';
 import { prisma } from "@udyaibase/database";
 import crypto from "crypto";
 
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
     const decodedEmail = decodeURIComponent(email);
     const decodedUrl = decodeURIComponent(url);
     const decodedLabel = label ? decodeURIComponent(label) : null;
-    const rawIp = request.headers.get("x-forwarded-for")?.split(',')[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
+    const rawIp = clientIp(request);
     const ipHashed = hashIp(rawIp);
     const userAgent = request.headers.get("user-agent") || "unknown";
 

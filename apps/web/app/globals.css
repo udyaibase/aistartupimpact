@@ -179,6 +179,37 @@
 
 @layer components {
 
+  /* ─── Portal type scale (organizer / host portal) ─── */
+
+  .portal-title {
+    @apply font-sora font-extrabold text-xl sm:text-2xl leading-tight text-navy dark:text-white;
+  }
+  .portal-subtitle {
+    @apply font-jakarta text-sm text-gray-500 dark:text-gray-400 mt-1;
+  }
+  .portal-section-title {
+    @apply font-sora font-bold text-base text-navy dark:text-white;
+  }
+  /* Phones: 16px+ fields stop iOS zooming on focus; remove the grey tap flash. */
+  @media (max-width: 639px) {
+    .organizer-portal input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+    .organizer-portal select,
+    .organizer-portal textarea,
+    .employer-portal input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+    .employer-portal select,
+    .employer-portal textarea {
+      font-size: 16px;
+    }
+  }
+  .organizer-portal,
+  .employer-portal {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .portal-eyebrow {
+    @apply font-jakarta text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400;
+  }
+
   /* ─── Buttons ──────────────────────────────── */
 
   .btn-brand {
@@ -241,7 +272,7 @@
   /* ─── Cards ────────────────────────────────── */
 
   .card {
-    @apply bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl transition-all duration-300 hover:shadow-lg;
+    @apply bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-lg transition-all duration-300 hover:shadow-lg;
   }
   .card:hover {
     border-color: color-mix(in srgb, var(--brand-color) 20%, transparent);

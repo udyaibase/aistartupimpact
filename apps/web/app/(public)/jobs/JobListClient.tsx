@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { MapPin, Building2, ExternalLink, Bookmark } from 'lucide-react';
@@ -34,10 +34,14 @@ function getShortDate(dateStr: string): string {
   return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 
-function SaveButton({ slug }: { slug: string }) {
+function SaveButton({ slug, initialSaved, onToggle }: { slug: string; initialSaved: boolean; onToggle?: (slug: string, saved: boolean) => void }) {
   const { user, signIn } = useUser();
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState(initialSaved);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setSaved(initialSaved);
+  }, [initialSaved]);
 
   const toggle = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -57,6 +61,7 @@ function SaveButton({ slug }: { slug: string }) {
       if (res.ok) {
         const data = await res.json();
         setSaved(data.saved);
+        onToggle?.(slug, data.saved);
       } else {
         setSaved(prev);
       }
@@ -74,7 +79,7 @@ function SaveButton({ slug }: { slug: string }) {
   );
 }
 
-function JobCard({ job }: { job: any }) {
+function JobCard({ job, isSaved, onToggleSave }: { job: any; isSaved: boolean; onToggleSave: (slug: string, saved: boolean) => void }) {
   const initials = job.companyName
     .split(/\s+/)
     .slice(0, 2)
@@ -97,10 +102,10 @@ function JobCard({ job }: { job: any }) {
   };
 
   return (
-    <div className="card p-4 sm:p-5 hover:border-gray-300 dark:hover:border-gray-600 transition-colors group">
+    <Link href={`/jobs/${job.slug}`} className="block card p-4 sm:p-5 hover:border-gray-300 dark:hover:border-gray-600 transition-colors group cursor-pointer">
       <div className="flex gap-3 sm:gap-4">
         {/* Company avatar */}
-        <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 overflow-hidden ${!job.logoUrl ? bgColor : 'bg-gray-100 dark:bg-gray-800'}`}>
+        <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center shrink-0 overflow-hidden ${!job.logoUrl ? bgColor : 'bg-gray-100 dark:bg-gray-800'}`}>
           {job.logoUrl ? (
             <Image src={job.logoUrl} alt={job.companyName} width={48} height={48} sizes="48px" className="w-full h-full object-cover" />
           ) : (
@@ -113,9 +118,9 @@ function JobCard({ job }: { job: any }) {
           {/* Title row */}
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <Link href={`/jobs/${job.slug}`} className="font-sora font-bold text-sm sm:text-base text-navy dark:text-white hover:text-brand transition-colors">
+              <span className="font-sora font-bold text-sm sm:text-base text-navy dark:text-white group-hover:text-brand transition-colors">
                 {job.title}
-              </Link>
+              </span>
               <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta mt-0.5">
                 {job.companyName}
               </p>
@@ -126,7 +131,7 @@ function JobCard({ job }: { job: any }) {
                   New
                 </span>
               )}
-              <SaveButton slug={job.slug} />
+              <SaveButton slug={job.slug} initialSaved={isSaved} onToggle={onToggleSave} />
             </div>
           </div>
 
@@ -157,15 +162,15 @@ function JobCard({ job }: { job: any }) {
 
           {/* Meta info - mobile */}
           <div className="flex sm:hidden flex-wrap gap-1.5 mt-2">
-            <span className="text-[11px] font-jakarta bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2.5 py-1 rounded-lg">
+            <span className="text-[11px] font-jakarta bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2.5 py-1 rounded-md">
               {job.workType === 'REMOTE' ? 'Remote' : job.workType === 'HYBRID' ? 'Hybrid' : job.city || 'On-site'}
             </span>
             {expLabel && (
-              <span className="text-[11px] font-jakarta bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2.5 py-1 rounded-lg">
+              <span className="text-[11px] font-jakarta bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2.5 py-1 rounded-md">
                 {expLabel}
               </span>
             )}
-            <span className="text-[11px] font-jakarta bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2.5 py-1 rounded-lg">
+            <span className="text-[11px] font-jakarta bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2.5 py-1 rounded-md">
               {formatEmploymentType(job.employmentType)}
             </span>
           </div>
@@ -197,23 +202,21 @@ function JobCard({ job }: { job: any }) {
               {job.publishedAt ? `Posted ${getTimeAgo(job.publishedAt)}` : 'Recently'} · Easy apply
             </span>
             <div className="flex items-center gap-2">
-              <Link
-                href={`/jobs/${job.slug}`}
-                className="px-4 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-semibold font-jakarta text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              <span
+                className="px-5 py-2 rounded-md border border-gray-200 dark:border-gray-700 text-sm font-semibold font-jakarta text-gray-700 dark:text-gray-300 group-hover:bg-gray-50 dark:group-hover:bg-gray-800 transition-colors"
               >
                 View details
-              </Link>
-              <Link
-                href={`/jobs/${job.slug}`}
-                className="inline-flex items-center gap-1 px-4 py-1.5 rounded-lg bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-xs font-semibold font-jakarta hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors"
+              </span>
+              <span
+                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-md bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-semibold font-jakarta group-hover:bg-gray-800 dark:group-hover:bg-gray-100 transition-colors"
               >
-                Apply <ExternalLink className="w-3 h-3" />
-              </Link>
+                Apply <ExternalLink className="w-3.5 h-3.5" />
+              </span>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -223,7 +226,37 @@ interface JobListClientProps {
 }
 
 export default function JobListClient({ jobs, total }: JobListClientProps) {
+  const { user } = useUser();
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [savedSlugs, setSavedSlugs] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!user || jobs.length === 0) return;
+    const slugs = jobs.map((j: any) => j.slug).join(',');
+    fetch(`/api/bookmarks/check?jobSlugs=${encodeURIComponent(slugs)}`)
+      .then(r => r.json())
+      .then(data => {
+        const saved = new Set<string>();
+        if (data.saved) {
+          Object.keys(data.saved).forEach(key => {
+            if (key.startsWith('job-') && data.saved[key]) {
+              saved.add(key.replace('job-', ''));
+            }
+          });
+        }
+        setSavedSlugs(saved);
+      })
+      .catch(() => {});
+  }, [user, jobs]);
+
+  const handleToggleSave = useCallback((slug: string, saved: boolean) => {
+    setSavedSlugs(prev => {
+      const next = new Set(prev);
+      if (saved) next.add(slug);
+      else next.delete(slug);
+      return next;
+    });
+  }, []);
 
   const visibleJobs = jobs.slice(0, visibleCount);
   const hasMore = visibleCount < jobs.length;
@@ -232,7 +265,7 @@ export default function JobListClient({ jobs, total }: JobListClientProps) {
     <>
       <div className="space-y-3">
         {visibleJobs.map((job: any) => (
-          <JobCard key={job.id} job={job} />
+          <JobCard key={job.id} job={job} isSaved={savedSlugs.has(job.slug)} onToggleSave={handleToggleSave} />
         ))}
       </div>
 
@@ -240,7 +273,7 @@ export default function JobListClient({ jobs, total }: JobListClientProps) {
         <div className="text-center mt-6">
           <button
             onClick={() => setVisibleCount(prev => prev + PAGE_SIZE)}
-            className="px-8 py-3 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold font-jakarta text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            className="px-8 py-3 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-semibold font-jakarta text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
             Show more jobs
           </button>

@@ -12,6 +12,8 @@ const segmentLabels: Record<string, string> = {
   'tools-dir': 'AI Tools',
   'jobs-board': 'Job Board',
   employers: 'Employers',
+  plans: 'Plans',
+  promotions: 'Premium Promotions',
   subscribers: 'Subscribers',
   'newsletter-admin': 'Newsletter',
   'newsletter-highlights': 'Highlights',

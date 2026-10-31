@@ -8,6 +8,7 @@ import { logAuditEvent, canDelete } from '@/lib/audit-log';
 import { startupApprovalHtml } from '@udyaibase/utils';
 import { sendEmailFireAndForget } from '@/lib/email-send';
 import { requireActionAuth } from '@/lib/api-auth';
+import { refreshPublic } from '@/lib/refresh-public';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -222,7 +223,7 @@ export async function createStartupAction(data: {
       after: { name: data.name, slug, stage: data.stage, headquartersCity: data.headquartersCity },
     });
 
-    return { success: true };
+    await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
     console.error('Error creating startup:', error);
     return { success: false, error: error.message || 'Failed to create startup' };
@@ -397,7 +398,7 @@ export async function updateStartupAction(id: string, data: {
       after: { name: data.name, stage: data.stage, category: data.category },
     });
 
-    return { success: true };
+    await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
     console.error('Error updating startup:', error);
     return { success: false, error: error.message || 'Failed to update startup' };
@@ -435,7 +436,7 @@ export async function deleteStartupAction(id: string) {
     });
 
     revalidatePath('/startups-dir');
-    return { success: true };
+    await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error) {
     console.error('Error deleting startup:', error);
     return { success: false, error: 'Failed to delete startup' };
@@ -468,7 +469,7 @@ export async function toggleFeaturedAction(id: string, isFeatured: boolean) {
     }
 
     revalidatePath('/startups-dir');
-    return { success: true };
+    await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error) {
     console.error('Error toggling featured status:', error);
     return { success: false, error: 'Failed to update featured status' };
@@ -584,7 +585,7 @@ export async function scheduleFeaturedCampaignAction(data: {
     }
 
     revalidatePath('/startups-dir');
-    return { success: true };
+    await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
     console.error('Error scheduling featured campaign:', error);
     return { success: false, error: error.message || 'Failed to schedule campaign' };
@@ -618,7 +619,7 @@ export async function cancelFeaturedCampaignAction(campaignId: string) {
     }
 
     revalidatePath('/startups-dir');
-    return { success: true };
+    await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
     console.error('Error cancelling featured campaign:', error);
     return { success: false, error: error.message || 'Failed to cancel campaign' };
@@ -663,7 +664,7 @@ export async function toggleContentReviewedAction(id: string, currentValue: bool
       WHERE id = ${id}
     `;
     revalidatePath('/startups-dir');
-    return { success: true };
+    await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
     console.error('toggleContentReviewedAction error:', error);
     return { success: false, error: error.message };
@@ -681,7 +682,7 @@ export async function fixNullImpactScoresAction() {
       WHERE "impactScore" IS NULL
     `;
     
-    return { success: true, message: `Fixed ${result.length} startups with null impactScore` };
+    await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true, message: `Fixed ${result.length} startups with null impactScore` };
   } catch (error) {
     console.error('Error fixing null impactScores:', error);
     return { success: false, error: 'Failed to fix null impactScores' };
@@ -745,7 +746,7 @@ export async function approveStartupAction(id: string) {
       after: { name: startup.name, slug: startup.slug, impactScore },
     });
 
-    return { success: true };
+    await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
     console.error('Error approving startup:', error);
     return { success: false, error: error.message || 'Failed to approve startup' };
@@ -767,7 +768,7 @@ export async function bulkApproveStartupsAction(ids: string[]) {
     `;
     revalidatePath('/startups-dir');
     await logAuditEvent({ action: 'APPROVE', resourceType: 'STARTUP', after: { bulkAction: true, count: ids.length } });
-    return { success: true, count: ids.length };
+    await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true, count: ids.length };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
@@ -785,7 +786,7 @@ export async function bulkArchiveStartupsAction(ids: string[]) {
     `;
     revalidatePath('/startups-dir');
     await logAuditEvent({ action: 'UPDATE', resourceType: 'STARTUP', after: { bulkAction: 'ARCHIVE', count: ids.length } });
-    return { success: true, count: ids.length };
+    await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true, count: ids.length };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
@@ -802,7 +803,7 @@ export async function bulkDeleteStartupsAction(ids: string[]) {
     await sql`UPDATE "Startup" SET "deletedAt" = NOW() WHERE id = ANY(${ids}::text[])`;
     revalidatePath('/startups-dir');
     await logAuditEvent({ action: 'DELETE', resourceType: 'STARTUP', after: { bulkAction: true, count: ids.length } });
-    return { success: true, count: ids.length };
+    await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true, count: ids.length };
   } catch (error: any) {
     return { success: false, error: error.message };
   }

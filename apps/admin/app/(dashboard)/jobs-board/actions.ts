@@ -4,6 +4,7 @@ import { neon } from '@neondatabase/serverless';
 import { requireActionAuth } from '@/lib/api-auth';
 import { logAuditEvent } from '@/lib/audit-log';
 import { revalidatePath } from 'next/cache';
+import { refreshPublic } from '@/lib/refresh-public';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -14,7 +15,7 @@ export async function getJobsAction() {
   try {
     const jobs = await sql`
       SELECT jl.id, jl.slug, jl.title, jl.category, jl."workType", jl."listingTier",
-             jl."isActive", jl."isFeatured", jl."applicationsCount", jl."viewsCount",
+             (jl.status = 'OPEN') AS "isActive", jl."isFeatured", jl."applicationsCount", jl."viewsCount",
              jl."publishedAt"::text, jl."createdAt"::text,
              e."companyName"
       FROM "JobBoardListing" jl
@@ -35,8 +36,8 @@ export async function toggleJobActiveAction(id: string, isActive: boolean) {
   if (error) return { success: false, error };
 
   try {
-    await sql`UPDATE "JobBoardListing" SET "isActive" = ${isActive}, "updatedAt" = NOW() WHERE id = ${id}`;
-    return { success: true };
+    await sql`UPDATE "JobBoardListing" SET "status" = (CASE WHEN ${isActive} THEN 'OPEN' ELSE 'PAUSED' END)::"JobBoardListingStatus", "closedAt" = NULL, "closeReason" = NULL, "isActive" = ${isActive}, "updatedAt" = NOW() WHERE id = ${id}`;
+    await refreshPublic(['jobs', 'home']); return { success: true };
   } catch (error: any) {
     console.error('[Admin Jobs Board Toggle]', error);
     return { success: false, error: 'Failed to update' };
@@ -48,8 +49,8 @@ export async function deleteJobAction(id: string) {
   if (error) return { success: false, error };
 
   try {
-    await sql`UPDATE "JobBoardListing" SET "deletedAt" = NOW(), "isActive" = false WHERE id = ${id}`;
-    return { success: true };
+    await sql`UPDATE "JobBoardListing" SET "deletedAt" = NOW(), "isActive" = false, "status" = 'CLOSED', "closedAt" = NOW(), "closeReason" = 'MANUAL' WHERE id = ${id}`;
+    await refreshPublic(['jobs', 'home']); return { success: true };
   } catch (error: any) {
     console.error('[Admin Jobs Board Delete]', error);
     return { success: false, error: 'Failed to delete' };
@@ -138,12 +139,12 @@ async function getOrCreateEmployerForStartup(startupId: string): Promise<string>
   const result = await sql`
     INSERT INTO "JobBoardEmployer" (
       id, "companyName", slug, email, "passwordHash", "logoUrl", "websiteUrl",
-      location, "startupId", "maxActiveJobs", "isVerified", "emailVerified",
+      location, "startupId", "startupClaimMethod", "startupClaimVerifiedAt", "maxActiveJobs", "isVerified", "emailVerified",
       "onboardingCompleted", "onboardingStep", "createdAt", "updatedAt"
     ) VALUES (
       gen_random_uuid()::text, ${s.name}, ${s.slug}, ${placeholderEmail}, '',
       ${s.logoUrl || null}, ${s.websiteUrl || null}, ${s.headquartersCity || null},
-      ${startupId}, 999, true, true, true, 3, NOW(), NOW()
+      ${startupId}, 'ADMIN'::"JobBoardClaimMethod", NOW(), 999, true, true, true, 3, NOW(), NOW()
     )
     ON CONFLICT (slug) DO UPDATE SET "updatedAt" = NOW()
     RETURNING id
@@ -189,6 +190,31 @@ export interface JobFormData {
   startupId: string;
 }
 
+export async function checkDuplicateJobAction(title: string, startupId: string) {
+  const { error } = await requireActionAuth();
+  if (error) return { isDuplicate: false };
+
+  if (!title?.trim() || !startupId?.trim()) return { isDuplicate: false };
+
+  try {
+    const normalizedTitle = title.trim().toLowerCase();
+    const existing = await sql`
+      SELECT id, title, (status = 'OPEN') AS "isActive", "createdAt"::text
+      FROM "JobBoardListing"
+      WHERE "startupId" = ${startupId}
+        AND "deletedAt" IS NULL
+        AND LOWER(TRIM(title)) = ${normalizedTitle}
+      LIMIT 1
+    `;
+    if (existing.length > 0) {
+      return { isDuplicate: true, existingJob: existing[0] };
+    }
+    return { isDuplicate: false };
+  } catch {
+    return { isDuplicate: false };
+  }
+}
+
 export async function createJobAction(data: JobFormData) {
   const { error } = await requireActionAuth();
   if (error) return { success: false, error };
@@ -211,7 +237,7 @@ export async function createJobAction(data: JobFormData) {
         "visaSponsorship", "salaryMin", "salaryMax", "salaryCurrency", "salaryPeriod", "showSalary",
         "experienceMin", "experienceMax", skills,
         "applicationType", "applicationUrl", "applicationEmail",
-        "listingTier", "isFeatured", "isActive",
+        "listingTier", "isFeatured", "isActive", "status",
         "employerId", "startupId", "expiresAt", "publishedAt",
         "createdAt", "updatedAt"
       ) VALUES (
@@ -232,6 +258,7 @@ export async function createJobAction(data: JobFormData) {
         ${data.applicationUrl || null}, ${data.applicationEmail || null},
         ${data.listingTier || 'FREE'}::"JobBoardTier",
         ${data.isFeatured ?? false}, ${data.isActive ?? false},
+        (CASE WHEN ${data.isActive ?? false} THEN 'OPEN' ELSE 'DRAFT' END)::"JobBoardListingStatus",
         ${employerId}, ${data.startupId},
         ${expiresAt.toISOString()}::timestamp,
         ${data.isActive ? new Date().toISOString() : null}::timestamp,
@@ -249,7 +276,7 @@ export async function createJobAction(data: JobFormData) {
       after: { type: 'JOB_LISTING', title: data.title, startupId: data.startupId },
     });
 
-    return { success: true, id: result[0].id, slug: result[0].slug };
+    await refreshPublic(['jobs', 'home']); return { success: true, id: result[0].id, slug: result[0].slug };
   } catch (err: any) {
     console.error('[createJobAction]', err);
     return { success: false, error: err.message || 'Failed to create job' };
@@ -293,6 +320,8 @@ export async function updateJobAction(id: string, data: Partial<JobFormData>) {
         "listingTier" = COALESCE(${data.listingTier || null}, "listingTier")::"JobBoardTier",
         "isFeatured" = ${data.isFeatured ?? false},
         "isActive" = ${data.isActive ?? false},
+        "status" = (CASE WHEN ${data.isActive ?? false} THEN 'OPEN' WHEN "status" = 'OPEN' THEN 'PAUSED' ELSE "status" END)::"JobBoardListingStatus",
+        "publishedAt" = COALESCE("publishedAt", CASE WHEN ${data.isActive ?? false} THEN NOW() END),
         "updatedAt" = NOW()
       WHERE id = ${id}
     `;
@@ -306,7 +335,7 @@ export async function updateJobAction(id: string, data: Partial<JobFormData>) {
       after: { type: 'JOB_LISTING', title: data.title },
     });
 
-    return { success: true };
+    await refreshPublic(['jobs', 'home']); return { success: true };
   } catch (err: any) {
     console.error('[updateJobAction]', err);
     return { success: false, error: err.message || 'Failed to update job' };
@@ -320,7 +349,7 @@ export async function getStartupJobsAction(startupId: string) {
   try {
     const jobs = await sql`
       SELECT jl.id, jl.slug, jl.title, jl.category, jl."workType",
-             jl."isActive", jl."isFeatured", jl."applicationsCount",
+             (jl.status = 'OPEN') AS "isActive", jl."isFeatured", jl."applicationsCount",
              jl."viewsCount", jl."createdAt"::text, jl."listingTier",
              e."companyName"
       FROM "JobBoardListing" jl

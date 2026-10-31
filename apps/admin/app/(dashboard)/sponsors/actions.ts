@@ -3,6 +3,7 @@
 import { neon } from '@neondatabase/serverless';
 import { revalidatePath } from 'next/cache';
 import { requireActionAuth } from '@/lib/api-auth';
+import { refreshPublic } from '@/lib/refresh-public';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -41,7 +42,7 @@ export async function createSponsorAction(data: {
       )
     `;
     revalidatePath('/sponsors');
-    return { success: true };
+    await refreshPublic(['all']); return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
@@ -65,7 +66,7 @@ export async function updateSponsorAction(id: string, data: {
       WHERE id = ${id}
     `;
     revalidatePath('/sponsors');
-    return { success: true };
+    await refreshPublic(['all']); return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
@@ -77,7 +78,7 @@ export async function deleteSponsorAction(id: string) {
   try {
     await sql`DELETE FROM "Sponsor" WHERE id = ${id}`;
     revalidatePath('/sponsors');
-    return { success: true };
+    await refreshPublic(['all']); return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
@@ -89,7 +90,7 @@ export async function toggleSponsorStatusAction(id: string, current: boolean) {
   try {
     await sql`UPDATE "Sponsor" SET "isActive" = ${!current}, "updatedAt" = NOW() WHERE id = ${id}`;
     revalidatePath('/sponsors');
-    return { success: true };
+    await refreshPublic(['all']); return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
