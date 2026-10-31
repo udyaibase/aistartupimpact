@@ -3,6 +3,7 @@ import { prisma } from '@udyaibase/database';
 import { getEmployerSession, type EmployerRole } from '@/lib/employer-auth';
 import { can, forbidden } from '@/lib/employer/permissions';
 import { INVITE_TTL_DAYS, cleanJobIds, hashToken, listTeam, newInviteToken, sendInviteEmail } from '@/lib/employer/team';
+import { ownerChangeProblem } from '@/lib/employer/owners';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,6 +42,10 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ mem
 
   if (!ROLES.includes(b.role)) return NextResponse.json({ error: 'Choose a role.' }, { status: 400 });
   if (member.id === session.memberId) return NextResponse.json({ error: 'You can’t change your own role.' }, { status: 400 });
+  if (b.role !== 'OWNER') {
+    const problem = await ownerChangeProblem(session.id, member.id, 'demote');
+    if (problem) return NextResponse.json({ error: problem }, { status: 409 });
+  }
   // Job limits only apply to interviewers; other roles always see every job.
   await prisma.jobBoardTeamMember.update({ where: { id: member.id }, data: { role: b.role, ...(b.role !== 'INTERVIEWER' ? { jobIds: [] } : {}) } });
   return NextResponse.json({ success: true, team: await listTeam(session.id) });
@@ -55,6 +60,8 @@ export async function DELETE(_request: NextRequest, props: { params: Promise<{ m
   const member = await own(memberId, session.id);
   if (!member) return NextResponse.json({ error: 'Teammate not found.' }, { status: 404 });
   if (member.id === session.memberId) return NextResponse.json({ error: 'You can’t remove yourself. Ask another owner.' }, { status: 400 });
+  const problem = await ownerChangeProblem(session.id, member.id, 'remove');
+  if (problem) return NextResponse.json({ error: problem }, { status: 409 });
   await prisma.jobBoardTeamMember.update({ where: { id: member.id }, data: { status: 'REMOVED', inviteTokenHash: null, inviteExpiresAt: null } });
   // Hiring and the founder portal are separate teams; say so if they still have founder-portal access.
   const w = await prisma.jobBoardEmployer.findUnique({ where: { id: session.id }, select: { founderUserId: true } });

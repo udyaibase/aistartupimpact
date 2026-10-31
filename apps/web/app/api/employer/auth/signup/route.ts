@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ensureOwnerMember } from '@/lib/employer/owners';
 import { verifyTurnstileToken } from '@/lib/turnstile';
 import { sql } from '@/lib/db';
 import bcrypt from 'bcryptjs';
@@ -93,6 +94,7 @@ export async function POST(request: NextRequest) {
     `;
 
     const employer = result[0] as any;
+    await ensureOwnerMember(employer.id);
 
     // Set session cookie
     await setEmployerSession({

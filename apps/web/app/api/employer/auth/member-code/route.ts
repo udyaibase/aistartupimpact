@@ -23,10 +23,12 @@ export async function POST(request: NextRequest) {
   const email = String(b.email ?? '').trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 });
 
-  const memberships = await prisma.jobBoardTeamMember.findMany({
+  const all = await prisma.jobBoardTeamMember.findMany({
     where: { email, status: 'ACTIVE', Employer: { isActive: true, deactivatedAt: null } },
-    include: { Employer: { select: { id: true, email: true, companyName: true, slug: true, plan: true } } },
+    include: { Employer: { select: { id: true, email: true, companyName: true, slug: true, plan: true, twoFactorEnabled: true } } },
   });
+  // An account owner who turned on two-step sign-in must use password + two-step; an email code alone would bypass it.
+  const memberships = all.filter((m) => !(m.Employer.twoFactorEnabled && m.Employer.email.toLowerCase() === email));
 
   if (b.step !== 'verify') {
     // Checked for every address (member or not), so the answer never reveals who is on a team.

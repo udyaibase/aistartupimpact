@@ -195,7 +195,7 @@ export default function TeamManager({ initialTeam, jobs, initialRequireApproval,
                 </div>
               </div>
               <div className="flex items-center gap-2 sm:shrink-0">
-                {t.id && canManage && !isMe(t) ? (
+                {t.id && canManage && !isMe(t) && !t.accountOwner ? (
                   <>
                     <label htmlFor={`role-${t.id}`} className="sr-only">Role for {t.email}</label>
                     <select id={`role-${t.id}`} value={t.role} disabled={busy === t.id}
@@ -216,7 +216,7 @@ export default function TeamManager({ initialTeam, jobs, initialRequireApproval,
                   </>
                 ) : (
                   <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-                    {ROLE_LABEL[t.role]}{t.status === 'OWNER_ACCOUNT' ? ' · account' : ''}{t.role === 'INTERVIEWER' && t.jobIds.length > 0 ? ` · ${accessLabel(t.jobIds)}` : ''}
+                    {ROLE_LABEL[t.role]}{t.accountOwner ? ' · account' : ''}{t.role === 'INTERVIEWER' && t.jobIds.length > 0 ? ` · ${accessLabel(t.jobIds)}` : ''}
                   </span>
                 )}
               </div>

@@ -54,8 +54,15 @@ describe('POST /api/employer/auth/member-code (send)', () => {
     expect(stranger.message).toBe(invited.message);
   });
 
+  it('an account owner with two-step sign-in never gets an email code (it would bypass two-step)', async () => {
+    findMany.mockResolvedValue([{ id: 'm1', employerId: 'e1', role: 'OWNER', email: 'priya@acme.ai', Employer: { id: 'e1', email: 'priya@acme.ai', twoFactorEnabled: true } }]);
+    const res = await send('priya@acme.ai');
+    expect(res.status).toBe(200);
+    expect(sendMemberLoginCode).not.toHaveBeenCalled();
+  });
+
   it('active teammates get a sign-in code, not an invitation', async () => {
-    findMany.mockResolvedValue([{ id: 'm1', employerId: 'e1', role: 'RECRUITER', email: 'rahul@acme.ai', Employer: { id: 'e1' } }]);
+    findMany.mockResolvedValue([{ id: 'm1', employerId: 'e1', role: 'RECRUITER', email: 'rahul@acme.ai', Employer: { id: 'e1', email: 'owner@acme.ai', twoFactorEnabled: true } }]);
     const res = await send('rahul@acme.ai');
     expect(res.status).toBe(200);
     expect(sendMemberLoginCode).toHaveBeenCalledTimes(1);

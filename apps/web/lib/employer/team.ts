@@ -4,6 +4,7 @@ import { prisma } from '@udyaibase/database';
 import type { EmployerRole } from '@/lib/employer-auth';
 import { sendEmail } from '@/lib/email/send';
 import { ROLE_LABEL } from '@/lib/employer/roles';
+import { isRealInbox } from '@/lib/employer/owners';
 import { employerContext } from '@/lib/employer/applications';
 import { emailDomain, emailMatchesDomain, isFreeMailDomain, websiteDomain } from '@/lib/jobs/trust';
 
@@ -40,6 +41,8 @@ export interface TeamRow {
   inviteExpired: boolean;
   /** Interviewers: the jobs they can see. Empty = all jobs. */
   jobIds: string[];
+  /** The owner whose email is the workspace account: can't be removed or demoted here. */
+  accountOwner: boolean;
 }
 
 /** Workspace account (always an owner) plus active and pending teammates. */
@@ -49,14 +52,17 @@ export async function listTeam(employerId: string): Promise<TeamRow[]> {
     prisma.jobBoardTeamMember.findMany({ where: { employerId, status: { in: ['PENDING', 'ACTIVE'] } }, orderBy: [{ status: 'asc' }, { invitedAt: 'asc' }] }),
   ]);
   const now = Date.now();
+  // The account owner normally has their own OWNER row; show the account line only for older workspaces without one.
+  const accountHasRow = !!employer && members.some((m) => m.email.toLowerCase() === employer.email.toLowerCase());
   return [
-    ...(employer && !employer.email.endsWith('@udyaibase.com')
-      ? [{ id: null, email: employer.email, name: employer.FounderUser?.name ?? null, role: 'OWNER' as const, status: 'OWNER_ACCOUNT' as const, invitedAt: null, inviteExpired: false, jobIds: [] }]
+    ...(employer && isRealInbox(employer.email) && !accountHasRow
+      ? [{ id: null, email: employer.email, name: employer.FounderUser?.name ?? null, role: 'OWNER' as const, status: 'OWNER_ACCOUNT' as const, invitedAt: null, inviteExpired: false, jobIds: [], accountOwner: true }]
       : []),
     ...members.map((m) => ({
       id: m.id, email: m.email, name: m.name, role: m.role, status: m.status as 'PENDING' | 'ACTIVE',
       invitedAt: m.invitedAt.toISOString(), inviteExpired: m.status === 'PENDING' && !!m.inviteExpiresAt && m.inviteExpiresAt.getTime() < now,
       jobIds: m.role === 'INTERVIEWER' ? m.jobIds : [],
+      accountOwner: !!employer && m.role === 'OWNER' && m.email.toLowerCase() === employer.email.toLowerCase(),
     })),
   ];
 }
@@ -239,7 +245,7 @@ export async function ownerInboxes(employerId: string): Promise<string[]> {
     prisma.jobBoardTeamMember.findMany({ where: { employerId, status: 'ACTIVE', role: 'OWNER' }, select: { email: true }, take: 10 }),
   ]);
   // Placeholder workspaces (created by the founder portal or admin) have no inbox of their own.
-  const account = employer && employer.passwordHash !== '' && !employer.email.endsWith('@udyaibase.com') ? [employer.email] : [];
+  const account = employer && employer.passwordHash !== '' && isRealInbox(employer.email) ? [employer.email] : [];
   return Array.from(new Set([...account, ...owners.map((o) => o.email)].map((e) => e.toLowerCase())));
 }
 

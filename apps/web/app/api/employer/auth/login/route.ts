@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ensureOwnerMember } from '@/lib/employer/owners';
 import { verifyTurnstileToken } from '@/lib/turnstile';
 import { sql } from '@/lib/db';
 import bcrypt from 'bcryptjs';
@@ -137,6 +138,9 @@ export async function POST(request: NextRequest) {
         .sign(CHALLENGE_SECRET);
       return NextResponse.json({ success: false, requires2FA: true, challengeToken });
     }
+
+    // Older accounts get their OWNER row on first sign-in (the backfill does the rest).
+    await ensureOwnerMember(employer.id).catch((e) => console.error('[login] owner row', e));
 
     // Set session cookie
     await setEmployerSession({

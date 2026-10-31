@@ -1,4 +1,5 @@
 import { prisma } from '@udyaibase/database';
+import { ownerInboxes } from '@/lib/employer/team';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 import { button, esc, shell } from '@/lib/jobs/apply-emails';
 import { calendarMonthStart, cycleDays, effectivePlan, GRACE_DAYS, periodStart, planDef, planFeaturedUntil, planKeyOf, planPhase, PLANS, TRIAL_AI_SCREENS, TRIAL_PLAN } from '@/lib/employer/plans';
@@ -120,8 +121,10 @@ export async function runPlanMaintenance(now = new Date(), opts: { onlyEmployerI
     take: 500,
   });
   for (const e of due) {
-    if (e.planIsTrial) sendTrialEndingEmail(e.email, e.planExpiresAt!);
-    else sendPlanEndingEmail(e.email, planDef(e.plan).name, e.planExpiresAt!);
+    for (const to of await ownerInboxes(e.id)) {
+      if (e.planIsTrial) sendTrialEndingEmail(to, e.planExpiresAt!);
+      else sendPlanEndingEmail(to, planDef(e.plan).name, e.planExpiresAt!);
+    }
     await prisma.jobBoardEmployer.update({ where: { id: e.id }, data: { planReminderSentAt: now } });
   }
 
@@ -131,7 +134,7 @@ export async function runPlanMaintenance(now = new Date(), opts: { onlyEmployerI
     take: 500,
   });
   for (const e of ended) {
-    sendGraceEmail(e.email, planDef(e.plan).name, new Date(e.planExpiresAt!.getTime() + GRACE_DAYS * DAY));
+    for (const to of await ownerInboxes(e.id)) sendGraceEmail(to, planDef(e.plan).name, new Date(e.planExpiresAt!.getTime() + GRACE_DAYS * DAY));
     await prisma.jobBoardEmployer.update({ where: { id: e.id }, data: { planGraceNoticeAt: now } });
   }
 
@@ -156,7 +159,7 @@ export async function runPlanMaintenance(now = new Date(), opts: { onlyEmployerI
     const extra = open.slice(PLANS.FREE.maxActiveJobs);
     for (const j of extra) await setListingStatus(j.id, 'PAUSED');
     jobsPaused += extra.length;
-    if (e.passwordHash !== '') sendMovedToFreeEmail(e.email, e.planIsTrial ? `${PLANS[TRIAL_PLAN].name} trial` : `${planDef(e.plan).name} plan`, open.slice(0, PLANS.FREE.maxActiveJobs), extra);
+    if (e.passwordHash !== '') for (const to of await ownerInboxes(e.id)) sendMovedToFreeEmail(to, e.planIsTrial ? `${PLANS[TRIAL_PLAN].name} trial` : `${planDef(e.plan).name} plan`, open.slice(0, PLANS.FREE.maxActiveJobs), extra);
   }
 
   const unfeatured = await prisma.jobBoardListing.updateMany({
