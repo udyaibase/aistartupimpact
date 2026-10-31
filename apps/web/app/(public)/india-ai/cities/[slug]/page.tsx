@@ -13,7 +13,13 @@ import {
 } from 'lucide-react';
 import { sql } from '@/lib/db';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 3600;
+
+// Pages are built on first visit and then cached (no list at build time); refreshed when content changes.
+export async function generateStaticParams() {
+  return [];
+}
+
 
 interface CityPageProps {
   params: Promise<{

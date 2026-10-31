@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://udyaibase.com';
     const unsubToken = await generateUnsubscribeToken(subscriber.id, subscriber.email);
-    const unsubUrl = `${siteUrl}/api/events/unsubscribe?token=${unsubToken}`;
+    const unsubUrl = `${siteUrl}/api/newsletter/unsubscribe?token=${unsubToken}`;
 
     sendEmailFireAndForget({
       to: subscriber.email,

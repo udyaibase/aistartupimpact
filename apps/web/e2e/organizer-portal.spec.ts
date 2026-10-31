@@ -36,3 +36,24 @@ test.describe('Organizer portal', () => {
     await expect(page.locator('input[type="password"]').first()).toBeVisible();
   });
 });
+
+test.describe('Organizer portal (signed out)', () => {
+  for (const path of ['/organizer/billing', '/organizer/organization', '/organizer/team', '/organizer/promote']) {
+    test(`${path} does not return 500`, async ({ page }) => {
+      const response = await page.goto(path, { waitUntil: 'domcontentloaded' });
+      expect(response?.status()).toBeLessThan(500);
+    });
+  }
+
+  test('payouts, billing and refund APIs refuse anonymous calls', async ({ request }) => {
+    expect((await request.get('/api/organizer/payouts')).status()).toBe(401);
+    expect((await request.get('/api/organizer/billing/invoice/x')).status()).toBe(401);
+    expect([401, 403]).toContain((await request.post('/api/organizer/registrations/x/refund')).status());
+  });
+
+  test('ticket checkout rejects a request with no event', async ({ request }) => {
+    const res = await request.post('/api/events/tickets/checkout', { data: {} });
+    expect(res.status()).toBeGreaterThanOrEqual(400);
+    expect(res.status()).toBeLessThan(500);
+  });
+});

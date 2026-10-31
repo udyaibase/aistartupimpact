@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 describe('rate-limiting', () => {
   beforeEach(() => {
@@ -6,16 +6,35 @@ describe('rate-limiting', () => {
   });
 
   describe('getClientIdentifier', () => {
-    it('returns cf-connecting-ip when available', async () => {
+    it('locally, prefers x-real-ip over a client-supplied cf-connecting-ip', async () => {
       const { getClientIdentifier } = await import('@/lib/rate-limit');
       const request = new Request('http://localhost/api/test', {
-        headers: {
-          'cf-connecting-ip': '1.2.3.4',
-          'x-forwarded-for': '5.6.7.8',
-          'x-real-ip': '9.10.11.12',
-        },
+        headers: { 'cf-connecting-ip': '1.2.3.4', 'x-forwarded-for': '5.6.7.8', 'x-real-ip': '9.10.11.12' },
       });
-      expect(getClientIdentifier(request)).toBe('1.2.3.4');
+      expect(getClientIdentifier(request)).toBe('9.10.11.12');
+    });
+
+    describe('on Vercel (spoof-resistant)', () => {
+      beforeEach(() => vi.stubEnv('VERCEL', '1'));
+      afterEach(() => vi.unstubAllEnvs());
+
+      it('ignores cf-connecting-ip sent straight to Vercel (anyone can set it)', async () => {
+        const { getClientIdentifier } = await import('@/lib/rate-limit');
+        const request = new Request('http://localhost/api/test', { headers: { 'cf-connecting-ip': '1.2.3.4', 'x-real-ip': '49.36.1.1' } });
+        expect(getClientIdentifier(request)).toBe('49.36.1.1');
+      });
+
+      it('trusts cf-connecting-ip only when the request came through Cloudflare', async () => {
+        const { getClientIdentifier } = await import('@/lib/rate-limit');
+        const request = new Request('http://localhost/api/test', { headers: { 'cf-connecting-ip': '49.36.9.9', 'x-real-ip': '172.70.10.10' } });
+        expect(getClientIdentifier(request)).toBe('49.36.9.9');
+      });
+
+      it('prefers x-vercel-forwarded-for', async () => {
+        const { getClientIdentifier } = await import('@/lib/rate-limit');
+        const request = new Request('http://localhost/api/test', { headers: { 'x-vercel-forwarded-for': '49.36.1.1', 'x-real-ip': '9.9.9.9' } });
+        expect(getClientIdentifier(request)).toBe('49.36.1.1');
+      });
     });
 
     it('falls back to x-real-ip', async () => {

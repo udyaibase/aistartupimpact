@@ -9,6 +9,7 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "clean": "turbo run clean"
   },
@@ -25,7 +26,7 @@
     "d3-color": "3.1.0",
     "glob": "10.5.0",
     "qs": "6.16.0",
-    "sanitize-html": "2.17.7",
+    "sanitize-html": "2.18.1",
     "@aws-sdk/client-s3": "3.1048.0",
     "@aws-sdk/s3-request-presigner": "3.1048.0",
     "next": {

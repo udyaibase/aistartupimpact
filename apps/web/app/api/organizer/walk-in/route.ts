@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
-import { getOrganizerSession } from "@/lib/organizer-auth";
+import { requirePermission, canAccessEvent } from "@/lib/organizer-auth/require-permission";
 import { generateQrToken } from "@/lib/events/qr-token";
 import { sendEmailFireAndForget } from "@/lib/email/send";
 import { eventRegistrationHtml } from "@udyaibase/utils";
@@ -11,15 +11,20 @@ export const dynamic = "force-dynamic";
  * POST /api/organizer/walk-in — Register a walk-in attendee manually
  */
 export async function POST(request: NextRequest) {
-  const session = await getOrganizerSession();
-  if (!session) return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 });
+  const result = await requirePermission("registrations.manage");
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   const { eventId, name, email, phone, company, emailConsent } = await request.json();
   if (!eventId || !name || !email) return NextResponse.json({ success: false, error: "Name and email required" }, { status: 400 });
 
+  if (!canAccessEvent(session, eventId)) {
+    return NextResponse.json({ success: false, error: "Not authorized for this event" }, { status: 403 });
+  }
+
   // Verify organizer owns event
   const event = await prisma.event.findFirst({
-    where: { id: eventId, organizerId: session.id, deletedAt: null },
+    where: { id: eventId, organizerId: session.organizerId, deletedAt: null },
     select: { id: true, title: true, slug: true, startAt: true, endAt: true, timezone: true, venueName: true, address: true, format: true, capacity: true, registrationCount: true },
   });
   if (!event) return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 });

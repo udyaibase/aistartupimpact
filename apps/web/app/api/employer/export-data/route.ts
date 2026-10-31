@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { requireEmployerAuth } from '@/lib/employer-auth';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
+import { can, forbidden } from '@/lib/employer/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,7 @@ export async function GET(request: NextRequest) {
     if (!success) return NextResponse.json({ error: 'Too many requests. Try again later.' }, { status: 429 });
 
     const session = await requireEmployerAuth();
+    if (!can(session.role, 'account.manage')) return forbidden();
 
     const employer = await prisma.jobBoardEmployer.findUnique({
       where: { id: session.id },
@@ -32,7 +34,7 @@ export async function GET(request: NextRequest) {
         where: { employerId: employer.id },
         select: {
           id: true, title: true, slug: true, location: true, workType: true,
-          isActive: true, applicationsCount: true, createdAt: true,
+          status: true, applicationsCount: true, createdAt: true,
         },
         orderBy: { createdAt: 'desc' },
       }),

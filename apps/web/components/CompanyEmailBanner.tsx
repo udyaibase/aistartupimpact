@@ -43,7 +43,7 @@ export default function CompanyEmailBanner({ userType }: CompanyEmailBannerProps
   const settingsPath = userType === 'founder' ? '/founder/settings' : '/organizer/settings';
 
   return (
-    <div className="mb-4 rounded-lg border border-amber-200 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 flex items-center gap-3 flex-wrap">
+    <div className="mb-4 rounded-md border border-amber-200 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 flex items-center gap-3 flex-wrap">
       <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
       <p className="text-sm text-amber-800 dark:text-amber-200 flex-1">
         <span className="font-semibold">Verify your company email</span> to earn a Verified badge on your profile and build trust with the community.

@@ -1,225 +1,178 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Send, MapPin, Briefcase, Users, Loader2, Mail, CalendarDays, Eye, MessageCircle, Plus, ChevronDown } from "lucide-react";
+import { CheckCircle2, Loader2, Lock, Mail, MapPin, Send, Sparkles } from "lucide-react";
+import { EVENT_BOOST, HOST_PLANS } from "@/lib/events/plans";
+import { rupees } from "@/lib/employer/plans";
+
+interface PromoEvent { id: string; title: string; startAt: string; format: string; promoCredits: number; boostedAt: string | null }
+interface Campaign { id: string; subject: string; status: string; recipientCount: number; createdAt: string; creditSource: string | null; event: { title: string } | null }
+interface Data { plan: "FREE" | "PRO"; promo: { used: number; limit: number; left: number }; events: PromoEvent[]; campaigns: Campaign[]; noteMax: number }
+
+const card = "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px]";
+const fmt = (iso: string) => new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 
 export default function PromotePage() {
-  const searchParams = useSearchParams();
-  const preselectedEvent = searchParams.get("event") || "";
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
-  const [msg, setMsg] = useState("");
-  const [events, setEvents] = useState<any[]>([]);
-  const [topCities, setTopCities] = useState<{city:string;count:number}[]>([]);
-  const [topOccupations, setTopOccupations] = useState<{occupation:string;count:number}[]>([]);
-  const [totalPromotable, setTotalPromotable] = useState(0);
-
-  const [selectedEventId, setSelectedEventId] = useState("");
-  const [channels, setChannels] = useState({ email: true, whatsapp: false });
-  const [filterCity, setFilterCity] = useState("");
-  const [filterOccupation, setFilterOccupation] = useState("");
-  const [subject, setSubject] = useState("");
-  const [emailBody, setEmailBody] = useState("");
-  const [whatsappBody, setWhatsappBody] = useState("");
-  const [showPreview, setShowPreview] = useState(false);
-
-  const selectedEvent = events.find((e: any) => e.id === selectedEventId);
-  const SITE_URL = typeof window !== "undefined" ? window.location.origin : "https://udyaibase.com";
-
-  useEffect(() => {
-    Promise.all([
-      fetch("/api/organizer/events").then(r => r.json()),
-      fetch("/api/organizer/promote").then(r => r.json()),
-    ]).then(([evRes, promoRes]) => {
-      if (evRes.success) setEvents(evRes.events || []);
-      if (promoRes.success) {
-        setTopCities(promoRes.topCities || []);
-        setTopOccupations(promoRes.topOccupations || []);
-        setTotalPromotable(promoRes.totalPromotable || 0);
-      }
-      // Auto-select event if passed via URL
-      if (preselectedEvent && evRes.events?.length) {
-        const found = evRes.events.find((e: any) => e.id === preselectedEvent);
-        if (found) {
-          setSelectedEventId(found.id);
-          const date = new Date(found.startAt).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-          setSubject(`🎉 ${found.title} — Register Now!`);
-          setEmailBody(`We're excited to invite you to:\n\n${found.title}\n\n📅 ${date}\n🏷️ ${found.category?.replace(/_/g, " ") || "Event"}\n\nThis event is free and spots are limited. Don't miss out!\n\nSee you there!`);
-          setWhatsappBody(`🎉 *${found.title}*\n\n📅 ${date}\n\nRegister free → ${SITE_URL}/events/${found.slug}`);
-        }
-      }
-      setLoading(false);
-    });
-  }, []);
-
-  const handleEventSelect = (eventId: string) => {
-    setSelectedEventId(eventId);
-    const event = events.find((e: any) => e.id === eventId);
-    if (event) {
-      const date = new Date(event.startAt).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-      setSubject(`🎉 ${event.title} — Register Now!`);
-      setEmailBody(`We're excited to invite you to:\n\n${event.title}\n\n📅 ${date}\n🏷️ ${event.category?.replace(/_/g, " ") || "Event"}\n\nThis event is free and spots are limited. Don't miss out!\n\nSee you there!`);
-      setWhatsappBody(`🎉 *${event.title}*\n\n📅 ${date}\n\nRegister free → ${SITE_URL}/events/${event.slug}`);
-    }
-  };
-
-  const handleSend = async () => {
-    if (channels.email && (!subject || !emailBody)) { setMsg("Email subject and body required"); return; }
-    if (channels.whatsapp && !whatsappBody) { setMsg("WhatsApp message required"); return; }
-    setSending(true); setMsg("");
-    if (channels.email) {
-      const res = await fetch("/api/organizer/promote", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, body: emailBody, filterCity: filterCity || undefined, filterOccupation: filterOccupation || undefined }),
-      });
-      const d = await res.json();
-      setMsg(d.success ? `✓ Email sent to ${d.sent} subscribers!` : d.error || "Failed");
-    }
-    if (channels.whatsapp) {
-      setMsg(prev => prev + (prev ? " | " : "") + "⚠ WhatsApp: Connect API in Settings → Integrations");
-    }
-    setSending(false);
-  };
-
-  // Email preview HTML
-  const escapeHtml = (str: string) => str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const emailPreviewHtml = selectedEvent ? `
-    <div style="font-family:-apple-system,sans-serif;max-width:100%;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
-      <div style="padding:20px;">
-        <h2 style="font-size:18px;font-weight:700;color:#0D1B2A;margin:0 0 12px;">${escapeHtml(selectedEvent.title)}</h2>
-        <div style="font-size:13px;color:#6b7280;line-height:1.7;white-space:pre-wrap;">${escapeHtml(emailBody)}</div>
-        <div style="margin:20px 0;"><a style="background:#FF3131;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:700;font-size:13px;">Register Now →</a></div>
-        <p style="font-size:10px;color:#9ca3af;">Udyaibase Events · Unsubscribe</p>
-      </div>
-    </div>` : "";
-
-  if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-brand" /></div>;
-
-  return (
-    <div className="max-w-4xl mx-auto space-y-5">
-      <div>
-        <h1 className="font-sora font-bold text-xl text-navy dark:text-white">Promote Event</h1>
-        <p className="text-sm text-gray-500 font-jakarta mt-0.5">Send targeted emails & WhatsApp to your attendees</p>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex items-center gap-3"><Mail className="w-4 h-4 text-blue-500"/><div><p className="text-lg font-bold text-navy dark:text-white">{totalPromotable}</p><p className="text-xs text-gray-400">Promotable</p></div></div>
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex items-center gap-3"><MapPin className="w-4 h-4 text-green-500"/><div><p className="text-lg font-bold text-navy dark:text-white">{topCities.length}</p><p className="text-xs text-gray-400">Cities</p></div></div>
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex items-center gap-3"><Briefcase className="w-4 h-4 text-purple-500"/><div><p className="text-lg font-bold text-navy dark:text-white">{topOccupations.length}</p><p className="text-xs text-gray-400">Occupations</p></div></div>
-      </div>
-
-      {/* Campaign Builder */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-5 space-y-5">
-
-        {/* Step 1: Event */}
-        <Step num={1} title="Select Event">
-          <select value={selectedEventId} onChange={e => handleEventSelect(e.target.value)} className="w-full px-3.5 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-jakarta focus:outline-none focus:ring-2 focus:ring-brand/20">
-            <option value="">Choose an event...</option>
-            {events.map((e: any) => <option key={e.id} value={e.id}>{e.title}</option>)}
-          </select>
-        </Step>
-
-        {/* Step 2: Channel */}
-        {selectedEventId && (
-          <Step num={2} title="Choose Channel">
-            <div className="flex gap-3">
-              <label className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border cursor-pointer transition-all ${channels.email?"border-brand bg-brand/5":"border-gray-200 dark:border-gray-700"}`}>
-                <input type="checkbox" checked={channels.email} onChange={e=>setChannels(p=>({...p,email:e.target.checked}))} className="w-3.5 h-3.5 rounded text-brand focus:ring-brand"/>
-                <Mail className={`w-4 h-4 ${channels.email?"text-brand":"text-gray-400"}`}/><span className="text-xs font-medium font-jakarta">Email</span>
-              </label>
-              <label className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border cursor-pointer transition-all ${channels.whatsapp?"border-green-500 bg-green-50 dark:bg-green-900/10":"border-gray-200 dark:border-gray-700"}`}>
-                <input type="checkbox" checked={channels.whatsapp} onChange={e=>setChannels(p=>({...p,whatsapp:e.target.checked}))} className="w-3.5 h-3.5 rounded text-green-600 focus:ring-green-500"/>
-                <MessageCircle className={`w-4 h-4 ${channels.whatsapp?"text-green-600":"text-gray-400"}`}/><span className="text-xs font-medium font-jakarta">WhatsApp</span>
-              </label>
-            </div>
-          </Step>
-        )}
-
-        {/* Step 3: Audience */}
-        {selectedEventId && (channels.email || channels.whatsapp) && (
-          <Step num={3} title="Target Audience">
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-xs font-bold text-gray-400 uppercase mb-1 font-jakarta">City</label><select value={filterCity} onChange={e=>setFilterCity(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs font-jakarta"><option value="">All Cities</option>{topCities.map(c=><option key={c.city} value={c.city}>{c.city} ({c.count})</option>)}</select></div>
-              <div><label className="block text-xs font-bold text-gray-400 uppercase mb-1 font-jakarta">Occupation</label><select value={filterOccupation} onChange={e=>setFilterOccupation(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs font-jakarta"><option value="">All</option>{topOccupations.map(o=><option key={o.occupation} value={o.occupation}>{o.occupation} ({o.count})</option>)}</select></div>
-            </div>
-          </Step>
-        )}
-
-        {/* Step 4: Compose */}
-        {selectedEventId && (channels.email || channels.whatsapp) && (
-          <Step num={4} title="Compose Message">
-            {channels.email && (
-              <div className="space-y-2 mb-4">
-                <p className="text-xs font-bold text-gray-400 uppercase font-jakarta flex items-center gap-1"><Mail className="w-3 h-3"/>Email</p>
-                <input value={subject} onChange={e=>setSubject(e.target.value)} placeholder="Subject line" className="w-full px-3.5 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-jakarta focus:outline-none focus:ring-2 focus:ring-brand/20"/>
-                <textarea value={emailBody} onChange={e=>setEmailBody(e.target.value)} rows={5} placeholder="Email body..." className="w-full px-3.5 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-jakarta focus:outline-none focus:ring-2 focus:ring-brand/20 resize-y"/>
-              </div>
-            )}
-            {channels.whatsapp && (
-              <div className="space-y-2">
-                <p className="text-xs font-bold text-gray-400 uppercase font-jakarta flex items-center gap-1"><MessageCircle className="w-3 h-3"/>WhatsApp</p>
-                <textarea value={whatsappBody} onChange={e=>{if(e.target.value.length<=1024)setWhatsappBody(e.target.value)}} rows={4} placeholder="WhatsApp message..." className="w-full px-3.5 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-jakarta focus:outline-none focus:ring-2 focus:ring-brand/20 resize-y" maxLength={1024}/>
-                <p className="text-xs text-gray-400 text-right font-jakarta">{whatsappBody.length}/1024</p>
-              </div>
-            )}
-          </Step>
-        )}
-
-        {/* Step 5: Preview */}
-        {selectedEventId && (emailBody || whatsappBody) && (
-          <Step num={5} title="Preview">
-            <button onClick={()=>setShowPreview(!showPreview)} className="px-3 py-1.5 text-xs font-semibold border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1.5 font-jakarta">
-              <Eye className="w-3.5 h-3.5"/> {showPreview?"Hide":"Show"} Preview
-            </button>
-            {showPreview && (
-              <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {channels.email && (
-                  <div><p className="text-xs font-bold text-gray-400 uppercase mb-2 font-jakarta">📧 Email</p>
-                    <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 max-h-[350px] overflow-y-auto">
-                      <div className="bg-white dark:bg-gray-900 rounded p-2 mb-2 text-xs text-gray-400"><strong className="text-gray-600">Subject:</strong> {subject}</div>
-                      <div dangerouslySetInnerHTML={{__html:emailPreviewHtml}}/>
-                    </div>
-                  </div>
-                )}
-                {channels.whatsapp && (
-                  <div><p className="text-xs font-bold text-gray-400 uppercase mb-2 font-jakarta">💬 WhatsApp</p>
-                    <div className="bg-[#e5ddd5] dark:bg-[#0b141a] rounded-lg p-3 max-h-[350px] overflow-y-auto">
-                      <div className="max-w-[260px] bg-white dark:bg-[#1f2c33] rounded-xl rounded-tl-sm shadow-sm p-3">
-                        <p className="text-[12px] text-gray-900 dark:text-gray-100 whitespace-pre-wrap leading-relaxed" style={{fontFamily:"Helvetica,Arial,sans-serif"}}>{whatsappBody}</p>
-                        <p className="text-xs text-gray-400 text-right mt-1">10:30 AM <span className="text-blue-500">✓✓</span></p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </Step>
-        )}
-
-        {/* Send */}
-        {selectedEventId && (emailBody || whatsappBody) && (
-          <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
-            {msg && <p className={`text-sm mb-3 font-jakarta ${msg.includes("✓")?"text-green-600":msg.includes("⚠")?"text-yellow-600":"text-red-500"}`}>{msg}</p>}
-            <button onClick={handleSend} disabled={sending} className="px-6 py-2.5 bg-brand hover:bg-brand-600 text-white font-bold text-sm rounded-lg disabled:opacity-40 flex items-center gap-2 transition-colors font-jakarta">
-              {sending?<Loader2 className="w-4 h-4 animate-spin"/>:<Send className="w-4 h-4"/>}
-              {sending?"Sending...":"Send Campaign"}
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  return <Suspense><Promote /></Suspense>;
 }
 
-function Step({ num, title, children }: { num: number; title: string; children: React.ReactNode }) {
+function Promote() {
+  const preselected = useSearchParams().get("event") || "";
+  const [data, setData] = useState<Data | null>(null);
+  const [error, setError] = useState("");
+  const [eventId, setEventId] = useState("");
+  const [audience, setAudience] = useState<number | null>(null);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState<number | null>(null);
+
+  const load = () => fetch("/api/organizer/promote").then((r) => r.json()).then((d) => {
+    if (!d.success) { setError(d.error || "Couldn’t load promotions."); return; }
+    setData(d);
+    const first = d.events.find((e: PromoEvent) => e.id === preselected) ?? d.events[0];
+    if (first) setEventId((cur) => cur || first.id);
+  }).catch(() => setError("You seem to be offline."));
+
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!eventId) return;
+    setAudience(null);
+    fetch(`/api/organizer/promote?eventId=${eventId}`).then((r) => r.json()).then((d) => setAudience(d.success ? d.audience : 0)).catch(() => setAudience(0));
+  }, [eventId]);
+
+  const ev = data?.events.find((e) => e.id === eventId);
+  const credits = (ev?.promoCredits ?? 0) + (data?.promo.left ?? 0);
+
+  async function send() {
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch("/api/organizer/promote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ eventId, note }) });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) { setSent(d.recipients); setNote(""); load(); }
+      else setError(d.error || "Couldn’t send.");
+    } catch {
+      setError("You seem to be offline.");
+    }
+    setBusy(false);
+  }
+
+  if (!data) {
+    return (
+      <div className="font-jakarta">
+        <h1 className="portal-title">Promote</h1>
+        {error ? <p role="alert" className="mt-4 text-sm text-red-700">{error}</p> : <Loader2 className="w-5 h-5 animate-spin text-gray-400 mt-6" aria-label="Loading" />}
+      </div>
+    );
+  }
+
   return (
-    <div>
-      <h2 className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-2 flex items-center gap-2 font-jakarta">
-        <span className="w-5 h-5 bg-brand text-white text-xs font-bold rounded-full flex items-center justify-center shrink-0">{num}</span>{title}
-      </h2>
-      <div className="pl-7">{children}</div>
+    <div className="font-jakarta space-y-5">
+      <div>
+        <h1 className="portal-title">Promote</h1>
+        <p className="portal-subtitle">Udyaibase emails your event to people near it who asked to hear about AI events. One email per event a week; everyone can unsubscribe.</p>
+      </div>
+
+      <div className={`${card} p-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm`}>
+        <span className="inline-flex items-center gap-2 text-gray-800 dark:text-gray-200">
+          <Mail className="w-4 h-4 text-gray-500" aria-hidden />
+          {data.plan === "PRO" ? <>Pro · <strong className="tabular-nums">{data.promo.left}</strong> of {data.promo.limit} promo emails left this month</> : "Free plan · no monthly promo emails"}
+        </span>
+        <span className="text-gray-600 dark:text-gray-400">Each Event Boost adds 1 promo email for that event.</span>
+        <Link href="/organizer/billing" className="ml-auto text-sm font-semibold text-gray-900 dark:text-white hover:underline">Plans &amp; billing</Link>
+      </div>
+
+      {sent != null && (
+        <p role="status" className="flex items-center gap-2 rounded-[12px] bg-green-50 dark:bg-green-900/20 px-4 py-3 text-sm text-green-800 dark:text-green-300">
+          <CheckCircle2 className="w-4 h-4" aria-hidden /> Sending to {sent.toLocaleString("en-IN")} people. It usually finishes within a few minutes.
+        </p>
+      )}
+
+      {data.events.length === 0 ? (
+        <div className={`${card} px-4 py-10 text-center`}>
+          <p className="text-[15px] font-semibold text-gray-900 dark:text-white">No upcoming public events</p>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Publish an event to promote it.</p>
+          <Link href="/organizer/events" className="mt-4 inline-flex min-h-[44px] items-center px-4 rounded-[10px] bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-semibold">Go to events</Link>
+        </div>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
+          <section aria-labelledby="new-promo" className={`${card} p-4 sm:p-5 space-y-4`}>
+            <h2 id="new-promo" className="portal-section-title">New promo email</h2>
+            <div>
+              <label htmlFor="promo-event" className="block text-sm font-semibold text-gray-900 dark:text-white mb-1.5">Event</label>
+              <select id="promo-event" value={eventId} onChange={(e) => { setEventId(e.target.value); setSent(null); }}
+                className="w-full min-h-[44px] px-3 rounded-[10px] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-base sm:text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#A50F15]/25">
+                {data.events.map((e) => <option key={e.id} value={e.id}>{e.title} · {fmt(e.startAt)}{e.promoCredits ? " · boost credit" : ""}</option>)}
+              </select>
+            </div>
+            <p className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-gray-500" aria-hidden />
+              {audience == null ? "Counting subscribers…"
+                : audience === 0 ? "No subscribers near this event yet. Try again closer to the date as more people sign up."
+                : <span><strong className="tabular-nums">{audience.toLocaleString("en-IN")}</strong> {ev?.format === "VIRTUAL" ? "subscribers (online event, so anyone can join)" : "subscribers live near this event"} and haven’t registered yet.</span>}
+            </p>
+            <div>
+              <label htmlFor="promo-note" className="block text-sm font-semibold text-gray-900 dark:text-white mb-1.5">A line from you <span className="font-normal text-gray-500">(optional)</span></label>
+              <textarea id="promo-note" rows={3} maxLength={data.noteMax} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Hands-on session, bring your laptop. Free pizza!"
+                className="w-full px-3 py-2.5 rounded-[10px] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-base sm:text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#A50F15]/25 resize-none" />
+              <p className="mt-1 text-xs text-gray-500 text-right tabular-nums">{note.length}/{data.noteMax}</p>
+            </div>
+            {error && <p role="alert" className="text-sm text-red-700 dark:text-red-400">{error}</p>}
+            {credits > 0 ? (
+              <button type="button" onClick={send} disabled={busy || !audience}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 min-h-[44px] px-5 rounded-[10px] bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-semibold disabled:opacity-50">
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Send className="w-4 h-4" aria-hidden />}
+                Send to {audience ? audience.toLocaleString("en-IN") : ""} people · uses 1 {ev?.promoCredits ? "boost credit" : "promo email"}
+              </button>
+            ) : (
+              <div className="rounded-[12px] border border-dashed border-gray-300 dark:border-gray-700 p-3.5">
+                <p className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white"><Lock className="w-4 h-4" aria-hidden /> No promo emails left for this event</p>
+                <p className="mt-1 text-[13px] text-gray-600 dark:text-gray-400">Boost this event ({rupees(EVENT_BOOST.pricePaise)}, includes {EVENT_BOOST.promoEmails} promo email and featured placement) or go Pro for {HOST_PLANS.PRO.promoEmailsPerPeriod} a month.</p>
+                <Link href={`/organizer/billing?boost=${eventId}`} className="mt-2.5 inline-flex items-center gap-1.5 min-h-[40px] px-3 rounded-[10px] bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-[13px] font-semibold">
+                  <Sparkles className="w-4 h-4" aria-hidden /> See options
+                </Link>
+              </div>
+            )}
+          </section>
+
+          <section aria-label="Email preview" className={`${card} p-4 sm:p-5`}>
+            <h2 className="portal-section-title mb-3">What people receive</h2>
+            <div className="rounded-[12px] bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 p-4 text-[13.5px]">
+              <p className="text-xs text-gray-500">An AI event near you</p>
+              <p className="mt-1 text-base font-bold text-gray-900 dark:text-white">{ev?.title}</p>
+              <p className="mt-1 text-gray-700 dark:text-gray-300">{ev && new Date(ev.startAt).toLocaleString("en-IN", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}</p>
+              {note.trim() && <p className="mt-3 border-l-2 border-gray-300 dark:border-gray-700 pl-3 text-gray-700 dark:text-gray-300">“{note.trim()}”</p>}
+              <span className="mt-4 inline-block px-3 py-2 rounded-[8px] bg-[#A50F15] text-white text-[13px] font-semibold">See the event</span>
+              <p className="mt-3 text-[11.5px] text-gray-500">You’re getting this because you asked Udyaibase to tell you about AI events in your area. Unsubscribe</p>
+            </div>
+            <p className="mt-2 text-xs text-gray-500">Sent from Udyaibase in this layout, with your event details. People who already registered aren’t emailed.</p>
+          </section>
+        </div>
+      )}
+
+      {data.campaigns.length > 0 && (
+        <section aria-labelledby="past" className={`${card} overflow-x-auto`}>
+          <h2 id="past" className="portal-section-title px-4 sm:px-5 pt-4 pb-2">Sent</h2>
+          <table className="w-full text-sm min-w-[480px]">
+            <thead><tr className="text-left text-xs text-gray-500 border-b border-gray-100 dark:border-gray-800">
+              {["Date", "Event", "People", "Status"].map((h) => <th key={h} scope="col" className="px-4 sm:px-5 py-2 font-semibold">{h}</th>)}
+            </tr></thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              {data.campaigns.map((c) => (
+                <tr key={c.id}>
+                  <td className="px-4 sm:px-5 py-2.5 whitespace-nowrap">{fmt(c.createdAt)}</td>
+                  <td className="px-4 sm:px-5 py-2.5">{c.event?.title ?? c.subject}</td>
+                  <td className="px-4 sm:px-5 py-2.5 tabular-nums">{c.recipientCount.toLocaleString("en-IN")}</td>
+                  <td className="px-4 sm:px-5 py-2.5">{c.status === "SENT" ? "Sent" : c.status === "SENDING" ? "Sending…" : "Failed"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
     </div>
   );
 }

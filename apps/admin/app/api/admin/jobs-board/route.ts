@@ -11,7 +11,7 @@ export async function GET() {
   try {
     const jobs = await sql`
       SELECT jl.id, jl.slug, jl.title, jl.category, jl."workType", jl."listingTier",
-             jl."isActive", jl."isFeatured", jl."applicationsCount", jl."viewsCount",
+             (jl.status = 'OPEN') AS "isActive", jl."isFeatured", jl."applicationsCount", jl."viewsCount",
              jl."publishedAt"::text, jl."createdAt"::text,
              e."companyName"
       FROM "JobBoardListing" jl

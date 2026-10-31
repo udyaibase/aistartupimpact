@@ -7,6 +7,11 @@ import { getDirectoryToolsDirect } from '@/lib/db';
 import { sql } from '@/lib/db';
 export const revalidate = 60;
 
+// Pages are built on first visit and then cached (no list at build time); refreshed when content changes.
+export async function generateStaticParams() {
+  return [];
+}
+
 export async function generateMetadata(props: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const params = await props.params;
   const categories = await sql`

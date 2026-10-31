@@ -2,6 +2,7 @@
 
 import { neon } from '@neondatabase/serverless';
 import { requireActionAuth } from '@/lib/api-auth';
+import { refreshPublic } from '@/lib/refresh-public';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -32,7 +33,7 @@ export async function toggleEmployerVerifyAction(id: string, isVerified: boolean
 
   try {
     await sql`UPDATE "JobBoardEmployer" SET "isVerified" = ${isVerified}, "updatedAt" = NOW() WHERE id = ${id}`;
-    return { success: true };
+    await refreshPublic(['jobs']); return { success: true };
   } catch (error: any) {
     return { success: false, error: 'Failed to update' };
   }
@@ -44,7 +45,7 @@ export async function toggleEmployerActiveAction(id: string, isActive: boolean) 
 
   try {
     await sql`UPDATE "JobBoardEmployer" SET "isActive" = ${isActive}, "updatedAt" = NOW() WHERE id = ${id}`;
-    return { success: true };
+    await refreshPublic(['jobs']); return { success: true };
   } catch (error: any) {
     return { success: false, error: 'Failed to update' };
   }

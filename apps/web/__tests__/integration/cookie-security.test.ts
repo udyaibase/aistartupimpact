@@ -3,6 +3,9 @@ import { NextRequest } from 'next/server';
 
 vi.mock('@neondatabase/serverless', () => ({
   neon: vi.fn(() => vi.fn(() => Promise.resolve([]))),
+  neonConfig: {},
+  Pool: vi.fn(),
+  types: { setTypeParser: vi.fn(), builtins: {} },
 }));
 
 vi.mock('@/lib/db', () => ({

@@ -1,7 +1,7 @@
 'use server';
 
 import { requireFounderAuth } from '@/lib/founder-auth';
-import { sendSubmissionReceivedEmail } from '@/lib/founder-email';
+import { sendAdminReviewAlert, sendChangesUnderReviewEmail, sendSubmissionReceivedEmail } from '@/lib/founder-email';
 import { prisma } from '@udyaibase/database';
 import { revalidatePath } from 'next/cache';
 
@@ -218,15 +218,14 @@ export async function submitStartupAction(data: StartupSubmission) {
       await prisma.$executeRaw`UPDATE "Startup" SET "impactScore" = ${impactScore} WHERE id = ${startupId}`;
     }
 
-    // TODO: Send notification to admin
-
-    // Send confirmation email to founder (fire-and-forget)
+    // Confirm to the founder and alert the review team (fire-and-forget)
     const founderInfo = await prisma.$queryRaw<any[]>`
       SELECT email, name FROM "FounderUser" WHERE id = ${session.userId} LIMIT 1
     `;
     if (founderInfo.length > 0) {
       sendSubmissionReceivedEmail(founderInfo[0].email, founderInfo[0].name, 'startup', data.name)
         .catch(err => console.error('Submission email error:', err));
+      sendAdminReviewAlert({ entityType: 'startup', entityName: data.name, founderEmail: founderInfo[0].email, reason: 'new' });
     }
 
     revalidatePath('/founder/startups');
@@ -422,8 +421,14 @@ export async function updateStartupAction(id: string, data: StartupSubmission) {
     });
     await prisma.$executeRaw`UPDATE "Startup" SET "impactScore" = ${impactScore} WHERE id = ${id}`;
 
-    // TODO: Send notification to admin if status changed to PENDING
-    // TODO: Send confirmation email to founder
+    // A live startup went back to review: tell the founder and the review team.
+    if (newStatus === 'PENDING' && startup.claimStatus !== 'PENDING') {
+      const founder = await prisma.founderUser.findUnique({ where: { id: session.userId }, select: { email: true, name: true } });
+      if (founder) {
+        sendChangesUnderReviewEmail(founder.email, founder.name, startup.name);
+        sendAdminReviewAlert({ entityType: 'startup', entityName: startup.name, founderEmail: founder.email, reason: 'edited' });
+      }
+    }
 
     revalidatePath('/founder/startups');
     revalidatePath(`/founder/startups/${slug}`);

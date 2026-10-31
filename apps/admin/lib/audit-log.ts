@@ -52,7 +52,8 @@ export type ResourceType =
   | 'ADV_PACKAGE'
   | 'ADV_ZONE_ACTIVATION'
   | 'ADV_SOCIAL_POST'
-  | 'ADV_PAYMENT';
+  | 'ADV_PAYMENT'
+  | 'BILLING_PAYMENT';
 
 interface AuditLogEntry {
   action: AuditAction;

@@ -1,5 +1,4 @@
 import dynamic from 'next/dynamic';
-import { cookies } from 'next/headers';
 import { AuthContext } from '@/components/AuthContext';
 import { AnnouncementBar } from '@/components/ClientOnly';
 
@@ -7,20 +6,19 @@ import { AnnouncementBar } from '@/components/ClientOnly';
 import Navbar from '@/components/layout/Navbar';
 const Footer = dynamic(() => import('@/components/layout/Footer'));
 
-export default async function PublicLayout(
+// No cookies() or headers() here: reading them would make every public page render on every request
+// (no caching). Sign-in state is handled in the browser (UserProvider / Navbar).
+export default function PublicLayout(
   {
     children,
   }: {
     children: React.ReactNode;
   }
 ) {
-  const cookieStore = await cookies();
-  const hasSession = !!(cookieStore.get('user-token')?.value || cookieStore.get('founder-token')?.value);
-
   return (
     <AuthContext>
       <AnnouncementBar />
-      <Navbar hasSession={hasSession} />
+      <Navbar />
       <div className="pt-[96px] sm:pt-[103px] min-h-screen flex flex-col">
         <main className="flex-1 pb-16 lg:pb-0 pb-safe">
           {children}

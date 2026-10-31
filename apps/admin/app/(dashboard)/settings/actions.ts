@@ -7,6 +7,7 @@ import { version as reactVersion } from "react";
 import nextPackage from "next/package.json";
 import appPackage from "../../../package.json";
 import { runServiceChecks } from "./service-health";
+import { refreshPublic } from '@/lib/refresh-public';
 
 const ALLOWED = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "AD_MANAGER"];
 
@@ -87,7 +88,7 @@ export async function saveSettingsAction(settings: Record<string, any>) {
       `;
     }
 
-    return { success: true };
+    await refreshPublic(['all']); return { success: true };
   } catch (e: any) {
     console.error('Save settings error:', e);
     return { success: false, error: e.message };

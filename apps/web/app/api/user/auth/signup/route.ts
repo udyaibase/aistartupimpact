@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { consumeVerifiedOtp } from '@/lib/otp';
 import { verifyTurnstileToken } from '@/lib/turnstile';
 import { sql } from '@/lib/db';
 import bcrypt from 'bcryptjs';
@@ -34,11 +35,12 @@ export async function POST(request: NextRequest) {
 
     // Input validation
     const body = await request.json();
-    if (body.turnstileToken) {
-      const isHuman = await verifyTurnstileToken(body.turnstileToken);
-      if (!isHuman) {
-        return NextResponse.json({ error: 'Human verification failed. Please try again.' }, { status: 403 });
-      }
+    if (!body.turnstileToken) {
+      return NextResponse.json({ error: 'CAPTCHA verification required. Please complete the challenge.' }, { status: 403 });
+    }
+    const isHuman = await verifyTurnstileToken(body.turnstileToken);
+    if (!isHuman) {
+      return NextResponse.json({ error: 'Human verification failed. Please try again.' }, { status: 403 });
     }
     const validation = validateInput(signupSchema, body);
     
@@ -92,6 +94,11 @@ export async function POST(request: NextRequest) {
         { error: 'User with this email already exists' },
         { status: 409 }
       );
+    }
+
+    // The email must have passed the emailed-code check (popup step 1) in the last 30 minutes.
+    if (!(await consumeVerifiedOtp(email, 'signup'))) {
+      return NextResponse.json({ error: 'Please verify your email with the code we sent first.' }, { status: 403 });
     }
 
     // Hash password

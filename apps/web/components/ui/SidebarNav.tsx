@@ -13,6 +13,8 @@ export interface NavItem {
   icon?: LucideIcon;
   exact?: boolean;
   locked?: boolean;
+  badge?: string;
+  count?: number;
   type?: 'divider';
 }
 
@@ -105,6 +107,7 @@ export default function SidebarNav({ items, topSlot }: SidebarNavProps) {
         const linkContent = (
           <Link
             href={item.href!}
+            data-tour={`nav:${item.href}`}
             className={`flex items-center ${collapsed ? 'justify-center' : 'gap-2.5'} px-3 py-2 rounded-lg text-[13px] font-jakarta font-medium transition-all duration-150 ${
               active
                 ? 'bg-brand/8 text-brand font-semibold'
@@ -112,7 +115,17 @@ export default function SidebarNav({ items, topSlot }: SidebarNavProps) {
             }`}
           >
             <Icon className={`shrink-0 ${collapsed ? 'w-5 h-5' : 'w-[18px] h-[18px]'} ${active ? 'text-brand' : 'text-gray-400 dark:text-gray-500'}`} />
-            {!collapsed && <span>{item.label}</span>}
+            {!collapsed && (
+              <span className="flex-1 flex items-center justify-between">
+                <span>{item.label}</span>
+                {item.count != null && item.count > 0 && (
+                  <span className="text-[11px] font-semibold text-gray-400 font-jakarta tabular-nums">{item.count}</span>
+                )}
+                {item.badge && (
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-brand bg-brand/10 px-1.5 py-0.5 rounded font-jakarta">{item.badge}</span>
+                )}
+              </span>
+            )}
           </Link>
         );
 

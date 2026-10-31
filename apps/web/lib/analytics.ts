@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { clientIp, clientIpFromHeaders } from '@/lib/client-ip';
 import { prisma } from '@udyaibase/database';
 import crypto from 'crypto';
 
@@ -80,18 +81,14 @@ export async function trackPageView(pathname: string, request?: NextRequest) {
       // Called from API route - use request headers
       userAgent = request.headers.get('user-agent') || '';
       referrer = request.headers.get('referer') || request.headers.get('referrer') || null;
-      ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 
-           request.headers.get('x-real-ip') || 
-           'unknown';
+      ip = clientIp(request);
     } else {
       // Called from server component - use headers() function
       const { headers } = await import('next/headers');
       const headersList = await headers();
       userAgent = headersList.get('user-agent') || '';
       referrer = headersList.get('referer') || headersList.get('referrer') || null;
-      ip = headersList.get('x-forwarded-for')?.split(',')[0] || 
-           headersList.get('x-real-ip') || 
-           'unknown';
+      ip = clientIpFromHeaders(headersList as unknown as Headers);
     }
     
     // Create session hash (IP + User Agent)

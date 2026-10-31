@@ -112,7 +112,6 @@ The project reads environment from:
 |----------|----------|-------------|
 | `NEXT_PUBLIC_WEB_URL` | Yes | Web app URL (http://localhost:3000) |
 | `NEXT_PUBLIC_ADMIN_URL` | Yes | Admin app URL (http://localhost:3001) |
-| `NEXT_PUBLIC_API_URL` | Yes | API URL (http://localhost:4000/v1) |
 | `NEXT_PUBLIC_SITE_URL` | Build | Canonical site URL |
 | `API_URL` | No | Internal API URL (server-side, never exposed) |
 

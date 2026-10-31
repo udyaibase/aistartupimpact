@@ -1,8 +1,10 @@
+import { jsonLd } from "@/lib/json-ld";
 import { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { sql } from "@/lib/db";
 import EventDetailClient from "./EventDetailClient";
 import TrackView from '@/components/TrackView';
+import { sanitizeHtml } from "@/lib/sanitize";
 
 export const revalidate = 60;
 
@@ -20,6 +22,7 @@ async function getEvent(slug: string) {
         e."registrationDeadline"::text AS "registrationDeadline",
         e."approvalRequired",
         e."metaTitle", e."metaDescription", e."socialImageUrl",
+        e."sourceUrl", e."sourceName",
         e."organizerId", e."deletedAt",
         o.name AS "organizerName", o.avatar AS "organizerAvatar"
       FROM "Event" e
@@ -290,15 +293,34 @@ export default async function EventDetailPage(
     }));
   }
 
+  const breadcrumbJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://udyaibase.com' },
+      { '@type': 'ListItem', position: 2, name: 'AI Events', item: 'https://udyaibase.com/events' },
+      { '@type': 'ListItem', position: 3, name: event.title, item: `https://udyaibase.com/events/${event.slug}` },
+    ],
+  };
+
   return (
     <>
       <TrackView entityType="event" entityId={event.id} />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(eventSchema) }}
+        dangerouslySetInnerHTML={{ __html: jsonLd(eventSchema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbJsonLd) }}
       />
       <EventDetailClient
-        event={event}
+        event={{
+          ...event,
+          description: event.description && typeof event.description === "object" && event.description.html
+            ? { ...event.description, html: sanitizeHtml(event.description.html) }
+            : event.description,
+        }}
         speakers={speakers as any}
         agenda={agenda as any}
         tags={tags as any}

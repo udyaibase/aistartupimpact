@@ -1,3 +1,4 @@
+import { jsonLd } from "@/lib/json-ld";
 import type { Metadata, Viewport } from 'next';
 import { Suspense } from 'react';
 import { Sora, Plus_Jakarta_Sans, Bebas_Neue } from 'next/font/google';
@@ -13,6 +14,7 @@ import ScrollRestoration from '@/components/ScrollRestoration';
 import { ScrollToTop } from '@/components/ClientOnly';
 import NewsletterPopup from '@/components/NewsletterPopup';
 import SignupSuccessPopup from '@/components/auth/SignupSuccessPopup';
+import SiteChrome from '@/components/SiteChrome';
 import { generateWebSiteSchema, generateOrganizationSchema } from '@/lib/seo';
 import { getBrandConfig } from '@/lib/brand';
 import { getSeoConfig } from '@/lib/seo-config';
@@ -167,28 +169,34 @@ export default async function RootLayout({
         {/* Site-level structured data */}
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
+          dangerouslySetInnerHTML={{ __html: jsonLd(websiteSchema) }}
         />
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(orgSchema) }}
+          dangerouslySetInnerHTML={{ __html: jsonLd(orgSchema) }}
         />
         <ThemeProvider>
-          <Suspense fallback={null}>
-            <NavigationProgress />
-          </Suspense>
-          <AnalyticsTracker />
-          <ScrollRestoration />
+          <SiteChrome>
+            <Suspense fallback={null}>
+              <NavigationProgress />
+            </Suspense>
+            <AnalyticsTracker />
+            <ScrollRestoration />
+          </SiteChrome>
           {children}
-          {/* <NewsletterPopup /> */}
-          <SignupSuccessPopup />
-          <ScrollToTop />
-          <CookieConsent />
-          {gaId && <GoogleAnalytics measurementId={gaId} />}
-          <ClearConsentButton />
+          <SiteChrome>
+            {/* <NewsletterPopup /> */}
+            <SignupSuccessPopup />
+            <ScrollToTop />
+            <CookieConsent />
+            {gaId && <GoogleAnalytics measurementId={gaId} />}
+            <ClearConsentButton />
+          </SiteChrome>
         </ThemeProvider>
-        <Analytics />
-        <SpeedInsights />
+        <SiteChrome>
+          <Analytics />
+          <SpeedInsights />
+        </SiteChrome>
       </body>
     </html>
   );

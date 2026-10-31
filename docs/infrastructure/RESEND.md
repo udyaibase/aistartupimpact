@@ -11,7 +11,19 @@ Email delivery service for transactional and newsletter emails.
 | Provider | Resend |
 | SDK | `resend` npm package |
 | Templates | React Email (`@react-email/components`) |
-| Location | `apps/api` (Express) + admin actions |
+| Location | `apps/web/lib/email` + admin actions |
+
+---
+
+## Bounce & complaint webhook
+
+Hard bounces and spam complaints unsubscribe the address from newsletters (`NewsletterSubscriber`) and
+event campaigns (`EventSubscriber`). Login accounts are never touched. Soft (transient) bounces are ignored.
+
+- Endpoint: `https://udyaibase.com/api/webhooks/resend` (`apps/web/app/api/webhooks/resend/route.ts`)
+- Resend dashboard → Webhooks → add the endpoint with events `email.bounced` and `email.complained`
+- Copy the signing secret (`whsec_…`) into `RESEND_WEBHOOK_SECRET` on the web Vercel project
+- Without the secret every request is rejected (401), so set it before enabling the webhook
 
 ---
 
@@ -24,6 +36,7 @@ RESEND_FROM_NAME=Udyaibase
 RESEND_NEWSLETTER_EMAIL=events@udyaibase.com
 RESEND_NEWSLETTER_NAME=Udyaibase Events
 RESEND_REPLY_TO=hello@udyaibase.com
+RESEND_WEBHOOK_SECRET=whsec_xxxxxxxxxxxx
 ```
 
 ---

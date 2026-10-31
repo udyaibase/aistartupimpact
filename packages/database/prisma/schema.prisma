@@ -119,81 +119,83 @@ model AffiliateClick {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model AiTool {
-  id                  String                   @id
-  name                String
-  slug                String                   @unique
-  slugChangedAt       DateTime?
-  previousSlugs       String[]                 @default([])
-  tagline             String
-  description         String
-  websiteUrl          String
-  affiliateUrl        String?
-  twitterUrl          String?
-  linkedinUrl         String?
-  socialLinks         Json?
-  logoUrl             String?
-  screenshotUrls      String[]
-  screenshotMeta      Json?
-  demoVideoUrl        String?
-  categoryId          String
-  pricingModel        PricingModel             @default(FREEMIUM)
-  freeTrialDays       Int?
-  startingPrice       Int?
-  hasApi              Boolean                  @default(false)
-  hasMobileApp        Boolean                  @default(false)
-  launchYear          Int?
-  headquartersCountry String?
-  founderNames        String[]
-  avgRating           Float                    @default(0)
-  reviewCount         Int                      @default(0)
-  status              ToolApprovalStatus       @default(PENDING)
-  contentReviewed     Boolean                  @default(false)
-  isFeatured          Boolean                  @default(false)
-  featuredUntil       DateTime?
-  submittedBy         String?
-  approvedBy          String?
-  approvedAt          DateTime?
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime
-  deletedAt           DateTime?
-  aiQualityScore      Int?
-  aiSpamFlag          Boolean                  @default(false)
-  aiSuggestedEdits    String[]
-  upvoteCount         Int                      @default(0)
-  saveCount           Int                      @default(0)
-  clicks              Int                      @default(0)
-  isUrlVerified       Boolean                  @default(false)
-  listingTier         ListingTier              @default(FREE)
-  paymentStatus       PaymentStatus            @default(PENDING)
-  pendingTier         ListingTier?
-  pricingUrl          String?
-  razorpayOrderId     String?                  @unique
-  razorpayPaymentId   String?                  @unique
-  referralCode        String?                  @unique
-  referredBy          String?
-  startupId           String?
-  tierExpiresAt       DateTime?
-  claimStatus         ClaimStatus              @default(UNCLAIMED)
-  claimedAt           DateTime?
-  ownerId             String?
-  searchVector        Unsupported("tsvector")?
-  AffiliateClick      AffiliateClick[]
-  ToolCategory        ToolCategory             @relation(fields: [categoryId], references: [id])
-  FounderUser         FounderUser?             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  Startup             Startup?                 @relation(fields: [startupId], references: [id])
-  Article             Article[]
-  ToolCon             ToolCon[]
-  ToolPro             ToolPro[]
-  ToolReview          ToolReview[]
-  ToolTag             ToolTag[]
-  ToolTraffic         ToolTraffic[]
-  ToolUseCase         ToolUseCase[]
-  SavedTool           SavedTool[]
+  id                   String                   @id
+  name                 String
+  slug                 String                   @unique
+  slugChangedAt        DateTime?
+  previousSlugs        String[]                 @default([])
+  tagline              String
+  description          String
+  websiteUrl           String
+  affiliateUrl         String?
+  twitterUrl           String?
+  linkedinUrl          String?
+  socialLinks          Json?
+  logoUrl              String?
+  screenshotUrls       String[]
+  screenshotMeta       Json?
+  demoVideoUrl         String?
+  categoryId           String
+  pricingModel         PricingModel             @default(FREEMIUM)
+  freeTrialDays        Int?
+  startingPrice        Int?
+  hasApi               Boolean                  @default(false)
+  hasMobileApp         Boolean                  @default(false)
+  launchYear           Int?
+  headquartersCountry  String?
+  founderNames         String[]
+  avgRating            Float                    @default(0)
+  reviewCount          Int                      @default(0)
+  status               ToolApprovalStatus       @default(PENDING)
+  contentReviewed      Boolean                  @default(false)
+  isFeatured           Boolean                  @default(false)
+  featuredUntil        DateTime?
+  submittedBy          String?
+  approvedBy           String?
+  approvedAt           DateTime?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime
+  deletedAt            DateTime?
+  aiQualityScore       Int?
+  aiSpamFlag           Boolean                  @default(false)
+  aiSuggestedEdits     String[]
+  upvoteCount          Int                      @default(0)
+  saveCount            Int                      @default(0)
+  clicks               Int                      @default(0)
+  isUrlVerified        Boolean                  @default(false)
+  listingTier          ListingTier              @default(FREE)
+  paymentStatus        PaymentStatus            @default(PENDING)
+  pendingTier          ListingTier?
+  pricingUrl           String?
+  razorpayOrderId      String?                  @unique
+  razorpayPaymentId    String?                  @unique
+  referralCode         String?                  @unique
+  referredBy           String?
+  startupId            String?
+  tierExpiresAt        DateTime?
+  claimStatus          ClaimStatus              @default(UNCLAIMED)
+  claimedAt            DateTime?
+  ownerId              String?
+  searchVector         Unsupported("tsvector")?
+  AffiliateClick       AffiliateClick[]
+  ToolCategory         ToolCategory             @relation(fields: [categoryId], references: [id])
+  FounderUser          FounderUser?             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  Startup              Startup?                 @relation(fields: [startupId], references: [id])
+  Article              Article[]
+  ToolCon              ToolCon[]
+  ToolPro              ToolPro[]
+  ToolReview           ToolReview[]
+  ToolTag              ToolTag[]
+  ToolTraffic          ToolTraffic[]
+  ToolUseCase          ToolUseCase[]
+  SavedTool            SavedTool[]
   ToolFeaturedCampaign ToolFeaturedCampaign[]
   ToolSystemTagMapping ToolSystemTagMapping[]
-  ToolAlternatives    ToolAlternative[] @relation("ToolToAlternatives")
-  ToolAlternativeOf   ToolAlternative[] @relation("AlternativeToTools")
-  ToolUpvote          ToolUpvote[]
+  ToolAlternatives     ToolAlternative[]        @relation("ToolToAlternatives")
+  ToolAlternativeOf    ToolAlternative[]        @relation("AlternativeToTools")
+  ToolUpvote           ToolUpvote[]
+
+  siteAnnouncements SiteAnnouncement[]
 
   @@index([avgRating])
   @@index([categoryId])
@@ -206,78 +208,76 @@ model AiTool {
   @@index([status, listingTier])
   @@index([deletedAt])
   @@index([createdAt])
-
-  siteAnnouncements SiteAnnouncement[]
 }
 
 model Article {
-  id                                            String                   @id
-  title                                         String
-  slug                                          String                   @unique
-  excerpt                                       String?
-  content                                       Json
-  contentText                                   String?
-  type                                          ArticleType              @default(NEWS)
-  status                                        ArticleStatus            @default(DRAFT)
-  authorId                                      String
-  categoryId                                    String?
-  coverImage                                    String?
-  readTimeMinutes                               Int                      @default(1)
-  wordCount                                     Int                      @default(0)
-  viewCount                                     Int                      @default(0)
-  shareCount                                    Int                      @default(0)
-  isFeatured                                    Boolean                  @default(false)
-  isPinned                                      Boolean                  @default(false)
-  isSponsored                                   Boolean                  @default(false)
-  sponsorId                                     String?
-  seoTitle                                      String?
-  seoDescription                                String?
-  focusKeyword                                  String?
-  ogImage                                       String?
-  canonicalUrl                                  String?
-  noIndex                                       Boolean                  @default(false)
-  schemaType                                    String?
-  scheduledAt                                   DateTime?
-  publishedAt                                   DateTime?
-  createdAt                                     DateTime                 @default(now())
-  updatedAt                                     DateTime
-  deletedAt                                     DateTime?
-  thumbnailImage                                String?
-  startupId                                     String?
-  toolId                                        String?
-  likeCount                                     Int                      @default(0)
-  keyTakeaways                                  Json?
-  agreeCount                                    Int                      @default(0)
-  disagreeCount                                 Int                      @default(0)
-  primaryTagId                                  String?
-  searchVector                                  Unsupported("tsvector")?
+  id              String                   @id
+  title           String
+  slug            String                   @unique
+  excerpt         String?
+  content         Json
+  contentText     String?
+  type            ArticleType              @default(NEWS)
+  status          ArticleStatus            @default(DRAFT)
+  authorId        String
+  categoryId      String?
+  coverImage      String?
+  readTimeMinutes Int                      @default(1)
+  wordCount       Int                      @default(0)
+  viewCount       Int                      @default(0)
+  shareCount      Int                      @default(0)
+  isFeatured      Boolean                  @default(false)
+  isPinned        Boolean                  @default(false)
+  isSponsored     Boolean                  @default(false)
+  sponsorId       String?
+  seoTitle        String?
+  seoDescription  String?
+  focusKeyword    String?
+  ogImage         String?
+  canonicalUrl    String?
+  noIndex         Boolean                  @default(false)
+  schemaType      String?
+  scheduledAt     DateTime?
+  publishedAt     DateTime?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime
+  deletedAt       DateTime?
+  thumbnailImage  String?
+  startupId       String?
+  toolId          String?
+  likeCount       Int                      @default(0)
+  keyTakeaways    Json?
+  agreeCount      Int                      @default(0)
+  disagreeCount   Int                      @default(0)
+  primaryTagId    String?
+  searchVector    Unsupported("tsvector")?
 
   // Founder content fields
-  submittedById                                 String?
-  founderAuthorId                               String?
-  moderationStatus                              ModerationStatus         @default(NONE)
-  moderationNote                                String?
-  moderatedBy                                   String?
-  moderatedAt                                   DateTime?
-  lastSavedAt                                   DateTime?
-  autoSaved                                     Boolean                  @default(false)
+  submittedById    String?
+  founderAuthorId  String?
+  moderationStatus ModerationStatus @default(NONE)
+  moderationNote   String?
+  moderatedBy      String?
+  moderatedAt      DateTime?
+  lastSavedAt      DateTime?
+  autoSaved        Boolean          @default(false)
 
-  User                                          User                     @relation(fields: [authorId], references: [id])
-  Category                                      Category?                @relation(fields: [categoryId], references: [id])
-  Startup                                       Startup?                 @relation(fields: [startupId], references: [id])
-  AiTool                                        AiTool?                  @relation(fields: [toolId], references: [id])
-  PrimaryTag                                    Tag?                     @relation("ArticlePrimaryTag", fields: [primaryTagId], references: [id], onDelete: SetNull)
-  SubmittedByFounder                            FounderUser?             @relation("ArticleSubmittedBy", fields: [submittedById], references: [id], onDelete: SetNull)
-  FounderAuthor                                 FounderUser?             @relation("ArticleFounderAuthor", fields: [founderAuthorId], references: [id], onDelete: SetNull)
+  User                                          User                   @relation(fields: [authorId], references: [id])
+  Category                                      Category?              @relation(fields: [categoryId], references: [id])
+  Startup                                       Startup?               @relation(fields: [startupId], references: [id])
+  AiTool                                        AiTool?                @relation(fields: [toolId], references: [id])
+  PrimaryTag                                    Tag?                   @relation("ArticlePrimaryTag", fields: [primaryTagId], references: [id], onDelete: SetNull)
+  SubmittedByFounder                            FounderUser?           @relation("ArticleSubmittedBy", fields: [submittedById], references: [id], onDelete: SetNull)
+  FounderAuthor                                 FounderUser?           @relation("ArticleFounderAuthor", fields: [founderAuthorId], references: [id], onDelete: SetNull)
   ArticleCoAuthor                               ArticleCoAuthor[]
   ArticleTag                                    ArticleTag[]
   ArticleVersion                                ArticleVersion[]
   Comment                                       Comment[]
   ContentActivityLog                            ContentActivityLog[]
   ContentMedia                                  ContentMedia[]
-  FounderContentReport                           FounderContentReport[]
-  RelatedArticle_RelatedArticle_fromIdToArticle RelatedArticle[]         @relation("RelatedArticle_fromIdToArticle")
-  RelatedArticle_RelatedArticle_toIdToArticle   RelatedArticle[]         @relation("RelatedArticle_toIdToArticle")
+  FounderContentReport                          FounderContentReport[]
+  RelatedArticle_RelatedArticle_fromIdToArticle RelatedArticle[]       @relation("RelatedArticle_fromIdToArticle")
+  RelatedArticle_RelatedArticle_toIdToArticle   RelatedArticle[]       @relation("RelatedArticle_toIdToArticle")
 
   @@index([authorId])
   @@index([categoryId])
@@ -498,53 +498,53 @@ model FounderSession {
 }
 
 model FounderUser {
-  id                                     String                   @id
-  email                                  String                   @unique
-  name                                   String
-  passwordHash                           String?
-  company                                String?
-  previousCompany                        String?
-  role                                   String?
-  phone                                  String?
-  avatar                                 String?
-  bio                                    String?
-  linkedin                               String?
-  twitter                                String?
-  website                                String?
-  emailVerified                          Boolean                  @default(false)
-  verifyToken                            String?                  @unique
-  resetToken                             String?                  @unique
-  resetExpiry                            DateTime?
-  status                                 FounderUserStatus        @default(PENDING_VERIFICATION)
-  createdAt                              DateTime                 @default(now())
-  updatedAt                              DateTime
-  lastLoginAt                            DateTime?
-  authProvider                           String                   @default("email")
-  companyDomain                          String?
-  companyEmail                           String?
-  companyEmailVerified                   Boolean                  @default(false)
-  companyEmailVerifiedAt                 DateTime?
-  googleId                               String?                  @unique
-  onboardingCompleted                    Boolean                  @default(false)
-  onboardingStep                         Int                      @default(0)
-  twoFactorEnabled                       Boolean                  @default(false)
-  twoFactorSecret                        String?
-  twoFactorBackupCodes                   String[]
-  failedLoginAttempts                    Int                      @default(0)
-  lockedUntil                            DateTime?
+  id                     String            @id
+  email                  String            @unique
+  name                   String
+  passwordHash           String?
+  company                String?
+  previousCompany        String?
+  role                   String?
+  phone                  String?
+  avatar                 String?
+  bio                    String?
+  linkedin               String?
+  twitter                String?
+  website                String?
+  emailVerified          Boolean           @default(false)
+  verifyToken            String?           @unique
+  resetToken             String?           @unique
+  resetExpiry            DateTime?
+  status                 FounderUserStatus @default(PENDING_VERIFICATION)
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime
+  lastLoginAt            DateTime?
+  authProvider           String            @default("email")
+  companyDomain          String?
+  companyEmail           String?
+  companyEmailVerified   Boolean           @default(false)
+  companyEmailVerifiedAt DateTime?
+  googleId               String?           @unique
+  onboardingCompleted    Boolean           @default(false)
+  onboardingStep         Int               @default(0)
+  twoFactorEnabled       Boolean           @default(false)
+  twoFactorSecret        String?
+  twoFactorBackupCodes   String[]
+  failedLoginAttempts    Int               @default(0)
+  lockedUntil            DateTime?
 
   // Email change
-  pendingEmail                           String?
-  emailChangeToken                       String?                  @unique
-  emailChangeTokenExpiry                 DateTime?
+  pendingEmail           String?
+  emailChangeToken       String?   @unique
+  emailChangeTokenExpiry DateTime?
 
   // Account lifecycle
-  deactivatedAt                          DateTime?
-  deletedAt                              DateTime?
+  deactivatedAt DateTime?
+  deletedAt     DateTime?
 
   // Unified identity link
-  unifiedUserId                          String?                  @unique
-  unifiedUser                            UnifiedUser?             @relation("FounderToUnified", fields: [unifiedUserId], references: [id], onDelete: SetNull)
+  unifiedUserId String?      @unique
+  unifiedUser   UnifiedUser? @relation("FounderToUnified", fields: [unifiedUserId], references: [id], onDelete: SetNull)
 
   AiTool                                 AiTool[]
   FounderAnalytics                       FounderAnalytics[]
@@ -562,6 +562,7 @@ model FounderUser {
   contentActivityLogs                    ContentActivityLog[]
   advPackages                            AdvPackage[]
   advPayments                            AdvPayment[]
+  HiringWorkspaces                       JobBoardEmployer[]
 
   @@index([companyDomain])
   @@index([status])
@@ -597,11 +598,11 @@ model FundingRound {
   createdAt     DateTime @default(now())
   Startup       Startup  @relation(fields: [startupId], references: [id], onDelete: Cascade)
 
+  siteAnnouncements SiteAnnouncement[]
+
   @@index([announcedAt])
   @@index([roundType])
   @@index([startupId, announcedAt])
-
-  siteAnnouncements SiteAnnouncement[]
 }
 
 model GlossaryTerm {
@@ -612,7 +613,6 @@ model GlossaryTerm {
   relatedTerms String[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime
-
 }
 
 model GovernmentScheme {
@@ -800,8 +800,8 @@ model Job {
 }
 
 model JobApplication {
-  id              String   @id @default(cuid())
-  type            String   @default("INTERNSHIP")
+  id              String    @id @default(cuid())
+  type            String    @default("INTERNSHIP")
   role            String
   fullName        String
   email           String
@@ -813,10 +813,10 @@ model JobApplication {
   resumeSizeBytes Int?
   linkedinUrl     String?
   portfolioUrl    String?
-  status          String   @default("NEW")
+  status          String    @default("NEW")
   notes           String?
   reviewedAt      DateTime?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime  @default(now())
 
   @@index([email, role])
   @@index([createdAt])
@@ -1022,7 +1022,6 @@ model Redirect {
   toPath    String
   permanent Boolean  @default(false)
   createdAt DateTime @default(now())
-
 }
 
 model RelatedArticle {
@@ -1212,6 +1211,8 @@ model Startup {
   ContentActivityLog                         ContentActivityLog[]
   ContentMedia                               ContentMedia[]
 
+  siteAnnouncements SiteAnnouncement[]
+
   @@index([category])
   @@index([cityId])
   @@index([claimStatus])
@@ -1230,8 +1231,6 @@ model Startup {
   @@index([businessType])
   @@index([employeeCount])
   @@index([createdAt])
-
-  siteAnnouncements SiteAnnouncement[]
 }
 
 model StartupFAQ {
@@ -1291,13 +1290,12 @@ model StartupVerificationLog {
 }
 
 model Tag {
-  id         String       @id
-  name       String       @unique
-  slug       String       @unique
+  id              String       @id
+  name            String       @unique
+  slug            String       @unique
   createdAt       DateTime     @default(now())
   ArticleTag      ArticleTag[]
   PrimaryArticles Article[]    @relation("ArticlePrimaryTag")
-
 }
 
 model TalentStats {
@@ -1322,20 +1320,20 @@ model TalentStats {
 }
 
 model ToolCategory {
-  id          String           @id
-  name        String
-  slug        String           @unique
-  description String?
-  icon        String?
-  parentId    String?
-  level       Int              @default(0)
-  sortOrder   Int              @default(0)
-  isActive    Boolean          @default(true)
-  toolCount   Int              @default(0)
-  createdAt   DateTime         @default(now())
-  parent      ToolCategory?    @relation("CategoryHierarchy", fields: [parentId], references: [id])
-  children    ToolCategory[]   @relation("CategoryHierarchy")
-  AiTool      AiTool[]
+  id               String            @id
+  name             String
+  slug             String            @unique
+  description      String?
+  icon             String?
+  parentId         String?
+  level            Int               @default(0)
+  sortOrder        Int               @default(0)
+  isActive         Boolean           @default(true)
+  toolCount        Int               @default(0)
+  createdAt        DateTime          @default(now())
+  parent           ToolCategory?     @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children         ToolCategory[]    @relation("CategoryHierarchy")
+  AiTool           AiTool[]
   webUserInterests WebUserInterest[]
 
   @@index([parentId])
@@ -1361,24 +1359,24 @@ model ToolPro {
 }
 
 model ToolReview {
-  id                 String       @id
+  id                 String              @id
   toolId             String
   userId             String
   rating             Int
   title              String
   body               String
   verdict            String?
-  isEditorPick       Boolean      @default(false)
-  publishedAt        DateTime     @default(now())
-  createdAt          DateTime     @default(now())
+  isEditorPick       Boolean             @default(false)
+  publishedAt        DateTime            @default(now())
+  createdAt          DateTime            @default(now())
   aiSpamScore        Int?
-  flagCount          Int          @default(0)
-  isVerifiedPurchase Boolean      @default(false)
+  flagCount          Int                 @default(0)
+  isVerifiedPurchase Boolean             @default(false)
   proofImageUrl      String?
-  status             ReviewStatus @default(PENDING)
-  helpfulCount       Int          @default(0)
-  AiTool             AiTool       @relation(fields: [toolId], references: [id], onDelete: Cascade)
-  WebUser            WebUser      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status             ReviewStatus        @default(PENDING)
+  helpfulCount       Int                 @default(0)
+  AiTool             AiTool              @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  WebUser            WebUser             @relation(fields: [userId], references: [id], onDelete: Cascade)
   ToolReviewResponse ToolReviewResponse?
 
   @@unique([toolId, userId])
@@ -1420,16 +1418,16 @@ model ToolUseCase {
 }
 
 model User {
-  id              String            @id
-  email           String            @unique
-  passwordHash    String?
-  name            String
-  slug            String            @unique
-  role            UserRole          @default(CONTRIBUTOR)
-  bio             String?
-  avatar          String?
-  twitter         String?
-  linkedin        String?
+  id                   String            @id
+  email                String            @unique
+  passwordHash         String?
+  name                 String
+  slug                 String            @unique
+  role                 UserRole          @default(CONTRIBUTOR)
+  bio                  String?
+  avatar               String?
+  twitter              String?
+  linkedin             String?
   isActive             Boolean           @default(true)
   canDeleteUntil       DateTime?
   deleteGrantedBy      String?
@@ -1455,11 +1453,11 @@ model User {
 }
 
 model WebUser {
-  id              String           @id
-  email           String           @unique
+  id              String    @id
+  email           String    @unique
   passwordHash    String?
   name            String
-  slug            String           @unique
+  slug            String    @unique
   bio             String?
   avatar          String?
   twitter         String?
@@ -1467,19 +1465,19 @@ model WebUser {
   instagram       String?
   facebook        String?
   github          String?
-  isActive        Boolean          @default(true)
-  termsAcceptedAt DateTime?        @db.Timestamptz
+  isActive        Boolean   @default(true)
+  termsAcceptedAt DateTime? @db.Timestamptz
   termsVersion    String?
-  lastLoginAt     DateTime?        @db.Timestamptz
-  createdAt       DateTime         @default(now()) @db.Timestamptz
-  updatedAt       DateTime         @updatedAt @db.Timestamptz
+  lastLoginAt     DateTime? @db.Timestamptz
+  createdAt       DateTime  @default(now()) @db.Timestamptz
+  updatedAt       DateTime  @updatedAt @db.Timestamptz
 
   // 2FA
-  twoFactorEnabled   Boolean       @default(false)
-  twoFactorSecret    String?
+  twoFactorEnabled     Boolean   @default(false)
+  twoFactorSecret      String?
   twoFactorBackupCodes String[]
-  failedLoginAttempts Int          @default(0)
-  lockedUntil         DateTime?
+  failedLoginAttempts  Int       @default(0)
+  lockedUntil          DateTime?
 
   // Email change
   pendingEmail           String?
@@ -1487,29 +1485,29 @@ model WebUser {
   emailChangeTokenExpiry DateTime?
 
   // Account lifecycle
-  deactivatedAt          DateTime?
-  deletedAt              DateTime?
+  deactivatedAt DateTime?
+  deletedAt     DateTime?
 
   // Onboarding
-  onboardingCompleted   Boolean   @default(false)
-  onboardingStep        Int       @default(0)
-  onboardingVersion     Int       @default(1)
+  onboardingCompleted Boolean @default(false)
+  onboardingStep      Int     @default(0)
+  onboardingVersion   Int     @default(1)
 
   // Explicit preferences
-  primaryIntent          String?
-  cityId                 String?
-  city                   City?     @relation(fields: [cityId], references: [id])
-  preferencesUpdatedAt   DateTime? @db.Timestamptz
+  primaryIntent        String?
+  cityId               String?
+  city                 City?     @relation(fields: [cityId], references: [id])
+  preferencesUpdatedAt DateTime? @db.Timestamptz
 
-  StartupReview   StartupReview[]
-  ToolReview      ToolReview[]
-  WebUserSession  WebUserSession[]
-  SavedTool       SavedTool[]
-  SavedStartup    SavedStartup[]
-  JobBoardSaved   JobBoardSaved[]
-  ToolUpvote      ToolUpvote[]
-  interests       WebUserInterest[]
-  interactions    WebUserInteraction[]
+  StartupReview  StartupReview[]
+  ToolReview     ToolReview[]
+  WebUserSession WebUserSession[]
+  SavedTool      SavedTool[]
+  SavedStartup   SavedStartup[]
+  JobBoardSaved  JobBoardSaved[]
+  ToolUpvote     ToolUpvote[]
+  interests      WebUserInterest[]
+  interactions   WebUserInteraction[]
 
   @@index([deactivatedAt])
   @@index([cityId])
@@ -1645,16 +1643,16 @@ model newsletter_testimonials {
 }
 
 model City {
-  id        String   @id @default(dbgenerated("gen_random_uuid()"))
-  slug      String   @unique
+  id        String    @id @default(dbgenerated("gen_random_uuid()"))
+  slug      String    @unique
   name      String
   state     String?
   country   String
   latitude  Float?
   longitude Float?
-  aliases   String[] @default([])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  aliases   String[]  @default([])
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   Startup   Startup[]
   WebUser   WebUser[]
 
@@ -1920,7 +1918,6 @@ enum StartupStage {
   PUBLIC
 }
 
-
 enum ToolApprovalStatus {
   PENDING
   APPROVED
@@ -1947,13 +1944,15 @@ enum ReportStatus {
 
 model ContentReport {
   id            String       @id @default(dbgenerated("gen_random_uuid()"))
-  entityType    String       // STARTUP | TOOL | EVENT
+  entityType    String // STARTUP | TOOL | EVENT
   entityId      String
   entityName    String
   entitySlug    String
-  reportType    String       // incorrect_info | duplicate | trademark | copyright | broken_links | spam | other
+  reportType    String // incorrect_info | duplicate | trademark | copyright | broken_links | spam | other
   description   String
   reporterEmail String?
+  /// Hash of reporter IP + entity, so one person can't count as several reports.
+  reporterHash  String?
   status        ReportStatus @default(PENDING)
   adminNotes    String?
   resolvedAt    DateTime?
@@ -2003,13 +2002,13 @@ enum SupportTicketPortal {
 }
 
 model SupportTicket {
-  id             String                @id @default(dbgenerated("gen_random_uuid()"))
-  ticketNumber   String                @unique
+  id             String                 @id @default(dbgenerated("gen_random_uuid()"))
+  ticketNumber   String                 @unique
   subject        String
   description    String
-  category       SupportTicketCategory @default(OTHER)
-  priority       SupportTicketPriority @default(MEDIUM)
-  status         SupportTicketStatus   @default(OPEN)
+  category       SupportTicketCategory  @default(OTHER)
+  priority       SupportTicketPriority  @default(MEDIUM)
+  status         SupportTicketStatus    @default(OPEN)
   portal         SupportTicketPortal
   submitterType  String
   submitterId    String
@@ -2019,8 +2018,8 @@ model SupportTicket {
   resolvedAt     DateTime?
   resolvedBy     String?
   closedAt       DateTime?
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
   messages       SupportTicketMessage[]
 
   @@index([status])
@@ -2054,14 +2053,14 @@ model SupportTicketMessage {
 // ============================================================
 
 model EmailOtp {
-  id          String   @id @default(dbgenerated("gen_random_uuid()"))
-  email       String
-  code        String   // 6-digit hashed code
-  purpose     String   @default("signup") // signup | login | verify | workspace_link
-  attempts    Int      @default(0) // max 3 attempts before code is invalidated
-  verified    Boolean  @default(false)
-  expiresAt   DateTime // 10 minutes from creation
-  createdAt   DateTime @default(now())
+  id        String   @id @default(dbgenerated("gen_random_uuid()"))
+  email     String
+  code      String // 6-digit hashed code
+  purpose   String   @default("signup") // signup | login | verify | workspace_link
+  attempts  Int      @default(0) // max 3 attempts before code is invalidated
+  verified  Boolean  @default(false)
+  expiresAt DateTime // 10 minutes from creation
+  createdAt DateTime @default(now())
 
   @@index([email, purpose, verified])
   @@index([expiresAt])
@@ -2078,63 +2077,62 @@ enum LastWorkspace {
 }
 
 model UnifiedUser {
-  id                   String         @id @default(dbgenerated("gen_random_uuid()"))
-  email                String         @unique
-  name                 String
-  passwordHash         String?
-  googleId             String?        @unique
-  avatar               String?
-  emailVerified        Boolean        @default(false)
-  verifyToken          String?        @unique
+  id            String  @id @default(dbgenerated("gen_random_uuid()"))
+  email         String  @unique
+  name          String
+  passwordHash  String?
+  googleId      String? @unique
+  avatar        String?
+  emailVerified Boolean @default(false)
+  verifyToken   String? @unique
 
   // Smart routing
-  lastWorkspace        LastWorkspace  @default(COMMUNITY)
+  lastWorkspace LastWorkspace @default(COMMUNITY)
 
   // 2FA
-  twoFactorEnabled     Boolean        @default(false)
+  twoFactorEnabled     Boolean  @default(false)
   twoFactorSecret      String?
   twoFactorBackupCodes String[]
-  twoFactorInherited   Boolean        @default(false) // true = 2FA was linked from founder account
+  twoFactorInherited   Boolean  @default(false) // true = 2FA was linked from founder account
 
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
-  sessions             UnifiedSession[]
-  linkLogs             WorkspaceLinkLog[]
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  sessions  UnifiedSession[]
+  linkLogs  WorkspaceLinkLog[]
 
   // Inverse relations (workspace profiles point to this user)
-  founderProfile       FounderUser?   @relation("FounderToUnified")
-  organizerProfile     EventOrganizer? @relation("OrganizerToUnified")
-
+  founderProfile   FounderUser?    @relation("FounderToUnified")
+  organizerProfile EventOrganizer? @relation("OrganizerToUnified")
 }
 
 model UnifiedSession {
-  id        String      @id @default(dbgenerated("gen_random_uuid()"))
+  id        String   @id @default(dbgenerated("gen_random_uuid()"))
   userId    String
-  token     String      @unique
+  token     String   @unique
   expiresAt DateTime
   ipAddress String?
   userAgent String?
-  source    String      @default("direct") // direct | migrated_founder | migrated_organizer | migrated_web
-  createdAt DateTime    @default(now())
+  source    String   @default("direct") // direct | migrated_founder | migrated_organizer | migrated_web
+  createdAt DateTime @default(now())
 
-  user      UnifiedUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user UnifiedUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
 }
 
 model WorkspaceLinkLog {
-  id            String      @id @default(dbgenerated("gen_random_uuid()"))
-  userId        String
-  workspace     String      // "founder" | "organizer"
-  action        String      // "created_fresh" | "linked_existing" | "auto_migrated"
-  linkedId      String
-  emailMatch    Boolean     @default(true)
-  verified      Boolean     @default(false)
-  ipAddress     String?
-  createdAt     DateTime    @default(now())
+  id         String   @id @default(dbgenerated("gen_random_uuid()"))
+  userId     String
+  workspace  String // "founder" | "organizer"
+  action     String // "created_fresh" | "linked_existing" | "auto_migrated"
+  linkedId   String
+  emailMatch Boolean  @default(true)
+  verified   Boolean  @default(false)
+  ipAddress  String?
+  createdAt  DateTime @default(now())
 
-  user          UnifiedUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user UnifiedUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([createdAt])
@@ -2142,14 +2140,14 @@ model WorkspaceLinkLog {
 
 // Pending workspace link requests (for high-value accounts requiring confirmation)
 model WorkspaceLinkRequest {
-  id            String      @id @default(dbgenerated("gen_random_uuid()"))
-  userId        String
-  workspace     String      // "founder" | "organizer"
-  targetId      String      // FounderUser.id or EventOrganizer.id to link
-  token         String      @unique
-  status        String      @default("PENDING") // PENDING | CONFIRMED | EXPIRED | REJECTED
-  expiresAt     DateTime    // 72 hours TTL
-  createdAt     DateTime    @default(now())
+  id        String   @id @default(dbgenerated("gen_random_uuid()"))
+  userId    String
+  workspace String // "founder" | "organizer"
+  targetId  String // FounderUser.id or EventOrganizer.id to link
+  token     String   @unique
+  status    String   @default("PENDING") // PENDING | CONFIRMED | EXPIRED | REJECTED
+  expiresAt DateTime // 72 hours TTL
+  createdAt DateTime @default(now())
 
   @@index([token])
   @@index([userId])
@@ -2187,56 +2185,93 @@ enum FounderTeamRole {
 }
 
 model EventOrganizer {
-  id               String               @id @default(dbgenerated("gen_random_uuid()"))
-  email            String               @unique
-  name             String
-  passwordHash     String?
-  googleId         String?              @unique
-  company          String?
-  phone            String?
-  avatar           String?
-  bio              String?
-  website          String?
-  linkedin         String?
-  emailVerified    Boolean              @default(false)
-  verifyToken      String?              @unique
-  companyDomain           String?
-  companyEmail            String?
-  companyEmailVerified    Boolean        @default(false)
-  companyEmailVerifiedAt  DateTime?
-  status           EventOrganizerStatus @default(PENDING_VERIFICATION)
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
-  lastLoginAt      DateTime?
+  id                     String               @id @default(dbgenerated("gen_random_uuid()"))
+  email                  String               @unique
+  name                   String
+  passwordHash           String?
+  googleId               String?              @unique
+  company                String?
+  phone                  String?
+  avatar                 String?
+  bio                    String?
+  website                String?
+  linkedin               String?
+  emailVerified          Boolean              @default(false)
+  verifyToken            String?              @unique
+  companyDomain          String?
+  companyEmail           String?
+  companyEmailVerified   Boolean              @default(false)
+  companyEmailVerifiedAt DateTime?
+  status                 EventOrganizerStatus @default(PENDING_VERIFICATION)
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  lastLoginAt            DateTime?
 
   // 2FA
-  twoFactorEnabled   Boolean            @default(false)
-  twoFactorSecret    String?
+  twoFactorEnabled     Boolean   @default(false)
+  twoFactorSecret      String?
   twoFactorBackupCodes String[]
-  failedLoginAttempts Int               @default(0)
-  lockedUntil         DateTime?
+  failedLoginAttempts  Int       @default(0)
+  lockedUntil          DateTime?
 
   // Email change
   pendingEmail           String?
-  emailChangeToken       String?        @unique
+  emailChangeToken       String?   @unique
   emailChangeTokenExpiry DateTime?
 
   // Onboarding
-  onboardingCompleted Boolean            @default(false)
-  onboardingStep      Int                @default(0)
+  onboardingCompleted Boolean @default(false)
+  onboardingStep      Int     @default(0)
 
   // Account lifecycle
-  deactivatedAt    DateTime?
-  deletedAt        DateTime?
+  deactivatedAt DateTime?
+  deletedAt     DateTime?
+
+  // Plan (Free / Pro). A Pro plan past planExpiresAt counts as Free.
+  plan                OrganizerPlan @default(FREE)
+  planExpiresAt       DateTime?
+  planReminderSentAt  DateTime?
+  billingName         String?
+  billingGstin        String?
+  billingAddress      String?
+  billingState        String?
+  /// Billing profile (invoices): GST | BUSINESS (unregistered) | INDIVIDUAL.
+  billingType         String?
+  billingAddressLine1 String?
+  billingAddressLine2 String?
+  billingCity         String?
+  billingPostalCode   String?
+  billingCountry      String?       @default("IN")
+  /// Customer's PO / reference number, printed on invoices.
+  billingPoNumber     String?
+  /// Where invoices, receipts and credit notes are emailed (plus up to 3 CC).
+  billingEmail        String?
+  billingCcEmails     String[]      @default([])
+  /// The free Event Boost on the first published event.
+  freeBoostUsedAt     DateTime?
+  planGraceNoticeAt   DateTime?
+
+  // Payouts for paid tickets (Razorpay Route linked account). Bank details go to Razorpay only.
+  payoutAccountId   String?
+  payoutProductId   String?
+  /// NOT_STARTED | UNDER_REVIEW | NEEDS_CLARIFICATION | ACTIVATED | SUSPENDED
+  payoutStatus      String?
+  payoutBankLast4   String?
+  payoutBeneficiary String?
+  payoutNote        String?
+  payoutUpdatedAt   DateTime?
 
   // Unified identity link
-  unifiedUserId    String?              @unique
-  unifiedUser      UnifiedUser?         @relation("OrganizerToUnified", fields: [unifiedUserId], references: [id], onDelete: SetNull)
+  unifiedUserId String?      @unique
+  unifiedUser   UnifiedUser? @relation("OrganizerToUnified", fields: [unifiedUserId], references: [id], onDelete: SetNull)
 
   // Relations
-  events           Event[]
-  sessions         EventOrganizerSession[]
-  teamMembers      EventTeamMember[]
+  events      Event[]
+  sessions    EventOrganizerSession[]
+  teamMembers EventTeamMember[]
+  widgets     EmbedWidget[]
+  payments    OrganizerPayment[]
+  campaigns   EventEmailCampaign[]
 
   @@index([status])
   @@index([deactivatedAt])
@@ -2257,24 +2292,81 @@ model EventOrganizerSession {
 }
 
 // ============================================================
+// EMBED WIDGETS
+// ============================================================
+
+model EmbedWidget {
+  id                String    @id @default(dbgenerated("gen_random_uuid()"))
+  organizerId       String
+  name              String
+  isDefault         Boolean   @default(false)
+  layout            String    @default("auto") // "auto" | "grid" | "list" | "compact"
+  accentColor       String    @default("#6366f1")
+  darkMode          String    @default("auto") // "auto" | "light" | "dark"
+  cornerStyle       String    @default("rounded") // "sharp" | "rounded" | "pill"
+  buttonText        String    @default("Register")
+  heading           String?
+  subheading        String?
+  headingAlign      String    @default("left") // "left" | "center"
+  headingSize       String    @default("md") // "sm" | "md" | "lg"
+  fontFamily        String    @default("system") // see EMBED_FONTS
+  textScale         String    @default("md") // "sm" | "md" | "lg"
+  showCover         Boolean   @default(true)
+  showPrice         Boolean   @default(true)
+  showSpotsLeft     Boolean   @default(true)
+  showAttendeeCount Boolean   @default(true)
+  showCategory      Boolean   @default(true)
+  buttonSize        String    @default("md") // "sm" | "md" | "lg"
+  buttonStyle       String    @default("filled") // "filled" | "outline" | "soft"
+  cardStyle         String    @default("bordered") // "bordered" | "elevated" | "flat"
+  spacing           String    @default("comfortable") // "compact" | "comfortable" | "spacious"
+  showPast          Boolean   @default(false)
+  registrationMode  String    @default("inline") // "inline" | "page"
+  showPoweredBy     Boolean   @default(true)
+  categories        String[]
+  eventIds          String[]
+  maxEvents         Int       @default(10)
+  allowedDomains    String[]
+  active            Boolean   @default(true)
+  // Setup funnel + install detection
+  platform          String?
+  setupStartedAt    DateTime?
+  codeCopiedAt      DateTime?
+  markedInstalledAt DateTime?
+  firstSeenAt       DateTime?
+  firstSeenHost     String?
+  lastSeenAt        DateTime?
+  lastSeenHost      String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  registrations EventRegistration[]
+
+  organizer EventOrganizer @relation(fields: [organizerId], references: [id], onDelete: Cascade)
+
+  @@index([organizerId])
+  @@index([active])
+}
+
+// ============================================================
 // TEAM MANAGEMENT
 // ============================================================
 
 model EventTeamMember {
-  id            String           @id @default(dbgenerated("gen_random_uuid()"))
-  organizerId   String
-  email         String
-  role          TeamRole         @default(STAFF)
-  status        TeamMemberStatus @default(PENDING)
-  inviteToken   String           @unique
-  expiresAt     DateTime
-  passwordHash  String?
-  acceptedAt    DateTime?
-  createdAt     DateTime         @default(now())
+  id           String           @id @default(dbgenerated("gen_random_uuid()"))
+  organizerId  String
+  email        String
+  role         TeamRole         @default(STAFF)
+  status       TeamMemberStatus @default(PENDING)
+  inviteToken  String           @unique
+  expiresAt    DateTime
+  passwordHash String?
+  acceptedAt   DateTime?
+  createdAt    DateTime         @default(now())
 
-  organizer     EventOrganizer   @relation(fields: [organizerId], references: [id], onDelete: Cascade)
-  assignments   EventTeamAssignment[]
-  activityLogs  TeamActivityLog[]
+  organizer    EventOrganizer        @relation(fields: [organizerId], references: [id], onDelete: Cascade)
+  assignments  EventTeamAssignment[]
+  activityLogs TeamActivityLog[]
 
   @@unique([organizerId, email])
   @@index([email])
@@ -2283,12 +2375,12 @@ model EventTeamMember {
 }
 
 model EventTeamAssignment {
-  id            String          @id @default(dbgenerated("gen_random_uuid()"))
-  teamMemberId  String
-  eventId       String
+  id           String @id @default(dbgenerated("gen_random_uuid()"))
+  teamMemberId String
+  eventId      String
 
-  teamMember    EventTeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
-  event         Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  teamMember EventTeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+  event      Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@unique([teamMemberId, eventId])
   @@index([teamMemberId])
@@ -2296,17 +2388,17 @@ model EventTeamAssignment {
 }
 
 model TeamActivityLog {
-  id            String          @id @default(dbgenerated("gen_random_uuid()"))
-  teamMemberId  String?
-  organizerId   String?
-  eventId       String?
-  action        String
-  targetName    String?
-  targetEmail   String?
-  metadata      String?
-  createdAt     DateTime        @default(now())
+  id           String   @id @default(dbgenerated("gen_random_uuid()"))
+  teamMemberId String?
+  organizerId  String?
+  eventId      String?
+  action       String
+  targetName   String?
+  targetEmail  String?
+  metadata     String?
+  createdAt    DateTime @default(now())
 
-  teamMember    EventTeamMember? @relation(fields: [teamMemberId], references: [id], onDelete: SetNull)
+  teamMember EventTeamMember? @relation(fields: [teamMemberId], references: [id], onDelete: SetNull)
 
   @@index([teamMemberId, createdAt])
   @@index([organizerId, createdAt])
@@ -2314,21 +2406,21 @@ model TeamActivityLog {
 }
 
 model FounderTeamMember {
-  id            String           @id @default(cuid())
-  founderId     String
-  email         String
-  name          String?
-  role          FounderTeamRole  @default(VIEWER)
-  status        TeamMemberStatus @default(PENDING)
-  inviteToken   String?          @unique
-  expiresAt     DateTime?
-  passwordHash  String?
-  acceptedAt    DateTime?
-  lastActiveAt  DateTime?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id           String           @id @default(cuid())
+  founderId    String
+  email        String
+  name         String?
+  role         FounderTeamRole  @default(VIEWER)
+  status       TeamMemberStatus @default(PENDING)
+  inviteToken  String?          @unique
+  expiresAt    DateTime?
+  passwordHash String?
+  acceptedAt   DateTime?
+  lastActiveAt DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
 
-  founder       FounderUser      @relation(fields: [founderId], references: [id], onDelete: Cascade)
+  founder FounderUser @relation(fields: [founderId], references: [id], onDelete: Cascade)
 
   @@unique([founderId, email])
   @@index([email])
@@ -2356,11 +2448,11 @@ model FounderMilestone {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  founder            FounderUser        @relation(fields: [founderId], references: [id], onDelete: Cascade)
-  startup            Startup            @relation(fields: [startupId], references: [id], onDelete: Cascade)
-  activityLogs       ContentActivityLog[]
-  media              ContentMedia[]
-  reports            FounderContentReport[]
+  founder      FounderUser            @relation(fields: [founderId], references: [id], onDelete: Cascade)
+  startup      Startup                @relation(fields: [startupId], references: [id], onDelete: Cascade)
+  activityLogs ContentActivityLog[]
+  media        ContentMedia[]
+  reports      FounderContentReport[]
 
   @@index([startupId, type])
   @@index([startupId, date])
@@ -2370,20 +2462,20 @@ model FounderMilestone {
 }
 
 model ContentActivityLog {
-  id            String        @id @default(cuid())
-  contentId     String?
-  milestoneId   String?
-  startupId     String
-  actorId       String
-  actorType     String        @default("FOUNDER")
-  action        ContentAction
-  metadata      Json?
-  createdAt     DateTime      @default(now())
+  id          String        @id @default(cuid())
+  contentId   String?
+  milestoneId String?
+  startupId   String
+  actorId     String
+  actorType   String        @default("FOUNDER")
+  action      ContentAction
+  metadata    Json?
+  createdAt   DateTime      @default(now())
 
-  article       Article?           @relation(fields: [contentId], references: [id], onDelete: SetNull)
-  milestone     FounderMilestone?  @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
-  startup       Startup            @relation(fields: [startupId], references: [id], onDelete: Cascade)
-  actor         FounderUser        @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  article   Article?          @relation(fields: [contentId], references: [id], onDelete: SetNull)
+  milestone FounderMilestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  startup   Startup           @relation(fields: [startupId], references: [id], onDelete: Cascade)
+  actor     FounderUser       @relation(fields: [actorId], references: [id], onDelete: Cascade)
 
   @@index([contentId, createdAt])
   @@index([milestoneId, createdAt])
@@ -2392,25 +2484,25 @@ model ContentActivityLog {
 }
 
 model ContentMedia {
-  id            String            @id @default(cuid())
-  contentId     String?
-  milestoneId   String?
-  startupId     String
-  uploadedBy    String
-  type          String            @default("IMAGE")
-  url           String
-  thumbnailUrl  String?
-  fileName      String
-  fileSize      Int               @default(0)
-  mimeType      String
-  alt           String?
-  caption       String?
-  sortOrder     Int               @default(0)
-  createdAt     DateTime          @default(now())
+  id           String   @id @default(cuid())
+  contentId    String?
+  milestoneId  String?
+  startupId    String
+  uploadedBy   String
+  type         String   @default("IMAGE")
+  url          String
+  thumbnailUrl String?
+  fileName     String
+  fileSize     Int      @default(0)
+  mimeType     String
+  alt          String?
+  caption      String?
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
 
-  article       Article?          @relation(fields: [contentId], references: [id], onDelete: SetNull)
-  milestone     FounderMilestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
-  startup       Startup           @relation(fields: [startupId], references: [id], onDelete: Cascade)
+  article   Article?          @relation(fields: [contentId], references: [id], onDelete: SetNull)
+  milestone FounderMilestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  startup   Startup           @relation(fields: [startupId], references: [id], onDelete: Cascade)
 
   @@index([contentId])
   @@index([milestoneId])
@@ -2418,20 +2510,20 @@ model ContentMedia {
 }
 
 model FounderContentReport {
-  id            String            @id @default(cuid())
-  contentId     String?
-  milestoneId   String?
-  reporterType  String            @default("ANONYMOUS")
-  reporterId    String?
-  reason        ReportReason
-  description   String?
-  status        ReportStatus      @default(PENDING)
-  reviewedBy    String?
-  reviewedAt    DateTime?
-  createdAt     DateTime          @default(now())
+  id           String       @id @default(cuid())
+  contentId    String?
+  milestoneId  String?
+  reporterType String       @default("ANONYMOUS")
+  reporterId   String?
+  reason       ReportReason
+  description  String?
+  status       ReportStatus @default(PENDING)
+  reviewedBy   String?
+  reviewedAt   DateTime?
+  createdAt    DateTime     @default(now())
 
-  article       Article?          @relation(fields: [contentId], references: [id], onDelete: SetNull)
-  milestone     FounderMilestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  article   Article?          @relation(fields: [contentId], references: [id], onDelete: SetNull)
+  milestone FounderMilestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
 
   @@index([contentId])
   @@index([milestoneId])
@@ -2463,7 +2555,9 @@ enum EventStatus {
   DRAFT
   PUBLISHED
   CANCELLED
+  POSTPONED
   COMPLETED
+  ARCHIVED
 }
 
 enum EventVisibility {
@@ -2474,6 +2568,7 @@ enum EventVisibility {
 
 enum RegistrationStatus {
   CONFIRMED
+  PENDING_APPROVAL
   PENDING_PAYMENT
   WAITLISTED
   CANCELLED
@@ -2501,60 +2596,73 @@ enum EventCampaignStatus {
 }
 
 model Event {
-  id                       String          @id @default(dbgenerated("gen_random_uuid()"))
-  slug                     String          @unique
-  shortCode                String          @unique  // Immutable 6-char code for short URLs (/e/KX7M4P)
-  organizerId              String
-  title                    String
-  subtitle                 String?
-  category                 EventCategory
-  format                   EventFormat
-  status                   EventStatus     @default(DRAFT)
+  id                          String          @id @default(dbgenerated("gen_random_uuid()"))
+  slug                        String          @unique
+  shortCode                   String          @unique // Immutable 6-char code for short URLs (/e/KX7M4P)
+  organizerId                 String
+  title                       String
+  subtitle                    String?
+  category                    EventCategory
+  format                      EventFormat
+  status                      EventStatus     @default(DRAFT)
   // Date & Time
-  startAt                  DateTime
-  endAt                    DateTime
-  timezone                 String          @default("Asia/Kolkata")
+  startAt                     DateTime
+  endAt                       DateTime
+  timezone                    String          @default("Asia/Kolkata")
   // Location (in-person/hybrid)
-  venueName                String?
-  address                  String?
-  latitude                 Float?
-  longitude                Float?
+  venueName                   String?
+  address                     String?
+  latitude                    Float?
+  longitude                   Float?
   // Virtual (virtual/hybrid)
-  meetingLink              String?
-  revealLinkAfterRegistration Boolean      @default(false)
+  meetingLink                 String?
+  revealLinkAfterRegistration Boolean         @default(false)
   // Content
-  coverImageUrl            String?
-  galleryImageUrls         String[]        @default([])
-  description              Json?           // Rich text (Tiptap JSON)
+  coverImageUrl               String?
+  galleryImageUrls            String[]        @default([])
+  description                 Json? // Rich text (Tiptap JSON)
   // Capacity & Registration
-  capacity                 Int?
-  registrationCount        Int             @default(0)
-  visibility               EventVisibility @default(PUBLIC)
-  registrationDeadline     DateTime?
-  approvalRequired         Boolean         @default(false)
+  capacity                    Int?
+  /// Featured on Udyaibase Events until this time (Event Boost or Pro plan).
+  featuredUntil               DateTime?
+  /// One-time Event Boost purchased: higher registration limit for this event.
+  boostedAt                   DateTime?
+  /// First time registrations hit the host plan limit; the host is emailed once. Cleared when the limit rises.
+  planLimitNotifiedAt         DateTime?
+  /// Promo emails left that came with an Event Boost.
+  promoCredits                Int             @default(0)
+  registrationCount           Int             @default(0)
+  visibility                  EventVisibility @default(PUBLIC)
+  registrationDeadline        DateTime?
+  approvalRequired            Boolean         @default(false)
   // SEO & Sharing
-  metaTitle                String?
-  metaDescription          String?
-  socialImageUrl           String?
+  metaTitle                   String?
+  metaDescription             String?
+  socialImageUrl              String?
+  // External / scraped event
+  sourceUrl                   String? // Original URL for scraped events; null = native Udyaibase event
+  sourceName                  String? // e.g. "Luma", "Eventbrite", "Meetup"
   // Publishing
-  publishAt                DateTime?       // Scheduled publish
-  publishedAt              DateTime?
+  publishAt                   DateTime? // Scheduled publish
+  publishedAt                 DateTime?
   // Soft delete
-  deletedAt                DateTime?
-  createdAt                DateTime        @default(now())
-  updatedAt                DateTime        @updatedAt
+  deletedAt                   DateTime?
+  createdAt                   DateTime        @default(now())
+  updatedAt                   DateTime        @updatedAt
 
   // Relations
-  organizer                EventOrganizer  @relation(fields: [organizerId], references: [id])
-  speakers                 EventSpeaker[]
-  agendaItems              EventAgendaItem[]
-  ticketTiers              EventTicketTier[]
-  customQuestions           EventCustomQuestion[]
-  registrations            EventRegistration[]
-  tags                     EventTagMapping[]
-  campaigns                EventEmailCampaign[]
-  slugHistory              EventSlugHistory[]
-  teamAssignments          EventTeamAssignment[]
+  organizer       EventOrganizer        @relation(fields: [organizerId], references: [id])
+  speakers        EventSpeaker[]
+  agendaItems     EventAgendaItem[]
+  ticketTiers     EventTicketTier[]
+  customQuestions EventCustomQuestion[]
+  registrations   EventRegistration[]
+  tags            EventTagMapping[]
+  campaigns       EventEmailCampaign[]
+  slugHistory     EventSlugHistory[]
+  teamAssignments EventTeamAssignment[]
+
+  siteAnnouncements SiteAnnouncement[]
 
   @@index([status, visibility])
   @@index([startAt])
@@ -2563,19 +2671,17 @@ model Event {
   @@index([format])
   @@index([latitude, longitude])
   @@index([deletedAt])
-
-  siteAnnouncements SiteAnnouncement[]
 }
 
 model EventSlugHistory {
-  id         String   @id @default(dbgenerated("gen_random_uuid()"))
-  eventId    String
-  oldSlug    String   @unique  // Prevents reuse of old slugs by other events
-  newSlug    String
-  changedBy  String             // Organizer ID who made the change
-  changedAt  DateTime @default(now())
+  id        String   @id @default(dbgenerated("gen_random_uuid()"))
+  eventId   String
+  oldSlug   String   @unique // Prevents reuse of old slugs by other events
+  newSlug   String
+  changedBy String // Organizer ID who made the change
+  changedAt DateTime @default(now())
 
-  event      Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@index([eventId])
 }
@@ -2593,46 +2699,46 @@ model EventSpeaker {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event       Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
   agendaItems EventAgendaItem[]
 
   @@index([eventId])
 }
 
 model EventAgendaItem {
-  id          String        @id @default(dbgenerated("gen_random_uuid()"))
+  id          String   @id @default(dbgenerated("gen_random_uuid()"))
   eventId     String
   speakerId   String?
-  dayNumber   Int           @default(1)
-  startTime   String        // "09:00" format for flexible time display
-  endTime     String        // "10:00"
+  dayNumber   Int      @default(1)
+  startTime   String // "09:00" format for flexible time display
+  endTime     String // "10:00"
   title       String
   description String?
-  sortOrder   Int           @default(0)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  event       Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  speaker     EventSpeaker? @relation(fields: [speakerId], references: [id], onDelete: SetNull)
+  event   Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  speaker EventSpeaker? @relation(fields: [speakerId], references: [id], onDelete: SetNull)
 
   @@index([eventId, dayNumber])
 }
 
 model EventTicketTier {
-  id           String         @id @default(dbgenerated("gen_random_uuid()"))
-  eventId      String
-  name         String
-  priceCents   Int            @default(0) // 0 = free
-  quantity     Int?           // null = unlimited
-  soldCount    Int            @default(0)
-  saleStart    DateTime?
-  saleEnd      DateTime?
-  tierType     TicketTierType @default(REGULAR)
-  description  String?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  id          String         @id @default(dbgenerated("gen_random_uuid()"))
+  eventId     String
+  name        String
+  priceCents  Int            @default(0) // 0 = free
+  quantity    Int? // null = unlimited
+  soldCount   Int            @default(0)
+  saleStart   DateTime?
+  saleEnd     DateTime?
+  tierType    TicketTierType @default(REGULAR)
+  description String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
-  event        Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event         Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
   registrations EventRegistration[]
 
   @@index([eventId])
@@ -2643,67 +2749,89 @@ model EventCustomQuestion {
   eventId      String
   questionText String
   questionType EventCustomQuestionType @default(TEXT)
-  options      Json?                   // For SELECT type: ["Option A", "Option B"]
+  options      Json? // For SELECT type: ["Option A", "Option B"]
   required     Boolean                 @default(false)
   sortOrder    Int                     @default(0)
   createdAt    DateTime                @default(now())
 
-  event        Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  answers      EventRegistrationAnswer[]
+  event   Event                     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  answers EventRegistrationAnswer[]
 
   @@index([eventId])
 }
 
 model EventRegistration {
-  id                   String             @id @default(dbgenerated("gen_random_uuid()"))
-  eventId              String
-  userId               String?            // nullable for guest registrations
-  ticketTierId         String?
+  id                    String             @id @default(dbgenerated("gen_random_uuid()"))
+  eventId               String
+  userId                String? // nullable for guest registrations
+  ticketTierId          String?
   // Guest info (for non-logged-in registrants)
-  guestName            String?
-  guestEmail           String?
-  guestPhone           String?
-  guestCompany         String?
-  guestRole            String?
-  guestOccupation      String?
+  guestName             String?
+  guestEmail            String?
+  guestPhone            String?
+  guestCompany          String?
+  guestRole             String?
+  guestOccupation       String?
   // Consent flags
-  whatsappConsent      Boolean            @default(false)
-  registrationSource   String             @default("WEBSITE") // WEBSITE | EVENT_QR | WALK_IN
+  whatsappConsent       Boolean            @default(false)
+  registrationSource    String             @default("WEBSITE") // WEBSITE | EMBED | EVENT_QR | WALK_IN
+  // Embed attribution
+  referrerUrl           String?
+  embedWidgetId         String?
+  utmSource             String?
+  utmMedium             String?
+  utmCampaign           String?
   // Status & tokens
-  status               RegistrationStatus @default(CONFIRMED)
-  qrToken              String             @unique // 16-char base62
-  // Payment (stub for future)
+  status                RegistrationStatus @default(CONFIRMED)
+  qrToken               String             @unique // 16-char base62
+  // Payment (paid tickets via Razorpay Route)
   stripePaymentIntentId String?
-  razorpayOrderId      String?
+  razorpayOrderId       String?
+  razorpayPaymentId     String?
+  /// PENDING | PAID | FAILED | EXPIRED | REFUNDED
+  paymentStatus         String?
+  amountPaise           Int?
+  /// Udyaibase's share; the rest is transferred to the host's linked account.
+  platformFeePaise      Int?
+  /// Unpaid seat hold ends here.
+  paymentExpiresAt      DateTime?
+  /// Why this person was waitlisted: "plan_limit" (host plan cap) or "capacity" (host-set capacity).
+  waitlistReason        String?
+  paidAt                DateTime?
+  refundId              String?
+  refundedAt            DateTime?
   // Timestamps
-  registeredAt         DateTime           @default(now())
-  checkedInAt          DateTime?
-  cancelledAt          DateTime?
-  deletedAt            DateTime?
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
+  registeredAt          DateTime           @default(now())
+  checkedInAt           DateTime?
+  cancelledAt           DateTime?
+  deletedAt             DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
 
   // Relations
-  event                Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  ticketTier           EventTicketTier?   @relation(fields: [ticketTierId], references: [id], onDelete: SetNull)
-  answers              EventRegistrationAnswer[]
+  event       Event                     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  ticketTier  EventTicketTier?          @relation(fields: [ticketTierId], references: [id], onDelete: SetNull)
+  embedWidget EmbedWidget?              @relation(fields: [embedWidgetId], references: [id], onDelete: SetNull)
+  answers     EventRegistrationAnswer[]
 
   @@unique([eventId, guestEmail]) // Prevent duplicate registrations by email per event
   @@index([eventId])
+  @@index([embedWidgetId])
   @@index([userId])
   @@index([qrToken])
   @@index([status])
   @@index([deletedAt])
+  @@index([razorpayOrderId])
 }
 
 model EventRegistrationAnswer {
-  id             String              @id @default(dbgenerated("gen_random_uuid()"))
+  id             String @id @default(dbgenerated("gen_random_uuid()"))
   registrationId String
   questionId     String
   answerText     String
 
-  registration   EventRegistration   @relation(fields: [registrationId], references: [id], onDelete: Cascade)
-  question       EventCustomQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  registration EventRegistration   @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  question     EventCustomQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@index([registrationId])
   @@index([questionId])
@@ -2714,13 +2842,13 @@ model EventRegistrationAnswer {
 // ============================================================
 
 model EventTag {
-  id            String           @id @default(dbgenerated("gen_random_uuid()"))
-  name          String           @unique  // Display name: "LLM"
-  canonicalName String           // Normalized: "large-language-models"
-  category      String?          // "technology", "domain", "format"
-  createdAt     DateTime         @default(now())
+  id            String   @id @default(dbgenerated("gen_random_uuid()"))
+  name          String   @unique // Display name: "LLM"
+  canonicalName String // Normalized: "large-language-models"
+  category      String? // "technology", "domain", "format"
+  createdAt     DateTime @default(now())
 
-  eventMappings  EventTagMapping[]
+  eventMappings       EventTagMapping[]
   subscriberInterests EventSubscriberInterest[]
 
   @@index([canonicalName])
@@ -2728,11 +2856,11 @@ model EventTag {
 }
 
 model EventTagMapping {
-  eventId  String
-  tagId    String
+  eventId String
+  tagId   String
 
-  event    Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  tag      EventTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  event Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  tag   EventTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([eventId, tagId])
 }
@@ -2742,16 +2870,16 @@ model EventSubscriber {
   email               String    @unique
   name                String?
   // Location for geo-targeting
-  locationCity        String?   // "Hyderabad, India"
+  locationCity        String? // "Hyderabad, India"
   locationLat         Float?
   locationLng         Float?
-  locationCountryCode String?   // "IN"
-  locationRegion      String?   // "Telangana"
+  locationCountryCode String? // "IN"
+  locationRegion      String? // "Telangana"
   // Consent & subscription
   subscribed          Boolean   @default(true)
   consentAt           DateTime?
-  consentSource       String?   // "event_registration:<event_id>" or "website_form"
-  consentText         String?   // Exact checkbox copy they agreed to
+  consentSource       String? // "event_registration:<event_id>" or "website_form"
+  consentText         String? // Exact checkbox copy they agreed to
   consentVersion      Int       @default(1)
   unsubscribedAt      DateTime?
   // Metadata
@@ -2759,8 +2887,8 @@ model EventSubscriber {
   updatedAt           DateTime  @updatedAt
 
   // Relations
-  interests           EventSubscriberInterest[]
-  campaignRecipients  EventCampaignRecipient[]
+  interests          EventSubscriberInterest[]
+  campaignRecipients EventCampaignRecipient[]
 
   @@index([subscribed])
   @@index([locationLat, locationLng])
@@ -2771,8 +2899,8 @@ model EventSubscriberInterest {
   subscriberId String
   tagId        String
 
-  subscriber   EventSubscriber @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
-  tag          EventTag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  subscriber EventSubscriber @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+  tag        EventTag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([subscriberId, tagId])
 }
@@ -2782,39 +2910,45 @@ model EventSubscriberInterest {
 // ============================================================
 
 model EventEmailCampaign {
-  id              String              @id @default(dbgenerated("gen_random_uuid()"))
-  eventId         String?             // null for non-event campaigns
-  subject         String
-  bodyHtml        String?
-  bodyJson        Json?               // React Email template data
-  audienceQuery   Json?               // Stored segmentation filters
-  status          EventCampaignStatus @default(DRAFT)
-  scheduledAt     DateTime?
-  sentAt          DateTime?
-  recipientCount  Int                 @default(0)
-  openCount       Int                 @default(0)
-  clickCount      Int                 @default(0)
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  id             String              @id @default(dbgenerated("gen_random_uuid()"))
+  eventId        String? // null for non-event campaigns
+  subject        String
+  bodyHtml       String?
+  bodyJson       Json? // React Email template data
+  audienceQuery  Json? // Stored segmentation filters
+  /// Host who sent it (host promo campaigns); null for Udyaibase's own campaigns.
+  organizerId    String?
+  /// "PLAN" (monthly Pro allowance) or "BOOST" (credit from an Event Boost).
+  creditSource   String?
+  status         EventCampaignStatus @default(DRAFT)
+  scheduledAt    DateTime?
+  sentAt         DateTime?
+  recipientCount Int                 @default(0)
+  openCount      Int                 @default(0)
+  clickCount     Int                 @default(0)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 
-  event           Event?              @relation(fields: [eventId], references: [id], onDelete: SetNull)
-  recipients      EventCampaignRecipient[]
+  event      Event?                   @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  organizer  EventOrganizer?          @relation(fields: [organizerId], references: [id], onDelete: SetNull)
+  recipients EventCampaignRecipient[]
 
   @@index([eventId])
   @@index([status])
   @@index([scheduledAt])
+  @@index([organizerId, createdAt])
 }
 
 model EventCampaignRecipient {
-  id           String              @id @default(dbgenerated("gen_random_uuid()"))
+  id           String    @id @default(dbgenerated("gen_random_uuid()"))
   campaignId   String
   subscriberId String
   sentAt       DateTime?
   openedAt     DateTime?
   clickedAt    DateTime?
 
-  campaign     EventEmailCampaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  subscriber   EventSubscriber     @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+  campaign   EventEmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  subscriber EventSubscriber    @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
 
   @@unique([campaignId, subscriberId])
   @@index([campaignId])
@@ -2863,15 +2997,15 @@ model ToolAlternative {
 }
 
 model ToolReviewResponse {
-  id         String   @id @default(dbgenerated("gen_random_uuid()"))
-  reviewId   String   @unique
-  founderId  String
-  body       String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @default(now())
+  id        String   @id @default(dbgenerated("gen_random_uuid()"))
+  reviewId  String   @unique
+  founderId String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
 
-  review   ToolReview  @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-  founder  FounderUser @relation(fields: [founderId], references: [id], onDelete: Cascade)
+  review  ToolReview  @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  founder FounderUser @relation(fields: [founderId], references: [id], onDelete: Cascade)
 
   @@index([founderId])
 }
@@ -2907,7 +3041,7 @@ model ToolSystemTag {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  group    ToolTagGroup         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group    ToolTagGroup           @relation(fields: [groupId], references: [id], onDelete: Cascade)
   mappings ToolSystemTagMapping[]
 
   @@unique([groupId, slug])
@@ -2991,6 +3125,44 @@ enum JobBoardAppStatus {
   REJECTED
 }
 
+enum JobBoardListingStatus {
+  DRAFT
+  OPEN
+  PAUSED
+  CLOSED
+}
+
+enum JobBoardCloseReason {
+  EXPIRED
+  FILLED
+  MANUAL
+}
+
+enum JobBoardApplicationSource {
+  JOBS_PAGE
+  STARTUP_PROFILE
+  GOOGLE
+  CAREERS_PAGE
+  WIDGET
+  REFERRAL
+  DIRECT
+  OTHER
+}
+
+enum JobBoardClaimMethod {
+  DOMAIN_OTP
+  ADMIN
+  FOUNDER
+  LEGACY_UNVERIFIED
+}
+
+enum JobBoardEmailStatus {
+  QUEUED
+  SCHEDULED
+  SENT
+  FAILED
+}
+
 enum JobBoardPlan {
   FREE
   FEATURED
@@ -2998,56 +3170,113 @@ enum JobBoardPlan {
 }
 
 model JobBoardEmployer {
-  id              String            @id @default(cuid())
-  companyName     String
-  slug            String            @unique
-  email           String            @unique
-  passwordHash    String
-  logoUrl         String?
-  websiteUrl      String?
-  description     String?
-  industry        String?
-  companySize     String?
-  location        String?
-  country         String?
-  linkedinUrl     String?
-  twitterUrl      String?
-  startupId       String?           @unique
-  plan            JobBoardPlan      @default(FREE)
-  planExpiresAt   DateTime?
-  maxActiveJobs   Int               @default(1)
-  isVerified      Boolean           @default(false)
-  isActive        Boolean           @default(true)
-  emailVerified   Boolean           @default(false)
-  resetToken      String?
-  resetTokenExpiry DateTime?
-  failedLoginAttempts Int           @default(0)
-  lockedUntil     DateTime?
-  lastLoginAt     DateTime?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  id                  String       @id @default(cuid())
+  companyName         String
+  slug                String       @unique
+  email               String       @unique
+  passwordHash        String
+  logoUrl             String?
+  websiteUrl          String?
+  description         String?
+  industry            String?
+  companySize         String?
+  location            String?
+  country             String?
+  linkedinUrl         String?
+  twitterUrl          String?
+  startupId           String?      @unique
+  plan                JobBoardPlan @default(FREE)
+  planExpiresAt       DateTime?
+  /// Last "plan ends soon" reminder, so the daily cron sends it once per period.
+  planReminderSentAt  DateTime?
+  /// When on, jobs written by recruiters wait for an owner to publish them.
+  requireJobApproval  Boolean      @default(false)
+  /// The current plan is the free Featured trial (no grace period after it ends).
+  planIsTrial         Boolean      @default(false)
+  /// One trial per workspace (and per verified startup / company domain).
+  trialStartedAt      DateTime?
+  /// "Your plan has ended, renew within 3 days" email, once per lapse.
+  planGraceNoticeAt   DateTime?
+  /// GST invoice details (optional; B2B buyers add a GSTIN).
+  billingName         String?
+  billingGstin        String?
+  billingAddress      String?
+  billingState        String?
+  /// Billing profile (invoices): GST | BUSINESS (unregistered) | INDIVIDUAL.
+  billingType         String?
+  billingAddressLine1 String?
+  billingAddressLine2 String?
+  billingCity         String?
+  billingPostalCode   String?
+  billingCountry      String?      @default("IN")
+  /// Customer's PO / reference number, printed on invoices.
+  billingPoNumber     String?
+  /// Where invoices, receipts and credit notes are emailed (plus up to 3 CC).
+  billingEmail        String?
+  billingCcEmails     String[]     @default([])
+  /// Paid plans: screen new applicants with AI automatically while quota remains.
+  aiAutoScreen        Boolean      @default(true)
+  /// Last "candidates are waiting" nudge email.
+  reviewNudgeAt       DateTime?
+  maxActiveJobs       Int          @default(1)
+  isVerified          Boolean      @default(false)
+  isActive            Boolean      @default(true)
+  emailVerified       Boolean      @default(false)
+  resetToken          String?
+  resetTokenExpiry    DateTime?
+  failedLoginAttempts Int          @default(0)
+  lockedUntil         DateTime?
+  lastLoginAt         DateTime?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 
   // 2FA
-  twoFactorEnabled   Boolean        @default(false)
-  twoFactorSecret    String?
+  twoFactorEnabled     Boolean  @default(false)
+  twoFactorSecret      String?
   twoFactorBackupCodes String[]
 
   // Email change
   pendingEmail           String?
-  emailChangeToken       String?    @unique
+  emailChangeToken       String?   @unique
   emailChangeTokenExpiry DateTime?
 
   // Onboarding
-  onboardingCompleted    Boolean        @default(false)
-  onboardingStep         Int            @default(0)
+  onboardingCompleted Boolean @default(false)
+  onboardingStep      Int     @default(0)
+
+  // Startup claim (ownership proof)
+  /// Founder account that owns this hiring workspace (signs in via the founder portal).
+  founderUserId          String?
+  startupClaimMethod     JobBoardClaimMethod?
+  startupClaimVerifiedAt DateTime?
+  verifiedCompanyDomain  String?
+
+  // Careers page / profile
+  brandColor          String?
+  tagline             String?
+  stage               String?
+  teamSize            String?
+  perks               String[]  @default([])
+  officePhotos        String[]  @default([])
+  techStack           String[]  @default([])
+  careersHeadline     String?
+  firstJobPublishedAt DateTime?
+  /// Calendly / Cal.com / Google Calendar link offered in interview emails.
+  interviewBookingUrl String?
 
   // Account lifecycle
-  deactivatedAt          DateTime?
-  deletedAt              DateTime?
+  deactivatedAt DateTime?
+  deletedAt     DateTime?
 
-  Listings        JobBoardListing[]
-  Startup         Startup?          @relation(fields: [startupId], references: [id], onDelete: SetNull)
+  Listings       JobBoardListing[]
+  CareersWidgets JobBoardCareersWidget[]
+  TeamMembers    JobBoardTeamMember[]
+  Payments       JobBoardPayment[]
+  AiScreenings   JobBoardAiScreening[]
+  Startup        Startup?                @relation(fields: [startupId], references: [id], onDelete: SetNull)
+  FounderUser    FounderUser?            @relation(fields: [founderUserId], references: [id], onDelete: SetNull)
 
+  @@index([founderUserId])
   @@index([startupId])
   @@index([isActive])
   @@index([plan])
@@ -3055,53 +3284,87 @@ model JobBoardEmployer {
 }
 
 model JobBoardListing {
-  id                String              @id @default(cuid())
-  slug              String              @unique
-  title             String
-  description       String
-  shortDescription  String?
-  location          String?
-  city              String?
-  country           String?
-  workType          JobBoardWorkType    @default(REMOTE)
-  employmentType    JobBoardEmploymentType @default(FULL_TIME)
-  visaSponsorship   Boolean             @default(false)
-  salaryMin         Int?
-  salaryMax         Int?
-  salaryCurrency    String              @default("USD")
-  salaryPeriod      String              @default("yearly")
-  showSalary        Boolean             @default(true)
-  equity            String?
-  category          JobBoardCategory    @default(AI_ENGINEER)
-  experienceMin     Int?
-  experienceMax     Int?
-  skills            String[]            @default([])
-  department        String?
-  listingTier       JobBoardTier        @default(FREE)
-  isFeatured        Boolean             @default(false)
-  featuredUntil     DateTime?
-  isActive          Boolean             @default(true)
-  expiresAt         DateTime?
-  applicationUrl    String?
-  applicationEmail  String?
-  applicationType   JobBoardApplyType   @default(INTERNAL)
-  applicationsCount Int                 @default(0)
-  viewsCount        Int                 @default(0)
-  clicksCount       Int                 @default(0)
-  savedCount        Int                 @default(0)
-  employerId        String
-  startupId         String?
-  searchVector      Unsupported("tsvector")?
-  publishedAt       DateTime?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  deletedAt         DateTime?
+  id                   String                   @id @default(cuid())
+  slug                 String                   @unique
+  title                String
+  description          String
+  shortDescription     String?
+  location             String?
+  city                 String?
+  country              String?
+  workType             JobBoardWorkType         @default(REMOTE)
+  employmentType       JobBoardEmploymentType   @default(FULL_TIME)
+  visaSponsorship      Boolean                  @default(false)
+  salaryMin            Int?
+  salaryMax            Int?
+  salaryCurrency       String                   @default("USD")
+  salaryPeriod         String                   @default("yearly")
+  showSalary           Boolean                  @default(true)
+  equity               String?
+  category             JobBoardCategory         @default(AI_ENGINEER)
+  experienceMin        Int?
+  experienceMax        Int?
+  skills               String[]                 @default([])
+  department           String?
+  listingTier          JobBoardTier             @default(FREE)
+  isFeatured           Boolean                  @default(false)
+  featuredUntil        DateTime?
+  isActive             Boolean                  @default(true)
+  expiresAt            DateTime?
+  applicationUrl       String?
+  applicationEmail     String?
+  applicationType      JobBoardApplyType        @default(INTERNAL)
+  status               JobBoardListingStatus    @default(OPEN)
+  closedAt             DateTime?
+  closeReason          JobBoardCloseReason?
+  experienceBand       String?
+  hasEsops             Boolean                  @default(false)
+  screeningQuestions   Json?
+  showOnJobsPage       Boolean                  @default(true)
+  showOnProfile        Boolean                  @default(true)
+  showOnCareers        Boolean                  @default(true)
+  hiringManagerName    String?
+  draftSavedAt         DateTime?
+  /// A recruiter asked an owner to publish this draft (approval mode).
+  approvalRequestedAt  DateTime?
+  approvalRequestedBy  String?
+  /// Subset of `skills` the employer marked as must-have (weighted higher in the match score).
+  mustHaveSkills       String[]                 @default([])
+  /// "Prefer people who can join within N days"; null = no preference.
+  maxNoticeDays        Int?
+  /// Hidden from every public surface while reports are reviewed by an admin.
+  moderationHold       Boolean                  @default(false)
+  moderationHoldAt     DateTime?
+  /// Last "still hiring?" email before the closing date.
+  expiryNudgeAt        DateTime?
+  /// Who first published it (owner or a teammate), for accountability and moderation.
+  publishedByEmail     String?
+  publishedByName      String?
+  /// Premium plan promotion, done by the Udyaibase team (admin promotion queue).
+  promotedNewsletterAt DateTime?
+  promotedSocialAt     DateTime?
+  promotedSocialUrl    String?
+  applicationsCount    Int                      @default(0)
+  viewsCount           Int                      @default(0)
+  clicksCount          Int                      @default(0)
+  savedCount           Int                      @default(0)
+  employerId           String
+  startupId            String?
+  searchVector         Unsupported("tsvector")?
+  publishedAt          DateTime?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  deletedAt            DateTime?
 
-  Employer          JobBoardEmployer    @relation(fields: [employerId], references: [id], onDelete: Cascade)
-  Startup           Startup?            @relation(fields: [startupId], references: [id], onDelete: SetNull)
-  Applications      JobBoardApplication[]
-  SavedBy           JobBoardSaved[]
+  Employer      JobBoardEmployer       @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  Startup       Startup?               @relation(fields: [startupId], references: [id], onDelete: SetNull)
+  Applications  JobBoardApplication[]
+  TalentInvites JobBoardTalentInvite[]
+  SavedBy       JobBoardSaved[]
 
+  siteAnnouncements SiteAnnouncement[]
+
+  @@index([status, expiresAt])
   @@index([isActive, category])
   @@index([isActive, workType])
   @@index([isActive, listingTier])
@@ -3111,31 +3374,58 @@ model JobBoardListing {
   @@index([expiresAt])
   @@index([searchVector], type: Gin)
   @@index([deletedAt])
-
-  siteAnnouncements SiteAnnouncement[]
 }
 
 model JobBoardApplication {
-  id              String              @id @default(cuid())
-  listingId       String
-  fullName        String
-  email           String
-  phone           String?
-  linkedinUrl     String?
-  portfolioUrl    String?
-  githubUrl       String?
-  resumeUrl       String
-  coverLetter     String?
-  status          JobBoardAppStatus   @default(APPLIED)
-  notes           String?
-  rating          Int?
-  appliedAt       DateTime            @default(now())
-  reviewedAt      DateTime?
-  statusChangedAt DateTime?
+  id               String                    @id @default(cuid())
+  listingId        String
+  fullName         String
+  email            String
+  phone            String?
+  linkedinUrl      String?
+  portfolioUrl     String?
+  githubUrl        String?
+  resumeUrl        String?
+  resumeKey        String?
+  coverLetter      String?
+  source           JobBoardApplicationSource @default(JOBS_PAGE)
+  widgetId         String?
+  referrerUrl      String?
+  utmSource        String?
+  utmMedium        String?
+  utmCampaign      String?
+  experienceYears  Int?
+  noticePeriodDays Int?
+  currentCompany   String?
+  currentTitle     String?
+  expectedCtcLakh  Float?
+  city             String?
+  screeningAnswers Json?
+  confirmedSkills  String[]                  @default([])
+  matchedSkills    String[]                  @default([])
+  consentAt        DateTime?
+  consentText      String?
+  withdrawnAt      DateTime?
+  statusTokenHash  String?
+  firstResponseAt  DateTime?
+  /// Candidate opted in to be contacted about other roles at this company until this date.
+  talentPoolUntil  DateTime?
+  status           JobBoardAppStatus         @default(APPLIED)
+  notes            String?
+  rating           Int?
+  appliedAt        DateTime                  @default(now())
+  reviewedAt       DateTime?
+  statusChangedAt  DateTime?
 
-  Listing         JobBoardListing     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  Listing       JobBoardListing            @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  Notes         JobBoardApplicationNote[]
+  Events        JobBoardApplicationEvent[]
+  ResumeUploads JobBoardResumeUpload[]
+  AiScreening   JobBoardAiScreening?
+  TalentInvites JobBoardTalentInvite[]
 
   @@unique([listingId, email])
+  @@index([statusTokenHash])
   @@index([listingId, status])
   @@index([email])
   @@index([appliedAt])
@@ -3143,28 +3433,125 @@ model JobBoardApplication {
 }
 
 model JobBoardSaved {
-  id        String          @id @default(cuid())
+  id        String   @id @default(cuid())
   listingId String
   userId    String
-  createdAt DateTime        @default(now())
+  createdAt DateTime @default(now())
 
-  Listing   JobBoardListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  WebUser   WebUser         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  Listing JobBoardListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  WebUser WebUser         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([listingId, userId])
   @@index([userId])
   @@index([listingId])
 }
 
+model JobBoardResumeUpload {
+  id            String   @id @default(cuid())
+  key           String   @unique
+  sha256        String
+  sizeBytes     Int
+  mime          String
+  listingId     String
+  applicationId String?
+  ipHash        String
+  parseCount    Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  Application JobBoardApplication? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+
+  @@index([applicationId, createdAt])
+}
+
+model JobBoardApplicationNote {
+  id            String   @id @default(cuid())
+  applicationId String
+  authorEmail   String
+  authorName    String
+  body          String
+  mentions      String[] @default([])
+  createdAt     DateTime @default(now())
+
+  Application JobBoardApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, createdAt])
+}
+
+model JobBoardApplicationEvent {
+  id             String               @id @default(cuid())
+  applicationId  String
+  fromStatus     JobBoardAppStatus?
+  toStatus       JobBoardAppStatus
+  actorEmail     String
+  emailSubject   String?
+  emailBody      String?
+  emailStatus    JobBoardEmailStatus?
+  resendId       String?
+  scheduledFor   DateTime?
+  idempotencyKey String?              @unique
+  createdAt      DateTime             @default(now())
+
+  Application JobBoardApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, createdAt])
+  @@index([emailStatus])
+}
+
+model JobBoardCareersWidget {
+  id                String    @id @default(dbgenerated("gen_random_uuid()"))
+  employerId        String
+  name              String    @default("Careers widget")
+  isDefault         Boolean   @default(false)
+  layout            String    @default("auto") // "auto" | "grid" | "list" | "compact"
+  accentColor       String    @default("#111827")
+  darkMode          String    @default("auto")
+  cornerStyle       String    @default("rounded")
+  fontFamily        String    @default("system")
+  heading           String?
+  subheading        String?
+  departments       String[]  @default([])
+  allowedDomains    String[]  @default([])
+  showPoweredBy     Boolean   @default(true)
+  active            Boolean   @default(true)
+  // Look options mirror EmbedWidget so both widgets customize the same way.
+  buttonText        String    @default("View role")
+  headingAlign      String    @default("left")
+  headingSize       String    @default("md")
+  textScale         String    @default("md")
+  buttonSize        String    @default("md")
+  buttonStyle       String    @default("filled")
+  cardStyle         String    @default("bordered")
+  spacing           String    @default("comfortable")
+  maxJobs           Int       @default(20)
+  showLogo          Boolean   @default(true)
+  showDepartment    Boolean   @default(true)
+  showSalary        Boolean   @default(true)
+  showSkills        Boolean   @default(true)
+  platform          String?
+  setupStartedAt    DateTime?
+  codeCopiedAt      DateTime?
+  markedInstalledAt DateTime?
+  firstSeenAt       DateTime?
+  firstSeenHost     String?
+  lastSeenAt        DateTime?
+  lastSeenHost      String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  Employer JobBoardEmployer @relation(fields: [employerId], references: [id], onDelete: Cascade)
+
+  @@index([employerId])
+}
+
 model EmailLog {
-  id        String   @id @default(uuid())
-  type      String
-  to        String
-  subject   String
-  status    String   @default("sent")
-  resendId  String?
-  error     String?
-  sentAt    DateTime @default(now())
+  id       String   @id @default(uuid())
+  type     String
+  to       String
+  subject  String
+  status   String   @default("sent")
+  resendId String?
+  error    String?
+  sentAt   DateTime @default(now())
 
   @@index([to])
   @@index([type, sentAt])
@@ -3183,12 +3570,12 @@ enum AnnouncementType {
 }
 
 model SiteAnnouncement {
-  id             String           @id @default(cuid())
-  type           AnnouncementType @default(CUSTOM)
-  text           String
-  mobileText     String?
-  emoji          String           @default("📢")
-  link           String
+  id         String           @id @default(cuid())
+  type       AnnouncementType @default(CUSTOM)
+  text       String
+  mobileText String?
+  emoji      String           @default("📢")
+  link       String
 
   startupId      String?
   fundingRoundId String?
@@ -3196,19 +3583,19 @@ model SiteAnnouncement {
   jobListingId   String?
   toolId         String?
 
-  isActive       Boolean          @default(true)
-  sortOrder      Int              @default(0)
-  startsAt       DateTime?
-  endsAt         DateTime?
+  isActive  Boolean   @default(true)
+  sortOrder Int       @default(0)
+  startsAt  DateTime?
+  endsAt    DateTime?
 
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  startup        Startup?         @relation(fields: [startupId], references: [id], onDelete: SetNull)
-  fundingRound   FundingRound?    @relation(fields: [fundingRoundId], references: [id], onDelete: SetNull)
-  event          Event?           @relation(fields: [eventId], references: [id], onDelete: SetNull)
-  jobListing     JobBoardListing? @relation(fields: [jobListingId], references: [id], onDelete: SetNull)
-  tool           AiTool?          @relation(fields: [toolId], references: [id], onDelete: SetNull)
+  startup      Startup?         @relation(fields: [startupId], references: [id], onDelete: SetNull)
+  fundingRound FundingRound?    @relation(fields: [fundingRoundId], references: [id], onDelete: SetNull)
+  event        Event?           @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  jobListing   JobBoardListing? @relation(fields: [jobListingId], references: [id], onDelete: SetNull)
+  tool         AiTool?          @relation(fields: [toolId], references: [id], onDelete: SetNull)
 
   @@index([isActive, sortOrder])
 }
@@ -3284,21 +3671,21 @@ enum AdvPaymentPurpose {
 }
 
 model AdvPackage {
-  id              String           @id @default(dbgenerated("gen_random_uuid()"))
-  founderId       String
-  tier            AdvPackageTier
-  status          AdvPackageStatus @default(ACTIVE)
-  purchasedAt     DateTime         @default(now())
-  expiresAt       DateTime
-  upgradedFromId  String?          @unique
-  upgradedToId    String?
-  cancelledAt     DateTime?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  id             String           @id @default(dbgenerated("gen_random_uuid()"))
+  founderId      String
+  tier           AdvPackageTier
+  status         AdvPackageStatus @default(ACTIVE)
+  purchasedAt    DateTime         @default(now())
+  expiresAt      DateTime
+  upgradedFromId String?          @unique
+  upgradedToId   String?
+  cancelledAt    DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
-  founder         FounderUser      @relation(fields: [founderId], references: [id], onDelete: Cascade)
-  upgradedFrom    AdvPackage?      @relation("PackageUpgrade", fields: [upgradedFromId], references: [id], onDelete: SetNull)
-  upgradedTo      AdvPackage?      @relation("PackageUpgrade")
+  founder      FounderUser @relation(fields: [founderId], references: [id], onDelete: Cascade)
+  upgradedFrom AdvPackage? @relation("PackageUpgrade", fields: [upgradedFromId], references: [id], onDelete: SetNull)
+  upgradedTo   AdvPackage? @relation("PackageUpgrade")
 
   zoneActivations AdvZoneActivation[]
   socialPosts     AdvSocialPostOrder[]
@@ -3310,22 +3697,22 @@ model AdvPackage {
 }
 
 model AdvZoneActivation {
-  id              String              @id @default(dbgenerated("gen_random_uuid()"))
-  packageId       String
-  zone            AdvZoneSlot
-  zoneTier        AdvZoneTier
-  status          AdvActivationStatus @default(SCHEDULED)
-  startsAt        DateTime
-  endsAt          DateTime
-  freeDaysUsed    Int                 @default(3)
-  extensionDays   Int                 @default(0)
-  extensionRate   Int                 @default(0)
-  extensionTotal  Int                 @default(0)
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  id             String              @id @default(dbgenerated("gen_random_uuid()"))
+  packageId      String
+  zone           AdvZoneSlot
+  zoneTier       AdvZoneTier
+  status         AdvActivationStatus @default(SCHEDULED)
+  startsAt       DateTime
+  endsAt         DateTime
+  freeDaysUsed   Int                 @default(3)
+  extensionDays  Int                 @default(0)
+  extensionRate  Int                 @default(0)
+  extensionTotal Int                 @default(0)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 
-  package         AdvPackage          @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  payments        AdvPayment[]
+  package  AdvPackage   @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  payments AdvPayment[]
 
   @@unique([packageId, zone])
   @@index([zone, status, startsAt, endsAt])
@@ -3333,51 +3720,51 @@ model AdvZoneActivation {
 }
 
 model AdvSocialPostOrder {
-  id              String              @id @default(dbgenerated("gen_random_uuid()"))
-  packageId       String
-  postType        AdvSocialPostType
-  status          AdvSocialPostStatus @default(PENDING_PAYMENT)
-  contentBrief    String?
-  publishedUrl    String?
-  publishedAt     DateTime?
-  amountPaise     Int
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  id           String              @id @default(dbgenerated("gen_random_uuid()"))
+  packageId    String
+  postType     AdvSocialPostType
+  status       AdvSocialPostStatus @default(PENDING_PAYMENT)
+  contentBrief String?
+  publishedUrl String?
+  publishedAt  DateTime?
+  amountPaise  Int
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
 
-  package         AdvPackage          @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  payments        AdvPayment[]
+  package  AdvPackage   @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  payments AdvPayment[]
 
   @@index([packageId, status])
   @@index([postType, status])
 }
 
 model AdvPayment {
-  id                  String            @id @default(dbgenerated("gen_random_uuid()"))
-  founderId           String
-  packageId           String?
-  zoneActivationId    String?
-  socialPostOrderId   String?
-  purpose             AdvPaymentPurpose
-  amountPaise         Int
-  gstPaise            Int
-  totalPaise          Int
-  currency            String            @default("INR")
-  razorpayOrderId     String?           @unique
-  razorpayPaymentId   String?           @unique
-  razorpaySignature   String?
-  status              PaymentStatus     @default(PENDING)
-  paidAt              DateTime?
-  failedAt            DateTime?
-  refundedAt          DateTime?
-  refundAmountPaise   Int?
-  metadata            Json?
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  id                String            @id @default(dbgenerated("gen_random_uuid()"))
+  founderId         String
+  packageId         String?
+  zoneActivationId  String?
+  socialPostOrderId String?
+  purpose           AdvPaymentPurpose
+  amountPaise       Int
+  gstPaise          Int
+  totalPaise        Int
+  currency          String            @default("INR")
+  razorpayOrderId   String?           @unique
+  razorpayPaymentId String?           @unique
+  razorpaySignature String?
+  status            PaymentStatus     @default(PENDING)
+  paidAt            DateTime?
+  failedAt          DateTime?
+  refundedAt        DateTime?
+  refundAmountPaise Int?
+  metadata          Json?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
-  founder             FounderUser       @relation(fields: [founderId], references: [id], onDelete: Cascade)
-  package             AdvPackage?       @relation(fields: [packageId], references: [id], onDelete: SetNull)
-  zoneActivation      AdvZoneActivation? @relation(fields: [zoneActivationId], references: [id], onDelete: SetNull)
-  socialPostOrder     AdvSocialPostOrder? @relation(fields: [socialPostOrderId], references: [id], onDelete: SetNull)
+  founder         FounderUser         @relation(fields: [founderId], references: [id], onDelete: Cascade)
+  package         AdvPackage?         @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  zoneActivation  AdvZoneActivation?  @relation(fields: [zoneActivationId], references: [id], onDelete: SetNull)
+  socialPostOrder AdvSocialPostOrder? @relation(fields: [socialPostOrderId], references: [id], onDelete: SetNull)
 
   @@index([founderId, status])
   @@index([razorpayOrderId])
@@ -3395,6 +3782,30 @@ model WebUserInterest {
   @@index([categoryId])
 }
 
+model AnalyticsDaily {
+  id            String   @id @default(dbgenerated("gen_random_uuid()"))
+  entityType    String
+  entityId      String
+  date          DateTime @db.Date
+  views         Int      @default(0)
+  clicks        Int      @default(0)
+  shares        Int      @default(0)
+  directViews   Int      @default(0)
+  searchViews   Int      @default(0)
+  socialViews   Int      @default(0)
+  emailViews    Int      @default(0)
+  referralViews Int      @default(0)
+  utmSource     String?
+  utmMedium     String?
+  utmCampaign   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([entityType, entityId, date])
+  @@index([entityType, entityId, date])
+  @@index([entityType, date])
+}
+
 model WebUserInteraction {
   id         String   @id @default(cuid())
   userId     String
@@ -3405,10 +3816,224 @@ model WebUserInteraction {
   metadata   Json?
   createdAt  DateTime @default(now()) @db.Timestamptz
 
-  user       WebUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user WebUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@index([userId, entityType, createdAt])
   @@index([entityType, entityId])
   @@index([categoryId])
+}
+
+enum JobBoardTeamRole {
+  OWNER
+  RECRUITER
+  INTERVIEWER
+}
+
+enum JobBoardTeamStatus {
+  PENDING
+  ACTIVE
+  REMOVED
+}
+
+/// Teammates of an employer hiring workspace. The workspace account itself is the original owner.
+model JobBoardTeamMember {
+  id              String             @id @default(cuid())
+  employerId      String
+  email           String
+  name            String?
+  role            JobBoardTeamRole   @default(RECRUITER)
+  /// Interviewers only: jobs they can see. Empty = every job.
+  jobIds          String[]           @default([])
+  status          JobBoardTeamStatus @default(PENDING)
+  inviteTokenHash String?            @unique
+  inviteExpiresAt DateTime?
+  invitedByEmail  String
+  invitedAt       DateTime           @default(now())
+  acceptedAt      DateTime?
+  lastActiveAt    DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  Employer JobBoardEmployer @relation(fields: [employerId], references: [id], onDelete: Cascade)
+
+  @@unique([employerId, email])
+  @@index([email])
+}
+
+enum JobBoardPaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+/// One Razorpay order for a 30-day employer plan period.
+model JobBoardPayment {
+  id                  String                @id @default(cuid())
+  employerId          String
+  plan                JobBoardPlan
+  amountPaise         Int
+  gstPaise            Int
+  totalPaise          Int
+  razorpayOrderId     String                @unique
+  razorpayPaymentId   String?               @unique
+  status              JobBoardPaymentStatus @default(PENDING)
+  periodStart         DateTime?
+  periodEnd           DateTime?
+  paidByEmail         String?
+  /// Assigned once from InvoiceCounter, so unique by construction.
+  invoiceNumber       String?
+  /// Bill-to details frozen when the invoice number is assigned; later profile edits never change it.
+  billingSnapshot     Json?
+  invoiceEmailedAt    DateTime?
+  /// GST credit note for a refund (UTPL/CN/<FY>/0001), linked to this payment's invoice.
+  creditNoteNumber    String?
+  creditNoteAt        DateTime?
+  creditNoteEmailedAt DateTime?
+  createdAt           DateTime              @default(now())
+  paidAt              DateTime?
+  failedAt            DateTime?
+  /// Set by an admin refund (Razorpay refund id). Status stays SUCCESS; the invoice needs a credit note.
+  refundedAt          DateTime?
+  refundId            String?
+  refundAmountPaise   Int?
+  refundReason        String?
+  refundedByEmail     String?
+
+  Employer JobBoardEmployer @relation(fields: [employerId], references: [id], onDelete: Cascade)
+
+  @@index([employerId, createdAt])
+}
+
+enum JobBoardAiScreeningStatus {
+  PENDING
+  DONE
+  FAILED
+}
+
+/// AI read of one application against its job (paid plans). A suggestion for the hiring team only;
+/// never shown to the candidate and never used to move anyone automatically.
+model JobBoardAiScreening {
+  id             String                    @id @default(cuid())
+  applicationId  String                    @unique
+  employerId     String
+  status         JobBoardAiScreeningStatus @default(PENDING)
+  model          String?
+  promptVersion  String?
+  /// Hash of the job requirements used, so the portal can say when they changed since.
+  jobHash        String?
+  fitScore       Int?
+  recommendation String?
+  result         Json?
+  error          String?
+  /// Counts against the plan quota (failed runs are refunded by clearing this).
+  billable       Boolean                   @default(true)
+  createdAt      DateTime                  @default(now())
+  completedAt    DateTime?
+
+  Application JobBoardApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  Employer    JobBoardEmployer    @relation(fields: [employerId], references: [id], onDelete: Cascade)
+
+  @@index([employerId, createdAt])
+}
+
+/// One "invite to apply" email from the talent pool, so a candidate is never invited twice to one job.
+model JobBoardTalentInvite {
+  id             String   @id @default(cuid())
+  applicationId  String
+  listingId      String
+  invitedByEmail String
+  createdAt      DateTime @default(now())
+
+  Application JobBoardApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  Listing     JobBoardListing     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, listingId])
+  @@index([listingId])
+}
+
+enum OrganizerPlan {
+  FREE
+  PRO
+}
+
+/// Razorpay order for an event host: a 30-day Pro plan or a one-time Event Boost.
+model OrganizerPayment {
+  id                  String                @id @default(cuid())
+  organizerId         String
+  kind                String // "PRO" | "BOOST"
+  eventId             String?
+  amountPaise         Int
+  gstPaise            Int
+  totalPaise          Int
+  razorpayOrderId     String                @unique
+  razorpayPaymentId   String?               @unique
+  status              JobBoardPaymentStatus @default(PENDING)
+  periodStart         DateTime?
+  periodEnd           DateTime?
+  paidByEmail         String?
+  /// Assigned once from InvoiceCounter, so unique by construction.
+  invoiceNumber       String?
+  /// Bill-to details frozen when the invoice number is assigned; later profile edits never change it.
+  billingSnapshot     Json?
+  invoiceEmailedAt    DateTime?
+  /// GST credit note for a refund (UTPL/CN/<FY>/0001), linked to this payment's invoice.
+  creditNoteNumber    String?
+  creditNoteAt        DateTime?
+  creditNoteEmailedAt DateTime?
+  createdAt           DateTime              @default(now())
+  paidAt              DateTime?
+  failedAt            DateTime?
+  refundedAt          DateTime?
+  refundId            String?
+  refundAmountPaise   Int?
+  refundReason        String?
+  refundedByEmail     String?
+
+  organizer EventOrganizer @relation(fields: [organizerId], references: [id], onDelete: Cascade)
+
+  @@index([organizerId, createdAt])
+}
+
+/// Sequential GST invoice numbers per financial year (April to March), shared by all portals.
+model InvoiceCounter {
+  fy   String @id
+  next Int    @default(1)
+}
+
+/// One run of a scheduled job (Vercel cron). Failures and missed runs alert the admins.
+model OpsCronRun {
+  id         String    @id @default(cuid())
+  job        String
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  ok         Boolean?
+  error      String?
+  summary    Json?
+
+  @@index([job, startedAt])
+}
+
+/// One OpenAI call, for cost and failure monitoring. Never stores prompts or outputs.
+model OpsAiCall {
+  id               String   @id @default(cuid())
+  feature          String
+  model            String
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  /// Estimated cost in millionths of a US dollar.
+  costMicroUsd     Int      @default(0)
+  ok               Boolean
+  error            String?
+  createdAt        DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([feature, createdAt])
+}
+
+/// Throttle for admin alerts: one email per key per window.
+model OpsAlert {
+  key        String   @id
+  lastSentAt DateTime
+  count      Int      @default(1)
 }

@@ -1,3 +1,4 @@
+import { jsonLd } from "@/lib/json-ld";
 import Link from 'next/link';
 import Image from 'next/image';
 import { Metadata } from 'next';
@@ -144,9 +145,9 @@ export default async function OpinionDetailPage(props: { params: Promise<{ slug:
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(personSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(articleSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(personSchema) }} />
 
       <nav className="flex items-center gap-1.5 text-xs sm:text-sm font-jakarta text-gray-400 dark:text-gray-500 mb-6 px-4 sm:px-0">
         <Link href="/" className="hover:text-brand">Home</Link>
@@ -386,7 +387,7 @@ export default async function OpinionDetailPage(props: { params: Promise<{ slug:
               </div>
               <div className="space-y-2">
                 {relevantJobs.map((job: any) => (
-                  <Link key={job.id} href={`/jobs/company/${job.companySlug}`} className="group card p-4 flex items-center gap-3 hover:border-brand/30 transition-all">
+                  <Link key={job.id} href={`/jobs/${job.slug}`} className="group card p-4 flex items-center gap-3 hover:border-brand/30 transition-all">
                     {job.companyLogo ? (
                       <Image src={job.companyLogo} alt={job.companyName} width={36} height={36} className="rounded-lg object-cover shrink-0" />
                     ) : (

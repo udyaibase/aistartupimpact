@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Rocket, Wrench, BarChart3, User, Users,
-  Plus, Settings, HelpCircle,
+  Plus, Settings, HelpCircle, Briefcase,
 } from 'lucide-react';
 import CollapsibleSidebar from '@/components/ui/CollapsibleSidebar';
 import SidebarNav, { type NavItem } from '@/components/ui/SidebarNav';
@@ -17,6 +17,7 @@ const NAV_ITEMS: NavItem[] = [
   { type: 'divider', label: 'Listings' },
   { label: 'My Startups', href: '/founder/startups', icon: Rocket },
   { label: 'My Tools', href: '/founder/tools', icon: Wrench },
+  { label: 'Hiring', href: '/founder/hiring', icon: Briefcase, badge: 'New' },
   { type: 'divider', label: 'Insights' },
   { label: 'Analytics', href: '/founder/analytics', icon: BarChart3 },
   { type: 'divider', label: 'Account' },

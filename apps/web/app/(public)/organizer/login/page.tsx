@@ -73,6 +73,12 @@ function OrganizerAuthContent() {
     e.preventDefault();
     setError("");
     setSuccessMsg("");
+
+    if (!turnstileToken.current) {
+      setError("Please complete the CAPTCHA verification before continuing.");
+      return;
+    }
+
     setLoading(true);
 
     if (mode === "forgot") {

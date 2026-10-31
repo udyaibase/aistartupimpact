@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Users, Plus, Loader2, Mail, Trash2, X, ChevronDown, ShieldCheck } from "lucide-react";
+import { Users, Plus, Loader2, Mail, Trash2, X, ChevronDown, ShieldCheck, Briefcase } from "lucide-react";
 
 const ROLES = [
   { value: "ADMIN", label: "Admin", desc: "Full access, manage team" },
@@ -14,6 +14,15 @@ interface OTPAction {
   memberId: string;
   newRole?: string;
   memberName?: string;
+  /** Revoke only: startups where this person is also on the hiring team. */
+  hiringStartups?: string[];
+}
+
+interface PersonAccess {
+  email: string;
+  name: string | null;
+  content: { memberId: string; role: string; status: string } | null;
+  hiring: { memberId: string; startup: string; roleLabel: string; status: string }[];
 }
 
 function OTPModal({
@@ -22,9 +31,10 @@ function OTPModal({
   onClose,
 }: {
   action: OTPAction;
-  onVerified: (otpToken: string, otpCode: string) => void;
+  onVerified: (otpToken: string, otpCode: string, alsoHiring: boolean) => void;
   onClose: () => void;
 }) {
+  const [alsoHiring, setAlsoHiring] = useState(true);
   const [otpToken, setOtpToken] = useState("");
   const [code, setCode] = useState("");
   const [sending, setSending] = useState(true);
@@ -59,7 +69,7 @@ function OTPModal({
     e.preventDefault();
     if (code.length !== 6) { setError("Enter the 6-digit code"); return; }
     setVerifying(true);
-    onVerified(otpToken, code);
+    onVerified(otpToken, code, !!action.hiringStartups?.length && alsoHiring);
   };
 
   const actionLabel = action.type === "role_change"
@@ -107,6 +117,12 @@ function OTPModal({
               className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-center text-2xl font-mono font-bold tracking-[0.5em] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/30"
               autoFocus
             />
+            {action.type === "revoke" && !!action.hiringStartups?.length && (
+              <label className="flex items-start gap-2 text-xs text-gray-700 dark:text-gray-300 font-jakarta cursor-pointer">
+                <input type="checkbox" checked={alsoHiring} onChange={(e) => setAlsoHiring(e.target.checked)} className="mt-0.5 w-4 h-4 accent-[#A50F15]" />
+                <span>Also remove their hiring access ({action.hiringStartups.join(", ")}), so they can&apos;t see candidates either.</span>
+              </label>
+            )}
             {error && <p className="text-xs text-red-500 font-jakarta">{error}</p>}
             <button
               type="submit"
@@ -134,6 +150,25 @@ export default function FounderTeamPage() {
   const [msg, setMsg] = useState("");
   const [editingRole, setEditingRole] = useState<string | null>(null);
   const [otpAction, setOtpAction] = useState<OTPAction | null>(null);
+  const [people, setPeople] = useState<PersonAccess[]>([]);
+  const [removeHiring, setRemoveHiring] = useState<PersonAccess | null>(null);
+  const [busyHiring, setBusyHiring] = useState(false);
+
+  const loadPeople = () =>
+    fetch("/api/founder/people").then((r) => r.json()).then((d) => { if (d.success) setPeople(d.people); }).catch(() => {});
+  useEffect(() => { loadPeople(); }, []);
+
+  const confirmRemoveHiring = async () => {
+    if (!removeHiring) return;
+    setBusyHiring(true);
+    const res = await fetch("/api/founder/people/hiring", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: removeHiring.email }) });
+    const d = await res.json().catch(() => ({}));
+    setBusyHiring(false);
+    setMsg(d.success ? `Hiring access removed for ${removeHiring.email}` : d.error || "Failed to remove");
+    if (d.success) setPeople(d.people);
+    setRemoveHiring(null);
+    setTimeout(() => setMsg(""), 4000);
+  };
 
   useEffect(() => {
     fetch("/api/founder/team")
@@ -174,10 +209,11 @@ export default function FounderTeamPage() {
   };
 
   const handleRevokeRequest = (member: any) => {
-    setOtpAction({ type: "revoke", memberId: member.id, memberName: member.name || member.email });
+    const hiring = people.find((p) => p.email === String(member.email).toLowerCase())?.hiring ?? [];
+    setOtpAction({ type: "revoke", memberId: member.id, memberName: member.name || member.email, hiringStartups: hiring.map((h) => h.startup) });
   };
 
-  const handleOTPVerified = async (otpToken: string, otpCode: string) => {
+  const handleOTPVerified = async (otpToken: string, otpCode: string, alsoHiring: boolean) => {
     if (!otpAction) return;
 
     if (otpAction.type === "role_change") {
@@ -197,12 +233,13 @@ export default function FounderTeamPage() {
       const res = await fetch(`/api/founder/team/${otpAction.memberId}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ otpToken, otpCode }),
+        body: JSON.stringify({ otpToken, otpCode, alsoHiring }),
       });
       const d = await res.json();
       if (d.success) {
         setMembers(prev => prev.map(m => m.id === otpAction.memberId ? { ...m, status: "REVOKED" } : m));
-        setMsg("Access revoked");
+        setMsg(d.hiringRemoved ? "Access revoked, including hiring" : "Access revoked");
+        loadPeople();
       } else {
         setMsg(d.error || "Failed to revoke");
       }
@@ -242,7 +279,7 @@ export default function FounderTeamPage() {
         </button>
       </div>
 
-      {msg && <p className={`text-xs font-jakarta px-3 py-2 rounded-lg ${msg.includes("sent") || msg.includes("Invite") || msg.includes("updated") || msg.includes("revoked") ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400"}`}>{msg}</p>}
+      {msg && <p className={`text-xs font-jakarta px-3 py-2 rounded-lg ${msg.includes("sent") || msg.includes("Invite") || msg.includes("updated") || msg.includes("revoked") || msg.includes("removed for") ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400"}`}>{msg}</p>}
 
       {showInvite && (
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-5 space-y-4">
@@ -343,6 +380,53 @@ export default function FounderTeamPage() {
           </>
         )}
       </div>
+
+      {people.length > 0 && (
+        <section aria-labelledby="people-title" className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+          <div className="px-4 pt-4 pb-2">
+            <h2 id="people-title" className="text-sm font-bold text-navy dark:text-white font-sora">Everyone with access</h2>
+            <p className="text-xs text-gray-500 font-jakarta mt-0.5">Your founder team (profile and content) and the hiring team of each startup (jobs and candidates). Hiring roles are managed in the employer portal.</p>
+          </div>
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+            {people.map((p) => (
+              <li key={p.email} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200 font-jakarta truncate">{p.name || p.email}</p>
+                  {p.name && <p className="text-xs text-gray-400 font-jakarta truncate">{p.email}</p>}
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {p.content && (
+                      <span className="text-xs font-jakarta px-2 py-0.5 rounded-full bg-brand/10 text-brand">Founder portal · {p.content.role.charAt(0) + p.content.role.slice(1).toLowerCase()}{p.content.status === "PENDING" ? " (invited)" : ""}</span>
+                    )}
+                    {p.hiring.map((h) => (
+                      <span key={h.memberId} className="inline-flex items-center gap-1 text-xs font-jakarta px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                        <Briefcase className="w-3 h-3" aria-hidden /> {h.startup} · {h.roleLabel}{h.status === "PENDING" ? " (invited)" : ""}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                {p.hiring.length > 0 && (
+                  <button onClick={() => setRemoveHiring(p)} className="self-start sm:self-center text-xs font-semibold text-red-600 hover:underline font-jakarta min-h-[36px] px-2">Remove from hiring</button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {removeHiring && (
+        <div className="fixed inset-0 z-modal bg-black/50 flex items-center justify-center p-4" onClick={() => setRemoveHiring(null)}>
+          <div role="alertdialog" aria-modal="true" aria-labelledby="rh-title" className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-xl max-w-sm w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <p id="rh-title" className="text-sm font-bold text-navy dark:text-white font-sora">Remove {removeHiring.name || removeHiring.email} from hiring?</p>
+            <p className="text-xs text-gray-500 font-jakarta mt-1">They lose access to jobs and candidates for {removeHiring.hiring.map((h) => h.startup).join(", ")} right away. Their notes stay on candidates.{removeHiring.content ? " Their founder-portal access doesn’t change." : ""}</p>
+            <div className="flex justify-end gap-2 mt-5">
+              <button autoFocus onClick={() => setRemoveHiring(null)} className="px-4 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 font-jakarta rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">Keep</button>
+              <button onClick={confirmRemoveHiring} disabled={busyHiring} className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 font-jakarta rounded-lg disabled:opacity-50 inline-flex items-center gap-1.5">
+                {busyHiring && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
         <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0"/>

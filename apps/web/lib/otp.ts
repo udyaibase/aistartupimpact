@@ -103,3 +103,28 @@ export async function verifyOtp(email: string, code: string, purpose: string = "
 
   return { valid: true };
 }
+
+/** How long a verified code stays valid as proof of email ownership for the next step. */
+const PROOF_MAX_AGE_MINUTES = 30;
+
+/**
+ * Server-side proof that this email passed a code check moments ago (e.g. signup verifies the
+ * code first, then creates the account in a second request). Consumes the proof so it can't be reused.
+ * Codes invalidated after too many wrong attempts are also stored as verified, so `attempts` tells them apart.
+ */
+export async function consumeVerifiedOtp(email: string, purpose: string = "signup"): Promise<boolean> {
+  const proof = await prisma.emailOtp.findFirst({
+    where: {
+      email: email.toLowerCase(),
+      purpose,
+      verified: true,
+      attempts: { lt: MAX_ATTEMPTS },
+      createdAt: { gte: new Date(Date.now() - PROOF_MAX_AGE_MINUTES * 60_000) },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  if (!proof) return false;
+  const used = await prisma.emailOtp.deleteMany({ where: { id: proof.id } });
+  return used.count === 1;
+}

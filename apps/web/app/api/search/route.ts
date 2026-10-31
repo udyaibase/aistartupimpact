@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { clientIp } from '@/lib/client-ip';
 import { sql } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -9,7 +10,7 @@ function normalizeQuery(query: string): string {
 
 // Generate session ID from request
 function getSessionId(request: NextRequest): string {
-  const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
+  const ip = clientIp(request);
   const ua = request.headers.get('user-agent') || 'unknown';
   return Buffer.from(`${ip}-${ua}`).toString('base64').substring(0, 32);
 }
@@ -185,7 +186,7 @@ export async function GET(request: NextRequest) {
         ${normalizedQuery},
         ${total},
         ${sessionId},
-        ${request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip')},
+        ${clientIp(request)},
         ${request.headers.get('user-agent')}
       )
     `.catch(err => console.error('Failed to log search query:', err));
@@ -245,7 +246,7 @@ export async function POST(request: NextRequest) {
         ${resultId},
         ${resultType},
         ${sessionId},
-        ${request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip')},
+        ${clientIp(request)},
         ${request.headers.get('user-agent')}
       )
     `;

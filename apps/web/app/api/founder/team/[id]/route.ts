@@ -4,6 +4,7 @@ import { getFounderSession } from "@/lib/founder-auth";
 import { canChangeRole, canRemoveMember } from "@/lib/founder-team-permissions";
 import { verifyOTP } from "@/lib/action-otp";
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from "@/lib/rate-limit";
+import { removeHiringAccess } from "@/lib/people/access";
 
 export const dynamic = "force-dynamic";
 
@@ -81,10 +82,12 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     let otpToken: string | undefined;
     let otpCode: string | undefined;
+    let alsoHiring = false;
     try {
       const body = await request.json();
       otpToken = body.otpToken;
       otpCode = body.otpCode;
+      alsoHiring = body.alsoHiring === true;
     } catch {
       return NextResponse.json({ success: false, error: "Verification code required" }, { status: 403 });
     }
@@ -101,8 +104,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       where: { id, founderId: session.userId },
       data: { status: "REVOKED" },
     });
+    // Offboarding in one step: also end their access to this founder's hiring workspaces.
+    const hiringRemoved = alsoHiring ? await removeHiringAccess(session.userId, member.email) : 0;
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, hiringRemoved });
   } catch (err) {
     console.error("[founder/team/[id] DELETE]", err);
     return NextResponse.json({ success: false, error: "Something went wrong" }, { status: 500 });

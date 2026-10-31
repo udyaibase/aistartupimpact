@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getEmployerSession } from '@/lib/employer-auth';
+import { can, forbidden } from '@/lib/employer/permissions';
+import { refreshPaths, refreshSections } from '@/lib/revalidate';
 
 export const dynamic = 'force-dynamic';
 export async function GET() {
   try {
     const session = await getEmployerSession();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!can(session.role, 'jobs.view')) return forbidden();
 
     const result = await sql`
-      SELECT e."companyName", e.description, e."websiteUrl", e.industry, e."companySize",
+      SELECT e."companyName", e.email, e."startupClaimMethod", e."verifiedCompanyDomain", e.description, e."websiteUrl", e.industry, e."companySize",
              e.location, e.country, e."linkedinUrl", e."twitterUrl", e."logoUrl", e."startupId",
              s.name AS "startupName", s.slug AS "startupSlug", s."logoUrl" AS "startupLogo",
              s."headquartersCity" AS "startupCity", s.stage AS "startupStage", s."websiteUrl" AS "startupWebsite"
@@ -29,29 +32,21 @@ export async function PUT(request: NextRequest) {
   try {
     const session = await getEmployerSession();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!can(session.role, 'company.manage')) return forbidden();
 
     const body = await request.json();
 
-    // Handle startup connect
-    if (body.action === 'connect_startup' && body.startupId) {
-      const startup = await sql`
-        SELECT id FROM "Startup" WHERE id = ${body.startupId} AND "deletedAt" IS NULL AND "isApproved" = true LIMIT 1
-      `;
-      if (startup.length === 0) return NextResponse.json({ error: 'Startup not found' }, { status: 404 });
-
-      const existing = await sql`
-        SELECT id FROM "JobBoardEmployer" WHERE "startupId" = ${body.startupId} AND id != ${session.id} LIMIT 1
-      `;
-      if (existing.length > 0) return NextResponse.json({ error: 'This startup is already linked to another employer account' }, { status: 409 });
-
-      await sql`UPDATE "JobBoardEmployer" SET "startupId" = ${body.startupId}, "updatedAt" = NOW() WHERE id = ${session.id}`;
-      await sql`UPDATE "JobBoardListing" SET "startupId" = ${body.startupId} WHERE "employerId" = ${session.id} AND "deletedAt" IS NULL`;
-      return NextResponse.json({ success: true, connected: true });
+    // Linking a startup requires proving domain ownership: /api/employer/claim/start + /verify.
+    if (body.action === 'connect_startup') {
+      return NextResponse.json(
+        { error: 'Verify a work email on the startup’s domain to link it.', code: 'claim_required' },
+        { status: 410 },
+      );
     }
 
     // Handle startup disconnect
     if (body.action === 'disconnect_startup') {
-      await sql`UPDATE "JobBoardEmployer" SET "startupId" = NULL, "updatedAt" = NOW() WHERE id = ${session.id}`;
+      await sql`UPDATE "JobBoardEmployer" SET "startupId" = NULL, "startupClaimMethod" = NULL, "startupClaimVerifiedAt" = NULL, "verifiedCompanyDomain" = NULL, "updatedAt" = NOW() WHERE id = ${session.id}`;
       await sql`UPDATE "JobBoardListing" SET "startupId" = NULL WHERE "employerId" = ${session.id}`;
       return NextResponse.json({ success: true, connected: false });
     }
@@ -73,6 +68,7 @@ export async function PUT(request: NextRequest) {
       WHERE id = ${session.id}
     `;
 
+    refreshSections(['jobs']); // company name and logo show on every job and the company page
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('[PUT /api/employer/company]', error);

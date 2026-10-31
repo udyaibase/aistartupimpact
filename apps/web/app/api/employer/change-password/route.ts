@@ -3,12 +3,14 @@ import { prisma } from '@udyaibase/database';
 import bcrypt from 'bcryptjs';
 import { requireEmployerAuth } from '@/lib/employer-auth';
 import { changePasswordSchema, validateInput } from '@/lib/validation';
+import { can, forbidden } from '@/lib/employer/permissions';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
     const session = await requireEmployerAuth();
+    if (!can(session.role, 'account.manage')) return forbidden();
 
     const body = await request.json();
     const validation = validateInput(changePasswordSchema, body);

@@ -18,6 +18,10 @@ vi.mock('next/headers', () => ({
 
 vi.mock('@neondatabase/serverless', () => ({
   neon: vi.fn(() => vi.fn(() => Promise.resolve([]))),
+  // The shared database package configures the driver on import.
+  neonConfig: {},
+  Pool: vi.fn(),
+  types: { setTypeParser: vi.fn(), builtins: {} },
 }));
 
 vi.mock('@/lib/auth', () => ({

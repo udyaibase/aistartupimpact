@@ -319,10 +319,8 @@ export default function FundingDashboard({ data: rawData }: { data: FundingRound
       
       if (result.success) {
         setShowEmailModal(false);
-        // Show success message
-        alert('Thank you! Your download will start shortly. Check your email for the full report.');
-        // TODO: Trigger actual PDF download when ready
-        // window.open(result.data.downloadUrl, '_blank');
+        // Start the download now; a copy of the link is emailed too.
+        window.location.href = result.data.downloadUrl;
       } else {
         alert('Failed to process your request. Please try again.');
       }

@@ -3,6 +3,7 @@
 import { neon } from '@neondatabase/serverless';
 import { revalidatePath } from 'next/cache';
 import { requireActionAuth } from '@/lib/api-auth';
+import { refreshPublic } from '@/lib/refresh-public';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -43,7 +44,7 @@ export async function createBreakingTickerAction(text: string) {
     `;
 
     revalidatePath('/tickers');
-    return { success: true };
+    await refreshPublic(['home']); return { success: true };
   } catch (error) {
     console.error('Error creating breaking ticker:', error);
     return { success: false, error: 'Failed to create ticker' };
@@ -61,7 +62,7 @@ export async function updateBreakingTickerAction(id: string, text: string, isAct
     `;
 
     revalidatePath('/tickers');
-    return { success: true };
+    await refreshPublic(['home']); return { success: true };
   } catch (error) {
     console.error('Error updating breaking ticker:', error);
     return { success: false, error: 'Failed to update ticker' };
@@ -77,7 +78,7 @@ export async function deleteBreakingTickerAction(id: string) {
     `;
 
     revalidatePath('/tickers');
-    return { success: true };
+    await refreshPublic(['home']); return { success: true };
   } catch (error) {
     console.error('Error deleting breaking ticker:', error);
     return { success: false, error: 'Failed to delete ticker' };
@@ -97,7 +98,7 @@ export async function reorderBreakingTickersAction(tickerIds: string[]) {
     }
 
     revalidatePath('/tickers');
-    return { success: true };
+    await refreshPublic(['home']); return { success: true };
   } catch (error) {
     console.error('Error reordering breaking tickers:', error);
     return { success: false, error: 'Failed to reorder tickers' };
@@ -141,7 +142,7 @@ export async function createLiveTickerAction(text: string) {
     `;
 
     revalidatePath('/tickers');
-    return { success: true };
+    await refreshPublic(['home']); return { success: true };
   } catch (error) {
     console.error('Error creating live ticker:', error);
     return { success: false, error: 'Failed to create ticker' };
@@ -159,7 +160,7 @@ export async function updateLiveTickerAction(id: string, text: string, isActive:
     `;
 
     revalidatePath('/tickers');
-    return { success: true };
+    await refreshPublic(['home']); return { success: true };
   } catch (error) {
     console.error('Error updating live ticker:', error);
     return { success: false, error: 'Failed to update ticker' };
@@ -175,7 +176,7 @@ export async function deleteLiveTickerAction(id: string) {
     `;
 
     revalidatePath('/tickers');
-    return { success: true };
+    await refreshPublic(['home']); return { success: true };
   } catch (error) {
     console.error('Error deleting live ticker:', error);
     return { success: false, error: 'Failed to delete ticker' };
@@ -195,7 +196,7 @@ export async function reorderLiveTickersAction(tickerIds: string[]) {
     }
 
     revalidatePath('/tickers');
-    return { success: true };
+    await refreshPublic(['home']); return { success: true };
   } catch (error) {
     console.error('Error reordering live tickers:', error);
     return { success: false, error: 'Failed to reorder tickers' };

@@ -1,3 +1,4 @@
+import { jsonLd as jsonLdHtml } from "@/lib/json-ld";
 import Link from 'next/link';
 import { Metadata } from 'next';
 import { Clock, Calendar, User, Newspaper, BookOpen, Twitter, Linkedin, Globe } from 'lucide-react';
@@ -61,7 +62,7 @@ export default async function AuthorPage(props: { params: Promise<{ slug: string
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }}
       />
       {/* Author Header */}
       <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 mb-8 sm:mb-10 text-center sm:text-left">

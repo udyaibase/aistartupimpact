@@ -1,15 +1,16 @@
+import { jsonLd } from "@/lib/json-ld";
 import Link from 'next/link';
 import Image from 'next/image';
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { Clock, Calendar, ChevronRight } from 'lucide-react';
 import StorySaveButton from '@/components/StorySaveButton';
-import { sql, getArticleBySlugDirect, getArticlesDirect } from '@/lib/db';
+import { sql, getArticleBySlugDirect, getRelatedArticlesDirect } from '@/lib/db';
 import { defaultHeroArticle, defaultLatestStories, defaultIndiaAI } from '@/lib/fallbacks';
 import { buildArticleMetadata, generateArticleSchema, generateBreadcrumbSchema } from '@/lib/seo';
 import { sanitizeHtml } from '@/lib/sanitize';
 import TrackView from '@/components/TrackView';
-import ShareButton from '@/components/ShareButton';
+import ShareMenu from '@/components/shared/ShareMenu';
 import ArticleActions from '@/components/ArticleActions';
 import SubscribeForm from '@/components/SubscribeForm';
 
@@ -39,7 +40,6 @@ export async function generateStaticParams() {
 export default async function ArticlePage(props: { params: Promise<{ slug: string }> }) {
   const params = await props.params;
   let article = await getArticleBySlugDirect(params.slug);
-  const related = await getArticlesDirect({ limit: 4 });
 
   if (!article) {
     if (params.slug === defaultHeroArticle.slug) article = defaultHeroArticle as any;
@@ -58,7 +58,8 @@ export default async function ArticlePage(props: { params: Promise<{ slug: strin
       : String(article.content || article.excerpt || '')
   );
 
-  const relatedArticles = (related || []).filter((a: any) => a.slug !== params.slug).slice(0, 3);
+  // Shown under /news, so only article types that live in the news section.
+  const relatedArticles = await getRelatedArticlesDirect(article.id, ['NEWS', 'TOOL_REVIEW', 'GUIDE', 'COMPARISON', 'REPORT', 'SPONSORED', 'STARTUP_UPDATE'], 3);
 
   const siteUrl = 'https://udyaibase.com';
   const articleUrl = `${siteUrl}/news/${article.slug}`;
@@ -86,11 +87,11 @@ export default async function ArticlePage(props: { params: Promise<{ slug: strin
       <TrackView entityType="article" entityId={article.id} />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema) }}
+        dangerouslySetInnerHTML={{ __html: jsonLd(articleSchema) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
+        dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbSchema) }}
       />
       <nav className="flex items-center gap-1.5 text-xs sm:text-sm font-jakarta text-gray-400 dark:text-gray-500 mb-6">
         <Link href="/" className="hover:text-brand">Home</Link>
@@ -132,7 +133,14 @@ export default async function ArticlePage(props: { params: Promise<{ slug: strin
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <ShareButton title={article.title} />
+              <ShareMenu
+                url={`https://udyaibase.com/news/${article.slug}`}
+                title={article.title}
+                utmCampaign="article_share"
+                variant="icon"
+                entityType="ARTICLE"
+                entityId={article.id}
+              />
               <StorySaveButton slug={article.slug} />
             </div>
           </div>

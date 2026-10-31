@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LogOut, Menu, X } from 'lucide-react';
+import { Receipt, LogOut, Menu, X } from 'lucide-react';
 import { useState, useEffect, createContext, useContext } from 'react';
 import {
   LayoutDashboard,
@@ -101,6 +101,10 @@ const sidebarItems = [
   { type: 'divider' as const, label: 'Job Board', roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
   { label: 'Job Listings', href: '/jobs-board', icon: Briefcase, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
   { label: 'Employers', href: '/employers', icon: Building2, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
+  { label: 'Billing', href: '/billing', icon: Receipt, roles: ['SUPER_ADMIN'] },
+  { label: 'Monitoring', href: '/monitoring', icon: Activity, roles: ['SUPER_ADMIN'] },
+  { label: 'Plans', href: '/plans', icon: CreditCard, roles: ['SUPER_ADMIN'] },
+  { label: 'Premium Promotions', href: '/promotions', icon: Megaphone, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
 
   { type: 'divider' as const, label: 'Marketing', roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'AD_MANAGER'] },
   { label: 'Subscribers', href: '/subscribers', icon: Users, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'AD_MANAGER'] },

@@ -1,7 +1,7 @@
 'use server';
 
 import { requireFounderAuth } from '@/lib/founder-auth';
-import { sendSubmissionReceivedEmail } from '@/lib/founder-email';
+import { sendAdminReviewAlert, sendSubmissionReceivedEmail } from '@/lib/founder-email';
 import { prisma } from '@udyaibase/database';
 import { revalidatePath } from 'next/cache';
 
@@ -200,15 +200,14 @@ export async function submitToolAction(data: ToolSubmission) {
       }
     }
 
-    // TODO: Send notification to admin
-
-    // Send confirmation email to founder (fire-and-forget)
+    // Confirm to the founder and alert the review team (fire-and-forget)
     const founderInfo = await prisma.$queryRaw<any[]>`
       SELECT email, name FROM "FounderUser" WHERE id = ${session.userId} LIMIT 1
     `;
     if (founderInfo.length > 0) {
       sendSubmissionReceivedEmail(founderInfo[0].email, founderInfo[0].name, 'tool', data.name)
         .catch(err => console.error('Submission email error:', err));
+      sendAdminReviewAlert({ entityType: 'tool', entityName: data.name, founderEmail: founderInfo[0].email, reason: 'new' });
     }
 
     revalidatePath('/founder/tools');
@@ -423,8 +422,6 @@ export async function updateToolAction(id: string, data: ToolSubmission) {
       }
     }
 
-    // TODO: Send notification to admin if status changed to PENDING
-    // TODO: Send confirmation email to founder
 
     revalidatePath('/founder/tools');
     revalidatePath(`/founder/tools/${id}`);

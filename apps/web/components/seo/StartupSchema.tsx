@@ -1,3 +1,4 @@
+import { jsonLd } from "@/lib/json-ld";
 /**
  * Startup JSON-LD Schema Component
  * Generates structured data with @graph containing WebPage, Organization, and BreadcrumbList
@@ -139,7 +140,7 @@ export function StartupSchema({ startup }: StartupSchemaProps) {
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+      dangerouslySetInnerHTML={{ __html: jsonLd(schema) }}
     />
   );
 }

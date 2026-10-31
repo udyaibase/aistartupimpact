@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { neon } from '@neondatabase/serverless';
 import { requireApiAuth } from '@/lib/api-auth';
+import { withPublicRefresh } from '@/lib/refresh-public';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST() {
+async function postHandler() {
   const { error } = await requireApiAuth(['SUPER_ADMIN', 'EDITOR_IN_CHIEF']);
   if (error) return error;
   try {
@@ -112,3 +113,5 @@ export async function POST() {
     );
   }
 }
+
+export const POST = withPublicRefresh(['india-ai', 'home'], postHandler);

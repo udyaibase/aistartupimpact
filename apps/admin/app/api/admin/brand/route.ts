@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getPublicUrl } from "@/lib/media";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@udyaibase/database";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import crypto from "crypto";
 import { logAuditEvent } from "@/lib/audit-log";
+import { withPublicRefresh } from '@/lib/refresh-public';
 
 const SUPER_ROLES = ["SUPER_ADMIN", "EDITOR_IN_CHIEF"];
 
@@ -17,10 +19,6 @@ const s3 = new S3Client({
   },
 });
 
-function getPublicUrl(key: string) {
-  if (process.env.R2_PUBLIC_URL) return `${process.env.R2_PUBLIC_URL}/${key}`;
-  return `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/v1/media/${key}`;
-}
 
 const ALLOWED_TYPES: Record<string, string[]> = {
   logoLight: ["image/svg+xml", "image/png", "image/webp"],
@@ -38,7 +36,7 @@ const BRAND_KEYS = [
   "brand_customDisplayFontName", "brand_customBodyFontName",
 ];
 
-export async function POST(request: NextRequest) {
+async function postHandler(request: NextRequest) {
   try {
     const session: any = await getServerSession(authOptions);
     if (!session?.user || !SUPER_ROLES.includes(session.user.role)) {
@@ -245,3 +243,5 @@ export async function GET() {
     return NextResponse.json({ success: false, error: "Failed to load" }, { status: 500 });
   }
 }
+
+export const POST = withPublicRefresh(['all'], postHandler);

@@ -137,26 +137,11 @@ async function checkEmail(): Promise<ServiceCheck> {
   }
 }
 
-async function checkApi(): Promise<ServiceCheck> {
-  const base = { id: "api", name: "API server" };
-  const url = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
-  if (!url) return { ...base, status: "not_configured", detail: "NEXT_PUBLIC_API_URL is not set", latencyMs: null };
-  const host = url.replace(/^https?:\/\//, "");
-  try {
-    const { value: res, ms } = await timed(() => fetch(`${url}/health`, { cache: "no-store", signal: signal() }));
-    const body = await res.json().catch(() => null);
-    if (res.ok && body?.status === "ok") return { ...base, status: "ok", detail: `${host} healthy`, latencyMs: ms };
-    return { ...base, status: "error", detail: `${host} returned HTTP ${res.status}`, latencyMs: ms };
-  } catch (e) {
-    return { ...base, status: "error", detail: `${host}: ${describeError(e)}`, latencyMs: null };
-  }
-}
-
 export async function runServiceChecks(): Promise<ServiceCheck[]> {
   const storagePromise = checkStorage();
-  const [storage, redis, search, email, api] = await Promise.all([
-    storagePromise, checkRedis(), checkSearch(), checkEmail(), checkApi(),
+  const [storage, redis, search, email] = await Promise.all([
+    storagePromise, checkRedis(), checkSearch(), checkEmail(),
   ]);
   const media = await checkMediaDomain(storage.sampleKey);
-  return [storage.check, media, redis, search, email, api];
+  return [storage.check, media, redis, search, email];
 }

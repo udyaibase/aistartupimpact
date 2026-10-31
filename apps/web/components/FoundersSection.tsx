@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { Crown } from 'lucide-react';
 import FounderProfileModal from './FounderProfileModal';
 import SignInModal from '@/components/auth/SignInModal';
+import { useUser } from '@/components/UserProvider';
 
 interface Founder {
   name: string;
@@ -20,10 +21,11 @@ interface Founder {
 interface FoundersSectionProps {
   founders: Founder[];
   startupName?: string;
-  isSignedIn?: boolean;
 }
 
-export default function FoundersSection({ founders, startupName, isSignedIn = false }: FoundersSectionProps) {
+export default function FoundersSection({ founders, startupName }: FoundersSectionProps) {
+  // Read in the browser so the startup page can be cached for everyone.
+  const isSignedIn = !!useUser().user;
   const [selectedFounder, setSelectedFounder] = useState<Founder | null>(null);
   const [showSignIn, setShowSignIn] = useState(false);
 

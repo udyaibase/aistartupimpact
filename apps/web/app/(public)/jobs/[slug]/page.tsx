@@ -1,3 +1,4 @@
+import { jsonLd } from "@/lib/json-ld";
 import { sql } from '@/lib/db';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
@@ -8,22 +9,51 @@ import JobActions from '@/components/jobs/JobActions';
 import JobDescription from '@/components/jobs/JobDescription';
 import TrackView from '@/components/TrackView';
 import SubscribeForm from '@/components/SubscribeForm';
+import ReportJobButton from '@/components/jobs/ReportJobButton';
+import { isClaimVerified } from '@/lib/jobs/trust';
+import { jobPostingSalary } from '@/lib/jobs/public';
+
+function listingIsOpen(job: { status?: string; expiresAt?: string | null; moderationHold?: boolean }): boolean {
+  if (job.status && job.status !== 'OPEN') return false;
+  if (job.moderationHold) return false;
+  return !job.expiresAt || new Date(job.expiresAt + 'Z').getTime() > Date.now();
+}
+
+function formatSalaryRange(min: number, max: number | null, currency: string | null): string {
+  if ((currency || 'INR') === 'INR') {
+    const l = (n: number) => (n / 100000).toLocaleString('en-IN', { maximumFractionDigits: 1 });
+    return max && max !== min ? `₹${l(min)}–${l(max)} L` : `₹${l(min)} L`;
+  }
+  const sym = currency === 'USD' ? '$' : `${currency} `;
+  const k = (n: number) => `${Math.round(n / 1000)}K`;
+  return max && max !== min ? `${sym}${k(min)}–${k(max)}` : `${sym}${k(min)}`;
+}
 interface PageProps {
   params: Promise<{ slug: string }>;
+}
+
+// Cached; refreshed when the employer publishes, edits, pauses or closes the job (lib/revalidate.ts).
+// Views are counted in the browser by <TrackView> (/api/track), never during render.
+export const revalidate = 3600;
+
+// Pages are built on first visit and then cached (no list at build time); refreshed when content changes.
+export async function generateStaticParams() {
+  return [];
 }
 
 export async function generateMetadata(props: PageProps): Promise<Metadata> {
   const params = await props.params;
   const jobs = await sql`
-    SELECT jl.title, jl."shortDescription", e."companyName"
+    SELECT jl.title, jl."shortDescription", jl.status, jl."moderationHold", jl."expiresAt"::text AS "expiresAt", e."companyName"
     FROM "JobBoardListing" jl
     JOIN "JobBoardEmployer" e ON e.id = jl."employerId"
     WHERE jl.slug = ${params.slug} AND jl."deletedAt" IS NULL
     LIMIT 1
   `;
-  if (jobs.length === 0) return { title: 'Job Not Found' };
+  if (jobs.length === 0 || (jobs[0] as any).status === 'DRAFT') return { title: 'Job Not Found' };
   const job = jobs[0] as any;
   return {
+    ...(listingIsOpen(job) ? {} : { robots: { index: false, follow: true } }),
     title: `${job.title} at ${job.companyName} — AI Jobs`,
     description: job.shortDescription || `${job.title} position at ${job.companyName}. Apply now on Udyaibase.`,
     alternates: { canonical: `/jobs/${params.slug}` },
@@ -35,7 +65,7 @@ export default async function JobDetailPage(props: PageProps) {
   const jobs = await sql`
     SELECT jl.*, e."companyName", e.slug AS "companySlug", e."logoUrl",
            e."websiteUrl", e.description AS "companyDescription",
-           e."companySize", e.industry, e."linkedinUrl", e."startupId", e."isVerified"
+           e."companySize", e.industry, e."linkedinUrl", e."startupId", e."isVerified", e."startupClaimMethod"
     FROM "JobBoardListing" jl
     JOIN "JobBoardEmployer" e ON e.id = jl."employerId"
     WHERE jl.slug = ${params.slug} AND jl."deletedAt" IS NULL
@@ -44,9 +74,11 @@ export default async function JobDetailPage(props: PageProps) {
 
   if (jobs.length === 0) notFound();
   const job = jobs[0] as any;
-
-  // Increment view count (fire-and-forget)
-  sql`UPDATE "JobBoardListing" SET "viewsCount" = "viewsCount" + 1 WHERE id = ${job.id}`.catch(() => {});
+  // Drafts were never public; they must not leak through a guessed slug.
+  if (job.status === 'DRAFT') notFound();
+  const isOpen = listingIsOpen(job);
+  // Only domain-verified (or admin-managed) companies get the Verified label and Google job markup.
+  const companyVerified = job.isVerified || isClaimVerified(job);
 
   // Get other jobs from same employer
   let otherJobs: any[] = [];
@@ -57,7 +89,8 @@ export default async function JobDetailPage(props: PageProps) {
         SELECT id, slug, title, "workType", category
         FROM "JobBoardListing"
         WHERE "employerId" = ${job.employerId} AND id != ${job.id}
-          AND "isActive" = true AND "deletedAt" IS NULL
+          AND status = 'OPEN' AND "moderationHold" = false AND "deletedAt" IS NULL
+          AND ("expiresAt" IS NULL OR "expiresAt" > NOW())
         ORDER BY "publishedAt" DESC
         LIMIT 5
       `,
@@ -70,8 +103,8 @@ export default async function JobDetailPage(props: PageProps) {
         JOIN "JobBoardEmployer" e ON e.id = jl."employerId"
         WHERE jl.id != ${job.id}
           AND jl."employerId" != ${job.employerId}
-          AND jl."isActive" = true AND jl."deletedAt" IS NULL
-          AND (jl."expiresAt" IS NULL OR jl."expiresAt" > NOW())
+          AND jl.status = 'OPEN' AND jl."moderationHold" = false AND jl."deletedAt" IS NULL
+          AND (jl."expiresAt" IS NULL OR jl."expiresAt" > NOW()) AND jl."showOnJobsPage" = true
           AND jl.category = ${job.category}
         ORDER BY jl."isFeatured" DESC, jl."publishedAt" DESC NULLS LAST
         LIMIT 6
@@ -120,17 +153,9 @@ export default async function JobDetailPage(props: PageProps) {
     };
   }
 
-  if (job.showSalary && job.salaryMin) {
-    jobSchema.baseSalary = {
-      "@type": "MonetaryAmount",
-      "currency": job.salaryCurrency || "INR",
-      "value": {
-        "@type": "QuantitativeValue",
-        "minValue": job.salaryMin,
-        "maxValue": job.salaryMax,
-        "unitText": "YEAR",
-      },
-    };
+  if (job.showSalary) {
+    const salary = jobPostingSalary(job);
+    if (salary) jobSchema.baseSalary = salary;
   }
 
   if (job.skills?.length > 0) {
@@ -159,13 +184,15 @@ export default async function JobDetailPage(props: PageProps) {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
       <TrackView entityType="job" entityId={job.id} />
+      {isOpen && companyVerified && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLd(jobSchema) }}
+        />
+      )}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jobSchema) }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbJsonLd) }}
       />
 
       {/* Breadcrumb */}
@@ -198,7 +225,11 @@ export default async function JobDetailPage(props: PageProps) {
                   <Link href={`/jobs/company/${job.companySlug}`} className="text-sm text-brand font-semibold font-jakarta hover:underline">
                     {job.companyName}
                   </Link>
-                  {job.isVerified && <CheckCircle2 className="w-3.5 h-3.5 text-blue-500" />}
+                  {companyVerified ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-blue-500" aria-label="Verified company" />
+                  ) : (
+                    <span className="text-[11px] font-jakarta font-medium text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">Unverified company</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -208,8 +239,7 @@ export default async function JobDetailPage(props: PageProps) {
               {job.showSalary && job.salaryMin && (
                 <div>
                   <p className="font-sora font-bold text-lg sm:text-xl text-navy dark:text-white">
-                    {job.salaryCurrency === 'USD' ? '$' : job.salaryCurrency === 'INR' ? '₹' : job.salaryCurrency}{' '}
-                    {(job.salaryMin / 1000).toFixed(0)}K – {(job.salaryMax / 1000).toFixed(0)}K
+                    {formatSalaryRange(job.salaryMin, job.salaryMax, job.salaryCurrency)}
                   </p>
                   <p className="text-[10px] text-gray-400 font-jakarta uppercase tracking-wider">per year</p>
                 </div>
@@ -264,6 +294,9 @@ export default async function JobDetailPage(props: PageProps) {
           {/* Description */}
           <div className="card p-5 sm:p-6">
             <h2 className="font-sora font-bold text-base text-navy dark:text-white mb-4">About the Role</h2>
+            {job.hiringManagerName && (
+              <p className="text-sm text-gray-600 dark:text-gray-400 font-jakarta -mt-2 mb-4">Reports to <span className="font-semibold text-gray-900 dark:text-white">{job.hiringManagerName}</span></p>
+            )}
             <JobDescription content={job.description || ''} />
           </div>
 
@@ -282,6 +315,15 @@ export default async function JobDetailPage(props: PageProps) {
           )}
 
           {/* Bottom Apply + Save + Share */}
+          {!isOpen ? (
+            <div role="status" className="card p-5 sm:p-6 border-amber-200 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-900/40">
+              <p className="font-sora font-bold text-base text-navy dark:text-white">This role is closed</p>
+              <p className="text-sm text-gray-600 dark:text-gray-300 font-jakarta mt-1">
+                {job.companyName} is no longer accepting applications for this job.{relatedJobs.length > 0 ? ' Similar open roles are listed below.' : ''}
+              </p>
+              <Link href="/jobs" className="inline-flex items-center gap-1 mt-3 min-h-[44px] text-sm font-semibold text-brand hover:underline">Browse open AI jobs <ChevronRight className="w-4 h-4" /></Link>
+            </div>
+          ) : (
           <JobActions
             applyUrl={applyUrl}
             isExternal={job.applicationType === 'EXTERNAL'}
@@ -289,7 +331,9 @@ export default async function JobDetailPage(props: PageProps) {
             jobUrl={jobUrl}
             companyName={job.companyName}
             jobSlug={job.slug}
+            jobId={job.id}
           />
+          )}
         </div>
 
         {/* Sidebar */}
@@ -306,7 +350,7 @@ export default async function JobDetailPage(props: PageProps) {
               </div>
               <div className="min-w-0">
                 <h3 className="font-sora font-bold text-base text-navy dark:text-white truncate">{job.companyName}</h3>
-                {job.isVerified && (
+                {companyVerified && (
                   <span className="inline-flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 font-jakarta font-semibold mt-0.5">
                     <CheckCircle2 className="w-3.5 h-3.5" /> Verified Company
                   </span>
@@ -409,6 +453,10 @@ export default async function JobDetailPage(props: PageProps) {
               <p><strong>Posted:</strong> {job.publishedAt ? new Date(job.publishedAt + 'Z').toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' }) : 'Recently'}</p>
               <p><strong>Views:</strong> {job.viewsCount}</p>
               <p><strong>Applications:</strong> {job.applicationsCount}</p>
+            </div>
+            <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+              <p className="text-[11px] text-gray-500 font-jakarta mb-1">Udyaibase never asks candidates to pay. If this job does, let us know.</p>
+              <ReportJobButton slug={job.slug} title={job.title} />
             </div>
           </div>
 

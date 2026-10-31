@@ -19,7 +19,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       sql`
         SELECT slug, "updatedAt", "createdAt"
         FROM "JobBoardListing"
-        WHERE "isActive" = true AND "deletedAt" IS NULL
+        WHERE status = 'OPEN' AND "moderationHold" = false AND "deletedAt" IS NULL
           AND ("expiresAt" IS NULL OR "expiresAt" > NOW())
         ORDER BY "publishedAt" DESC
         LIMIT 1000
@@ -28,7 +28,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         SELECT e.slug, MAX(l."updatedAt") as "lastModified"
         FROM "JobBoardEmployer" e
         JOIN "JobBoardListing" l ON l."employerId" = e.id
-        WHERE e."isActive" = true AND l."isActive" = true AND l."deletedAt" IS NULL
+        WHERE e."isActive" = true AND l.status = 'OPEN' AND l."moderationHold" = false AND l."deletedAt" IS NULL
           AND (l."expiresAt" IS NULL OR l."expiresAt" > NOW())
         GROUP BY e.slug
       `,

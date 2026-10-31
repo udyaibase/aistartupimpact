@@ -33,6 +33,8 @@ export default function BookmarkButton({
       return;
     }
 
+    const controller = new AbortController();
+
     const checkSaved = async () => {
       try {
         const params = new URLSearchParams();
@@ -42,16 +44,17 @@ export default function BookmarkButton({
           params.set('startupIds', itemId);
         }
 
-        const res = await fetch(`/api/bookmarks/check?${params}`);
+        const res = await fetch(`/api/bookmarks/check?${params}`, { signal: controller.signal });
+        if (!res.ok) return;
         const data = await res.json();
-        const key = `${type}-${itemId}`;
-        setIsSaved(!!data.saved[key]);
-      } catch (error) {
-        console.error('Error checking saved status:', error);
+        setIsSaved(!!data?.saved?.[`${type}-${itemId}`]);
+      } catch {
+        // Saved state is a hint only: aborted requests (navigation, dev reloads) and offline errors are expected.
       }
     };
 
     checkSaved();
+    return () => controller.abort();
   }, [user, type, itemId]);
 
   const handleToggle = async (e: React.MouseEvent) => {

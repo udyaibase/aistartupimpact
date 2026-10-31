@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { dailyDigestHtml } from '@udyaibase/utils';
 import { sendEmail } from '@/lib/email/send';
+import { trackCronRoute } from '@/lib/ops/cron';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +10,10 @@ const ADMIN_EMAIL = process.env.ADMIN_DIGEST_EMAIL || 'admin@udyaibase.com';
 const FROM_EMAIL = process.env.RESEND_NEWSLETTER_EMAIL || 'newsletter-noreply@udyaibase.com';
 
 export async function GET(request: NextRequest) {
+  return trackCronRoute('daily-digest', () => digest(request));
+}
+
+async function digest(request: NextRequest) {
   // Verify cron secret (Vercel sets this automatically for cron jobs)
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;

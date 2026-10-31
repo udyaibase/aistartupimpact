@@ -48,45 +48,46 @@ export default function JobSearchBar({ initialQuery, initialLocation }: { initia
 
   useEffect(() => () => clearTimeout(debounceRef.current), []);
 
-  const hasInput = query.trim() || location.trim();
-
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2 sm:gap-0">
-      <div className="relative flex-1 sm:rounded-l-xl sm:rounded-r-none rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden focus-within:border-brand/50 focus-within:ring-1 focus-within:ring-brand/20 transition-all">
+    <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 sm:rounded-lg sm:border sm:border-gray-200 dark:sm:border-gray-700 sm:bg-white dark:sm:bg-gray-900 sm:p-2">
+      {/* Job title input */}
+      <div className="relative flex-1 rounded-md bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 sm:border-0 overflow-hidden">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         <input
           type="text"
           value={query}
           onChange={(e) => handleQueryChange(e.target.value)}
-          placeholder="Job title, skill or company"
+          placeholder="Job title, skill or company (e.g. LLM, Sarvam)"
           className="w-full pl-10 pr-8 py-3 text-sm font-jakarta bg-transparent text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none"
         />
         {query && (
-          <button type="button" onClick={() => handleQueryChange('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
+          <button type="button" onClick={() => handleQueryChange('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
             <X className="w-3.5 h-3.5 text-gray-400" />
           </button>
         )}
       </div>
-      <div className="relative hidden sm:block sm:border-y sm:border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden sm:border-l-0 focus-within:border-brand/50 focus-within:ring-1 focus-within:ring-brand/20 transition-all">
+      {/* Location input */}
+      <div className="relative hidden sm:block rounded-md bg-gray-100 dark:bg-gray-800 overflow-hidden sm:w-56">
         <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         <input
           type="text"
           value={location}
           onChange={(e) => handleLocationChange(e.target.value)}
           placeholder="City or Remote"
-          className="w-full sm:w-48 pl-10 pr-8 py-3 text-sm font-jakarta bg-transparent text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none"
+          className="w-full pl-10 pr-8 py-3 text-sm font-jakarta bg-transparent text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none"
         />
         {location && (
-          <button type="button" onClick={() => handleLocationChange('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
+          <button type="button" onClick={() => handleLocationChange('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
             <X className="w-3.5 h-3.5 text-gray-400" />
           </button>
         )}
       </div>
+      {/* Search button */}
       <button
         type="submit"
-        className="px-6 py-3 sm:rounded-r-xl sm:rounded-l-none rounded-xl bg-brand text-white font-sora font-bold text-sm hover:bg-brand/90 transition-colors shrink-0"
+        className="px-6 py-3 rounded-md bg-brand text-white font-sora font-bold text-sm hover:bg-brand/90 transition-colors shrink-0"
       >
-        Search
+        Search jobs
       </button>
     </form>
   );

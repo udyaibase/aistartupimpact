@@ -7,8 +7,12 @@ import { getUnifiedSession } from "@/lib/unified-auth";
 import OrganizerSidebar from "@/components/organizer/OrganizerSidebar";
 import OrganizerHeader from "@/components/organizer/OrganizerHeader";
 import OrganizerMobileNav from "@/components/organizer/OrganizerMobileNav";
+import GuideHost from "@/components/organizer/guide/GuideHost";
 import { SidebarProvider } from "@/components/ui/SidebarContext";
 import CompanyEmailBanner from "@/components/CompanyEmailBanner";
+import PlanBanner from "@/components/billing/PlanBanner";
+import { hostPlanPhase, isPlatformOrganizer } from "@/lib/events/plans";
+import { prisma } from "@udyaibase/database";
 
 const USER_JWT_SECRET = new TextEncoder().encode(
   process.env.USER_JWT_SECRET!
@@ -65,21 +69,31 @@ export default async function OrganizerWorkspaceLayout({
   }
 
   if (!session) redirect("/organizer/login");
+  const hostRow = await prisma.eventOrganizer.findUnique({ where: { id: session.id }, select: { plan: true, planExpiresAt: true, email: true } }).catch(() => null);
+  const hostPlan = hostRow && !isPlatformOrganizer(hostRow.email) ? hostPlanPhase(hostRow) : null;
+
+  let eventCount = 0;
+  try {
+    const rows = await sql`SELECT COUNT(*)::int AS c FROM "Event" WHERE "organizerId" = ${session.id} AND "deletedAt" IS NULL`;
+    eventCount = rows[0]?.c ?? 0;
+  } catch {}
 
   return (
     <SidebarProvider storageKey="organizer-sidebar-collapsed">
-      <div className="flex h-screen bg-page dark:bg-page-dark overflow-hidden">
+      <div className="organizer-portal flex h-[100dvh] bg-page dark:bg-page-dark overflow-hidden">
         <div className="hidden md:block">
-          <OrganizerSidebar organizer={session} />
+          <OrganizerSidebar organizer={session} eventCount={eventCount} />
         </div>
         <div className="flex-1 flex flex-col overflow-hidden">
           <OrganizerHeader organizer={session} />
-          <main className="flex-1 overflow-y-auto p-4 pb-20 md:pb-4">
+          <main className="relative flex-1 overflow-y-auto overscroll-contain px-4 md:px-8 lg:px-10 py-4 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-4">
             <CompanyEmailBanner userType="organizer" />
+            {hostPlan && <PlanBanner phase={hostPlan.phase} planName="Pro" endsAt={hostPlan.endsAt} graceEndsAt={hostPlan.graceEndsAt} billingHref="/organizer/billing" canRenew pausedWhatInGrace="New promo emails are paused." />}
             {children}
           </main>
         </div>
         <OrganizerMobileNav />
+        <GuideHost />
       </div>
     </SidebarProvider>
   );

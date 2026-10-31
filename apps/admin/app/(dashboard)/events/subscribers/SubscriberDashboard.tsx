@@ -57,7 +57,7 @@ export default function SubscriberDashboard({ totalCount, events, topCities, top
 
   const previewAudience = async () => {
     setLoading(true);
-    const result = await getAudiencePreviewAction({ city: targetCity || undefined, occupation: targetOccupation || undefined });
+    const result = await getAudiencePreviewAction({ city: targetCity || undefined, occupation: targetOccupation || undefined, eventSlug: selectedEvent?.slug });
     setAudienceCount(result.count);
     setLoading(false);
   };

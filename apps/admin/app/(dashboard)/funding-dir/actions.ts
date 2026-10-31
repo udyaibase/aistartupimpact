@@ -3,6 +3,7 @@
 import { neon } from '@neondatabase/serverless';
 import { revalidatePath } from 'next/cache';
 import { requireActionAuth } from '@/lib/api-auth';
+import { refreshPublic } from '@/lib/refresh-public';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -47,7 +48,7 @@ export async function createFundingDigestAction(data: {
     `;
 
     revalidatePath('/funding-dir');
-    return { success: true };
+    await refreshPublic(['funding', 'startups', 'india-ai', 'home']); return { success: true };
   } catch (error) {
     console.error('Error creating funding digest:', error);
     return { success: false, error: 'Failed to create funding digest' };
@@ -78,7 +79,7 @@ export async function updateFundingDigestAction(id: string, data: {
     `;
 
     revalidatePath('/funding-dir');
-    return { success: true };
+    await refreshPublic(['funding', 'startups', 'india-ai', 'home']); return { success: true };
   } catch (error) {
     console.error('Error updating funding digest:', error);
     return { success: false, error: 'Failed to update funding digest' };
@@ -94,7 +95,7 @@ export async function deleteFundingDigestAction(id: string) {
     `;
 
     revalidatePath('/funding-dir');
-    return { success: true };
+    await refreshPublic(['funding', 'startups', 'india-ai', 'home']); return { success: true };
   } catch (error) {
     console.error('Error deleting funding digest:', error);
     return { success: false, error: 'Failed to delete funding digest' };
@@ -115,7 +116,7 @@ export async function toggleFundingDigestStatusAction(id: string) {
     `;
 
     revalidatePath('/funding-dir');
-    return { success: true };
+    await refreshPublic(['funding', 'startups', 'india-ai', 'home']); return { success: true };
   } catch (error) {
     console.error('Error toggling funding digest status:', error);
     return { success: false, error: 'Failed to toggle status' };
@@ -191,7 +192,7 @@ export async function createFundingRoundDirectAction(data: {
       )
     `;
     revalidatePath('/funding-dir');
-    return { success: true };
+    await refreshPublic(['funding', 'startups', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
     console.error('createFundingRoundDirectAction error:', error);
     return { success: false, error: error.message };
@@ -223,7 +224,7 @@ export async function updateFundingRoundDirectAction(id: string, data: {
       WHERE id = ${id}
     `;
     revalidatePath('/funding-dir');
-    return { success: true };
+    await refreshPublic(['funding', 'startups', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
     console.error('updateFundingRoundDirectAction error:', error);
     return { success: false, error: error.message };
@@ -236,7 +237,7 @@ export async function deleteFundingRoundDirectAction(id: string) {
   try {
     await sql`DELETE FROM "FundingRound" WHERE id = ${id}`;
     revalidatePath('/funding-dir');
-    return { success: true };
+    await refreshPublic(['funding', 'startups', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };
   }

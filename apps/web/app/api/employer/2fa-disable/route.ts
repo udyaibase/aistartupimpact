@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { requireEmployerAuth } from '@/lib/employer-auth';
 import { verifyTOTPToken, decryptSecret } from '@/lib/two-factor';
+import { can, forbidden } from '@/lib/employer/permissions';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
     const session = await requireEmployerAuth();
+    if (!can(session.role, 'account.manage')) return forbidden();
     const { token } = await request.json();
 
     if (!token) {

@@ -3,6 +3,7 @@
 import { neon } from '@neondatabase/serverless';
 import { revalidatePath } from 'next/cache';
 import { requireActionAuth } from '@/lib/api-auth';
+import { refreshPublic } from '@/lib/refresh-public';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -68,7 +69,7 @@ export async function createFundingRoundAction(data: {
     `;
 
     revalidatePath('/funding-rounds');
-    return { success: true };
+    await refreshPublic(['funding', 'startups', 'india-ai', 'home']); return { success: true };
   } catch (error) {
     console.error('Error creating funding round:', error);
     return { success: false, error: 'Failed to create funding round' };
@@ -98,7 +99,7 @@ export async function updateFundingRoundAction(id: string, data: {
     `;
 
     revalidatePath('/funding-rounds');
-    return { success: true };
+    await refreshPublic(['funding', 'startups', 'india-ai', 'home']); return { success: true };
   } catch (error) {
     console.error('Error updating funding round:', error);
     return { success: false, error: 'Failed to update funding round' };
@@ -114,7 +115,7 @@ export async function deleteFundingRoundAction(id: string) {
     `;
 
     revalidatePath('/funding-rounds');
-    return { success: true };
+    await refreshPublic(['funding', 'startups', 'india-ai', 'home']); return { success: true };
   } catch (error) {
     console.error('Error deleting funding round:', error);
     return { success: false, error: 'Failed to delete funding round' };

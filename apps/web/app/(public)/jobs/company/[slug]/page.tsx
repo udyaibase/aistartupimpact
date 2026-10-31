@@ -8,6 +8,15 @@ interface PageProps {
   params: Promise<{ slug: string }>;
 }
 
+
+// Cached; refreshed when the company edits its profile or a job changes (lib/revalidate.ts).
+export const revalidate = 3600;
+
+// Built on first visit, then cached.
+export async function generateStaticParams() {
+  return [];
+}
+
 export async function generateMetadata(props: PageProps): Promise<Metadata> {
   const params = await props.params;
   const employers = await sql`
@@ -38,8 +47,8 @@ export default async function CompanyJobsPage(props: PageProps) {
            "salaryMin", "salaryMax", "salaryCurrency", "showSalary",
            "isFeatured", "publishedAt"::text, city, country
     FROM "JobBoardListing"
-    WHERE "employerId" = ${company.id} AND "isActive" = true AND "deletedAt" IS NULL
-      AND ("expiresAt" IS NULL OR "expiresAt" > NOW())
+    WHERE "employerId" = ${company.id} AND status = 'OPEN' AND "moderationHold" = false AND "deletedAt" IS NULL
+      AND ("expiresAt" IS NULL OR "expiresAt" > NOW()) AND "showOnProfile" = true
     ORDER BY "isFeatured" DESC, "publishedAt" DESC
   `;
 

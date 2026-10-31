@@ -35,11 +35,30 @@ vi.mock('@/lib/rate-limit', () => ({
 
 vi.mock('@neondatabase/serverless', () => ({
   neon: vi.fn(() => vi.fn(() => Promise.resolve([]))),
+  neonConfig: {},
+  Pool: vi.fn(),
+  types: { setTypeParser: vi.fn(), builtins: {} },
 }));
 
-vi.mock('@udyaibase/database', () => ({
-  prisma: { $queryRaw: vi.fn(() => Promise.resolve([])) },
-}));
+// In-memory jobs: the routes must scope every query by the signed-in employer.
+const JOBS = [
+  { id: 'job-1', employerId: 'employer-a', title: 'Dev', slug: 'dev', description: 'x'.repeat(200), status: 'DRAFT', publishedAt: null, deletedAt: null, skills: [], mustHaveSkills: [], screeningQuestions: [], perks: [] },
+];
+const matches = (j: any, where: any = {}) =>
+  Object.entries(where).every(([k, v]) => (v === null ? j[k] == null : typeof v === 'object' ? true : j[k] === v));
+const mockPrisma = {
+  $queryRaw: vi.fn(() => Promise.resolve([])),
+  jobBoardListing: {
+    findMany: vi.fn(async ({ where }: any) => JOBS.filter((j) => matches(j, where))),
+    findFirst: vi.fn(async ({ where }: any) => JOBS.find((j) => matches(j, where)) ?? null),
+    count: vi.fn(async () => 0),
+    update: vi.fn(async ({ where, data }: any) => ({ ...JOBS.find((j) => j.id === where.id), ...data })),
+  },
+  jobBoardEmployer: { findUnique: vi.fn(async () => ({ id: 'employer-a', plan: 'FREE', planExpiresAt: null, maxActiveJobs: 1 })) },
+};
+vi.mock('@udyaibase/database', () => ({ prisma: mockPrisma }));
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+vi.mock('@/lib/jobs/slug', () => ({ uniqueJobSlug: vi.fn(async () => 'updated') }));
 
 function makeRequest(url: string, method = 'GET', body?: any) {
   const init: any = { method };
@@ -59,6 +78,9 @@ const EMPLOYER_A = {
   slug: 'company-a',
   plan: 'FREE',
   onboardingCompleted: true,
+  memberId: null,
+  memberName: null,
+  role: 'OWNER',
 };
 
 const EMPLOYER_B = {
@@ -68,6 +90,9 @@ const EMPLOYER_B = {
   slug: 'company-b',
   plan: 'FREE',
   onboardingCompleted: true,
+  memberId: null,
+  memberName: null,
+  role: 'OWNER',
 };
 
 describe('IDOR — Employer A cannot access Employer B resources', () => {
@@ -78,9 +103,6 @@ describe('IDOR — Employer A cannot access Employer B resources', () => {
   describe('GET /api/employer/jobs — scoped to own employer', () => {
     it('returns only jobs owned by authenticated employer', async () => {
       mockGetEmployerSession.mockResolvedValue(EMPLOYER_A);
-      mockSql.mockResolvedValueOnce([
-        { id: 'job-1', title: 'Dev', employerId: 'employer-a' },
-      ]);
       const { GET } = await import('@/app/api/employer/jobs/route');
       const res = await GET();
       expect(res.status).toBe(200);
@@ -99,22 +121,20 @@ describe('IDOR — Employer A cannot access Employer B resources', () => {
   describe('GET /api/employer/jobs/[id] — ownership check', () => {
     it('Employer A can access own job', async () => {
       mockGetEmployerSession.mockResolvedValue(EMPLOYER_A);
-      mockSql.mockResolvedValueOnce([{ id: 'job-1', title: 'Dev' }]);
       const { GET } = await import('@/app/api/employer/jobs/[id]/route');
       const res = await GET(
         makeRequest('/api/employer/jobs/job-1'),
-        { params: { id: 'job-1' } } as any
+        { params: Promise.resolve({ id: 'job-1' }) } as any
       );
       expect(res.status).toBe(200);
     });
 
     it('Employer B cannot access Employer A job (query scoped by session.id)', async () => {
       mockGetEmployerSession.mockResolvedValue(EMPLOYER_B);
-      mockSql.mockResolvedValueOnce([]);
       const { GET } = await import('@/app/api/employer/jobs/[id]/route');
       const res = await GET(
         makeRequest('/api/employer/jobs/job-1'),
-        { params: { id: 'job-1' } } as any
+        { params: Promise.resolve({ id: 'job-1' }) } as any
       );
       expect(res.status).toBe(404);
     });
@@ -124,7 +144,7 @@ describe('IDOR — Employer A cannot access Employer B resources', () => {
       const { GET } = await import('@/app/api/employer/jobs/[id]/route');
       const res = await GET(
         makeRequest('/api/employer/jobs/job-1'),
-        { params: { id: 'job-1' } } as any
+        { params: Promise.resolve({ id: 'job-1' }) } as any
       );
       expect(res.status).toBe(401);
     });
@@ -133,25 +153,38 @@ describe('IDOR — Employer A cannot access Employer B resources', () => {
   describe('PUT /api/employer/jobs/[id] — ownership check', () => {
     it('Employer A can update own job', async () => {
       mockGetEmployerSession.mockResolvedValue(EMPLOYER_A);
-      mockSql.mockResolvedValueOnce([{ id: 'job-1' }]); // ownership check
-      mockSql.mockResolvedValueOnce([]); // update
       const { PUT } = await import('@/app/api/employer/jobs/[id]/route');
       const res = await PUT(
-        makeRequest('/api/employer/jobs/job-1', 'PUT', { title: 'Updated' }),
-        { params: { id: 'job-1' } } as any
+        makeRequest('/api/employer/jobs/job-1', 'PUT', { draft: { title: 'Updated' } }),
+        { params: Promise.resolve({ id: 'job-1' }) } as any
       );
       expect(res.status).toBe(200);
     });
 
     it('Employer B cannot update Employer A job', async () => {
       mockGetEmployerSession.mockResolvedValue(EMPLOYER_B);
-      mockSql.mockResolvedValueOnce([]);
       const { PUT } = await import('@/app/api/employer/jobs/[id]/route');
       const res = await PUT(
-        makeRequest('/api/employer/jobs/job-1', 'PUT', { title: 'Hacked' }),
-        { params: { id: 'job-1' } } as any
+        makeRequest('/api/employer/jobs/job-1', 'PUT', { draft: { title: 'Hacked' } }),
+        { params: Promise.resolve({ id: 'job-1' }) } as any
       );
       expect(res.status).toBe(404);
+    });
+  });
+
+  describe('Team roles on jobs', () => {
+    it('an Interviewer cannot edit jobs (403)', async () => {
+      mockGetEmployerSession.mockResolvedValue({ ...EMPLOYER_A, memberId: 'm-1', memberName: 'Ivy', role: 'INTERVIEWER' });
+      const { PUT } = await import('@/app/api/employer/jobs/[id]/route');
+      const res = await PUT(makeRequest('/api/employer/jobs/job-1', 'PUT', { draft: { title: 'Nope' } }), { params: Promise.resolve({ id: 'job-1' }) } as any);
+      expect(res.status).toBe(403);
+    });
+
+    it('a Recruiter can edit the workspace job', async () => {
+      mockGetEmployerSession.mockResolvedValue({ ...EMPLOYER_A, memberId: 'm-2', memberName: 'Rae', role: 'RECRUITER' });
+      const { PUT } = await import('@/app/api/employer/jobs/[id]/route');
+      const res = await PUT(makeRequest('/api/employer/jobs/job-1', 'PUT', { draft: { title: 'Recruiter edit' } }), { params: Promise.resolve({ id: 'job-1' }) } as any);
+      expect(res.status).toBe(200);
     });
   });
 

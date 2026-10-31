@@ -124,7 +124,7 @@ export default function JobFilters({
     <>
       {/* ─── DESKTOP SIDEBAR ─── */}
       <aside className="hidden lg:block w-60 shrink-0">
-        <div className="sticky top-28 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-5 shadow-sm max-h-[calc(100vh-8rem)] overflow-y-auto">
+        <div className="sticky top-28 bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 p-5 shadow-sm max-h-[calc(100vh-8rem)] overflow-y-auto">
           <div className="flex items-center justify-between mb-5">
             <h3 className="font-sora font-bold text-base text-navy dark:text-white">Filters</h3>
             {activeFilterCount > 0 && (
@@ -370,7 +370,7 @@ export default function JobFilters({
               <div className="px-4 pb-5 pt-2 border-t border-gray-100 dark:border-gray-800">
                 <button
                   onClick={() => setMobileOpen(false)}
-                  className="w-full py-2.5 rounded-xl bg-brand text-white font-sora font-bold text-xs"
+                  className="w-full py-2.5 rounded-lg bg-brand text-white font-sora font-bold text-xs"
                 >
                   Show {total} jobs
                 </button>

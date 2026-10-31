@@ -55,15 +55,17 @@ const mobileMenuSecondary = [
   { label: 'Contact', href: '/contact', icon: Mail },
 ];
 
-export default function Navbar({ hasSession = false }: { hasSession?: boolean }) {
+export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [signInModalOpen, setSignInModalOpen] = useState(false);
 
-  const { user, loading, refreshSession } = useUser();
-  const showProfile = user || (loading && hasSession);
-  const showSignIn = !user && (!loading || !hasSession);
+  const { user, loading, likelySignedIn, refreshSession } = useUser();
+  // Pages are cached for everyone, so sign-in state is only known in the browser: until the session
+  // loads, trust this browser's last known state; before even that is read, show neither.
+  const showProfile = user || (loading && likelySignedIn === true);
+  const showSignIn = !user && (!loading || likelySignedIn === false);
 
   const pathname = usePathname();
   const router = useRouter();
@@ -202,7 +204,7 @@ export default function Navbar({ hasSession = false }: { hasSession?: boolean })
                 )}
               </div>
 
-              {/* User Profile or Sign In — server knows hasSession so no flicker */}
+              {/* User Profile or Sign In: decided in the browser (see showProfile above) */}
               {showProfile ? (
                 <div className="hidden md:block">
                   {user ? (

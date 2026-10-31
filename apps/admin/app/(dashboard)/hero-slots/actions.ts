@@ -3,6 +3,7 @@
 import { neon } from '@neondatabase/serverless';
 import { revalidatePath } from 'next/cache';
 import { requireActionAuth } from '@/lib/api-auth';
+import { refreshPublic } from '@/lib/refresh-public';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -49,7 +50,7 @@ export async function createHeroSlotAction(data: {
       )
     `;
     revalidatePath('/hero-slots');
-    return { success: true };
+    await refreshPublic(['home']); return { success: true };
   } catch (e: any) {
     return { success: false, error: e.message };
   }
@@ -78,7 +79,7 @@ export async function updateHeroSlotAction(id: string, data: {
       WHERE id = ${id}
     `;
     revalidatePath('/hero-slots');
-    return { success: true };
+    await refreshPublic(['home']); return { success: true };
   } catch (e: any) {
     return { success: false, error: e.message };
   }
@@ -90,7 +91,7 @@ export async function deleteHeroSlotAction(id: string) {
   try {
     await sql`DELETE FROM "HeroSlot" WHERE id = ${id}`;
     revalidatePath('/hero-slots');
-    return { success: true };
+    await refreshPublic(['home']); return { success: true };
   } catch (e: any) {
     return { success: false, error: e.message };
   }
@@ -102,7 +103,7 @@ export async function toggleHeroSlotAction(id: string, current: boolean) {
   try {
     await sql`UPDATE "HeroSlot" SET "isActive" = ${!current}, "updatedAt" = NOW() WHERE id = ${id}`;
     revalidatePath('/hero-slots');
-    return { success: true };
+    await refreshPublic(['home']); return { success: true };
   } catch (e: any) {
     return { success: false, error: e.message };
   }
@@ -114,7 +115,7 @@ export async function reorderHeroSlotAction(id: string, sortOrder: number) {
   try {
     await sql`UPDATE "HeroSlot" SET "sortOrder" = ${sortOrder}, "updatedAt" = NOW() WHERE id = ${id}`;
     revalidatePath('/hero-slots');
-    return { success: true };
+    await refreshPublic(['home']); return { success: true };
   } catch (e: any) {
     return { success: false, error: e.message };
   }

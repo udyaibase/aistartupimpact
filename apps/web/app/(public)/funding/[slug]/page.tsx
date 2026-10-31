@@ -1,12 +1,18 @@
+import { jsonLd } from "@/lib/json-ld";
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronRight, IndianRupee, Calendar, Users, Building2, ExternalLink } from 'lucide-react';
 import { getFundingRoundBySlugDirect } from '@/lib/db';
-import { getUserSession } from '@/lib/user-session';
 import SignInGate from '@/components/SignInGate';
+import { SignedIn, SignedOut } from '@/components/auth/SignedIn';
 
 export const revalidate = 86400; // Regenerate daily
+
+// Pages are built on first visit and then cached (no list at build time); refreshed when content changes.
+export async function generateStaticParams() {
+  return [];
+}
 
 export async function generateMetadata(props: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const params = await props.params;
@@ -45,12 +51,8 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
 
 export default async function FundingRoundPage(props: { params: Promise<{ slug: string }> }) {
   const params = await props.params;
-  const [round, session] = await Promise.all([
-    getFundingRoundBySlugDirect(params.slug),
-    getUserSession(),
-  ]);
+  const round = await getFundingRoundBySlugDirect(params.slug);
   if (!round) notFound();
-  const isSignedIn = !!session;
 
   const pageUrl = `https://udyaibase.com/funding/${params.slug}`;
 
@@ -130,7 +132,7 @@ export default async function FundingRoundPage(props: { params: Promise<{ slug: 
 
   return (
     <div className="max-w-5xl mx-auto px-0 sm:px-2 lg:px-4 py-6 sm:py-10">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(schema) }} />
       
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-xs sm:text-sm font-jakarta text-gray-400 dark:text-gray-500 mb-6">
@@ -158,7 +160,8 @@ export default async function FundingRoundPage(props: { params: Promise<{ slug: 
       <div className="card overflow-hidden mb-8">
         <div className="p-6 sm:p-8">
         <h2 className="font-sora font-bold text-xl text-navy dark:text-white mb-6">Funding Details</h2>
-        {isSignedIn ? (
+        {/* Soft gate, decided in the browser so the page stays cached (the amount is in the page's schema anyway). */}
+        <SignedIn>
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               {/* Amount */}
@@ -268,11 +271,11 @@ export default async function FundingRoundPage(props: { params: Promise<{ slug: 
               </div>
             )}
           </>
-        ) : null}
+        </SignedIn>
         </div>
-        {!isSignedIn && (
+        <SignedOut>
           <SignInGate isSignedIn={false} blurContent={false} label="Sign in to view funding details" />
-        )}
+        </SignedOut>
       </div>
 
       {/* Startup Link */}

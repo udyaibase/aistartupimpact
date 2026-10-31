@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
-import { getOrganizerSession } from "@/lib/organizer-auth";
+import { requirePermission, canAccessEvent } from "@/lib/organizer-auth/require-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -9,8 +9,9 @@ export const dynamic = "force-dynamic";
  * Check in an attendee by QR token, email, or name.
  */
 export async function POST(request: NextRequest) {
-  const session = await getOrganizerSession();
-  if (!session) return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 });
+  const result = await requirePermission("checkin");
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   const { eventId, input, action } = await request.json();
 
@@ -18,9 +19,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: "Event and search input required" }, { status: 400 });
   }
 
-  // Verify organizer owns this event
+  if (!canAccessEvent(session, eventId)) {
+    return NextResponse.json({ success: false, error: "Not authorized for this event" }, { status: 403 });
+  }
+
   const event = await prisma.event.findFirst({
-    where: { id: eventId, organizerId: session.id, deletedAt: null },
+    where: { id: eventId, organizerId: session.organizerId, deletedAt: null },
     select: { id: true, title: true },
   });
   if (!event) return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 });
@@ -70,6 +74,16 @@ export async function POST(request: NextRequest) {
   // Cancelled
   if (registration.status === "CANCELLED") {
     return NextResponse.json({ success: false, status: "CANCELLED", message: "Registration was cancelled", attendee: registration });
+  }
+
+  // Pending approval
+  // Unpaid ticket holds can't be checked in.
+  if (registration.status === "PENDING_PAYMENT") {
+    return NextResponse.json({ success: false, status: "UNPAID", message: "Ticket not paid yet", attendee: registration });
+  }
+
+  if (registration.status === "PENDING_APPROVAL") {
+    return NextResponse.json({ success: false, status: "PENDING_APPROVAL", message: "Registration pending approval", attendee: registration });
   }
 
   // Waitlisted

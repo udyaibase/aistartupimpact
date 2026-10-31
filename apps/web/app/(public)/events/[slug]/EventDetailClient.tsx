@@ -9,15 +9,14 @@ import {
   MapPin,
   Video,
   Users,
-  Share2,
   Tag,
   User,
   ChevronRight,
   Globe,
-  Copy,
-  Check,
+  ExternalLink,
 } from "lucide-react";
 import RegistrationModal from "./RegistrationModal";
+import ShareMenu from "@/components/shared/ShareMenu";
 
 interface Event {
   id: string;
@@ -39,6 +38,8 @@ interface Event {
   coverImageUrl?: string;
   galleryImageUrls: string[];
   description?: any;
+  sourceUrl?: string;
+  sourceName?: string;
   capacity?: number;
   registrationCount: number;
   registrationDeadline?: string;
@@ -149,25 +150,15 @@ export default function EventDetailClient({
   similarEvents,
 }: Props) {
   const [showRegistration, setShowRegistration] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   const upcoming = isUpcoming(event.startAt);
   const regOpen = isRegistrationOpen(event);
   const spotsLeft = event.capacity ? event.capacity - event.registrationCount : null;
   const isFull = event.capacity ? event.registrationCount >= event.capacity : false;
 
-  const handleShare = async () => {
-    const shortUrl = event.shortCode
-      ? `${typeof window !== "undefined" ? window.location.origin : "https://udyaibase.com"}/e/${event.shortCode}`
-      : `${typeof window !== "undefined" ? window.location.origin : "https://udyaibase.com"}/events/${event.slug}`;
-    try {
-      await navigator.clipboard.writeText(shortUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // fallback
-    }
-  };
+  const eventUrl = event.shortCode
+    ? `https://udyaibase.com/e/${event.shortCode}`
+    : `https://udyaibase.com/events/${event.slug}`;
 
   // Group agenda by day
   const agendaByDay = agenda.reduce((acc, item) => {
@@ -179,11 +170,14 @@ export default function EventDetailClient({
 
   return (
     <div className="max-w-5xl mx-auto px-6 sm:px-10 lg:px-16 py-6 sm:py-8">
-      {/* Back to events */}
-      <Link href="/events" className="inline-flex items-center gap-1.5 text-[14px] text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 mb-5 transition-colors">
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
-        Events
-      </Link>
+      {/* Breadcrumb */}
+      <nav className="flex items-center gap-1.5 text-xs font-jakarta text-gray-400 dark:text-gray-500 mb-5">
+        <Link href="/" className="hover:text-brand transition-colors">Home</Link>
+        <ChevronRight className="w-3 h-3" />
+        <Link href="/events" className="hover:text-brand transition-colors">AI Events</Link>
+        <ChevronRight className="w-3 h-3" />
+        <span className="text-gray-600 dark:text-gray-300 truncate max-w-[250px]">{event.title}</span>
+      </nav>
 
       {/* ─── Top: Image+Host Left | Details+CTA Right ─── */}
       <div className="grid grid-cols-1 md:grid-cols-7 gap-6 md:gap-8 mb-8">
@@ -192,7 +186,14 @@ export default function EventDetailClient({
           {/* Cover Image — square */}
           <div className="rounded-xl overflow-hidden bg-gradient-to-br from-brand/5 to-brand/10 relative aspect-square">
             {event.coverImageUrl ? (
-              <Image src={event.coverImageUrl} alt={event.title} width={400} height={400} sizes="(max-width: 768px) 100vw, 50vw" className="w-full h-full object-cover" />
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={event.coverImageUrl}
+                alt={event.title}
+                className="w-full h-full object-cover"
+                loading="lazy"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
             ) : (
               <div className="w-full h-full flex items-center justify-center">
                 <Calendar className="w-12 h-12 text-brand/20" />
@@ -204,22 +205,37 @@ export default function EventDetailClient({
             </div>
           </div>
 
-          {/* Host - Luma style */}
-          {event.organizerName && (
-            <div className="flex items-center gap-2.5 px-1">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand to-brand-600 flex items-center justify-center shrink-0 shadow-sm">
-                {event.organizerAvatar ? (
-                  <Image src={event.organizerAvatar} alt="" width={32} height={32} sizes="32px" className="w-full h-full rounded-full object-cover" />
-                ) : (
-                  <span className="text-xs font-bold text-white">{event.organizerName.charAt(0)}</span>
-                )}
+          {/* Host */}
+          {(() => {
+            const isExternal = !!event.sourceUrl;
+            const displayOrganizer = isExternal
+              ? (event.subtitle?.startsWith('Hosted by ') ? event.subtitle.replace('Hosted by ', '') : null)
+              : event.organizerName;
+            return (displayOrganizer || isExternal) ? (
+              <div className="flex items-center gap-2.5 px-1">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand to-brand-600 flex items-center justify-center shrink-0 shadow-sm">
+                  {event.organizerAvatar && !isExternal ? (
+                    <Image src={event.organizerAvatar} alt="" width={32} height={32} sizes="32px" className="w-full h-full rounded-full object-cover" />
+                  ) : (
+                    <Globe className="w-4 h-4 text-white" />
+                  )}
+                </div>
+                <div>
+                  {displayOrganizer ? (
+                    <>
+                      <p className="text-xs text-gray-400 font-jakarta leading-none">Hosted by</p>
+                      <p className="text-sm font-semibold text-navy dark:text-white font-jakarta">{displayOrganizer}</p>
+                    </>
+                  ) : null}
+                  {isExternal && event.sourceName && (
+                    <p className={`text-${displayOrganizer ? '[10px]' : 'xs'} text-gray-400 font-jakarta`}>
+                      {displayOrganizer ? 'via' : 'Listed from'} {event.sourceName}
+                    </p>
+                  )}
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-gray-400 font-jakarta leading-none">Hosted by</p>
-                <p className="text-sm font-semibold text-navy dark:text-white font-jakarta">{event.organizerName}</p>
-              </div>
-            </div>
-          )}
+            ) : null;
+          })()}
         </div>
 
         {/* Right: All details + CTA (4 cols) */}
@@ -286,24 +302,48 @@ export default function EventDetailClient({
 
           {/* Register CTA */}
           <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-800 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-lg font-sora font-bold text-navy dark:text-white">Free</span>
-              {event.registrationDeadline && (
-                <span className="text-xs text-gray-400 font-jakarta">Closes {new Date(event.registrationDeadline).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
-              )}
-            </div>
-            {regOpen ? (
-              <button onClick={() => setShowRegistration(true)} className="w-full py-3 bg-brand hover:bg-brand-600 text-white font-bold font-jakarta text-sm rounded-xl transition-colors shadow-lg shadow-brand/20">
-                Register Now — Free
-              </button>
-            ) : isFull ? (
-              <button disabled className="w-full py-3 bg-gray-200 dark:bg-gray-700 text-gray-500 font-bold font-jakarta text-sm rounded-xl cursor-not-allowed">Event Full</button>
+            {event.sourceUrl ? (
+              <>
+                <a
+                  href={event.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-3 bg-brand hover:bg-brand-600 text-white font-bold font-jakarta text-sm rounded-xl transition-colors shadow-lg shadow-brand/20 flex items-center justify-center gap-2"
+                >
+                  Register on {event.sourceName || 'Source'} <ExternalLink className="w-4 h-4" />
+                </a>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 font-jakarta text-center">
+                  This event is hosted externally{event.sourceName ? ` on ${event.sourceName}` : ''}. Registration is managed by the organizer.
+                </p>
+              </>
             ) : (
-              <button disabled className="w-full py-3 bg-gray-200 dark:bg-gray-700 text-gray-500 font-bold font-jakarta text-sm rounded-xl cursor-not-allowed">Registration Closed</button>
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-lg font-sora font-bold text-navy dark:text-white">Free</span>
+                  {event.registrationDeadline && (
+                    <span className="text-xs text-gray-400 font-jakarta">Closes {new Date(event.registrationDeadline).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+                  )}
+                </div>
+                {regOpen ? (
+                  <button onClick={() => setShowRegistration(true)} className="w-full py-3 bg-brand hover:bg-brand-600 text-white font-bold font-jakarta text-sm rounded-xl transition-colors shadow-lg shadow-brand/20">
+                    Register Now — Free
+                  </button>
+                ) : isFull ? (
+                  <button disabled className="w-full py-3 bg-gray-200 dark:bg-gray-700 text-gray-500 font-bold font-jakarta text-sm rounded-xl cursor-not-allowed">Event Full</button>
+                ) : (
+                  <button disabled className="w-full py-3 bg-gray-200 dark:bg-gray-700 text-gray-500 font-bold font-jakarta text-sm rounded-xl cursor-not-allowed">Registration Closed</button>
+                )}
+              </>
             )}
-            <button onClick={handleShare} className="w-full flex items-center justify-center gap-2 py-2 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-jakarta text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-              {copied ? <><Check className="w-3.5 h-3.5 text-green-500" />Copied!</> : <><Share2 className="w-3.5 h-3.5" />Share Event</>}
-            </button>
+            <ShareMenu
+              url={eventUrl}
+              title={`${event.title} — Udyaibase Events`}
+              utmCampaign="event_share"
+              variant="button"
+              buttonLabel="Share Event"
+              entityType="EVENT"
+              entityId={event.id}
+            />
           </div>
         </div>
       </div>
@@ -427,21 +467,31 @@ function DescriptionSection({ description }: { description: any }) {
 
   if (!description) return null;
 
+  const html = typeof description === "object" && description?.html ? description.html : null;
   const text = typeof description === "string"
     ? description
     : typeof description === "object" && description?.text
     ? description.text
     : "";
 
-  if (!text) return null;
+  if (!html && !text) return null;
+
+  const isLong = html ? html.length > 500 : (text.split("\n").length > 4 || text.length > 300);
 
   return (
     <div className="mt-4">
       <p className="text-xs font-bold uppercase text-gray-400 font-jakarta mb-1.5">About</p>
-      <div className={`text-sm text-gray-600 dark:text-gray-300 font-jakarta whitespace-pre-wrap leading-relaxed ${!expanded ? "line-clamp-4" : ""}`}>
-        {text}
-      </div>
-      {text.split("\n").length > 4 || text.length > 300 ? (
+      {html ? (
+        <div
+          className={`prose prose-sm dark:prose-invert max-w-none font-jakarta ${!expanded ? "line-clamp-4" : ""}`}
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      ) : (
+        <div className={`text-sm text-gray-600 dark:text-gray-300 font-jakarta whitespace-pre-wrap leading-relaxed ${!expanded ? "line-clamp-4" : ""}`}>
+          {text}
+        </div>
+      )}
+      {isLong ? (
         <button
           onClick={() => setExpanded(!expanded)}
           className="text-xs text-brand font-semibold font-jakarta mt-1.5 hover:underline"

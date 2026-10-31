@@ -61,10 +61,10 @@ export default function OnSitePage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5">
+    <div className="space-y-5">
       <div>
-        <h1 className="font-sora font-bold text-lg text-navy dark:text-white flex items-center gap-2"><QrCode className="w-5 h-5 text-brand"/> On-Site Registration</h1>
-        <p className="text-xs text-gray-500 font-jakarta">Display QR for walk-ins or register attendees manually</p>
+        <h1 className="portal-title flex items-center gap-2"><QrCode className="w-5 h-5 text-brand"/> On-Site Registration</h1>
+        <p className="portal-subtitle">Display QR for walk-ins or register attendees manually</p>
       </div>
 
       {/* Event Selector */}

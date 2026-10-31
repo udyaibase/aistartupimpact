@@ -31,7 +31,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
     // Find job
     const jobs = await sql`
       SELECT id FROM "JobBoardListing"
-      WHERE slug = ${slug} AND "isActive" = true AND "deletedAt" IS NULL
+      WHERE slug = ${slug} AND status = 'OPEN' AND "moderationHold" = false AND "deletedAt" IS NULL
+        AND ("expiresAt" IS NULL OR "expiresAt" > NOW())
       LIMIT 1
     `;
     if (jobs.length === 0) return NextResponse.json({ error: 'Job not found' }, { status: 404 });

@@ -1,3 +1,4 @@
+import { jsonLd as jsonLdHtml } from "@/lib/json-ld";
 import Link from 'next/link';
 import Image from 'next/image';
 import { cache } from 'react';
@@ -21,6 +22,7 @@ import FAQSection from '@/components/FAQSection';
 import SimilarTools from '@/components/tools/SimilarTools';
 import SimilarToolsCarousel from '@/components/tools/SimilarToolsCarousel';
 import TrackView from '@/components/TrackView';
+import ShareMenu from '@/components/shared/ShareMenu';
 
 export const revalidate = 300;
 
@@ -184,7 +186,7 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
       <FAQSchema faqs={faqs} />
 
       {/* Legacy schema for backward compatibility */}
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />
 
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-xs sm:text-sm font-jakarta text-gray-400 mb-6">
@@ -281,6 +283,14 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
           <span className="hidden sm:inline-flex">
             <UpvoteButton toolSlug={tool.slug} initialCount={tool.upvoteCount || 0} size="md" />
           </span>
+          <ShareMenu
+            url={`https://udyaibase.com/tools/${tool.slug}`}
+            title={`${tool.name} — ${tool.tagline || 'AI Tool'}`}
+            utmCampaign="tool_share"
+            variant="icon"
+            entityType="TOOL"
+            entityId={tool.id}
+          />
         </div>
         {(tool.twitterUrl || tool.linkedinUrl || (Array.isArray(tool.socialLinks) && tool.socialLinks.length > 0)) && (
           <div className="flex items-center gap-2 mt-3 flex-wrap">

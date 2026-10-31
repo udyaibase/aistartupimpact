@@ -27,9 +27,8 @@ const r2 = new S3Client({
 const BUCKET = process.env.R2_BUCKET_NAME!;
 
 function getPublicUrl(key: string): string {
-  if (process.env.R2_PUBLIC_URL)
-    return `${process.env.R2_PUBLIC_URL.replace(/\/$/, '')}/${key}`;
-  return `http://localhost:4000/v1/media/${key}`;
+  if (!process.env.R2_PUBLIC_URL) throw new Error('R2_PUBLIC_URL is not configured');
+  return `${process.env.R2_PUBLIC_URL.replace(/\/$/, '')}/${key}`;
 }
 
 function slugifyName(name: string): string {

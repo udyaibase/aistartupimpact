@@ -1,109 +1,78 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sql } from '@/lib/db';
+import { prisma } from '@udyaibase/database';
 import { getEmployerSession } from '@/lib/employer-auth';
+import { draftFromRow, draftToData, defaultClosesOn, type JobDraft } from '@/lib/jobs/composer';
+import { uniqueJobSlug } from '@/lib/jobs/slug';
+import { can, forbidden, listingScope } from '@/lib/employer/permissions';
 
 export const dynamic = 'force-dynamic';
-// GET: List employer's own jobs
+
+const MAX_DRAFTS = 50;
+
+// GET: List the employer's own jobs
 export async function GET() {
-  try {
-    const session = await getEmployerSession();
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const session = await getEmployerSession();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!can(session.role, 'jobs.view')) return forbidden();
 
-    const jobs = await sql`
-      SELECT id, slug, title, category, "workType", "listingTier",
-             "isActive", "isFeatured", "applicationsCount", "viewsCount",
-             "salaryMin", "salaryMax", "salaryCurrency", "showSalary",
-             "publishedAt"::text, "createdAt"::text, "expiresAt"::text
-      FROM "JobBoardListing"
-      WHERE "employerId" = ${session.id} AND "deletedAt" IS NULL
-      ORDER BY "createdAt" DESC
-    `;
-
-    return NextResponse.json({ jobs });
-  } catch (error: any) {
-    console.error('[GET /api/employer/jobs]', error);
-    return NextResponse.json({ error: 'Failed to fetch jobs' }, { status: 500 });
-  }
+  const jobs = await prisma.jobBoardListing.findMany({
+    where: { ...listingScope(session), deletedAt: null },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true, slug: true, title: true, status: true, workType: true, location: true,
+      applicationsCount: true, viewsCount: true, publishedAt: true, createdAt: true, expiresAt: true, closeReason: true,
+    },
+  });
+  return NextResponse.json({ jobs });
 }
 
-// POST: Create a new job listing
+/**
+ * POST: Create a draft. The composer calls this only once the title is non-empty,
+ * so abandoned blank forms never create rows. `{ duplicateOf }` copies an existing job.
+ * Publishing is a separate step: POST /api/employer/jobs/[id]/status { action: 'publish' }.
+ */
 export async function POST(request: NextRequest) {
   try {
     const session = await getEmployerSession();
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
+    if (!can(session.role, 'jobs.manage')) return forbidden();
 
-    // Check email verified
-    const verifyCheck = await sql`SELECT "emailVerified" FROM "JobBoardEmployer" WHERE id = ${session.id}`;
-    if (!(verifyCheck[0] as any)?.emailVerified) {
-      return NextResponse.json({ error: 'Please verify your email before posting jobs.' }, { status: 403 });
+    const body = await request.json().catch(() => ({}));
+
+    const drafts = await prisma.jobBoardListing.count({ where: { employerId: session.id, status: 'DRAFT', deletedAt: null } });
+    if (drafts >= MAX_DRAFTS) {
+      return NextResponse.json({ error: `You have ${MAX_DRAFTS} drafts. Delete some before starting another.` }, { status: 403 });
     }
 
-    // Check active job limit
-    const countResult = await sql`
-      SELECT COUNT(*)::int AS count FROM "JobBoardListing"
-      WHERE "employerId" = ${session.id} AND "isActive" = true AND "deletedAt" IS NULL
-    `;
-    const activeCount = (countResult[0] as any)?.count || 0;
-
-    // Get max active jobs from employer plan
-    const employerData = await sql`
-      SELECT "maxActiveJobs" FROM "JobBoardEmployer" WHERE id = ${session.id}
-    `;
-    const maxJobs = (employerData[0] as any)?.maxActiveJobs || 1;
-
-    if (activeCount >= maxJobs) {
-      return NextResponse.json({
-        error: `You've reached your active job limit (${maxJobs}). Upgrade your plan to post more jobs.`
-      }, { status: 403 });
+    let draft: Partial<JobDraft>;
+    if (body.duplicateOf) {
+      const source = await prisma.jobBoardListing.findFirst({ where: { id: String(body.duplicateOf), employerId: session.id, deletedAt: null } });
+      if (!source) return NextResponse.json({ error: 'Job to copy not found.' }, { status: 404 });
+      draft = { ...draftFromRow(source), title: `${source.title} (copy)`, closesOn: defaultClosesOn() };
+    } else {
+      draft = (body.draft ?? body) as Partial<JobDraft>;
     }
 
-    const body = await request.json();
+    const data = draftToData(draft);
+    if (!data.title) return NextResponse.json({ error: 'Add a job title first.', field: 'title' }, { status: 400 });
 
-    // Validation
-    if (!body.title?.trim()) return NextResponse.json({ error: 'Job title is required' }, { status: 400 });
-    if (!body.description?.trim()) return NextResponse.json({ error: 'Description is required' }, { status: 400 });
+    const employer = await prisma.jobBoardEmployer.findUnique({ where: { id: session.id }, select: { startupId: true } });
+    const job = await prisma.jobBoardListing.create({
+      data: {
+        ...data,
+        slug: await uniqueJobSlug(data.title),
+        employerId: session.id,
+        startupId: employer?.startupId ?? null,
+        status: 'DRAFT',
+        isActive: false,
+        draftSavedAt: new Date(),
+      },
+      select: { id: true, slug: true, title: true, status: true, draftSavedAt: true },
+    });
 
-    // Generate slug
-    const baseSlug = body.title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 80);
-    const slugCheck = await sql`SELECT id FROM "JobBoardListing" WHERE slug = ${baseSlug} LIMIT 1`;
-    const slug = slugCheck.length > 0 ? `${baseSlug}-${Date.now().toString(36)}` : baseSlug;
-
-    // Get employer's linked startup
-    const employerInfo = await sql`SELECT "startupId" FROM "JobBoardEmployer" WHERE id = ${session.id}`;
-    const startupId = (employerInfo[0] as any)?.startupId || null;
-
-    // Calculate expiry (30 days from now)
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
-
-    const result = await sql`
-      INSERT INTO "JobBoardListing" (
-        "id", "slug", "title", "description", "shortDescription",
-        "workType", "location", "city", "country", "visaSponsorship",
-        "salaryMin", "salaryMax", "salaryCurrency", "salaryPeriod", "showSalary",
-        "category", "experienceMin", "experienceMax", "skills", "department",
-        "applicationType", "applicationUrl", "applicationEmail",
-        "employerId", "startupId", "isActive", "publishedAt", "expiresAt",
-        "createdAt", "updatedAt"
-      ) VALUES (
-        gen_random_uuid()::text, ${slug}, ${body.title.trim()}, ${body.description.trim()}, ${body.shortDescription || null},
-        ${body.workType || 'REMOTE'}::"JobBoardWorkType", ${body.location || null}, ${body.city || null}, ${body.country || null}, ${body.visaSponsorship || false},
-        ${body.salaryMin || null}, ${body.salaryMax || null}, ${body.salaryCurrency || 'USD'}, ${body.salaryPeriod || 'yearly'}, ${body.showSalary !== false},
-        ${body.category || 'AI_ENGINEER'}::"JobBoardCategory", ${body.experienceMin || null}, ${body.experienceMax || null}, ${body.skills || []}, ${body.department || null},
-        ${body.applicationType || 'INTERNAL'}::"JobBoardApplyType", ${body.applicationUrl || null}, ${body.applicationEmail || null},
-        ${session.id}, ${startupId}, false, NOW(), ${expiresAt.toISOString()}::timestamp,
-        NOW(), NOW()
-      )
-      RETURNING id, slug, title
-    `;
-
-    return NextResponse.json({ success: true, job: result[0] }, { status: 201 });
-  } catch (error: any) {
+    return NextResponse.json({ success: true, job }, { status: 201 });
+  } catch (error) {
     console.error('[POST /api/employer/jobs]', error);
-    return NextResponse.json({ error: 'Failed to create job' }, { status: 500 });
+    return NextResponse.json({ error: 'Couldn’t save the job. Try again.' }, { status: 500 });
   }
 }

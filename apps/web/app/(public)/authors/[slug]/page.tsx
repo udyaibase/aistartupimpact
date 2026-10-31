@@ -1,3 +1,4 @@
+import { jsonLd } from "@/lib/json-ld";
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
@@ -7,6 +8,11 @@ import { getAuthorBySlugDirect } from '@/lib/db';
 import { generatePersonSchema, generateBreadcrumbSchema } from '@/lib/seo';
 
 export const revalidate = 120;
+
+// Pages are built on first visit and then cached (no list at build time); refreshed when content changes.
+export async function generateStaticParams() {
+  return [];
+}
 
 const SITE_URL = 'https://udyaibase.com';
 
@@ -66,8 +72,8 @@ export default async function AuthorPage(props: { params: Promise<{ slug: string
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(personSchema) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(personSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbSchema) }} />
 
       <nav className="flex items-center gap-1.5 text-xs sm:text-sm font-jakarta text-gray-400 dark:text-gray-500 mb-8">
         <Link href="/" className="hover:text-brand">Home</Link>

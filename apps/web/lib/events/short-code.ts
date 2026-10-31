@@ -12,10 +12,10 @@ const CHARSET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
  * 30^6 = 729,000,000 possible combinations.
  */
 export function generateShortCode(length: number = 6): string {
-  const bytes = crypto.randomBytes(length);
+  // randomInt is uniform; taking a random byte modulo the charset size would favour some characters.
   let code = "";
   for (let i = 0; i < length; i++) {
-    code += CHARSET[bytes[i]! % CHARSET.length];
+    code += CHARSET[crypto.randomInt(CHARSET.length)];
   }
   return code;
 }

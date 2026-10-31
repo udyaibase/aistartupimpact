@@ -10,7 +10,6 @@ import ClaimStartupCard from '@/components/ClaimStartupCard';
 import { detectCategory } from '@/lib/categories';
 import WriteStartupReviewClient from '@/components/WriteStartupReviewClient';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
-import { getUserSession } from '@/lib/user-session';
 import FoundersSection from '@/components/FoundersSection';
 import BookmarkButton from '@/components/BookmarkButton';
 import { StartupSchema, FAQSchema } from '@/components/seo';
@@ -19,11 +18,12 @@ import FAQSection from '@/components/FAQSection';
 import SimilarStartupsCarousel from '@/components/SimilarStartupsCarousel';
 import ImpactScoreBadge from '@/components/ImpactScoreBadge';
 import { calculateImpactScore } from '@/lib/impact-score';
-import ShareButton from '@/components/ShareButton';
+import ShareMenu from '@/components/shared/ShareMenu';
 import ReportButton from '@/components/ReportButton';
 import SubscribeForm from '@/components/SubscribeForm';
 import SignInGate from '@/components/SignInGate';
 import TrackView from '@/components/TrackView';
+import { SignedIn, SignedOut } from '@/components/auth/SignedIn';
 
 export const revalidate = 300;
 
@@ -154,9 +154,10 @@ const getStartup = cache(async (slug: string) => {
                jl."publishedAt"::text AS "createdAt", 'board' AS source
         FROM "JobBoardListing" jl
         LEFT JOIN "JobBoardEmployer" e ON e.id = jl."employerId"
-        WHERE (jl."startupId" = ${s.id} OR e."startupId" = ${s.id})
-          AND jl."isActive" = true AND jl."deletedAt" IS NULL
-          AND (jl."expiresAt" IS NULL OR jl."expiresAt" > NOW())
+        WHERE e."startupId" = ${s.id}
+          AND e."startupClaimMethod" IN ('DOMAIN_OTP', 'ADMIN', 'FOUNDER')
+          AND jl.status = 'OPEN' AND jl."moderationHold" = false AND jl."deletedAt" IS NULL
+          AND (jl."expiresAt" IS NULL OR jl."expiresAt" > NOW()) AND jl."showOnProfile" = true
         ORDER BY jl."publishedAt" DESC
         LIMIT 10
       `,
@@ -214,19 +215,7 @@ const getStartup = cache(async (slug: string) => {
       }
     }
 
-    // Jobs: use board jobs, fallback to legacy
-    let jobs: any[] = boardJobs as any[];
-    if (jobs.length === 0) {
-      try {
-        jobs = await sql`
-          SELECT id, title, location, type, "salaryRangeMin", "salaryRangeMax", "createdAt"::text AS "createdAt"
-          FROM "Job"
-          WHERE "startupId" = ${s.id} AND "isActive" = true AND "deletedAt" IS NULL
-          ORDER BY "createdAt" DESC
-          LIMIT 10
-        `;
-      } catch { jobs = []; }
-    }
+    const jobs: any[] = boardJobs as any[];
 
     return {
       ...s,
@@ -376,10 +365,7 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
 
 export default async function StartupDetailPage(props: { params: Promise<{ slug: string }> }) {
   const params = await props.params;
-  const [startup, session] = await Promise.all([
-    getStartup(params.slug) as Promise<any>,
-    getUserSession(),
-  ]);
+  const startup: any = await getStartup(params.slug);
 
   if (!startup) {
     // Check if this is an old slug that was changed — redirect to new URL
@@ -707,12 +693,13 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
               );
             })}
             <BookmarkButton type="startup" itemId={startup.slug} itemName={startup.name} variant="icon" size="lg" />
-            <ShareButton
-              title={`${startup.name} — ${startup.tagline}`}
-              text={`${startup.name}: ${startup.tagline}${startup.stage ? ` · ${startup.stage.replace(/_/g, ' ')}` : ''}${startup.headquartersCity ? ` · ${startup.headquartersCity}` : ''}`}
+            <ShareMenu
               url={`https://udyaibase.com/startups/${startup.slug}`}
-              iconOnly
-              size="lg"
+              title={`${startup.name} — ${startup.tagline}`}
+              utmCampaign="startup_share"
+              variant="icon"
+              entityType="STARTUP"
+              entityId={startup.id}
             />
           </div>
         </div>
@@ -779,7 +766,7 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
 
           {/* Founders */}
           {startup.foundersData?.length > 0 && (
-            <FoundersSection founders={startup.foundersData} startupName={startup.name} isSignedIn={!!session} />
+            <FoundersSection founders={startup.foundersData} startupName={startup.name} />
           )}
 
           {/* Startup Updates */}
@@ -848,7 +835,8 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
                 </h2>
                 <div className="relative">
                   <div className="space-y-3">
-                    {(session ? startup.fundingRounds : startup.fundingRounds.slice(0, Math.max(1, Math.floor(startup.fundingRounds.length / 2)))).map((r: any, i: number) => (
+                    {startup.fundingRounds.map((r: any, i: number) => {
+                      const row = (
                       <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-lg bg-brand/10 flex items-center justify-center shrink-0">
@@ -864,15 +852,22 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
                         </div>
                         <span className="font-sora font-bold text-sm text-brand">{formatUsd(r.amountUsd) || 'Undisclosed'}</span>
                       </div>
-                    ))}
+                      );
+                      // Signed-out visitors see the first half (soft gate, decided in the browser so the page stays cached).
+                      return i < Math.max(1, Math.floor(startup.fundingRounds.length / 2)) ? row : <SignedIn key={i}>{row}</SignedIn>;
+                    })}
                   </div>
-                  {!session && startup.fundingRounds.length > 1 && (
-                    <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white dark:from-gray-900 to-transparent" />
+                  {startup.fundingRounds.length > 1 && (
+                    <SignedOut>
+                      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white dark:from-gray-900 to-transparent" />
+                    </SignedOut>
                   )}
                 </div>
               </div>
-              {!session && startup.fundingRounds.length > 1 && (
-                <SignInGate isSignedIn={false} blurContent={false} label={`Sign in to see all ${startup.fundingRounds.length} funding rounds`} />
+              {startup.fundingRounds.length > 1 && (
+                <SignedOut>
+                  <SignInGate isSignedIn={false} blurContent={false} label={`Sign in to see all ${startup.fundingRounds.length} funding rounds`} />
+                </SignedOut>
               )}
             </div>
           )}
@@ -935,7 +930,7 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
                   <div key={job.id} className="py-4 first:pt-0 last:pb-0 flex items-center justify-between gap-4 font-jakarta">
                     <div>
                       <Link 
-                        href={job.slug ? `/jobs/${job.slug}` : `/jobs/${job.id}`} 
+                        href={job.slug ? `/jobs/${job.slug}?source=profile` : `/jobs/${job.id}`} 
                         className="text-sm font-bold text-link dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline leading-snug"
                       >
                         {job.title}
@@ -955,7 +950,7 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
                       </div>
                     </div>
                     <Link 
-                      href={job.slug ? `/jobs/${job.slug}` : `/jobs/${job.id}`} 
+                      href={job.slug ? `/jobs/${job.slug}?source=profile` : `/jobs/${job.id}`} 
                       className="btn-brand py-1.5 px-4 text-xs font-bold tracking-wide flex items-center justify-center shrink-0 shadow-sm transition-all hover:scale-105"
                     >
                       Apply Now &rsaquo;
@@ -1100,7 +1095,7 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
             startupSlug={startup.slug}
             isVerified={startup.isVerified || false}
             isClaimed={!!startup.claimedBy}
-            isOwner={session?.id === startup.claimedBy}
+            claimedBy={startup.claimedBy ?? null}
           />
           
           {/* EmbedBadge temporarily hidden - can be shown in future */}

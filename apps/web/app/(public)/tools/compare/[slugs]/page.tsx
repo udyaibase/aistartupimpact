@@ -1,3 +1,4 @@
+import { jsonLd } from "@/lib/json-ld";
 import Link from 'next/link';
 import Image from 'next/image';
 import { Metadata } from 'next';
@@ -6,6 +7,11 @@ import { Star, Check, X as XIcon, ChevronRight, Zap, Shield, Smartphone, Globe, 
 import { getAiToolBySlugDirect, getToolProsConsDirect, getSimilarToolsDirect } from '@/lib/db';
 
 export const revalidate = 60;
+
+// Pages are built on first visit and then cached (no list at build time); refreshed when content changes.
+export async function generateStaticParams() {
+  return [];
+}
 
 export async function generateMetadata(props: { params: Promise<{ slugs: string }> }): Promise<Metadata> {
   const params = await props.params;
@@ -315,7 +321,7 @@ export default async function ComparePage(props: { params: Promise<{ slugs: stri
       )}
 
       {/* JSON-LD */}
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd({
         '@context': 'https://schema.org',
         '@type': 'WebPage',
         name: tt.map(t => t.name).join(' vs '),

@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { neon } from '@neondatabase/serverless';
 import { requireApiAuth } from '@/lib/api-auth';
 import { logAuditEvent } from '@/lib/audit-log';
+import { withPublicRefresh } from '@/lib/refresh-public';
 
 const sql = neon(process.env.DATABASE_URL!);
 
-export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function putHandler(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const { error } = await requireApiAuth();
   if (error) return error;
@@ -50,3 +51,5 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
     return NextResponse.json({ error: 'Failed' }, { status: 500 });
   }
 }
+
+export const PUT = withPublicRefresh(['tools', 'home'], putHandler);

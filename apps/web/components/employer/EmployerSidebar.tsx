@@ -1,65 +1,106 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
-import {
-  LayoutDashboard, Briefcase, PlusCircle, Users, Building2,
-  BarChart3, Megaphone, Settings, HelpCircle,
+import { UserCheck, CreditCard,
+  Home, Briefcase, Users, Globe, BarChart3, Building2, Settings, HelpCircle, Plus, BadgeCheck, AlertTriangle, UserPlus,
 } from 'lucide-react';
+import { can, WORKSPACE_WIDE_PAGES, type Permission } from '@/lib/employer/roles';
+import type { EmployerRole } from '@/lib/employer-auth';
 import CollapsibleSidebar from '@/components/ui/CollapsibleSidebar';
 import SidebarNav, { type NavItem } from '@/components/ui/SidebarNav';
+import { useSidebar } from '@/components/ui/SidebarContext';
+import type { EmployerShell } from '@/lib/employer/portal';
 
-interface Props {
-  employer: {
-    id: string;
-    companyName: string;
-    slug: string;
-    email: string;
-    plan: string;
-  };
+export function employerNav(newCandidates: number, role: EmployerRole = 'OWNER', jobScoped = false): NavItem[] {
+  const items: (NavItem & { perm?: Permission })[] = [
+    { label: 'Home', href: '/employer/dashboard', icon: Home, exact: true },
+    { type: 'divider', label: 'Hiring' },
+    { label: 'Jobs', href: '/employer/jobs', icon: Briefcase, perm: 'jobs.view' },
+    { label: 'Candidates', href: '/employer/applications', icon: Users, badge: newCandidates > 0 ? `${newCandidates} new` : undefined, perm: 'candidates.view' },
+    { label: 'Talent pool', href: '/employer/talent', icon: UserCheck, perm: 'candidates.view' },
+    { label: 'Website widget', href: '/employer/careers', icon: Globe, perm: 'widget.manage' },
+    { label: 'Insights', href: '/employer/analytics', icon: BarChart3, perm: 'insights.view' },
+    { type: 'divider', label: 'Company' },
+    { label: 'Company profile', href: '/employer/company', icon: Building2, perm: 'company.manage' },
+    { label: 'Team', href: '/employer/team', icon: UserPlus },
+    { label: 'Plans & billing', href: '/employer/billing', icon: CreditCard, perm: 'account.manage' },
+    { label: 'Settings', href: '/employer/settings', icon: Settings, perm: 'account.manage' },
+    { label: 'Help', href: '/employer/support', icon: HelpCircle },
+  ];
+  return items
+    .filter((i) => (!i.perm || can(role, i.perm)) && !(jobScoped && 'href' in i && WORKSPACE_WIDE_PAGES.includes(i.href as string)))
+    .map(({ perm: _perm, ...i }) => i);
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard', href: '/employer/dashboard', icon: LayoutDashboard, exact: true },
-  { type: 'divider', label: 'Jobs' },
-  { label: 'My Jobs', href: '/employer/jobs', icon: Briefcase },
-  { label: 'Post a Job', href: '/employer/jobs/new', icon: PlusCircle },
-  { label: 'Applications', href: '/employer/applications', icon: Users },
-  { type: 'divider', label: 'Company' },
-  { label: 'Company Profile', href: '/employer/company', icon: Building2 },
-  { label: 'Analytics', href: '/employer/analytics', icon: BarChart3 },
-  { label: 'Promote', href: '/employer/promote', icon: Megaphone },
-  { type: 'divider', label: 'Account' },
-  { label: 'Settings', href: '/employer/settings', icon: Settings },
-  { label: 'Support', href: '/employer/support', icon: HelpCircle },
-];
-
-function UpgradeCard() {
+export function CompanyAvatar({ shell, size = 36 }: { shell: EmployerShell; size?: number }) {
   return (
-    <Link href="/employer/promote" className="relative overflow-hidden rounded-lg bg-brand p-2.5 flex items-center gap-2.5 hover:opacity-95 transition-opacity block">
-      <div className="absolute -top-3 -right-3 w-10 h-10 bg-white/10 rounded-full blur-lg" />
-      <svg className="w-4 h-4 text-amber-300 shrink-0 relative" fill="currentColor" viewBox="0 0 20 20">
-        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-      </svg>
-      <div className="relative">
-        <p className="text-xs font-sora font-bold text-white leading-tight">Upgrade to Pro</p>
-        <p className="text-[10px] text-white/60 font-jakarta leading-tight">Unlimited jobs & more</p>
+    <span
+      className="rounded-[10px] bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center overflow-hidden shrink-0 font-sora font-bold text-gray-700 dark:text-gray-200"
+      style={{ width: size, height: size, fontSize: size * 0.4 }}
+      aria-hidden
+    >
+      {shell.logoUrl
+        ? <Image src={shell.logoUrl} alt="" width={size} height={size} sizes={`${size}px`} className="w-full h-full object-cover" />
+        : shell.companyName.charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
+export function VerificationLine({ shell }: { shell: EmployerShell }) {
+  if (shell.claimVerified) {
+    return (
+      <span className="flex items-center gap-1 text-xs text-green-700 dark:text-green-400">
+        <BadgeCheck className="w-3.5 h-3.5 shrink-0" aria-hidden /> Verified startup
+      </span>
+    );
+  }
+  return (
+    <Link href="/employer/company" className="flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400 hover:underline">
+      <AlertTriangle className="w-3.5 h-3.5 shrink-0" aria-hidden />
+      {shell.claimLegacy ? 'Re-verify your startup' : 'Not verified yet'}
+    </Link>
+  );
+}
+
+function CompanyCard({ shell }: { shell: EmployerShell }) {
+  const { collapsed } = useSidebar();
+  const canPost = can(shell.role ?? 'OWNER', 'jobs.manage');
+  if (collapsed) {
+    return (
+      <div className="flex flex-col items-center gap-2 px-2 pt-3 pb-1">
+        <Link href="/employer/company" title={shell.companyName}><CompanyAvatar shell={shell} /></Link>
+        {canPost && <Link href="/employer/jobs/new" aria-label="Post a job" title="Post a job"
+          className="w-10 h-10 rounded-xl bg-gray-900 dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-100 text-white dark:text-gray-900 flex items-center justify-center transition-colors">
+          <Plus className="w-5 h-5" aria-hidden />
+        </Link>}
       </div>
-    </Link>
+    );
+  }
+  return (
+    <div className="px-3 pt-3 pb-1 space-y-3">
+      <div className="flex items-center gap-2.5 p-2.5 rounded-[12px] border border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/60">
+        <CompanyAvatar shell={shell} />
+        <div className="min-w-0">
+          <p className="text-[13px] font-semibold font-jakarta text-gray-900 dark:text-white truncate">{shell.companyName}</p>
+          <VerificationLine shell={shell} />
+        </div>
+      </div>
+      {canPost && (
+        <Link href="/employer/jobs/new" data-tour="employer:post-job"
+          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-gray-900 dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-100 text-white dark:text-gray-900 rounded-lg font-jakarta font-semibold text-sm transition-colors">
+          <Plus className="w-4 h-4" aria-hidden /> Post a job
+        </Link>
+      )}
+    </div>
   );
 }
 
-function UpgradeIcon() {
+export default function EmployerSidebar({ shell }: { shell: EmployerShell }) {
   return (
-    <Link href="/employer/settings" className="w-10 h-10 rounded-xl bg-brand flex items-center justify-center hover:opacity-90 transition-opacity">
-      <span className="text-[10px] font-sora font-bold text-white uppercase tracking-wide">Pro</span>
-    </Link>
-  );
-}
-
-export default function EmployerSidebar({ employer }: Props) {
-  return (
-    <CollapsibleSidebar logoHref="/employer/dashboard" bottomSlot={<UpgradeCard />} collapsedBottomSlot={<UpgradeIcon />}>
-      <SidebarNav items={NAV_ITEMS} />
+    <CollapsibleSidebar logoHref={shell.jobScoped ? '/employer/applications' : '/employer/dashboard'}>
+      <CompanyCard shell={shell} />
+      <SidebarNav items={employerNav(shell.newCandidates, shell.role, shell.jobScoped)} />
     </CollapsibleSidebar>
   );
 }

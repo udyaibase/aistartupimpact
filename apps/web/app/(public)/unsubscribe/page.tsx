@@ -8,6 +8,7 @@ import { Mail, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 function UnsubscribeContent() {
   const searchParams = useSearchParams();
   const email = searchParams.get('email');
+  const token = searchParams.get('token');
   const campaignId = searchParams.get('c');
 
   const [loading, setLoading] = useState(false);
@@ -17,7 +18,7 @@ function UnsubscribeContent() {
   const [feedback, setFeedback] = useState('');
 
   const handleUnsubscribe = async () => {
-    if (!email) {
+    if (!email && !token) {
       setError('Email address is required');
       return;
     }
@@ -29,7 +30,7 @@ function UnsubscribeContent() {
       const response = await fetch('/api/newsletter/unsubscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, campaignId, reason, feedback }),
+        body: JSON.stringify({ email, token, campaignId, reason, feedback }),
       });
 
       const data = await response.json();

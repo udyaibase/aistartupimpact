@@ -1,3 +1,4 @@
+import { jsonLd } from "@/lib/json-ld";
 /**
  * Tool JSON-LD Schema Component
  * Generates structured data with @graph containing WebPage, SoftwareApplication, and BreadcrumbList
@@ -132,7 +133,7 @@ export function ToolSchema({ tool }: ToolSchemaProps) {
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+      dangerouslySetInnerHTML={{ __html: jsonLd(schema) }}
     />
   );
 }

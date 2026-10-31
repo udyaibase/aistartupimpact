@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { clientIp } from '@/lib/client-ip';
 import { verifyTurnstileToken } from '@/lib/turnstile';
 import { sql } from '@/lib/db';
 import bcrypt from 'bcryptjs';
@@ -80,11 +81,12 @@ export async function POST(request: NextRequest) {
 
     // Input validation
     const body = await request.json();
-    if (body.turnstileToken) {
-      const isHuman = await verifyTurnstileToken(body.turnstileToken);
-      if (!isHuman) {
-        return NextResponse.json({ error: 'Human verification failed. Please try again.' }, { status: 403 });
-      }
+    if (!body.turnstileToken) {
+      return NextResponse.json({ error: 'CAPTCHA verification required. Please complete the challenge.' }, { status: 403 });
+    }
+    const isHuman = await verifyTurnstileToken(body.turnstileToken);
+    if (!isHuman) {
+      return NextResponse.json({ error: 'Human verification failed. Please try again.' }, { status: 403 });
     }
     const validation = validateInput(loginSchema, body);
 
@@ -328,7 +330,7 @@ async function createWebUserSession(user: any, request: NextRequest) {
     INSERT INTO "WebUserSession" (id, "webUserId", "refreshToken", "expiresAt", "ipAddress", "userAgent", "createdAt")
     VALUES (
       ${sessionId}, ${user.id}, ${token}, ${expiresAt.toISOString()},
-      ${request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'},
+      ${clientIp(request)},
       ${request.headers.get('user-agent') || 'unknown'}, NOW()
     )
   `;

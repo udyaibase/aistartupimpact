@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { clientIp } from '@/lib/client-ip';
 import { prisma } from '@udyaibase/database';
 import { createHash } from 'crypto';
 import { appendUtmParams } from '@/lib/utm';
@@ -88,9 +89,7 @@ export async function GET(request: NextRequest) {
     if (!isBot(userAgent)) {
       // Track click BEFORE redirect (await it — setImmediate doesn't work in serverless)
       try {
-        const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-          || request.headers.get('x-real-ip')
-          || 'unknown';
+        const ip = clientIp(request);
         const ipHash = hashValue(ip);
         const sessionHash = hashValue(`${ip}-${userAgent}`);
         const referrer = request.headers.get('referer') || null;

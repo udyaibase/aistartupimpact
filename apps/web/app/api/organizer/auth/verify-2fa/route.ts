@@ -3,12 +3,19 @@ import { jwtVerify } from 'jose';
 import { prisma } from '@udyaibase/database';
 import { createOrganizerSession } from '@/lib/organizer-auth';
 import { verifyTOTPToken, decryptSecret, verifyBackupCode } from '@/lib/two-factor';
+import { checkRateLimit, getClientIdentifier, authRateLimit, twoFactorRateLimit } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
 const CHALLENGE_SECRET = new TextEncoder().encode(process.env.ORGANIZER_JWT_SECRET || process.env.USER_JWT_SECRET!);
 
 export async function POST(request: NextRequest) {
+  const identifier = getClientIdentifier(request);
+  const { success: rlOk } = await checkRateLimit(authRateLimit, identifier);
+  if (!rlOk) {
+    return NextResponse.json({ success: false, error: 'Too many attempts. Try again later.' }, { status: 429 });
+  }
+
   try {
     const { challengeToken, token, isBackupCode } = await request.json();
 
@@ -26,6 +33,12 @@ export async function POST(request: NextRequest) {
       userId = payload.userId as string;
     } catch {
       return NextResponse.json({ success: false, error: 'Challenge expired. Please log in again.' }, { status: 401 });
+    }
+
+    // Per-account rate limit (prevents brute-force across rotating IPs)
+    const { success: accountRlOk } = await checkRateLimit(twoFactorRateLimit, `2fa:${userId}`);
+    if (!accountRlOk) {
+      return NextResponse.json({ success: false, error: 'Too many 2FA attempts. Try again later.' }, { status: 429 });
     }
 
     const organizer = await prisma.eventOrganizer.findUnique({

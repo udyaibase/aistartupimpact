@@ -86,10 +86,18 @@ describe('Security headers — next.config.mjs', () => {
     expect(h!.value).toBe('same-origin');
   });
 
-  it('sets Cross-Origin-Embedder-Policy', () => {
-    const h = findHeader('Cross-Origin-Embedder-Policy');
-    expect(h).toBeDefined();
-    expect(h!.value).toBe('credentialless');
+  it('sets Cross-Origin-Embedder-Policy on normal pages, but not where third-party frames must load', async () => {
+    const resolved = typeof config === 'function' ? await config : config;
+    const blocks: Array<{ source: string; headers: Array<{ key: string; value: string }> }> = await resolved.headers();
+    const coep = blocks.find((b) => b.headers.some((h) => h.key === 'Cross-Origin-Embedder-Policy'));
+    expect(coep).toBeDefined();
+    expect(coep!.headers.find((h) => h.key === 'Cross-Origin-Embedder-Policy')!.value).toBe('credentialless');
+    // Next.js path patterns are regex-like; test the pattern against sample paths.
+    const re = new RegExp(`^${coep!.source.replace(/^\//, '\\/')}$`);
+    expect(re.test('/news/some-article')).toBe(true);
+    for (const path of ['/embed/abc', '/events/ai-meetup', '/organizer/billing', '/employer/billing', '/employer/careers']) {
+      expect(re.test(path), path).toBe(false);
+    }
   });
 
   it('disables X-Powered-By header', () => {

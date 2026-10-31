@@ -1,3 +1,4 @@
+import { jsonLd } from "@/lib/json-ld";
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { sql } from '@/lib/db';
@@ -47,7 +48,7 @@ export default async function MilestonesPage() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbSchema) }} />
 
       <div className="mb-6 sm:mb-8">
         <h1 className="font-sora font-extrabold text-2xl sm:text-3xl md:text-4xl text-navy dark:text-white leading-tight tracking-tight">

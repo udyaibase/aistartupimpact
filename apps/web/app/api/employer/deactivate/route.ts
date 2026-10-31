@@ -3,6 +3,8 @@ import { prisma } from '@udyaibase/database';
 import bcrypt from 'bcryptjs';
 import { requireEmployerAuth, clearEmployerSession } from '@/lib/employer-auth';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
+import { can, forbidden } from '@/lib/employer/permissions';
+import { refreshPaths, refreshSections } from '@/lib/revalidate';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +15,7 @@ export async function POST(request: NextRequest) {
     if (!success) return NextResponse.json({ error: 'Too many requests. Try again later.' }, { status: 429 });
 
     const session = await requireEmployerAuth();
+    if (!can(session.role, 'account.manage')) return forbidden();
 
     const body = await request.json().catch(() => ({}));
     const { password } = body as { password?: string };
@@ -45,13 +48,14 @@ export async function POST(request: NextRequest) {
       });
 
       await tx.jobBoardListing.updateMany({
-        where: { employerId: session.id, isActive: true },
-        data: { isActive: false },
+        where: { employerId: session.id, status: 'OPEN' },
+        data: { isActive: false, status: 'PAUSED' },
       });
     });
 
     await clearEmployerSession();
 
+    refreshSections(['jobs', 'startups', 'home']);
     return NextResponse.json({ success: true, message: 'Account deactivated' });
   } catch (error) {
     if (error instanceof Error && error.message === 'EMPLOYER_AUTH_REQUIRED') {

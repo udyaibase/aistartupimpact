@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useLayoutEffect, useState } from 'react';
 
 export interface UserSession {
   id: string;
@@ -20,6 +20,11 @@ export interface UserSession {
 interface UserContextType {
   user: UserSession | null;
   loading: boolean;
+  /**
+   * Last known sign-in state from this browser (null until read). Public pages are cached and the server
+   * never reads cookies, so the navbar uses this to avoid a "Sign in" flash while the session loads.
+   */
+  likelySignedIn: boolean | null;
   signIn: (returnTo?: string) => void;
   signOut: () => Promise<void>;
   refreshSession: () => Promise<void>;
@@ -27,15 +32,26 @@ interface UserContextType {
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
+const SESSION_HINT = 'udb:signed-in';
+
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserSession | null>(null);
   const [loading, setLoading] = useState(true);
+  const [likelySignedIn, setLikelySignedIn] = useState<boolean | null>(null);
+
+  // Before paint, so a returning signed-in user never sees "Sign in" flash.
+  useLayoutEffect(() => {
+    try { setLikelySignedIn(localStorage.getItem(SESSION_HINT) === '1'); } catch { setLikelySignedIn(false); }
+  }, []);
 
   const fetchSession = async () => {
     try {
       const response = await fetch('/api/user/session');
       const data = await response.json();
       setUser(data.user || null);
+      try {
+        if (data.user) localStorage.setItem(SESSION_HINT, '1'); else localStorage.removeItem(SESSION_HINT);
+      } catch { /* storage blocked: the hint is only cosmetic */ }
     } catch (error) {
       console.error('Failed to fetch session:', error);
       setUser(null);
@@ -57,6 +73,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     try {
       await fetch('/api/user/auth/logout', { method: 'POST' });
       setUser(null);
+      try { localStorage.removeItem(SESSION_HINT); } catch { /* cosmetic */ }
       window.location.href = '/';
     } catch (error) {
       console.error('Sign out failed:', error);
@@ -68,7 +85,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <UserContext.Provider value={{ user, loading, signIn, signOut, refreshSession }}>
+    <UserContext.Provider value={{ user, loading, likelySignedIn, signIn, signOut, refreshSession }}>
       {children}
     </UserContext.Provider>
   );
@@ -77,6 +94,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 const fallbackContext: UserContextType = {
   user: null,
   loading: false,
+  likelySignedIn: false,
   signIn: () => { window.location.href = '/api/user/auth/google?returnTo=' + encodeURIComponent(window.location.pathname); },
   signOut: async () => {},
   refreshSession: async () => {},

@@ -11,8 +11,19 @@ interface ScrapedJob {
   workType: string | null;
   description: string | null;
   jobPageUrl: string | null;
+  applicationUrl: string | null;
   category: string;
   employmentType: string | null;
+  _kekaDetail?: {
+    id: number;
+    fullDescription: string | null;
+    experience: string | null;
+    experienceMin: number | null;
+    experienceMax: number | null;
+    salaryRange: any;
+    skills: string[];
+    publishedOn: string | null;
+  };
 }
 
 interface DetailedJob {
@@ -101,13 +112,13 @@ export default function CareerScraperModal({
     salaryMin: null,
     salaryMax: null,
     salaryCurrency: null,
-    applicationUrl: job.jobPageUrl,
+    applicationUrl: job.applicationUrl || job.jobPageUrl,
     applicationEmail: null,
     employmentType: job.employmentType || null,
   });
 
-  const mergeDetail = (listData: DetailedJob, detail: any): DetailedJob => ({
-    title: detail.title || listData.title,
+  const mergeDetail = (listData: DetailedJob, detail: any, preserveListTitle = false): DetailedJob => ({
+    title: preserveListTitle ? listData.title : (detail.title || listData.title),
     shortDescription: detail.shortDescription || listData.shortDescription,
     description: detail.description || listData.description,
     department: detail.department || listData.department,
@@ -125,8 +136,26 @@ export default function CareerScraperModal({
     employmentType: detail.employmentType || listData.employmentType,
   });
 
-  const fetchJobDetail = async (job: ScrapedJob): Promise<DetailedJob> => {
+  const fetchJobDetail = async (job: ScrapedJob, isBulk = false): Promise<DetailedJob> => {
     const listData = buildListData(job);
+
+    // Keka HR: we already have full detail from the API — no need to re-fetch
+    if (job._kekaDetail) {
+      const kd = job._kekaDetail;
+      // fullDescription is already structured text (converted from HTML server-side)
+      const cleanDesc = kd.fullDescription || listData.description;
+      return {
+        ...listData,
+        description: cleanDesc,
+        experienceMin: kd.experienceMin,
+        experienceMax: kd.experienceMax,
+        salaryMin: kd.salaryRange?.minSalary || null,
+        salaryMax: kd.salaryRange?.maxSalary || null,
+        salaryCurrency: kd.salaryRange?.currency || null,
+        skills: Array.isArray(kd.skills) ? kd.skills : [],
+      };
+    }
+
     if (!job.jobPageUrl) return listData;
     try {
       const res = await fetch('/api/admin/scrape-careers', {
@@ -136,7 +165,14 @@ export default function CareerScraperModal({
       });
       const data = await res.json();
       if (res.ok && data.success && data.job) {
-        return mergeDetail(listData, data.job);
+        if (data.partial) {
+          return {
+            ...listData,
+            applicationUrl: data.job.applicationUrl || job.jobPageUrl,
+          };
+        }
+        // In bulk mode, always keep the list title — the user selected these specific jobs
+        return mergeDetail(listData, data.job, isBulk);
       }
     } catch {}
     return listData;
@@ -160,7 +196,7 @@ export default function CareerScraperModal({
 
     for (let i = 0; i < selectedJobs.length; i++) {
       setBulkProgress({ current: i + 1, total: selectedJobs.length, title: selectedJobs[i].title });
-      const detailed = await fetchJobDetail(selectedJobs[i]);
+      const detailed = await fetchJobDetail(selectedJobs[i], true);
       detailedJobs.push(detailed);
     }
 

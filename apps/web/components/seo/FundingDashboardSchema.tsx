@@ -1,3 +1,4 @@
+import { jsonLd } from "@/lib/json-ld";
 /**
  * Funding Dashboard Schema Component
  * Unified @graph with DataFeed + FAQPage + BreadcrumbList
@@ -184,7 +185,7 @@ export function FundingDashboardSchema({ rounds, stats }: FundingDashboardSchema
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+      dangerouslySetInnerHTML={{ __html: jsonLd(schema) }}
     />
   );
 }

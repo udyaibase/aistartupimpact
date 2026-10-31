@@ -6,10 +6,11 @@ import { startupApprovalHtml } from '@udyaibase/utils';
 import { sendEmailFireAndForget } from '@/lib/email-send';
 import { requireApiAuth } from '@/lib/api-auth';
 import { logAuditEvent } from '@/lib/audit-log';
+import { withPublicRefresh } from '@/lib/refresh-public';
 
 const sql = neon(process.env.DATABASE_URL!);
 
-export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function postHandler(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const { error: authError } = await requireApiAuth(['SUPER_ADMIN', 'EDITOR_IN_CHIEF']);
   if (authError) return authError;
@@ -72,3 +73,5 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     );
   }
 }
+
+export const POST = withPublicRefresh(['startups', 'india-ai', 'home'], postHandler);

@@ -14,8 +14,8 @@
         "NEXTAUTH_SECRET",
         "NEXTAUTH_URL",
         "ADMIN_NEXTAUTH_URL",
-        "NEXT_PUBLIC_API_URL",
         "NEXT_PUBLIC_SITE_URL",
+        "NEXT_PUBLIC_CF_IMAGE_RESIZING",
         "NEXT_PUBLIC_GA_ID",
         "JWT_SECRET",
         "REFRESH_SECRET",
@@ -56,6 +56,11 @@
       "persistent": true
     },
     "lint": {
+      "dependsOn": [
+        "^build"
+      ]
+    },
+    "typecheck": {
       "dependsOn": [
         "^build"
       ]

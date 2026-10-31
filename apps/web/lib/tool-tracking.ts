@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { clientIp } from '@/lib/client-ip';
 import { prisma } from '@udyaibase/database';
 import { createHash } from 'crypto';
 
@@ -64,9 +65,7 @@ export async function trackToolClick({
     // Extract data from request
     const userAgent = request.headers.get('user-agent') || '';
     const referrer = request.headers.get('referer') || request.headers.get('referrer') || null;
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 
-               request.headers.get('x-real-ip') || 
-               'unknown';
+    const ip = clientIp(request);
 
     // Create hashes for privacy
     const ipHash = createHash256(ip);

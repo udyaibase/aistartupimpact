@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { clientIp } from '@/lib/client-ip';
 import { requireFounderAuth } from '@/lib/founder-auth';
 import { prisma } from '@udyaibase/database';
 import crypto from 'crypto';
@@ -102,7 +103,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         ${token}, 
         ${dnsRecord},
         true,
-        ${request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null},
+        ${clientIp(request)},
         ${request.headers.get('user-agent') || null},
         NOW()
       )

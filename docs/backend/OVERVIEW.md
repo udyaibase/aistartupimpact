@@ -1,5 +1,7 @@
 # Backend Overview
 
+> **Note (Oct 2026):** the Express server `apps/api` has been retired. The web and admin apps query the database directly, media URLs come from `R2_PUBLIC_URL`, and the Resend bounce/complaint webhook moved to `apps/web/app/api/webhooks/resend` (see `docs/infrastructure/RESEND.md`). Sections below that mention `apps/api`, port 4000 or `/api/v1` rewrites are historical.
+
 The backend consists of two systems: Next.js API routes (`apps/web/app/api/`) and an Express server (`apps/api`).
 
 ---

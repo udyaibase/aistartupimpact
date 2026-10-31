@@ -1,3 +1,4 @@
+import { jsonLd } from "@/lib/json-ld";
 /**
  * FAQ JSON-LD Schema Component
  * Generates FAQPage structured data (separate from main @graph)
@@ -30,7 +31,7 @@ export function FAQSchema({ faqs }: FAQSchemaProps) {
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+      dangerouslySetInnerHTML={{ __html: jsonLd(schema) }}
     />
   );
 }

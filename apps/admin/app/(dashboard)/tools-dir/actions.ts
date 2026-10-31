@@ -7,6 +7,7 @@ import { invalidateToolCache, invalidateTaxonomyCache } from '@/lib/cache-invali
 import { toolApprovalHtml } from '@udyaibase/utils';
 import { sendEmailFireAndForget } from '@/lib/email-send';
 import { requireActionAuth } from '@/lib/api-auth';
+import { refreshPublic } from '@/lib/refresh-public';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -93,7 +94,7 @@ export async function approveToolAction(id: string) {
       after: { name: tool.name, slug: tool.slug },
     });
 
-    return { success: true };
+    await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('approveToolAction error:', error);
     return { success: false, error: error.message };
@@ -114,7 +115,7 @@ export async function rejectToolAction(id: string, reason?: string) {
     `;
     revalidatePath('/tools-dir');
     invalidateToolCache();
-    return { success: true };
+    await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('rejectToolAction error:', error);
     return { success: false, error: error.message };
@@ -297,7 +298,7 @@ export async function createToolAction(data: {
       after: { name: data.name, slug: data.slug, pricingModel: data.pricingModel, status: data.status },
     });
 
-    return { success: true, toolId };
+    await refreshPublic(['tools', 'home']); return { success: true, toolId };
   } catch (error: any) {
     console.error('createToolAction error:', error);
     return { success: false, error: error.message || 'Failed to create tool' };
@@ -416,7 +417,7 @@ export async function updateToolAction(id: string, data: {
       after: { name: data.name, pricingModel: data.pricingModel, status: data.status },
     });
 
-    return { success: true };
+    await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('updateToolAction error:', error);
     return { success: false, error: error.message || 'Failed to update tool' };
@@ -461,7 +462,7 @@ export async function deleteToolAction(id: string) {
       before: before ? { name: before.name, slug: before.slug } : undefined,
     });
 
-    return { success: true };
+    await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('deleteToolAction error:', error);
     return { success: false, error: error.message || 'Failed to delete tool' };
@@ -479,7 +480,7 @@ export async function setListingTierAction(id: string, tier: string) {
     `;
     revalidatePath('/tools-dir');
     invalidateToolCache();
-    return { success: true };
+    await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('setListingTierAction error:', error);
     return { success: false, error: error.message || 'Failed to update tier' };
@@ -550,7 +551,7 @@ export async function updateToolProsConsAction(toolId: string, data: { pros: str
 
     revalidatePath('/tools-dir');
     invalidateToolCache();
-    return { success: true };
+    await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('updateToolProsConsAction error:', error);
     return { success: false, error: error.message };
@@ -664,7 +665,7 @@ export async function scheduleToolFeaturedCampaignAction(data: {
 
     revalidatePath('/tools-dir');
     invalidateToolCache();
-    return { success: true };
+    await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('Error scheduling tool featured campaign:', error);
     return { success: false, error: error.message || 'Failed to schedule campaign' };
@@ -697,7 +698,7 @@ export async function cancelToolFeaturedCampaignAction(campaignId: string) {
 
     revalidatePath('/tools-dir');
     invalidateToolCache();
-    return { success: true };
+    await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('Error cancelling tool featured campaign:', error);
     return { success: false, error: error.message || 'Failed to cancel campaign' };
@@ -737,7 +738,7 @@ export async function linkToolToStartupAction(toolId: string, startupId: string 
     `;
     revalidatePath('/tools-dir');
     invalidateToolCache();
-    return { success: true };
+    await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('linkToolToStartupAction error:', error);
     return { success: false, error: error.message };
@@ -782,7 +783,7 @@ export async function verifyToolManuallyAction(id: string) {
       after: { action: 'MANUAL_VERIFICATION' },
     });
 
-    return { success: true };
+    await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
@@ -799,7 +800,7 @@ export async function unverifyToolAction(id: string) {
     `;
     revalidatePath('/tools-dir');
     invalidateToolCache();
-    return { success: true };
+    await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
@@ -843,7 +844,7 @@ export async function addToolAlternativeAction(toolId: string, alternativeId: st
 
     revalidatePath('/tools-dir');
     invalidateToolCache();
-    return { success: true };
+    await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('addToolAlternativeAction error:', error);
     return { success: false, error: error.message };
@@ -858,7 +859,7 @@ export async function removeToolAlternativeAction(toolId: string, alternativeId:
     await sql`DELETE FROM "ToolAlternative" WHERE ("toolId" = ${toolId} AND "alternativeId" = ${alternativeId}) OR ("toolId" = ${alternativeId} AND "alternativeId" = ${toolId})`;
     revalidatePath('/tools-dir');
     invalidateToolCache();
-    return { success: true };
+    await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
@@ -901,7 +902,7 @@ export async function bulkApproveToolsAction(ids: string[]) {
     revalidatePath('/tools-dir');
     invalidateToolCache();
     await logAuditEvent({ action: 'APPROVE', resourceType: 'AI_TOOL', after: { bulkAction: true, count: ids.length } });
-    return { success: true, count: ids.length };
+    await refreshPublic(['tools', 'home']); return { success: true, count: ids.length };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
@@ -920,7 +921,7 @@ export async function bulkArchiveToolsAction(ids: string[]) {
     revalidatePath('/tools-dir');
     invalidateToolCache();
     await logAuditEvent({ action: 'UPDATE', resourceType: 'AI_TOOL', after: { bulkAction: 'ARCHIVE', count: ids.length } });
-    return { success: true, count: ids.length };
+    await refreshPublic(['tools', 'home']); return { success: true, count: ids.length };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
@@ -938,7 +939,7 @@ export async function bulkDeleteToolsAction(ids: string[]) {
     revalidatePath('/tools-dir');
     invalidateToolCache();
     await logAuditEvent({ action: 'DELETE', resourceType: 'AI_TOOL', after: { bulkAction: true, count: ids.length } });
-    return { success: true, count: ids.length };
+    await refreshPublic(['tools', 'home']); return { success: true, count: ids.length };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
@@ -986,7 +987,7 @@ export async function toggleToolContentReviewedAction(id: string, currentValue: 
       WHERE id = ${id}
     `;
     revalidatePath('/tools-dir');
-    return { success: true };
+    await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('toggleToolContentReviewedAction error:', error);
     return { success: false, error: error.message };

@@ -3,6 +3,7 @@ import { prisma } from '@udyaibase/database';
 import bcrypt from 'bcryptjs';
 import { requireEmployerAuth, clearEmployerSession } from '@/lib/employer-auth';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
+import { can, forbidden } from '@/lib/employer/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,7 @@ export async function DELETE(request: NextRequest) {
     if (!success) return NextResponse.json({ error: 'Too many requests. Try again later.' }, { status: 429 });
 
     const session = await requireEmployerAuth();
+    if (!can(session.role, 'account.manage')) return forbidden();
 
     const body = await request.json().catch(() => ({}));
     const { password } = body as { password?: string };
