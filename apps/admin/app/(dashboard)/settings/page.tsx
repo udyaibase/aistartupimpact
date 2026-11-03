@@ -691,6 +691,7 @@ function SecuritySection({ settings, updateSetting, Toggle, userRole }: { settin
   const [setupLoading, setSetupLoading] = useState(false);
   const [setupError, setSetupError] = useState('');
   const [copied, setCopied] = useState(false);
+  const { update: updateSession } = useSession();
 
   useEffect(() => {
     fetch('/api/admin/2fa-status').then(r => r.json()).then(data => {
@@ -723,6 +724,8 @@ function SecuritySection({ settings, updateSetting, Toggle, userRole }: { settin
       const data = await res.json();
       if (data.success) {
         setBackupCodes(data.backupCodes);
+        // Enabling with a correct code also completes 2FA for this sign-in (otherwise you'd be asked again).
+        if (data.proof) await updateSession({ twoFactorProof: data.proof });
         setSetupStep('backup');
         setTwoFAStatus({ enabled: true, backupCodesRemaining: data.backupCodes.length });
       } else setSetupError(data.error);
@@ -740,6 +743,7 @@ function SecuritySection({ settings, updateSetting, Toggle, userRole }: { settin
       });
       const data = await res.json();
       if (data.success) {
+        await updateSession();
         setTwoFAStatus({ enabled: false, backupCodesRemaining: 0 });
         setSetupStep('idle'); setDisableCode('');
       } else setSetupError(data.error);

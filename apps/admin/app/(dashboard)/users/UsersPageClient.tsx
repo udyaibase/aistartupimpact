@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useTransition, useEffect } from "react";
-import { UserPlus, Shield, Mail, X, Save, Trash2, Edit3, Key, Clock } from "lucide-react";
+import { UserPlus, Shield, Mail, X, Save, Trash2, Edit3, Key, Clock, ShieldCheck, ShieldOff } from "lucide-react";
 import { useSession } from "next-auth/react";
-import { inviteUser, updateUserMode, toggleUserStatus, deleteUser, grantDeleteAccessAction, revokeDeleteAccessAction, getDeletePermissionsAction } from "./actions";
+import { inviteUser, updateUserMode, toggleUserStatus, resetUserTwoFactorAction, deleteUser, grantDeleteAccessAction, revokeDeleteAccessAction, getDeletePermissionsAction } from "./actions";
 
 interface User {
   id: string;
@@ -13,6 +13,8 @@ interface User {
   status: string;
   articles: number;
   lastActive: string;
+  twoFactorEnabled?: boolean;
+  locked?: boolean;
 }
 
 const roles = [
@@ -110,6 +112,14 @@ export default function UsersPageClient({ initialUsers }: { initialUsers: User[]
     });
   };
 
+  const handleResetTwoFactor = (u: User) => {
+    if (!confirm(`Reset two-factor authentication for ${u.name || u.email}?\n\nUse this only if they lost their authenticator. They can sign in with Google and set up 2FA again.`)) return;
+    startTransition(async () => {
+      const res = await resetUserTwoFactorAction(u.id);
+      if (res.error) alert(res.error);
+    });
+  };
+
   const handleToggleStatus = async (id: string, currentStatus: string) => {
     startTransition(async () => {
       const res = await toggleUserStatus(id, currentStatus);
@@ -176,6 +186,14 @@ export default function UsersPageClient({ initialUsers }: { initialUsers: User[]
                       <p className="text-xs text-gray-400 font-jakarta flex items-center gap-1">
                         <Mail className="w-3 h-3" /> {u.email}
                       </p>
+                      <p className="mt-1 flex items-center gap-1.5">
+                        {u.twoFactorEnabled ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-700 dark:text-green-400"><ShieldCheck className="w-3 h-3" /> 2FA on</span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400"><ShieldOff className="w-3 h-3" /> 2FA off</span>
+                        )}
+                        {u.locked && <span className="text-[10px] font-semibold text-red-600 dark:text-red-400">· Locked (wrong codes)</span>}
+                      </p>
                     </div>
                   </div>
                 </td>
@@ -214,6 +232,16 @@ export default function UsersPageClient({ initialUsers }: { initialUsers: User[]
                       >
                         <Edit3 className="w-3.5 h-3.5 text-gray-400" />
                       </button>
+                      {(u.twoFactorEnabled || u.locked) && session?.user?.id !== u.id && (
+                        <button
+                          onClick={() => handleResetTwoFactor(u)}
+                          className="p-1.5 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                          title="Reset 2FA (lost authenticator)"
+                          aria-label={`Reset 2FA for ${u.name || u.email}`}
+                        >
+                          <ShieldOff className="w-3.5 h-3.5 text-gray-400 hover:text-amber-600" />
+                        </button>
+                      )}
                       <button
                         onClick={() => setDeleteConfirm(u.id)}
                         disabled={session?.user?.id === u.id}

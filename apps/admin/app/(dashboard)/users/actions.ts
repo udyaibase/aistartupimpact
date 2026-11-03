@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { logAuditEvent } from '@/lib/audit-log';
+import { requireActionAuth } from '@/lib/api-auth';
 import { userInvitationHtml } from '@udyaibase/utils';
 import { sendEmail } from '@/lib/email-send';
 
@@ -36,12 +37,14 @@ export async function getUsers() {
         u.email,
         u.role,
         u."isActive",
+        u."twoFactorEnabled",
+        u."lockedUntil"::text as "lockedUntil",
         u."lastLoginAt"::text as "lastLoginAt",
         u."createdAt"::text as "createdAt",
         COUNT(a.id)::int as article_count
       FROM "User" u
       LEFT JOIN "Article" a ON a."authorId" = u.id
-      GROUP BY u.id, u.name, u.email, u.role, u."isActive", u."lastLoginAt", u."createdAt"
+      GROUP BY u.id, u.name, u.email, u.role, u."isActive", u."twoFactorEnabled", u."lockedUntil", u."lastLoginAt", u."createdAt"
       ORDER BY u."createdAt" DESC
     `;
 
@@ -52,6 +55,8 @@ export async function getUsers() {
       role: u.role,
       status: u.isActive ? 'ACTIVE' : 'INACTIVE',
       articles: u.article_count,
+      twoFactorEnabled: !!u.twoFactorEnabled,
+      locked: !!u.lockedUntil && new Date(u.lockedUntil) > new Date(),
       lastActive: u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : 'Never'
     }));
   } catch (error) {
@@ -170,6 +175,32 @@ export async function toggleUserStatus(id: string, currentStatus: string) {
     return { success: true };
   } catch (error) {
     return { success: false, error: "Failed to toggle status" };
+  }
+}
+
+/**
+ * For a team member who lost their authenticator: turns their 2FA off and clears any code lock, so they can sign in
+ * and set it up again (they'll be asked to if the org requires 2FA). Super Admins only, never on themselves —
+ * your own 2FA is turned off from Settings with a current code.
+ */
+export async function resetUserTwoFactorAction(id: string) {
+  const { session, error } = await requireActionAuth(["SUPER_ADMIN"]);
+  if (error || !session) return { success: false, error: error || "Unauthorized" };
+  if (session.user.id === id) {
+    return { success: false, error: "Turn off your own 2FA from Settings (it needs a current code)." };
+  }
+
+  try {
+    const user = await prisma.user.update({
+      where: { id },
+      data: { twoFactorEnabled: false, twoFactorSecret: null, twoFactorBackupCodes: [], failedLoginAttempts: 0, lockedUntil: null },
+      select: { id: true, email: true },
+    });
+    await logAuditEvent({ action: "CONFIG_CHANGE", resourceType: "USER", resourceId: user.id, resourceName: user.email, after: { twoFactorEnabled: false, reset: true } });
+    revalidatePath("/users");
+    return { success: true };
+  } catch {
+    return { success: false, error: "Failed to reset 2FA" };
   }
 }
 
