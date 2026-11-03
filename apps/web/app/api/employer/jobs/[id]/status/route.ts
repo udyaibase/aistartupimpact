@@ -40,7 +40,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     }),
     prisma.jobBoardEmployer.findUnique({
       where: { id: session.id },
-      select: { email: true, passwordHash: true, requireJobApproval: true, emailVerified: true, maxActiveJobs: true, plan: true, planExpiresAt: true, firstJobPublishedAt: true, startupId: true, startupClaimMethod: true },
+      select: { email: true, passwordHash: true, requireJobApproval: true, emailVerified: true, maxActiveJobs: true, plan: true, planExpiresAt: true, firstJobPublishedAt: true, startupId: true, startupClaimMethod: true, Startup: { select: { isVerified: true } } },
     }),
   ]);
   if (!listing || !employer) return NextResponse.json({ error: 'Job not found.' }, { status: 404 });

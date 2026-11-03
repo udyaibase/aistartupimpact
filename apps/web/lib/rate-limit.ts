@@ -64,6 +64,14 @@ export const gstinLookupRateLimit = redis ? new Ratelimit({
   prefix: "ratelimit:gstin",
 }) : null;
 
+/** New companies added at signup: one per email address a day (stops directory spam). */
+export const companyCreateRateLimit = redis ? new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(1, "24 h"),
+  analytics: true,
+  prefix: "ratelimit:newcompany",
+}) : null;
+
 /** Codes sent to one email address (sign-in, verification, claims): stops anyone flooding an inbox. */
 export const emailCodeRateLimit = redis ? new Ratelimit({
   redis,

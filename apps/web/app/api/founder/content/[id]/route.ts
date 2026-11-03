@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
 import { getFounderSession } from "@/lib/founder-auth";
-import { verifyStartupAccess } from "@/lib/founder-content-auth";
+import { verifyStartupAccess, UNVERIFIED_STARTUP_ERROR } from "@/lib/founder-content-auth";
 import { canEditOwnContent, canEditAnyContent, canDeleteContent } from "@/lib/founder-team-permissions";
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from "@/lib/rate-limit";
 
@@ -73,6 +73,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const body = await request.json();
     const { title, content, excerpt, coverImage, isAutoSave, submitForReview } = body;
+    if (submitForReview && !auth.startupVerified) return NextResponse.json({ success: false, error: UNVERIFIED_STARTUP_ERROR, code: 'startup_unverified' }, { status: 403 });
 
     if (content !== undefined) {
       const contentStr = typeof content === "string" ? content : JSON.stringify(content);

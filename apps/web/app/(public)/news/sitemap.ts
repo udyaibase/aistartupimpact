@@ -19,7 +19,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const news = await sql`
       SELECT slug, "updatedAt", "publishedAt"
       FROM "Article"
-      WHERE status = 'PUBLISHED' AND "deletedAt" IS NULL
+      WHERE status = 'PUBLISHED' AND "deletedAt" IS NULL AND "noIndex" = false
         AND type = 'NEWS'
       ORDER BY "publishedAt" DESC
       LIMIT 5000

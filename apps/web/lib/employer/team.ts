@@ -36,7 +36,7 @@ export interface TeamRow {
   email: string;
   name: string | null;
   role: EmployerRole;
-  status: 'OWNER_ACCOUNT' | 'PENDING' | 'ACTIVE';
+  status: 'OWNER_ACCOUNT' | 'PENDING' | 'ACTIVE' | 'REQUESTED';
   invitedAt: string | null;
   inviteExpired: boolean;
   /** Interviewers: the jobs they can see. Empty = all jobs. */
@@ -49,7 +49,7 @@ export interface TeamRow {
 export async function listTeam(employerId: string): Promise<TeamRow[]> {
   const [employer, members] = await Promise.all([
     prisma.jobBoardEmployer.findUnique({ where: { id: employerId }, select: { email: true, FounderUser: { select: { name: true } } } }),
-    prisma.jobBoardTeamMember.findMany({ where: { employerId, status: { in: ['PENDING', 'ACTIVE'] } }, orderBy: [{ status: 'asc' }, { invitedAt: 'asc' }] }),
+    prisma.jobBoardTeamMember.findMany({ where: { employerId, status: { in: ['PENDING', 'ACTIVE', 'REQUESTED'] } }, orderBy: [{ status: 'asc' }, { invitedAt: 'asc' }] }),
   ]);
   const now = Date.now();
   // The account owner normally has their own OWNER row; show the account line only for older workspaces without one.
@@ -59,7 +59,7 @@ export async function listTeam(employerId: string): Promise<TeamRow[]> {
       ? [{ id: null, email: employer.email, name: employer.FounderUser?.name ?? null, role: 'OWNER' as const, status: 'OWNER_ACCOUNT' as const, invitedAt: null, inviteExpired: false, jobIds: [], accountOwner: true }]
       : []),
     ...members.map((m) => ({
-      id: m.id, email: m.email, name: m.name, role: m.role, status: m.status as 'PENDING' | 'ACTIVE',
+      id: m.id, email: m.email, name: m.name, role: m.role, status: m.status as 'PENDING' | 'ACTIVE' | 'REQUESTED',
       invitedAt: m.invitedAt.toISOString(), inviteExpired: m.status === 'PENDING' && !!m.inviteExpiresAt && m.inviteExpiresAt.getTime() < now,
       jobIds: m.role === 'INTERVIEWER' ? m.jobIds : [],
       accountOwner: !!employer && m.role === 'OWNER' && m.email.toLowerCase() === employer.email.toLowerCase(),
@@ -221,6 +221,19 @@ export async function resendPendingInvites(email: string): Promise<number> {
     await sendInviteEmail({ employerId: m.employerId, to: email, role: m.role as EmployerRole, inviterEmail: m.invitedByEmail, inviterName: null, token });
   }
   return pending.length;
+}
+
+/** Tells someone their request to join a hiring team was approved. */
+export function sendJoinApprovedEmail(to: string, company: string) {
+  void sendEmail({
+    to,
+    subject: `You’re in: ${company}'s hiring team on Udyaibase`,
+    type: 'employer_join_approved',
+    html: shell(`
+<h1 style="font-size:20px;margin:0 0 8px">You’re on ${esc(company)}'s hiring team</h1>
+<p style="margin:0 0 20px;font-size:15px;line-height:1.6">An owner approved your request. Sign in with a code sent to this email; no password needed.</p>
+<p style="margin:0 0 24px">${btn(`${SITE}/employer/login`, 'Sign in')}</p>`),
+  });
 }
 
 /** Owner alert: a teammate published a job under the workspace's name. */

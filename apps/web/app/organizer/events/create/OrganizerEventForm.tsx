@@ -121,6 +121,7 @@ interface EventData {
   ticketTiers?: { id?: string; name: string; tierType: string; quantity?: number | null; description?: string | null; priceCents?: number }[];
   customQuestions?: { questionText: string; questionType: string; required: boolean; options?: any }[];
   tags?: { tag: { name: string } }[];
+  startupId?: string | null;
 }
 
 export default function OrganizerEventForm({ organizerId, template, event }: { organizerId: string; template?: string; event?: EventData }) {
@@ -203,6 +204,12 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
 
   // 5. Publish
   const [visibility, setVisibility] = useState(event?.visibility ?? "PUBLIC");
+  // "Hosted by <startup>": verified startups this host belongs to (none → the picker is hidden).
+  const [startupId, setStartupId] = useState<string>(event?.startupId ?? "");
+  const [taggable, setTaggable] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    fetch("/api/organizer/startups").then((r) => r.json()).then((d) => { if (d?.startups) setTaggable(d.startups); }).catch(() => {});
+  }, []);
   const [description, setDescription] = useState(() => {
     if (!event?.description) return "";
     if (typeof event.description === "object" && event.description?.html) return event.description.html;
@@ -348,6 +355,7 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
       customQuestions, ticketTiers,
       seoTitle: seoTitle || undefined,
       seoDescription: seoDescription || undefined,
+      ...(taggable.length || event?.startupId ? { startupId: startupId || null } : {}),
       ...(isEdit && isDraft && publish ? { status: "PUBLISHED" } : {}),
     };
     try {
@@ -363,8 +371,10 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
         setLoading(false);
         return;
       }
+      const id = isEdit ? event!.id : d.data.id;
+      if (d.data?.status === "PENDING_REVIEW") { router.push(`/organizer/events?review=${id}`); return; }
       const justPublished = !isEdit || (isDraft && publish);
-      router.push(justPublished ? `/organizer/events?published=${isEdit ? event!.id : d.data.id}` : "/organizer/events");
+      router.push(justPublished ? `/organizer/events?published=${id}` : "/organizer/events");
     } catch {
       setError("Network error.");
       setLoading(false);
@@ -854,6 +864,19 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
                         <option value="INVITE_ONLY">Private — Invite only</option>
                       </select>
                     </div>
+
+                    {/* Hosted by a startup (only verified startups the host belongs to) */}
+                    {(taggable.length > 0 || startupId) && (
+                      <div>
+                        <label htmlFor="ev-startup" className="text-sm font-semibold text-gray-700 dark:text-gray-200 font-jakarta mb-1.5 block">Hosted by a startup <span className="font-normal text-gray-500">(optional)</span></label>
+                        <select id="ev-startup" value={startupId} onChange={e => setStartupId(e.target.value)} className={ic}>
+                          <option value="">No startup: hosted by me or my community</option>
+                          {taggable.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                          {startupId && !taggable.some((s) => s.id === startupId) && <option value={startupId}>Current startup</option>}
+                        </select>
+                        <p className="text-xs text-gray-500 font-jakarta mt-1">Shows “Hosted by” with a Verified startup badge. Only verified startups you belong to are listed; tagged events publish without review.</p>
+                      </div>
+                    )}
 
                     {/* Description */}
                     <div>

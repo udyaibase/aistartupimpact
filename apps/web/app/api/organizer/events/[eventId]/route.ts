@@ -10,6 +10,7 @@ import { canSellTickets } from "@/lib/events/payouts";
 import { refundEventTickets } from "@/lib/events/tickets";
 import { refreshPaths, refreshSections } from '@/lib/revalidate';
 import { applyFirstEventBoost } from "@/lib/events/free-boost";
+import { canTagStartup, publishDecision } from "@/lib/events/trust";
 
 class TierError extends Error {}
 
@@ -83,7 +84,7 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ event
 
   const event = await prisma.event.findUnique({
     where: { id: params.eventId, deletedAt: null },
-    select: { organizerId: true, slug: true, title: true, startAt: true, endAt: true, status: true },
+    select: { organizerId: true, slug: true, title: true, startAt: true, endAt: true, status: true, startupId: true, heldAt: true },
   });
   if (!event) return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 });
   if (event.organizerId !== session.organizerId) return NextResponse.json({ success: false, error: "Not authorized" }, { status: 403 });
@@ -93,6 +94,29 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ event
   if (data.status !== undefined && !EVENT_STATUSES.includes(data.status)) {
     return NextResponse.json({ success: false, error: "Unknown event status." }, { status: 400 });
   }
+
+  // "Hosted by <startup>": only a verified startup, tagged by one of its own people. null removes the tag.
+  let startupTag: string | null | undefined;
+  if (data.startupId !== undefined) {
+    startupTag = data.startupId ? String(data.startupId) : null;
+    if (startupTag && startupTag !== event.startupId) {
+      const host = await prisma.eventOrganizer.findUnique({ where: { id: session.organizerId }, select: { email: true } });
+      if (!(await canTagStartup([session.email, host?.email ?? ''], startupTag))) {
+        return NextResponse.json({ success: false, code: "startup_not_allowed", error: "You can only tag a verified startup you belong to." }, { status: 403 });
+      }
+    }
+  }
+
+  // Review: an event waiting for review (or hidden after reports) is released only by an admin; other edits still save.
+  // Publishing otherwise follows the same rule as creating: verified organizers and startups publish at once.
+  let nextStatus: string | undefined = data.status;
+  if (nextStatus === "PUBLISHED" && event.status !== "PUBLISHED") {
+    if (event.status === "PENDING_REVIEW") nextStatus = undefined;
+    else if (event.heldAt) nextStatus = "PENDING_REVIEW";
+    else if ((await publishDecision(session.organizerId, { taggedStartup: !!(startupTag === undefined ? event.startupId : startupTag) })) === "PENDING_REVIEW") nextStatus = "PENDING_REVIEW";
+  }
+  if (event.heldAt && nextStatus && !["DRAFT", "CANCELLED", "PENDING_REVIEW"].includes(nextStatus)) nextStatus = undefined;
+  const goingLive = nextStatus === "PUBLISHED" && event.status !== "PUBLISHED";
   if (data.status === "PUBLISHED" && event.status !== "PUBLISHED") {
     const limit = await upcomingLimitProblem(session.organizerId, params.eventId);
     if (limit) return NextResponse.json({ success: false, code: "plan_limit", error: limit }, { status: 403 });
@@ -112,7 +136,7 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ event
   }
 
   // Publishing on Pro: featured until the event ends (never shortens a Boost).
-  const proFeatured = data.status === "PUBLISHED" && event.status !== "PUBLISHED"
+  const proFeatured = goingLive
     ? await featuredUntilFor(session.organizerId, data.endAt ? new Date(data.endAt) : event.endAt)
     : null;
 
@@ -140,7 +164,10 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ event
         capacity: data.capacity !== undefined ? (data.capacity ? parseInt(data.capacity) : null) : undefined,
         coverImageUrl: data.coverImageUrl !== undefined ? data.coverImageUrl : undefined,
         visibility: data.visibility || undefined,
-        status: data.status || undefined,
+        status: (nextStatus as "PUBLISHED" | undefined) || undefined,
+        ...(startupTag !== undefined ? { startupId: startupTag } : {}),
+        ...(goingLive ? { publishedAt: new Date() } : {}),
+        ...(nextStatus === "PENDING_REVIEW" && event.status !== "PENDING_REVIEW" ? { reviewNote: event.heldAt ? undefined : "First event from a new organizer" } : {}),
         approvalRequired: data.approvalRequired !== undefined ? data.approvalRequired : undefined,
         metaTitle: data.seoTitle !== undefined ? data.seoTitle : undefined,
         metaDescription: data.seoDescription !== undefined ? data.seoDescription : undefined,
@@ -244,7 +271,7 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ event
   }
 
   // First event a host publishes gets the free Event Boost.
-  if (data.status === "PUBLISHED" && event.status !== "PUBLISHED") {
+  if (goingLive) {
     await applyFirstEventBoost(session.organizerId, params.eventId).catch((e) => console.error("[free boost]", e));
   }
 
@@ -252,7 +279,11 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ event
   refreshSections(["events", "home"]);
   refreshPaths([`/events/${event.slug}`]);
 
-  return NextResponse.json({ success: true, data: { status: data.status } });
+  return NextResponse.json({
+    success: true,
+    data: { status: nextStatus ?? event.status },
+    ...(nextStatus === "PENDING_REVIEW" ? { message: "Your event is waiting for a quick review by our team (usually within a day). We'll email you when it's live." } : {}),
+  });
 }
 
 const EVENT_STATUSES = ["DRAFT", "PUBLISHED", "CANCELLED", "POSTPONED", "COMPLETED", "ARCHIVED"];

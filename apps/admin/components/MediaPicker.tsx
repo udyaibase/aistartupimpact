@@ -47,10 +47,12 @@ export default function MediaPicker({ isOpen, onClose, onSelect, title = "Select
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Search waits for a pause in typing instead of querying on every keystroke.
   useEffect(() => {
-    if (isOpen && activeTab === 'library') {
-      fetchLibrary();
-    }
+    if (!isOpen || activeTab !== 'library') return;
+    const t = setTimeout(fetchLibrary, searchQuery ? 300 : 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, activeTab, searchQuery]);
 
   const fetchLibrary = async () => {

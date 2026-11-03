@@ -62,9 +62,13 @@ async function getEvents(params: {
         e."coverImageUrl", e."registrationCount", e.capacity,
         e.timezone, e."sourceUrl", e."sourceName",
         o.name AS "organizerName", o.avatar AS "organizerAvatar",
+        st.name AS "hostStartupName", st.slug AS "hostStartupSlug",
+        (st.id IS NOT NULL OR o."verifiedAt" IS NOT NULL) AS "trustedHost",
         (e."featuredUntil" IS NOT NULL AND e."featuredUntil" > NOW() AND e."endAt" > NOW()) AS featured
       FROM "Event" e
       LEFT JOIN "EventOrganizer" o ON o.id = e."organizerId"
+      -- "Hosted by" shows only while the tagged startup is verified.
+      LEFT JOIN "Startup" st ON st.id = e."startupId" AND st."isVerified" = true AND st."deletedAt" IS NULL
       WHERE e.status = 'PUBLISHED'
         AND e."deletedAt" IS NULL
         AND e.visibility = 'PUBLIC'
@@ -83,7 +87,8 @@ async function getEvents(params: {
             ? sql`(e."featuredUntil" > NOW() AND e."endAt" > NOW()) DESC NULLS LAST, e."registrationCount" DESC NULLS LAST`
             : sortBy === 'newest'
               ? sql`e.id DESC`
-              : sql`CASE WHEN e."featuredUntil" > NOW() AND e."endAt" > NOW() THEN 0 ELSE 1 END ASC, CASE WHEN e."startAt" >= ${now}::timestamp THEN 0 ELSE 1 END ASC, e."startAt" ASC`
+              // Featured first, then events from verified startups and verified organizers, then the rest.
+              : sql`CASE WHEN e."featuredUntil" > NOW() AND e."endAt" > NOW() THEN 0 ELSE 1 END ASC, CASE WHEN st.id IS NOT NULL OR o."verifiedAt" IS NOT NULL THEN 0 ELSE 1 END ASC, CASE WHEN e."startAt" >= ${now}::timestamp THEN 0 ELSE 1 END ASC, e."startAt" ASC`
         }
       LIMIT 100
     `;

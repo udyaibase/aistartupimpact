@@ -9,9 +9,16 @@ export const contentType = 'image/png';
 export default async function OGImage({ params }: { params: { slug: string } }) {
   const article = await getArticleBySlugDirect(params.slug);
 
+  // A social image the editor picked in the admin wins over the generated card.
+  if (article?.ogImage) {
+    const res = await fetch(article.ogImage).catch(() => null);
+    const type = res?.ok ? res.headers.get('content-type') : null;
+    if (res && type?.startsWith('image/')) return new Response(res.body, { headers: { 'content-type': type, 'cache-control': 'public, max-age=3600' } });
+  }
+
   const title = article?.title || 'Udyaibase';
   const category = article?.category?.name || 'News';
-  const author = article?.author?.name || 'ASI Editorial';
+  const author = article?.author?.name || 'Udyaibase Editorial';
   const coverImage = article?.coverImage;
 
   return new ImageResponse(

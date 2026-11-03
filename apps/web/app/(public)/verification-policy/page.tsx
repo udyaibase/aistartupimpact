@@ -36,7 +36,7 @@ export default function VerificationPolicyPage() {
         <ol>
           <li><strong>Claim your profile</strong> — Sign in to your Founder Dashboard and navigate to your startup profile.</li>
           <li><strong>Initiate verification</strong> — Click "Verify Ownership" to receive a unique verification token.</li>
-          <li><strong>Add DNS record</strong> — Add a TXT record to your domain's DNS settings with the provided token value. The record format is: <code>udyaibase-verify=YOUR_TOKEN</code></li>
+          <li><strong>Add DNS record</strong> — Add a TXT record at the root of your domain (shown as <code>@</code> by most DNS providers) with the provided value. The record format is: <code>udyaibase-verify=YOUR_TOKEN</code></li>
           <li><strong>Confirm verification</strong> — Click "Check Verification" in your dashboard. Our system queries your domain's DNS records to confirm the token.</li>
           <li><strong>Badge applied</strong> — Once confirmed, the verified badge appears on your profile immediately.</li>
         </ol>

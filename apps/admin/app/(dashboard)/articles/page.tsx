@@ -12,9 +12,13 @@ import { Pagination } from '@/components/Pagination';
 import { TableEmptyState } from '@/components/EmptyState';
 
 interface Article {
-  id: string; title: string; slug: string; status: string; type: string;
-  author: string; category: string; publishedAt: string | null; views: number;
+  id: string; title: string; slug: string; status: string; type: string; authorId?: string;
+  author: string; category: string; publishedAt: string | null; scheduledAt?: string | null; updatedAt?: string; views: number;
 }
+
+const fmtDate = (iso?: string | null, time = false) => iso
+  ? new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', ...(time ? { hour: '2-digit', minute: '2-digit' } : {}) })
+  : '';
 
 const PAGE_SIZE = 20;
 
@@ -26,7 +30,6 @@ const statusConfig: Record<string, { color: string; icon: typeof CheckCircle }> 
   ARCHIVED: { color: 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400', icon: Archive },
 };
 
-const categories = ['AI News', 'Deep Dive', 'Founder Stories', 'Tools & Reviews', 'Funding', 'Opinion', 'Technology'];
 const types = ['NEWS', 'STORY', 'GUIDE', 'COMPARISON', 'OPINION', 'REPORT', 'SPONSORED'];
 
 export default function ArticlesPage() {
@@ -42,6 +45,7 @@ export default function ArticlesPage() {
   const [actionMenu, setActionMenu] = useState<string | null>(null);
   const [sortField, setSortField] = useState<'views' | 'publishedAt' | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [viewer, setViewer] = useState<{ id: string; canPublish: boolean } | null>(null);
   const [page, setPage] = useState(1);
 
   useEffect(() => {
@@ -55,11 +59,13 @@ export default function ArticlesPage() {
             slug: a.slug,
             status: a.status,
             type: a.type,
+            authorId: a.authorId,
             author: a.author?.name || 'Unknown',
             category: a.category?.name || 'Uncategorized',
-            publishedAt: a.publishedAt ? new Date(a.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null,
+            publishedAt: a.publishedAt, scheduledAt: a.scheduledAt, updatedAt: a.updatedAt,
             views: a.viewCount || 0,
           })));
+          setViewer(json.viewer ?? null);
         } else {
           console.error("Failed to load articles via action:", json.error);
           setFetchError(json.error || 'Failed to load articles');
@@ -88,7 +94,9 @@ export default function ArticlesPage() {
   });
 
   // Sort
+  const dateOf = (a: Article) => Date.parse(a.publishedAt || a.scheduledAt || a.updatedAt || '') || 0;
   if (sortField === 'views') filtered = [...filtered].sort((a, b) => sortDir === 'desc' ? b.views - a.views : a.views - b.views);
+  if (sortField === 'publishedAt') filtered = [...filtered].sort((a, b) => sortDir === 'desc' ? dateOf(b) - dateOf(a) : dateOf(a) - dateOf(b));
 
   // Paginate
   const totalFiltered = filtered.length;
@@ -124,10 +132,9 @@ export default function ArticlesPage() {
       const res = await updateArticleStatusAction(id, newStatus);
       if (!res.success) throw new Error(res.error || 'Action failed');
 
-      setArticles(articles.map(a => a.id === id ? { ...a, status: newStatus, publishedAt: newStatus === 'PUBLISHED' ? new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : a.publishedAt } : a));
-    } catch (e) {
-      console.error('Failed to update status', e);
-      alert('Failed to update status. Please try again.');
+      setArticles(articles.map(a => a.id === id ? { ...a, status: newStatus, publishedAt: newStatus === 'PUBLISHED' ? a.publishedAt || new Date().toISOString() : a.publishedAt } : a));
+    } catch (e: any) {
+      alert(e?.message || 'Failed to update status. Please try again.');
     }
     setActionMenu(null);
   };
@@ -221,7 +228,9 @@ export default function ArticlesPage() {
               <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden sm:table-cell cursor-pointer select-none" onClick={() => toggleSort('views')}>
                 <span className="flex items-center gap-1">Views {sortField === 'views' && (sortDir === 'desc' ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />)}</span>
               </th>
-              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden md:table-cell">Date</th>
+              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden md:table-cell cursor-pointer select-none" onClick={() => toggleSort('publishedAt')}>
+                <span className="flex items-center gap-1">Date {sortField === 'publishedAt' && (sortDir === 'desc' ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />)}</span>
+              </th>
               <th className="px-6 py-3 w-10"></th>
             </tr>
           </thead>
@@ -264,7 +273,9 @@ export default function ArticlesPage() {
                     <span className="text-sm text-gray-600 dark:text-gray-400 font-jakarta font-medium">{article.views > 0 ? article.views.toLocaleString() : '—'}</span>
                   </td>
                   <td className="px-6 py-4 hidden md:table-cell">
-                    <span className="text-sm text-gray-400 dark:text-gray-500 font-jakarta">{article.publishedAt || 'Not published'}</span>
+                    <span className="text-sm text-gray-400 dark:text-gray-500 font-jakarta">
+                      {article.status === 'SCHEDULED' && article.scheduledAt ? `Goes live ${fmtDate(article.scheduledAt, true)}` : article.publishedAt ? fmtDate(article.publishedAt) : `Edited ${fmtDate(article.updatedAt)}`}
+                    </span>
                   </td>
                   <td className="px-6 py-4 relative">
                     <button onClick={() => setActionMenu(actionMenu === article.id ? null : article.id)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
@@ -273,10 +284,10 @@ export default function ArticlesPage() {
                     {actionMenu === article.id && (
                       <div className={`absolute right-6 z-20 w-48 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1 ${isNearBottom ? 'bottom-10' : 'top-10'}`}>
                         <Link href={`/articles/${article.id}`} className="w-full text-left px-4 py-2 text-sm font-jakarta text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"><Edit3 className="w-3.5 h-3.5" /> Edit Article</Link>
-                        {article.status === 'DRAFT' && <button onClick={() => changeStatus(article.id, 'IN_REVIEW')} className="w-full text-left px-4 py-2 text-sm font-jakarta text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"><Send className="w-3.5 h-3.5" /> Submit for Review</button>}
-                        {article.status === 'IN_REVIEW' && <button onClick={() => changeStatus(article.id, 'PUBLISHED')} className="w-full text-left px-4 py-2 text-sm font-jakarta text-green-600 dark:text-green-400 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5" /> Publish</button>}
-                        {article.status === 'PUBLISHED' && <button onClick={() => changeStatus(article.id, 'ARCHIVED')} className="w-full text-left px-4 py-2 text-sm font-jakarta text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"><Archive className="w-3.5 h-3.5" /> Archive</button>}
-                        {article.status === 'ARCHIVED' && <button onClick={() => changeStatus(article.id, 'DRAFT')} className="w-full text-left px-4 py-2 text-sm font-jakarta text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"><Edit3 className="w-3.5 h-3.5" /> Move to Draft</button>}
+                        {article.status === 'DRAFT' && (viewer?.canPublish || article.authorId === viewer?.id) && <button onClick={() => changeStatus(article.id, 'IN_REVIEW')} className="w-full text-left px-4 py-2 text-sm font-jakarta text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"><Send className="w-3.5 h-3.5" /> Submit for Review</button>}
+                        {article.status === 'IN_REVIEW' && viewer?.canPublish && <button onClick={() => changeStatus(article.id, 'PUBLISHED')} className="w-full text-left px-4 py-2 text-sm font-jakarta text-green-600 dark:text-green-400 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5" /> Publish</button>}
+                        {article.status === 'PUBLISHED' && viewer?.canPublish && <button onClick={() => changeStatus(article.id, 'ARCHIVED')} className="w-full text-left px-4 py-2 text-sm font-jakarta text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"><Archive className="w-3.5 h-3.5" /> Archive</button>}
+                        {article.status === 'ARCHIVED' && viewer?.canPublish && <button onClick={() => changeStatus(article.id, 'DRAFT')} className="w-full text-left px-4 py-2 text-sm font-jakarta text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"><Edit3 className="w-3.5 h-3.5" /> Move to Draft</button>}
                         <button onClick={() => duplicate(article)} className="w-full text-left px-4 py-2 text-sm font-jakarta text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"><Eye className="w-3.5 h-3.5" /> Duplicate</button>
                         <div className="border-t border-gray-100 dark:border-gray-800 my-1" />
                         <button onClick={() => { setDeleteConfirm(article.id); setActionMenu(null); }} className="w-full text-left px-4 py-2 text-sm font-jakarta text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"><Trash2 className="w-3.5 h-3.5" /> Delete</button>

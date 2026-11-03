@@ -35,6 +35,7 @@
     "react-dom": "^19.1.0",
     "react-hook-form": "^7.82.0",
     "resend": "^6.12.2",
+    "sanitize-html": "^2.18.1",
     "speakeasy": "^2.0.0",
     "tailwind-merge": "^2.5.0",
     "zod": "^3.25.76"
@@ -44,6 +45,7 @@
     "@types/node": "^20.14.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "@types/sanitize-html": "^2.16.2",
     "autoprefixer": "^10.4.19",
     "eslint": "^8.57.0",
     "eslint-config-next": "15.5.25",

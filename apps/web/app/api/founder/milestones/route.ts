@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
 
     const auth = await verifyStartupAccess(startupId);
     if (!auth) return NextResponse.json({ success: false, error: "Not authorized for this startup" }, { status: 403 });
+    if (!auth.startupVerified) return NextResponse.json({ success: false, error: "Only verified startups can post updates. Verify your startup first.", code: "startup_unverified" }, { status: 403 });
     if (!canCreateContent(auth.role)) return NextResponse.json({ success: false, error: "Your role does not allow creating milestones" }, { status: 403 });
 
     const milestoneDate = new Date(date);

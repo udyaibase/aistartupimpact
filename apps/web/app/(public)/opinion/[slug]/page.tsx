@@ -6,8 +6,8 @@ import { notFound } from 'next/navigation';
 import { Clock, Calendar, ChevronRight } from 'lucide-react';
 import StorySaveButton from '@/components/StorySaveButton';
 import { sql, getArticleBySlugDirect, getArticlesDirect } from '@/lib/db';
-import { buildArticleMetadata, generateArticleSchema, generateBreadcrumbSchema } from '@/lib/seo';
-import { sanitizeHtml } from '@/lib/sanitize';
+import { buildArticleMetadata, withArticleSeo, generateArticleSchema, generateBreadcrumbSchema } from '@/lib/seo';
+import { articleBodyHtml } from '@/lib/article-body';
 import ShareButton from '@/components/ShareButton';
 import ArticleActions from '@/components/ArticleActions';
 import SubscribeForm from '@/components/SubscribeForm';
@@ -19,10 +19,7 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
   const article = await getArticleBySlugDirect(params.slug);
   if (!article) return { title: 'Article Not Found' };
   const meta = buildArticleMetadata(article);
-  return {
-    ...meta,
-    alternates: { canonical: `https://udyaibase.com/opinion/${params.slug}` },
-  };
+  return withArticleSeo({ ...meta, alternates: { canonical: `https://udyaibase.com/opinion/${params.slug}` } }, article);
 }
 
 export async function generateStaticParams() {
@@ -49,11 +46,7 @@ export default async function OpinionArticlePage(props: { params: Promise<{ slug
   const formatDate = (d: string) =>
     d ? new Date(d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '';
 
-  const bodyHtml = sanitizeHtml(
-    typeof article.content === 'object'
-      ? (article.content?.html || article.content?.text || article.excerpt || '')
-      : String(article.content || article.excerpt || '')
-  );
+  const bodyHtml = articleBodyHtml(article);
 
   const relatedArticles = (related || []).filter((a: any) => a.slug !== params.slug).slice(0, 3);
 

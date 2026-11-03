@@ -24,9 +24,11 @@ async function getEvent(slug: string) {
         e."metaTitle", e."metaDescription", e."socialImageUrl",
         e."sourceUrl", e."sourceName",
         e."organizerId", e."deletedAt",
-        o.name AS "organizerName", o.avatar AS "organizerAvatar"
+        o.name AS "organizerName", o.avatar AS "organizerAvatar", (o."verifiedAt" IS NOT NULL) AS "organizerVerified",
+        st.name AS "hostStartupName", st.slug AS "hostStartupSlug"
       FROM "Event" e
       LEFT JOIN "EventOrganizer" o ON o.id = e."organizerId"
+      LEFT JOIN "Startup" st ON st.id = e."startupId" AND st."isVerified" = true AND st."deletedAt" IS NULL
       WHERE e.slug = ${slug}
       LIMIT 1
     `;

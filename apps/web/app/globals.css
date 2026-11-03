@@ -347,6 +347,14 @@
   .dark .article-content blockquote {
     background-color: color-mix(in srgb, var(--brand-color) 10%, transparent);
   }
+  /* Links are plain (underline on hover); editors can underline one link (class set in the admin editor). */
+  .article-content a.link-underline {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .article-content a:not(.link-underline) u {
+    text-decoration: none;
+  }
   .article-content .mention {
     @apply font-semibold no-underline text-brand;
     background: none;

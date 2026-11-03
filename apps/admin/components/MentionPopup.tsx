@@ -91,7 +91,7 @@ export default function MentionPopup({ query, position, onSelect, onClose }: Men
           <span className="text-xs text-gray-400 font-jakarta">@{query || '...'}</span>
         </div>
         <div className="px-3 py-4 text-center">
-          <span className="text-xs text-gray-400 font-jakarta">Type a startup or founder name</span>
+          <span className="text-xs text-gray-400 font-jakarta">Type a startup or AI tool name</span>
         </div>
       </div>
     );
@@ -116,7 +116,7 @@ export default function MentionPopup({ query, position, onSelect, onClose }: Men
 
       {!loading && results.length === 0 && query.length >= 2 && (
         <div className="px-3 py-4 text-center">
-          <span className="text-xs text-gray-400 font-jakarta">No startups or founders found</span>
+          <span className="text-xs text-gray-400 font-jakarta">No approved startups or tools match. Add it to the directory first.</span>
         </div>
       )}
 

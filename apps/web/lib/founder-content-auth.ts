@@ -9,7 +9,11 @@ interface ContentAuthResult {
   email: string;
   name: string;
   startupId: string;
+  /** Only verified startups may publish or submit updates and stories (drafts are always allowed). */
+  startupVerified: boolean;
 }
+
+export const UNVERIFIED_STARTUP_ERROR = 'Only verified startups can post updates and stories. Verify your startup first; you can keep this as a draft meanwhile.';
 
 export async function verifyStartupAccess(
   startupId: string
@@ -19,7 +23,7 @@ export async function verifyStartupAccess(
 
   const startup = await prisma.startup.findUnique({
     where: { id: startupId },
-    select: { id: true, ownerId: true },
+    select: { id: true, ownerId: true, isVerified: true },
   });
   if (!startup) return null;
 
@@ -31,6 +35,7 @@ export async function verifyStartupAccess(
       email: session.email,
       name: session.name,
       startupId: startup.id,
+      startupVerified: startup.isVerified,
     };
   }
 
@@ -52,6 +57,7 @@ export async function verifyStartupAccess(
     email: session.email,
     name: session.name,
     startupId: startup.id,
+    startupVerified: startup.isVerified,
   };
 }
 

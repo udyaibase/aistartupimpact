@@ -2,10 +2,10 @@ import dns from 'dns/promises';
 import crypto from 'crypto';
 
 /**
- * Generate a secure random verification token
+ * Generate a secure random verification token (the "ub_" prefix marks Udyaibase tokens in a DNS zone).
  */
 export function generateVerificationToken(): string {
-  return crypto.randomBytes(16).toString('hex');
+  return `ub_${crypto.randomBytes(16).toString('hex')}`;
 }
 
 /**
@@ -14,6 +14,9 @@ export function generateVerificationToken(): string {
 export function generateDNSRecord(token: string): string {
   return `udyaibase-verify=${token}`;
 }
+
+/** Where the TXT record goes: the root of the domain (shown as "@" by most DNS providers). */
+export const DNS_RECORD_NAME = '@';
 
 /**
  * Extract clean domain from URL
@@ -31,57 +34,35 @@ export function extractDomain(url: string): string {
   }
 }
 
+/** Not-found answers from the resolver (the record or name simply isn't there). */
+const NOT_FOUND = new Set(['ENOTFOUND', 'ENODATA', 'ENOTIMP', 'ESERVFAIL', 'NXDOMAIN']);
+
 /**
- * Verify DNS TXT record for domain ownership
+ * Verify domain ownership by DNS: a TXT record `udyaibase-verify=<token>` at the root of the domain ("@").
+ * The older location, `_udyaibase-verify.<domain>`, is still accepted so claims started before the move keep
+ * working. The value must match exactly (long TXT values arrive in chunks, which are joined first).
  */
 export async function verifyDNS(domain: string, expectedToken: string): Promise<{
   verified: boolean;
   error?: string;
 }> {
-  try {
-    const cleanDomain = extractDomain(domain);
-    const subdomain = `_udyaibase-verify.${cleanDomain}`;
-    
-    console.log(`Checking DNS TXT record for: ${subdomain}`);
-    
-    // Resolve TXT records
-    const records = await dns.resolveTxt(subdomain);
-    
-    // Flatten array of arrays
-    const allRecords = records.flat();
-    const expectedRecord = `udyaibase-verify=${expectedToken}`;
-    
-    console.log('Found TXT records:', allRecords);
-    console.log('Expected record:', expectedRecord);
-    
-    // Check if our verification record exists
-    const verified = allRecords.some(record => 
-      record.includes(expectedRecord) || record.includes(expectedToken)
-    );
-    
-    if (verified) {
-      return { verified: true };
-    } else {
-      return {
-        verified: false,
-        error: 'DNS TXT record not found. Please ensure the record is added and DNS has propagated (may take 5-10 minutes).'
-      };
+  const cleanDomain = extractDomain(domain).toLowerCase();
+  const expected = `udyaibase-verify=${expectedToken}`;
+  let lookupError: string | null = null;
+  for (const host of [cleanDomain, `_udyaibase-verify.${cleanDomain}`]) {
+    try {
+      const records = (await dns.resolveTxt(host)).map((chunks) => chunks.join('').trim());
+      if (records.includes(expected)) return { verified: true };
+    } catch (error: any) {
+      if (!NOT_FOUND.has(error?.code)) lookupError = error?.message ?? 'DNS lookup failed';
     }
-  } catch (error: any) {
-    console.error('DNS verification error:', error);
-    
-    if (error.code === 'ENOTFOUND' || error.code === 'ENODATA') {
-      return {
-        verified: false,
-        error: 'DNS TXT record not found. Please add the record and wait for DNS propagation (5-10 minutes).'
-      };
-    }
-    
-    return {
-      verified: false,
-      error: `DNS lookup failed: ${error.message}`
-    };
   }
+  return {
+    verified: false,
+    error: lookupError
+      ? `We couldn't check DNS for ${cleanDomain} right now (${lookupError}). Try again in a minute.`
+      : `The TXT record isn't on ${cleanDomain} yet. Add it at @ (the root of the domain) and allow 5–10 minutes, sometimes up to an hour, for DNS to update.`,
+  };
 }
 
 /**

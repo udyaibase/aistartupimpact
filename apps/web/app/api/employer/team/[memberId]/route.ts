@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { getEmployerSession, type EmployerRole } from '@/lib/employer-auth';
 import { can, forbidden } from '@/lib/employer/permissions';
-import { INVITE_TTL_DAYS, cleanJobIds, hashToken, listTeam, newInviteToken, sendInviteEmail } from '@/lib/employer/team';
+import { INVITE_TTL_DAYS, cleanJobIds, hashToken, listTeam, newInviteToken, sendInviteEmail, sendJoinApprovedEmail } from '@/lib/employer/team';
+import { effectivePlan } from '@/lib/employer/plans';
 import { ownerChangeProblem } from '@/lib/employer/owners';
 
 export const dynamic = 'force-dynamic';
@@ -10,7 +11,7 @@ export const dynamic = 'force-dynamic';
 const ROLES: EmployerRole[] = ['OWNER', 'RECRUITER', 'INTERVIEWER'];
 
 async function own(memberId: string, employerId: string) {
-  return prisma.jobBoardTeamMember.findFirst({ where: { id: memberId, employerId, status: { in: ['PENDING', 'ACTIVE'] } } });
+  return prisma.jobBoardTeamMember.findFirst({ where: { id: memberId, employerId, status: { in: ['PENDING', 'ACTIVE', 'REQUESTED'] } } });
 }
 
 /** Change a teammate's role or an interviewer's jobs ({ jobIds }), or resend their invite ({ action: 'resend' }). Owners only. */
@@ -22,6 +23,24 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ mem
   const member = await own(memberId, session.id);
   if (!member) return NextResponse.json({ error: 'Teammate not found.' }, { status: 404 });
   const b = await request.json().catch(() => ({}));
+
+  // Someone asked to join (signup "request to join"): approve as Recruiter (role can be changed after), or decline.
+  if (b.action === 'approve' || b.action === 'decline') {
+    if (member.status !== 'REQUESTED') return NextResponse.json({ error: 'That request was already handled.' }, { status: 400 });
+    if (b.action === 'decline') {
+      await prisma.jobBoardTeamMember.update({ where: { id: member.id }, data: { status: 'DECLINED' } });
+      return NextResponse.json({ success: true, team: await listTeam(session.id) });
+    }
+    const e = await prisma.jobBoardEmployer.findUnique({ where: { id: session.id }, select: { plan: true, planExpiresAt: true, planIsTrial: true, companyName: true } });
+    const plan = e ? effectivePlan(e) : null;
+    const seats = 1 + await prisma.jobBoardTeamMember.count({ where: { employerId: session.id, status: { in: ['PENDING', 'ACTIVE'] } } });
+    if (plan?.maxSeats != null && seats >= plan.maxSeats) {
+      return NextResponse.json({ error: `The ${plan.name} plan includes ${plan.maxSeats} seats, including you. Remove someone or upgrade to approve this request.`, code: 'seat_limit' }, { status: 403 });
+    }
+    await prisma.jobBoardTeamMember.update({ where: { id: member.id }, data: { status: 'ACTIVE', role: 'RECRUITER', acceptedAt: new Date(), invitedByEmail: session.email } });
+    sendJoinApprovedEmail(member.email, e?.companyName ?? 'your company');
+    return NextResponse.json({ success: true, team: await listTeam(session.id) });
+  }
 
   if (b.action === 'resend') {
     if (member.status !== 'PENDING') return NextResponse.json({ error: 'They’ve already joined.' }, { status: 400 });

@@ -61,7 +61,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
         method: 'DNS TXT Record',
         steps: [
           `Go to your DNS provider for ${domain}`,
-          `Add a TXT record with value: udyaibase-verify=${token}`,
+          `Add a TXT record at @ (the root of the domain) with value: udyaibase-verify=${token}`,
           'Wait 1-5 minutes for DNS propagation',
           'Click "Verify" to check',
         ],

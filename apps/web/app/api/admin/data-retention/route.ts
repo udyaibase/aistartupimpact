@@ -5,6 +5,7 @@ import { deleteResume } from '@/lib/jobs/resume-storage';
 import { runPlanMaintenance } from '@/lib/employer/billing';
 import { runHiringMaintenance } from '@/lib/employer/lifecycle';
 import { runHostPlanMaintenance } from '@/lib/events/billing';
+import { finishRecentlyApprovedEvents, processSuspendedEvents } from '@/lib/events/trust';
 import { expireTicketHolds } from '@/lib/events/tickets';
 import { trackCronRoute } from '@/lib/ops/cron';
 import { sizePendingLogos } from '@/lib/media/logo-sizes';
@@ -145,6 +146,10 @@ async function runCleanup(request: NextRequest) {
     Object.assign(results, await runHiringMaintenance(now));
     // Event host plans: reminders and lapses.
     Object.assign(results, await runHostPlanMaintenance(now));
+    // Events an admin approved: featured placement and the first-event free Boost (safe to repeat).
+    results.approvedEventsFinished = await finishRecentlyApprovedEvents(now);
+    // Organizers suspended by an admin: tell attendees of their cancelled events and refund paid tickets.
+    results.suspendedEventsHandled = await processSuspendedEvents();
     // Unpaid ticket holds (they stop counting after 15 minutes anyway; this tidies their status).
     Object.assign(results, await expireTicketHolds(now));
 

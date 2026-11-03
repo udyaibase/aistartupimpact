@@ -11,11 +11,11 @@ export const dynamic = "force-dynamic";
 export default async function OrganizerEventsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ published?: string }>;
+  searchParams: Promise<{ published?: string; review?: string }>;
 }) {
   const session = await getOrganizerSession();
   if (!session) return null;
-  const { published } = await searchParams;
+  const { published, review } = await searchParams;
 
   const events = await prisma.event.findMany({
     where: { organizerId: session.id, deletedAt: null },
@@ -23,7 +23,7 @@ export default async function OrganizerEventsPage({
     select: {
       id: true, title: true, slug: true, shortCode: true, status: true, category: true,
       format: true, startAt: true, registrationCount: true, capacity: true,
-      coverImageUrl: true, venueName: true,
+      coverImageUrl: true, venueName: true, heldAt: true,
     },
   });
 
@@ -35,8 +35,16 @@ export default async function OrganizerEventsPage({
       })
     : null;
 
+  const reviewEvent = review ? events.find((e) => e.id === review && e.status === "PENDING_REVIEW") : undefined;
+
   return (
     <div className="space-y-6">
+      {reviewEvent && (
+        <div role="status" className="rounded-[12px] border border-violet-200 dark:border-violet-900/50 bg-violet-50 dark:bg-violet-900/10 px-4 py-3 text-sm text-violet-900 dark:text-violet-200 font-jakarta">
+          <p className="font-semibold">“{reviewEvent.title}” is waiting for a quick review</p>
+          <p className="mt-0.5">New organizers&apos; first events are checked by our team, usually within a day. We&apos;ll email you when it&apos;s live; after that, your events publish straight away.</p>
+        </div>
+      )}
       {publishedEvent && (
         <PublishedModal
           event={{ id: publishedEvent.id, title: publishedEvent.title, slug: publishedEvent.slug, shortCode: publishedEvent.shortCode }}
@@ -82,11 +90,12 @@ export default async function OrganizerEventsPage({
                       event.status === "PUBLISHED" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
                       event.status === "CANCELLED" ? "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400" :
                       event.status === "POSTPONED" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
+                      event.status === "PENDING_REVIEW" ? "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300" :
                       event.status === "COMPLETED" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" :
                       event.status === "ARCHIVED" ? "bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400" :
                       "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
                     }`}>
-                      {event.status.charAt(0) + event.status.slice(1).toLowerCase()}
+                      {event.status === "PENDING_REVIEW" ? (event.heldAt ? "Hidden for review" : "Under review") : event.status.charAt(0) + event.status.slice(1).toLowerCase()}
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-500 font-jakarta">

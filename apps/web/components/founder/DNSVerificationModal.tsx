@@ -103,7 +103,7 @@ export default function DNSVerificationModal({ unverifiedStartups }: DNSVerifica
 
           <div className="text-xs text-gray-500 dark:text-gray-400 font-jakarta flex items-start gap-2">
             <CheckCircle className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
-            <span>Takes about a minute with a code sent to your work email, or add a DNS TXT record instead.</span>
+            <span>Add a DNS TXT record to your domain, or use a code sent to your work email if you can’t change DNS.</span>
           </div>
         </div>
 

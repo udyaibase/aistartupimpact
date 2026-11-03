@@ -14,7 +14,7 @@ export async function GET() {
     const result = await sql`
       SELECT e."companyName", e.email, e."startupClaimMethod", e."verifiedCompanyDomain", e.description, e."websiteUrl", e.industry, e."companySize",
              e.location, e.country, e."linkedinUrl", e."twitterUrl", e."logoUrl", e."startupId",
-             s.name AS "startupName", s.slug AS "startupSlug", s."logoUrl" AS "startupLogo",
+             s.name AS "startupName", s.slug AS "startupSlug", s."logoUrl" AS "startupLogo", s."isVerified" AS "startupIsVerified",
              s."headquartersCity" AS "startupCity", s.stage AS "startupStage", s."websiteUrl" AS "startupWebsite"
       FROM "JobBoardEmployer" e
       LEFT JOIN "Startup" s ON s.id = e."startupId"

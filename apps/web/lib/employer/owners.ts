@@ -5,6 +5,9 @@ import { prisma } from '@udyaibase/database';
  * is an OWNER team-member row, so sign-in, notices and permissions work the same way for everyone.
  */
 
+/** passwordHash marker for workspaces created through code signup (never a valid bcrypt hash). */
+export const CODE_ONLY_MARKER = '!code-only';
+
 /** Account emails that are never a real inbox: Udyaibase's own placeholders and internal workspace addresses. */
 export const INTERNAL_ACCOUNT_DOMAIN = 'workspace.udyaibase.invalid';
 export function isRealInbox(email: string | null | undefined): boolean {

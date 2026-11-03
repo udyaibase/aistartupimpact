@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
 import { getFounderSession } from "@/lib/founder-auth";
-import { verifyStartupAccess, getFounderStartups } from "@/lib/founder-content-auth";
+import { verifyStartupAccess, getFounderStartups, UNVERIFIED_STARTUP_ERROR } from "@/lib/founder-content-auth";
 import { canCreateContent, canViewAllDrafts } from "@/lib/founder-team-permissions";
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from "@/lib/rate-limit";
 import { generateUniqueSlug } from "@udyaibase/utils";
@@ -87,6 +87,7 @@ export async function POST(request: NextRequest) {
 
     const auth = await verifyStartupAccess(startupId);
     if (!auth) return NextResponse.json({ success: false, error: "Not authorized for this startup" }, { status: 403 });
+    if (!isDraft && !auth.startupVerified) return NextResponse.json({ success: false, error: UNVERIFIED_STARTUP_ERROR, code: 'startup_unverified' }, { status: 403 });
     if (!canCreateContent(auth.role)) return NextResponse.json({ success: false, error: "Your role does not allow creating content" }, { status: 403 });
 
     const articleType = VALID_TYPES.includes(type) ? type : "STARTUP_UPDATE";

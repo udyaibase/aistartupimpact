@@ -7,8 +7,8 @@ import { aiCostMicroUsd } from '@udyaibase/utils/ai-cost';
  * never prompts or answers) into OpsAiCall, the same table the web app uses. Budget and failure alerts
  * are raised by the web app's checks, which read this table too.
  */
-export function monitoredOpenAI(feature: string) {
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+export function monitoredOpenAI(feature: string, opts: { timeoutMs?: number; maxRetries?: number } = {}) {
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: opts.timeoutMs, maxRetries: opts.maxRetries });
   const record = (model: string, ok: boolean, usage?: { prompt_tokens?: number; completion_tokens?: number } | null, error?: string) => {
     const promptTokens = usage?.prompt_tokens ?? 0, completionTokens = usage?.completion_tokens ?? 0;
     return prisma.opsAiCall.create({

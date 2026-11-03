@@ -305,7 +305,32 @@ export function generateFAQSchema(
 
 // ─── Next.js Metadata builder ─────────────────────────────────────────────────
 
-export function buildArticleMetadata(article: {
+/** The SEO fields an editor sets on an article in the admin; each one, when set, wins over the defaults. */
+export type ArticleSeoFields = {
+  title: string;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  canonicalUrl?: string | null;
+  ogImage?: string | null;
+  noIndex?: boolean | null;
+};
+
+export function withArticleSeo(meta: Metadata, a: ArticleSeoFields): Metadata {
+  const title = a.seoTitle?.trim() || undefined;
+  const description = a.seoDescription?.trim() || undefined;
+  const images = a.ogImage ? [{ url: a.ogImage, width: 1200, height: 630, alt: a.title }] : undefined;
+  return {
+    ...meta,
+    ...(title ? { title } : {}),
+    ...(description ? { description } : {}),
+    ...(a.canonicalUrl ? { alternates: { ...meta.alternates, canonical: a.canonicalUrl } } : {}),
+    ...(a.noIndex ? { robots: { index: false, follow: true } } : {}),
+    openGraph: { ...meta.openGraph, ...(title ? { title } : {}), ...(description ? { description } : {}), ...(images ? { images } : {}) },
+    twitter: { ...meta.twitter, ...(title ? { title } : {}), ...(description ? { description } : {}), ...(images ? { images: images.map((i) => i.url) } : {}) },
+  } as Metadata;
+}
+
+export function buildArticleMetadata(article: Omit<ArticleSeoFields, 'title'> & {
   title: string;
   excerpt?: string | null;
   coverImage?: string | null;
@@ -327,7 +352,7 @@ export function buildArticleMetadata(article: {
     ? [{ url: article.coverImage, width: 1200, height: 630, alt: article.title }]
     : [{ url: `${d}/og-image.png`, width: 1200, height: 630 }];
 
-  return {
+  return withArticleSeo({
     title: article.title,
     description,
     alternates: { canonical },
@@ -353,7 +378,7 @@ export function buildArticleMetadata(article: {
       creator: twitterHandle,
       site: twitterHandle,
     },
-  };
+  }, article);
 }
 
 // ─── Interfaces (kept for backward compat) ───────────────────────────────────

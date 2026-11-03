@@ -8,7 +8,7 @@ import StorySaveButton from '@/components/StorySaveButton';
 import { sql, getArticleBySlugDirect, getRelatedArticlesDirect } from '@/lib/db';
 import { defaultHeroArticle, defaultLatestStories, defaultIndiaAI } from '@/lib/fallbacks';
 import { buildArticleMetadata, generateArticleSchema, generateBreadcrumbSchema } from '@/lib/seo';
-import { sanitizeHtml } from '@/lib/sanitize';
+import { articleBodyHtml } from '@/lib/article-body';
 import TrackView from '@/components/TrackView';
 import ShareMenu from '@/components/shared/ShareMenu';
 import ArticleActions from '@/components/ArticleActions';
@@ -52,11 +52,7 @@ export default async function ArticlePage(props: { params: Promise<{ slug: strin
   const formatDate = (d: string) =>
     d ? new Date(d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '';
 
-  const bodyHtml = sanitizeHtml(
-    typeof article.content === 'object'
-      ? (article.content?.html || article.content?.text || article.excerpt || '')
-      : String(article.content || article.excerpt || '')
-  );
+  const bodyHtml = articleBodyHtml(article);
 
   // Shown under /news, so only article types that live in the news section.
   const relatedArticles = await getRelatedArticlesDirect(article.id, ['NEWS', 'TOOL_REVIEW', 'GUIDE', 'COMPARISON', 'REPORT', 'SPONSORED', 'STARTUP_UPDATE'], 3);

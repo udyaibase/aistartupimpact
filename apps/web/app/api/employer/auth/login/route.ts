@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ensureOwnerMember } from '@/lib/employer/owners';
+import { passwordSignInOpen, twoFactorChallenge } from '@/lib/employer/sign-in';
 import { verifyTurnstileToken } from '@/lib/turnstile';
 import { sql } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import { FOUNDER_SSO_MARKER } from '@/lib/employer/founder-workspace';
-import { SignJWT } from 'jose';
+import { CODE_ONLY_MARKER } from '@/lib/employer/owners';
 import { setEmployerSession } from '@/lib/employer-auth';
 import { securityAlertHtml } from '@udyaibase/utils';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 import { authRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 
-const CHALLENGE_SECRET = new TextEncoder().encode(process.env.EMPLOYER_JWT_SECRET || process.env.USER_JWT_SECRET!);
 
 export const dynamic = 'force-dynamic';
 const MAX_FAILED_ATTEMPTS = 5;
@@ -18,6 +18,9 @@ const LOCKOUT_MINUTES = 15;
 
 export async function POST(request: NextRequest) {
   try {
+    if (!passwordSignInOpen()) {
+      return NextResponse.json({ error: 'Password sign-in has ended. Sign in with a code sent to your email instead.', useCode: true }, { status: 410 });
+    }
     const identifier = getClientIdentifier(request);
     const { success: allowed } = await checkRateLimit(authRateLimit, identifier);
     if (!allowed) {
@@ -57,6 +60,9 @@ export async function POST(request: NextRequest) {
     // Workspaces opened from the founder portal have no password of their own.
     if (employer.passwordHash === FOUNDER_SSO_MARKER) {
       return NextResponse.json({ error: 'This account signs in with your founder account. Use “Continue with your founder account” below.', code: 'founder_sso' }, { status: 401 });
+    }
+    if (employer.passwordHash === CODE_ONLY_MARKER) {
+      return NextResponse.json({ error: 'This account has no password. Sign in with a code sent to your email above.', code: 'code_only', useCode: true }, { status: 401 });
     }
 
     // Check if account is active
@@ -131,12 +137,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (employer.twoFactorEnabled) {
-      const challengeToken = await new SignJWT({ userId: employer.id, userType: 'employer', purpose: '2fa-challenge' })
-        .setProtectedHeader({ alg: 'HS256' })
-        .setIssuedAt()
-        .setExpirationTime('5m')
-        .sign(CHALLENGE_SECRET);
-      return NextResponse.json({ success: false, requires2FA: true, challengeToken });
+      return NextResponse.json({ success: false, requires2FA: true, challengeToken: await twoFactorChallenge(employer.id) });
     }
 
     // Older accounts get their OWNER row on first sign-in (the backfill does the rest).
