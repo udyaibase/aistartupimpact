@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Search, Building2, MapPin, X, Loader2, SlidersHorizontal, ChevronDown, ChevronUp, ArrowUpDown, ChevronLeft, ChevronRight, TrendingUp, Sparkles, LayoutGrid, List, Users } from 'lucide-react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { useListRestore } from '@/hooks/useListRestore';
 import { VerifiedBadge } from './VerifiedBadge';
 import { useHeadroomBar } from '@/hooks/useHeadroomBar';
 import SmartSearchBox, { type SearchSuggestion } from './search/SmartSearchBox';
@@ -325,6 +326,17 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
   }, [filterParams, fetchPage, pathname, router]);
 
   useEffect(() => () => requestRef.current?.abort(), []);
+
+  // Back from a profile (or a refresh) returns to the same spot: re-load the pages that were loaded, then scroll.
+  const restorePages = useCallback(async (pages: number) => {
+    for (let p = 2; p <= Math.min(pages, 20); p++) {
+      const data = await fetchPage(p);
+      setStartups(prev => [...prev, ...(data.startups || [])]);
+      setCurrentPage(p);
+      if (!data.startups?.length) break;
+    }
+  }, [fetchPage]);
+  useListRestore('startups', filterParams, currentPage, restorePages);
 
   const handleFundingChange = (value: Funding) => {
     if (value === shownFunding) return;

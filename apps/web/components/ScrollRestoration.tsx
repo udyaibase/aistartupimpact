@@ -2,6 +2,13 @@
 
 import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
+import { cameFromHistory } from '@/lib/nav-intent';
+
+/**
+ * Site-wide scroll memory. Going Back/Forward (or refreshing) returns to where the page was left; following a
+ * link always starts at the top. Positions are kept per URL including its filters (?…), since a filtered list is
+ * a different page to come back to. Long lists also restore how much they had loaded (hooks/useListRestore).
+ */
 
 const STORAGE_KEY = 'scroll-positions';
 const MAX_RESTORE_TIME = 3000;
@@ -15,18 +22,24 @@ function getScrollMap(): Record<string, number> {
   }
 }
 
-function saveScroll(path: string, y: number) {
-  const map = getScrollMap();
-  map[path] = y;
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+function saveScroll(key: string, y: number) {
+  try {
+    const map = getScrollMap();
+    map[key] = y;
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+  } catch { /* storage blocked or full: nothing to restore */ }
 }
+
+const currentKey = () => window.location.pathname + window.location.search;
 
 export default function ScrollRestoration() {
   const pathname = usePathname();
   const restoringUntil = useRef(0);
 
   useEffect(() => {
-    const saved = getScrollMap()[pathname];
+    if (!cameFromHistory()) return;
+
+    const saved = getScrollMap()[currentKey()];
     if (!saved || saved < 10) return;
 
     restoringUntil.current = Date.now() + MAX_RESTORE_TIME;
@@ -60,7 +73,7 @@ export default function ScrollRestoration() {
   useEffect(() => {
     const onScroll = () => {
       if (restoringUntil.current > 0) return;
-      saveScroll(pathname, window.scrollY);
+      saveScroll(currentKey(), window.scrollY);
     };
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
