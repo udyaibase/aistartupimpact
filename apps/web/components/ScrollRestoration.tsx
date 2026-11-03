@@ -75,8 +75,11 @@ export default function ScrollRestoration() {
       if (restoringUntil.current > 0) return;
       saveScroll(currentKey(), window.scrollY);
     };
+    // Also save the moment a link is followed, so a quick scroll-and-tap is never lost.
+    const onClick = (e: MouseEvent) => { if ((e.target as Element | null)?.closest?.('a[href]')) onScroll(); };
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    document.addEventListener('click', onClick, true);
+    return () => { window.removeEventListener('scroll', onScroll); document.removeEventListener('click', onClick, true); };
   }, [pathname]);
 
   return null;

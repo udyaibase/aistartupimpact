@@ -2,6 +2,7 @@ import { articlePath } from '@/lib/seo';
 import { formatPlace } from '@udyaibase/utils/src/locations';
 import { jsonLd as jsonLdHtml } from "@/lib/json-ld";
 import Link from 'next/link';
+import BackToListLink from '@/components/shared/BackToListLink';
 import Image from 'next/image';
 import { cache } from 'react';
 import { Metadata } from 'next';
@@ -194,7 +195,7 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
       <nav className="flex items-center gap-1.5 text-xs sm:text-sm font-jakarta text-gray-400 mb-6">
         <Link href="/" className="hover:text-brand">Home</Link>
         <ChevronRight className="w-3 h-3" />
-        <Link href="/tools" className="hover:text-brand">Tools</Link>
+        <BackToListLink scope="tools" href="/tools" className="hover:text-brand">Tools</BackToListLink>
         <ChevronRight className="w-3 h-3" />
         <span className="text-gray-600 dark:text-gray-300">{tool.name}</span>
       </nav>

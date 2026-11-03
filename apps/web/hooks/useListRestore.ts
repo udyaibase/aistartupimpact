@@ -13,6 +13,13 @@ import { cameFromHistory } from '@/lib/nav-intent';
 const MAX_AGE = 30 * 60_000;
 type Saved = { amount: number; y: number; at: number };
 
+const lastListKey = (scope: string) => `list-last:${scope}`;
+
+/** The list URL (with filters) last shown for this scope in this tab, for "back to the list" links. */
+export function lastListUrl(scope: string): string | null {
+  try { return sessionStorage.getItem(lastListKey(scope)); } catch { return null; }
+}
+
 const storageKey = (scope: string) => `list-restore:${scope}:${window.location.pathname}${window.location.search}`;
 
 function read(scope: string): Saved | null {
@@ -59,11 +66,20 @@ export function useListRestore(scope: string, filters: string, amount: number, r
       if (restoring.current) return;
       try {
         sessionStorage.setItem(storageKey(scope), JSON.stringify({ amount: latestAmount.current, y: Math.round(window.scrollY), at: Date.now() }));
+        sessionStorage.setItem(lastListKey(scope), window.location.pathname + window.location.search);
       } catch { /* storage full or blocked: nothing to restore later */ }
     };
     const onScroll = () => { timer ??= setTimeout(save, 150); };
+    // Remember this list (with its filters) for "back to the list" links, even before any scrolling.
+    try { sessionStorage.setItem(lastListKey(scope), window.location.pathname + window.location.search); } catch { /* ignore */ }
+    // Also save the moment a link is followed, so a quick scroll-and-tap is never lost.
+    const onClick = (e: MouseEvent) => { if ((e.target as Element | null)?.closest?.('a[href]')) { clearTimeout(timer); save(); } };
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('pagehide', save);
-    return () => { window.removeEventListener('scroll', onScroll); window.removeEventListener('pagehide', save); clearTimeout(timer); };
+    document.addEventListener('click', onClick, true);
+    return () => {
+      window.removeEventListener('scroll', onScroll); window.removeEventListener('pagehide', save);
+      document.removeEventListener('click', onClick, true); clearTimeout(timer);
+    };
   }, [scope, filters, amount]);
 }
