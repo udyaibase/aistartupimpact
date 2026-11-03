@@ -1,12 +1,25 @@
 'use client';
 
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useDeferredValue } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Star, Zap, ArrowRight, CheckSquare, Square, X, BarChart, Search, Grid3X3, List, Loader2, SlidersHorizontal, ChevronDown, ChevronRight, SearchX } from 'lucide-react';
 import BookmarkButton from './BookmarkButton';
 import UpvoteButton from './tools/UpvoteButton';
+import { useHeadroomBar } from '@/hooks/useHeadroomBar';
+import SmartSearchBox, { type SearchSuggestion } from './search/SmartSearchBox';
+import { indexTools, searchTools } from '@/lib/search/tool-search';
+import { removeChipFromQuery } from '@/lib/search/understand';
+
+const TOOL_EXAMPLES = [
+  'Free AI tool to write blog posts',
+  'Generate images from text',
+  'Code assistant with API',
+  'Summarize long PDFs',
+  'Open source chatbot',
+  'Turn meetings into notes',
+];
 
 interface ToolPick {
   id: string;
@@ -58,9 +71,16 @@ interface ToolsListProps {
   toolTagMap?: Record<string, string[]>;
   initialTagId?: string | null;
   initialPricing?: string | null;
+  /** Set on a category page: `picks` are already that category's tools, so the parent-category pills are hidden
+   *  and filtering starts (and resets) inside this parent category. */
+  scopeCategory?: string | null;
+  /** Subcategory selected on first render (a subcategory page shows its parent's tools, filtered to it). */
+  initialSubcategory?: string | null;
+  /** Called whenever the selected subcategory changes ('all' for none). */
+  onSubcategoryChange?: (slug: string) => void;
 }
 
-type SortOption = 'rating' | 'upvotes' | 'name' | 'newest';
+type SortOption = 'relevance' | 'rating' | 'upvotes' | 'name' | 'newest';
 type ViewMode = 'grid' | 'list';
 
 const ITEMS_PER_PAGE = 30;
@@ -68,13 +88,14 @@ const ITEMS_PER_PAGE = 30;
 // Primary filter groups shown expanded by default (sortOrder 1-4)
 const PRIMARY_GROUP_SLUGS = ['pricing-access', 'platform-access', 'target-user', 'ai-model-technology'];
 
-export default function ToolsListWithComparison({ picks, tagGroups = [], toolTagMap = {}, initialTagId, initialPricing }: ToolsListProps) {
+export default function ToolsListWithComparison({ picks, tagGroups = [], toolTagMap = {}, initialTagId, initialPricing, scopeCategory, initialSubcategory, onSubcategoryChange }: ToolsListProps) {
+  const defaultCategory = scopeCategory || 'all';
   const router = useRouter();
   const [selectedTools, setSelectedTools] = useState<ToolPick[]>([]);
   const [categoryBeforeCompare, setCategoryBeforeCompare] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [selectedSubcategory, setSelectedSubcategory] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState(defaultCategory);
+  const [selectedSubcategory, setSelectedSubcategory] = useState(initialSubcategory || 'all');
   const [selectedPricing, setSelectedPricing] = useState(initialPricing || 'all');
   const [sortBy, setSortBy] = useState<SortOption>('rating');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
@@ -87,7 +108,7 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
   );
   const [showAllInGroup, setShowAllInGroup] = useState<Set<string>>(new Set());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
   const parentPillsRef = useRef<HTMLDivElement>(null);
   const subPillsRef = useRef<HTMLDivElement>(null);
 
@@ -183,18 +204,39 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
     return Array.from(subMap.values()).sort((a, b) => b.count - a.count);
   }, [picks, selectedCategory]);
 
+  // Tag counts for the tools on this page (a category page shows fewer tools than the site-wide counts).
+  const tagCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of picks) for (const id of toolTagMap[p.id] || []) counts.set(id, (counts.get(id) || 0) + 1);
+    return counts;
+  }, [picks, toolTagMap]);
+
   const pricingModels = useMemo(() => {
     return Array.from(new Set(picks.map(p => p.pricing))).sort();
   }, [picks]);
 
+  // Relevance search: index once per tool list, rank on every (deferred) keystroke.
+  const tagNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const g of tagGroups) for (const t of g.tags) m.set(t.id, t.name);
+    return m;
+  }, [tagGroups]);
+  const toolIndex = useMemo(
+    () => indexTools(picks, (tool) => (toolTagMap[tool.id] || []).map((id) => tagNameById.get(id) || '').filter(Boolean)),
+    [picks, toolTagMap, tagNameById],
+  );
+  const deferredQuery = useDeferredValue(searchQuery);
+  const searchResult = useMemo(
+    () => (deferredQuery.trim() ? searchTools(toolIndex, deferredQuery) : null),
+    [toolIndex, deferredQuery],
+  );
+
+  // "Best match" only means something while searching (e.g. after "Clear all" it falls back to Top Rated).
+  const effectiveSort: SortOption = sortBy === 'relevance' && !searchResult ? 'rating' : sortBy;
+
   // Filter and sort tools
   const filteredTools = useMemo(() => {
-    let result = picks.filter(tool => {
-      const matchesSearch = searchQuery === '' ||
-        tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        tool.tagline.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        tool.category.toLowerCase().includes(searchQuery.toLowerCase());
-
+    let result = (searchResult ? searchResult.tools : picks).filter(tool => {
       const matchesCategory = selectedCategory === 'all' || 
         (tool.parentCategorySlug || tool.categorySlug) === selectedCategory;
       const matchesSubcategory = selectedSubcategory === 'all' || tool.categorySlug === selectedSubcategory;
@@ -230,11 +272,11 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
         }
       }
 
-      return matchesSearch && matchesCategory && matchesSubcategory && matchesPricing && matchesTrial && matchesTags;
+      return matchesCategory && matchesSubcategory && matchesPricing && matchesTrial && matchesTags;
     });
 
-    // Sort
-    switch (sortBy) {
+    // Sort ('relevance' keeps the search ranking)
+    switch (effectiveSort) {
       case 'rating':
         result.sort((a, b) => b.rating - a.rating);
         break;
@@ -250,7 +292,7 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
     }
 
     return result;
-  }, [picks, searchQuery, selectedCategory, selectedSubcategory, selectedPricing, sortBy, selectedTagIds, freeTrialOnly, toolTagMap, tagGroups]);
+  }, [picks, searchResult, selectedCategory, selectedSubcategory, selectedPricing, effectiveSort, selectedTagIds, freeTrialOnly, toolTagMap, tagGroups]);
 
   // Paginated tools
   const visibleTools = useMemo(() => {
@@ -258,6 +300,17 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
   }, [filteredTools, visibleCount]);
 
   const hasMore = visibleCount < filteredTools.length;
+
+  const searchSuggestions = useMemo<SearchSuggestion[]>(() => {
+    if (!searchQuery.trim()) return [];
+    return filteredTools.slice(0, 5).map((t) => ({
+      key: t.id,
+      title: t.name,
+      subtitle: [t.category, t.pricing].filter(Boolean).join(' · '),
+      logoUrl: t.logoUrl,
+      href: `/tools/${t.slug}`,
+    }));
+  }, [searchQuery, filteredTools]);
 
   // Reset pagination when filters change
   const handleCategoryChange = (slug: string) => {
@@ -273,6 +326,9 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
+    // Searching ranks by best match; clearing the search goes back to the default order.
+    if (value.trim() && sortBy === 'rating') setSortBy('relevance');
+    if (!value.trim() && sortBy === 'relevance') setSortBy('rating');
     setVisibleCount(ITEMS_PER_PAGE);
   };
 
@@ -312,17 +368,21 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
     }
   };
 
-  // Keyboard shortcut: "/" to focus search
+  const onSubcategoryChangeRef = useRef(onSubcategoryChange);
+  onSubcategoryChangeRef.current = onSubcategoryChange;
+  useEffect(() => { onSubcategoryChangeRef.current?.(selectedSubcategory); }, [selectedSubcategory]);
+
+  // Sticky search & filter bar (same behaviour as the startups directory).
+  const barAnchorRef = useRef<HTMLDivElement>(null);
+  const bar = useHeadroomBar(barAnchorRef, showMoreFilters || searchOpen);
+  const scrollToResults = bar.scrollToResults;
+  const filterKey = [searchQuery, selectedCategory, selectedSubcategory, selectedPricing, sortBy, freeTrialOnly, selectedTagIds.join(',')].join('|');
+  const prevFilterKey = useRef(filterKey);
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
+    if (prevFilterKey.current === filterKey) return;
+    prevFilterKey.current = filterKey;
+    scrollToResults();
+  }, [filterKey, scrollToResults]);
 
   return (
     <div className="relative">
@@ -333,9 +393,25 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
         </div>
       )}
 
-      {/* ── Sticky Category Pills (Parent Categories) ── */}
-      <div className="sticky top-[96px] z-[100] bg-gray-50/95 dark:bg-gray-950/95 backdrop-blur-sm -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 py-2 sm:py-3">
+      {/* ── Search & filter bar: sticks under the site header (hides on scroll down on small screens) ── */}
+      <div ref={barAnchorRef} aria-hidden className="h-0" />
+      <div
+        style={{ top: bar.headerOffset, transform: bar.hidden ? `translateY(calc(-100% - ${bar.headerOffset}px))` : undefined }}
+        className="sticky z-40 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 pb-3 mb-3 sm:mb-5 transition-transform duration-300 ease-out"
+      >
+      {/* Full-bleed backdrop: runs edge to edge of the window while the controls stay aligned with the content */}
+      <div
+        aria-hidden
+        className={`absolute inset-y-0 -left-[100vw] -right-[100vw] -z-10 bg-gray-50/95 dark:bg-gray-950/95 backdrop-blur-md transition-shadow duration-300 ${
+          bar.stuck ? 'shadow-[0_8px_16px_-12px_rgba(0,0,0,0.25)] border-b border-gray-200/70 dark:border-gray-800' : ''
+        }`}
+      />
+
+      {/* ── Category Pills ── */}
+      {(!scopeCategory || subcategories.length > 1) && (
+      <div className="pt-2 sm:pt-3">
         {/* Parent category pills */}
+        {!scopeCategory && (
         <div className="relative">
         <div ref={parentPillsRef} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 pr-8 -webkit-overflow-scrolling-touch" style={{ WebkitOverflowScrolling: 'touch' }}>
           <button
@@ -364,10 +440,11 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
         </div>
         <div className="absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-gray-50 dark:from-gray-950 pointer-events-none sm:hidden" />
         </div>
+        )}
 
         {/* Subcategory pills (shown when a parent is selected) */}
         {selectedCategory !== 'all' && subcategories.length > 1 && (
-          <div ref={subPillsRef} className="flex items-center gap-2 mt-2 overflow-x-auto scrollbar-hide pb-1" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div ref={subPillsRef} className={`flex items-center gap-2 ${scopeCategory ? '' : 'mt-2'} overflow-x-auto scrollbar-hide pb-1`} style={{ WebkitOverflowScrolling: 'touch' }}>
             <button
               onClick={() => handleSubcategoryChange('all')}
               className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold font-jakarta transition-all active:scale-95 ${
@@ -376,7 +453,7 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
                   : 'bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
               }`}
             >
-              All in {parentCategories.find(c => c.slug === selectedCategory)?.name || 'category'}
+              {scopeCategory ? 'All' : `All in ${parentCategories.find(c => c.slug === selectedCategory)?.name || 'category'}`} ({parentCategories.find(c => c.slug === selectedCategory)?.count ?? picks.length})
             </button>
             {subcategories.map(sub => (
               <button
@@ -394,22 +471,23 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
           </div>
         )}
       </div>
+      )}
 
       {/* ── Search + Filters + Sort + View Toggle ── */}
-      <div className="mt-3 sm:mt-5 mb-3 sm:mb-6 space-y-2.5 sm:space-y-3">
+      <div className="pt-3 space-y-2.5 sm:space-y-3">
         {/* Search Bar */}
-        <div className="relative">
-          <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
-          <input
-            ref={searchInputRef}
-            type="text"
-            inputMode="search" enterKeyHint="search" placeholder="Search tools..."
-            value={searchQuery}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            className="w-full pl-9 sm:pl-11 pr-10 sm:pr-12 py-2 sm:py-2.5 rounded-lg sm:rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-xs sm:text-sm font-jakarta"
-          />
-          <kbd className="absolute right-3 top-1/2 -translate-y-1/2 hidden sm:inline-flex items-center px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-400 text-xs font-mono">/</kbd>
-        </div>
+        <SmartSearchBox
+          value={searchQuery}
+          onChange={handleSearchChange}
+          noun="AI tools"
+          examples={TOOL_EXAMPLES}
+          suggestions={searchSuggestions}
+          resultCount={searchQuery.trim() ? filteredTools.length : null}
+          chips={searchResult?.understood.chips}
+          relaxed={searchResult?.relaxed}
+          onRemoveChip={(chip) => handleSearchChange(removeChipFromQuery(searchQuery, chip))}
+          onOpenChange={setSearchOpen}
+        />
 
         {/* Filters + Sort Row */}
         <div className="flex items-center gap-2">
@@ -435,14 +513,15 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
           {/* Sort Dropdown */}
           <div className="relative">
             <select
-              value={sortBy}
+              value={effectiveSort}
               onChange={(e) => setSortBy(e.target.value as SortOption)}
               className={`appearance-none flex items-center gap-1.5 sm:gap-2 pl-7 sm:pl-9 pr-6 sm:pr-8 py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl border font-jakarta text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand cursor-pointer ${
-                sortBy !== 'rating'
+                sortBy !== 'rating' && sortBy !== 'relevance'
                   ? 'border-brand bg-brand/5 text-brand shadow-sm'
                   : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300'
               }`}
             >
+              {searchQuery.trim() && <option value="relevance">Best match</option>}
               <option value="rating">Top Rated</option>
               <option value="upvotes">Most Upvoted</option>
               <option value="newest">Newest First</option>
@@ -455,7 +534,7 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
           {/* Clear Filters */}
           {(searchQuery || selectedCategory !== 'all' || selectedPricing !== 'all' || selectedTagIds.length > 0 || freeTrialOnly) && (
             <button
-              onClick={() => { setSearchQuery(''); setSelectedCategory('all'); setSelectedSubcategory('all'); setSelectedPricing('all'); setSelectedTagIds([]); setFreeTrialOnly(false); setVisibleCount(ITEMS_PER_PAGE); }}
+              onClick={() => { setSearchQuery(''); setSelectedCategory(defaultCategory); setSelectedSubcategory('all'); setSelectedPricing('all'); setSelectedTagIds([]); setFreeTrialOnly(false); setVisibleCount(ITEMS_PER_PAGE); }}
               className="shrink-0 px-3 py-2 rounded-xl text-xs font-semibold text-brand hover:bg-brand/5 transition-colors font-jakarta active:scale-95"
             >
               Clear all
@@ -463,34 +542,36 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
           )}
         </div>
 
-        {/* Results Count + View Toggle */}
-        <div className="flex items-center justify-between text-xs text-gray-400 font-jakarta">
-          <span>
-            Found <span className="font-bold text-navy dark:text-white">{filteredTools.length}</span> tools
-            {hasMore && <span className="ml-1">· showing {Math.min(visibleCount, filteredTools.length)}</span>}
-          </span>
-          <div className="flex items-center border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        {/* Results Count + View Toggle — same sizes as the startups directory */}
+        <div className="flex items-center justify-between gap-3 text-sm text-gray-500 dark:text-gray-400 font-jakarta">
+          <p aria-live="polite">
+            Found <span className="font-bold text-navy dark:text-white">{filteredTools.length}</span> {filteredTools.length === 1 ? 'tool' : 'tools'}
+            {hasMore && <span className="ml-1 text-gray-400">· showing {Math.min(visibleCount, filteredTools.length)}</span>}
+          </p>
+          <div role="group" aria-label="View" className="flex items-center gap-1.5">
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-1.5 transition-colors ${viewMode === 'grid' ? 'bg-brand/10 text-brand' : 'bg-white dark:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
+              aria-pressed={viewMode === 'grid'}
+              className={`btn-icon ${viewMode === 'grid' ? 'btn-icon-active' : ''}`}
               aria-label="Grid view"
             >
-              <Grid3X3 className="w-3.5 h-3.5" />
+              <Grid3X3 className="w-4 h-4" />
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`p-1.5 transition-colors ${viewMode === 'list' ? 'bg-brand/10 text-brand' : 'bg-white dark:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
+              aria-pressed={viewMode === 'list'}
+              className={`btn-icon ${viewMode === 'list' ? 'btn-icon-active' : ''}`}
               aria-label="List view"
             >
-              <List className="w-3.5 h-3.5" />
+              <List className="w-4 h-4" />
             </button>
           </div>
         </div>
       </div>
 
       {/* ── FILTERS PANEL ── */}
-      {tagGroups.length > 0 && (
-        <div className="mb-4 sm:mb-6">
+      {tagGroups.length > 0 && (showMoreFilters || selectedTagIds.length > 0 || selectedPricing !== 'all' || freeTrialOnly) && (
+        <div className="pt-3">
           {/* Active filter chips */}
           {(selectedTagIds.length > 0 || selectedPricing !== 'all' || freeTrialOnly) && (
             <div className="flex flex-wrap items-center gap-1.5 mb-3">
@@ -538,7 +619,7 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
 
           {/* Expanded filter panel */}
           {showMoreFilters && (
-            <div className="mt-3 p-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl space-y-3 max-h-[60vh] overflow-y-auto">
+            <div className="mt-3 p-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl space-y-3 max-h-[45vh] overflow-y-auto overscroll-contain">
               {/* Pricing & Free Trial */}
               <div className="border-b border-gray-100 dark:border-gray-800 pb-3">
                 <div className="flex flex-col gap-2">
@@ -568,7 +649,7 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
 
               {tagGroups.map(group => {
                 const isExpanded = expandedFilterGroups.has(group.slug);
-                const activeTags = group.tags.filter((t: TagItem) => t.tagCount > 0 || selectedTagIds.includes(t.id));
+                const activeTags = group.tags.filter((t: TagItem) => (tagCounts.get(t.id) || 0) > 0 || selectedTagIds.includes(t.id));
                 const visibleTags = showAllInGroup.has(group.id)
                   ? activeTags
                   : activeTags.slice(0, group.maxVisibleDefault);
@@ -616,7 +697,7 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
                               }`}
                             >
                               {tag.name}
-                              {tag.tagCount > 0 && <span className="text-xs text-gray-400 ml-0.5">({tag.tagCount})</span>}
+                              {(tagCounts.get(tag.id) || 0) > 0 && <span className="text-xs text-gray-400 ml-0.5">({tagCounts.get(tag.id)})</span>}
                             </button>
                           );
                         })}
@@ -642,6 +723,7 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
           )}
         </div>
       )}
+      </div>
 
       {/* ── GRID VIEW ── */}
       {viewMode === 'grid' && (
@@ -878,7 +960,7 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
              'Try broadening your search or removing some filters.'}
           </p>
           <button
-            onClick={() => { setSearchQuery(''); setSelectedCategory('all'); setSelectedSubcategory('all'); setSelectedPricing('all'); setSelectedTagIds([]); setFreeTrialOnly(false); }}
+            onClick={() => { setSearchQuery(''); setSelectedCategory(defaultCategory); setSelectedSubcategory('all'); setSelectedPricing('all'); setSelectedTagIds([]); setFreeTrialOnly(false); }}
             className="px-4 py-2 text-sm font-semibold text-brand bg-brand/5 hover:bg-brand/10 rounded-lg transition-colors"
           >
             Clear All Filters

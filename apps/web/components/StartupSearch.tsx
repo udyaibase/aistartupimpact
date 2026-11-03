@@ -6,6 +6,10 @@ import Image from 'next/image';
 import { Search, Building2, MapPin, X, Loader2, SlidersHorizontal, ChevronDown, ChevronUp, ArrowUpDown, ChevronLeft, ChevronRight, TrendingUp, Sparkles, LayoutGrid, List, Users } from 'lucide-react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { VerifiedBadge } from './VerifiedBadge';
+import { useHeadroomBar } from '@/hooks/useHeadroomBar';
+import SmartSearchBox, { type SearchSuggestion } from './search/SmartSearchBox';
+import { removeChipFromQuery } from '@/lib/search/understand';
+import type { SearchUnderstanding } from '@/lib/startups/directory';
 
 interface Startup {
   id: string; name: string; slug: string; tagline: string;
@@ -141,13 +145,34 @@ function isNewStartup(foundedYear?: number) {
   return foundedYear && foundedYear >= 2025;
 }
 
+type Funding = '' | 'funded' | 'unfunded';
+interface FundingCounts { all: number; funded: number; unfunded: number }
+
+const FUNDING_OPTIONS: { value: Funding; label: string; key: keyof FundingCounts }[] = [
+  { value: '', label: 'All', key: 'all' },
+  { value: 'funded', label: 'Funded', key: 'funded' },
+  { value: 'unfunded', label: 'Not funded', key: 'unfunded' },
+];
+
 interface Props {
   initialStartups: Startup[];
   initialTotal: number;
+  initialCounts: FundingCounts;
+  initialUnderstood?: SearchUnderstanding | null;
+  initialFunding?: Funding | null;
   cities: string[];
 }
 
-export default function StartupSearch({ initialStartups, initialTotal, cities }: Props) {
+const STARTUP_EXAMPLES = [
+  'Funded fintech startups in Bangalore',
+  'AI for doctors and hospitals',
+  'Seed stage edtech startups',
+  'Voice AI startups in India',
+  'Startups helping farmers',
+  'B2B SaaS companies in Mumbai',
+];
+
+export default function StartupSearch({ initialStartups, initialTotal, initialCounts, initialUnderstood, initialFunding, cities }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -161,6 +186,12 @@ export default function StartupSearch({ initialStartups, initialTotal, cities }:
   const [country, setCountry] = useState(searchParams.get('country') || '');
   const [employeeRange, setEmployeeRange] = useState(searchParams.get('employeeRange') || '');
   const [sort, setSort] = useState(searchParams.get('sort') || '');
+  const [funding, setFunding] = useState<Funding | 'all'>(() => {
+    const f = searchParams.get('funding');
+    return f === 'funded' || f === 'unfunded' || f === 'all' ? f : '';
+  });
+  const [counts, setCounts] = useState<FundingCounts>(initialCounts);
+  const [appliedFunding, setAppliedFunding] = useState<Funding>(initialFunding ?? '');
 
   const [startups, setStartups] = useState<Startup[]>(initialStartups);
   const [total, setTotal] = useState(initialTotal);
@@ -169,9 +200,10 @@ export default function StartupSearch({ initialStartups, initialTotal, cities }:
   const [currentPage, setCurrentPage] = useState(1);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [showTypeahead, setShowTypeahead] = useState(false);
-  const [typeaheadIdx, setTypeaheadIdx] = useState(-1);
-  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [understood, setUnderstood] = useState<SearchUnderstanding | null>(initialUnderstood ?? null);
+  // Page 1 came back relaxed (filters read from the text matched nothing): later pages must ask for the same.
+  const relaxedRef = useRef(!!initialUnderstood?.relaxed);
   const categoryScrollerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const wasDragged = useRef(false);
@@ -203,91 +235,102 @@ export default function StartupSearch({ initialStartups, initialTotal, cities }:
   const hasUserInteracted = useRef(false);
   const debounceRef = useRef<NodeJS.Timeout>(undefined);
 
-  const typeaheadSuggestions = useMemo(() => {
-    if (!query || query.length < 2) return [];
-    const q = query.toLowerCase();
-    return initialStartups
-      .filter(s => s.name.toLowerCase().includes(q) || s.tagline?.toLowerCase().includes(q))
-      .slice(0, 6)
-      .map(s => ({ name: s.name, slug: s.slug, category: s.category, logoUrl: s.logoUrl }));
-  }, [query, initialStartups]);
+  // Top live results double as quick-jump suggestions under the search box.
+  const suggestions = useMemo<SearchSuggestion[]>(() => {
+    if (!query.trim() || loading) return [];
+    return startups.slice(0, 5).map(s => ({
+      key: s.id,
+      title: s.name,
+      subtitle: [s.category && categoryShortLabel(s.category), s.headquartersCity].filter(Boolean).join(' · ') || s.tagline,
+      logoUrl: s.logoUrl,
+      href: `/startups/${s.slug}`,
+    }));
+  }, [query, loading, startups]);
 
-  const buildSearchParams = useCallback((
-    q: string, s: string, c: string, bt: string, st: string, ci: string, co: string, er: string, so: string, page: number
-  ) => {
+  // A funding word in the search text ("funded fintech…") selects that funding option; "All" then overrides it.
+  const textFunding = understood?.chips.some(c => c.kind === 'funding') ? appliedFunding : null;
+  const shownFunding: Funding = funding === 'all' ? '' : (funding || textFunding || '');
+
+  // Everything that decides which startups match, in URL-param form. Sent to the API and mirrored into the page URL.
+  const filterParams = useMemo(() => {
     const params = new URLSearchParams();
-    if (q) params.set('q', q);
-    if (s) params.set('stage', s);
-    if (c) params.set('category', c);
-    if (bt) params.set('businessType', bt);
-    if (st) params.set('status', st);
-    if (ci) params.set('city', ci);
-    if (co) params.set('country', co);
-    if (er) params.set('employeeRange', er);
-    if (so) params.set('sort', so);
+    const entries: [string, string][] = [
+      ['q', query], ['stage', stage], ['category', category], ['businessType', businessType], ['status', status],
+      ['city', city], ['country', country], ['employeeRange', employeeRange], ['funding', funding], ['sort', sort],
+    ];
+    for (const [k, v] of entries) if (v) params.set(k, v);
+    return params.toString();
+  }, [query, stage, category, businessType, status, city, country, employeeRange, funding, sort]);
+
+  // Only the newest request may update the list: rapid toggling must never show an older answer.
+  const requestRef = useRef<AbortController | null>(null);
+
+  const fetchPage = useCallback(async (page: number) => {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    const params = new URLSearchParams(filterParams);
     params.set('limit', String(ITEMS_PER_PAGE));
     params.set('page', String(page));
-    return params;
-  }, []);
-
-  const fetchStartups = useCallback(async (
-    q: string, s: string, c: string, bt: string, st: string, ci: string, co: string, er: string, so: string
-  ) => {
-    setLoading(true);
-    setStartups([]);
-    setCurrentPage(1);
-    try {
-      const params = buildSearchParams(q, s, c, bt, st, ci, co, er, so, 1);
-      const res = await fetch(`/api/startups/search?${params}`);
-      const data = await res.json();
-      setStartups(data.startups || []);
-      setTotal(data.total || 0);
-    } catch {
-      // keep empty on error
-    } finally {
-      setLoading(false);
-    }
-  }, [buildSearchParams]);
+    if (page > 1 && relaxedRef.current) params.set('relax', '1');
+    const res = await fetch(`/api/startups/search?${params}`, { signal: controller.signal });
+    if (!res.ok) throw new Error(`search ${res.status}`);
+    return res.json() as Promise<{
+      startups: Startup[]; total?: number; counts?: FundingCounts;
+      understood?: SearchUnderstanding | null; funding?: Funding | null;
+    }>;
+  }, [filterParams]);
 
   const loadMore = useCallback(async () => {
-    if (loadingMore) return;
+    if (loadingMore || loading) return;
     const nextPage = currentPage + 1;
     setLoadingMore(true);
     try {
-      const params = buildSearchParams(query, stage, category, businessType, status, city, country, employeeRange, sort, nextPage);
-      const res = await fetch(`/api/startups/search?${params}`);
-      const data = await res.json();
+      const data = await fetchPage(nextPage);
       setStartups(prev => [...prev, ...(data.startups || [])]);
       setCurrentPage(nextPage);
     } catch {
-      // keep existing on error
+      // keep existing on error or when superseded
     } finally {
       setLoadingMore(false);
     }
-  }, [loadingMore, currentPage, query, stage, category, businessType, status, city, country, employeeRange, sort, buildSearchParams]);
+  }, [loadingMore, loading, currentPage, fetchPage]);
 
   // Fast debounced search — instant for filters, 150ms for typing
   useEffect(() => {
     if (!hasUserInteracted.current) return;
     clearTimeout(debounceRef.current);
     const isTyping = query !== (searchParams.get('q') || '');
-    debounceRef.current = setTimeout(() => {
-      fetchStartups(query, stage, category, businessType, status, city, country, employeeRange, sort);
-      const params = new URLSearchParams();
-      if (query) params.set('q', query);
-      if (stage) params.set('stage', stage);
-      if (category) params.set('category', category);
-      if (businessType) params.set('businessType', businessType);
-      if (status) params.set('status', status);
-      if (city) params.set('city', city);
-      if (country) params.set('country', country);
-      if (employeeRange) params.set('employeeRange', employeeRange);
-      if (sort) params.set('sort', sort);
-      const newUrl = params.toString() ? `${pathname}?${params}` : pathname;
-      router.replace(newUrl, { scroll: false });
+    debounceRef.current = setTimeout(async () => {
+      router.replace(filterParams ? `${pathname}?${filterParams}` : pathname, { scroll: false });
+      setLoading(true);
+      setCurrentPage(1);
+      try {
+        const data = await fetchPage(1);
+        setStartups(data.startups || []);
+        setTotal(data.total ?? 0);
+        if (data.counts) setCounts(data.counts);
+        setUnderstood(data.understood ?? null);
+        relaxedRef.current = !!data.understood?.relaxed;
+        setAppliedFunding(data.funding ?? '');
+        setLoading(false);
+      } catch (err) {
+        // A newer request took over; it will clear the loading state.
+        if ((err as Error)?.name !== 'AbortError') { setStartups([]); setTotal(0); setLoading(false); }
+      }
     }, isTyping ? 150 : 0);
     return () => clearTimeout(debounceRef.current);
-  }, [query, stage, category, businessType, status, city, country, employeeRange, sort, fetchStartups, pathname, router, searchParams]);
+    // searchParams is read only to tell typing from filter clicks; it must not re-trigger the search.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterParams, fetchPage, pathname, router]);
+
+  useEffect(() => () => requestRef.current?.abort(), []);
+
+  const handleFundingChange = (value: Funding) => {
+    if (value === shownFunding) return;
+    hasUserInteracted.current = true;
+    setFunding(value === '' && textFunding ? 'all' : value);
+  };
 
   const handleCategoryChange = (value: string) => {
     hasUserInteracted.current = true;
@@ -299,7 +342,7 @@ export default function StartupSearch({ initialStartups, initialTotal, cities }:
     hasUserInteracted.current = true;
     setQuery(''); setStage(''); setCategory(''); setBusinessType('');
     setStatus(''); setCity(''); setCountry(''); setEmployeeRange('');
-    setSort('');
+    setFunding(''); setSort('');
     setCurrentPage(1);
   };
 
@@ -338,10 +381,35 @@ export default function StartupSearch({ initialStartups, initialTotal, cities }:
     setCurrentPage(1);
   };
 
+  const barAnchorRef = useRef<HTMLDivElement>(null);
+  const bar = useHeadroomBar(barAnchorRef, showAdvanced || searchOpen);
+  const scrollToResults = bar.scrollToResults;
+
+  // A new search while the bar is stuck: bring the top of the fresh results under the bar instead of leaving the user mid-page.
+  const prevFilterParams = useRef(filterParams);
+  useEffect(() => {
+    if (prevFilterParams.current === filterParams) return;
+    prevFilterParams.current = filterParams;
+    scrollToResults();
+  }, [filterParams, scrollToResults]);
+
   return (
     <div className="space-y-5">
-      {/* ── Sticky Category Pills ── */}
-      <div className="sticky top-0 z-10 bg-gray-50/90 dark:bg-gray-950/80 backdrop-blur-md -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 py-2.5 sm:py-3">
+      {/* ── Search & filter bar: sticks under the site header, hides while scrolling down, returns on scroll up ── */}
+      <div ref={barAnchorRef} aria-hidden className="h-0 !mt-0" />
+      <div
+        style={{ top: bar.headerOffset, transform: bar.hidden ? `translateY(calc(-100% - ${bar.headerOffset}px))` : undefined }}
+        className="sticky z-30 !mt-0 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 pb-3 space-y-3 transition-transform duration-300 ease-out"
+      >
+      {/* Full-bleed backdrop: runs edge to edge of the window while the controls stay aligned with the content */}
+      <div
+        aria-hidden
+        className={`absolute inset-y-0 -left-[100vw] -right-[100vw] -z-10 bg-gray-50/95 dark:bg-gray-950/95 backdrop-blur-md transition-shadow duration-300 ${
+          bar.stuck ? 'shadow-[0_8px_16px_-12px_rgba(0,0,0,0.25)] border-b border-gray-200/70 dark:border-gray-800' : ''
+        }`}
+      />
+      {/* ── Category Pills ── */}
+      <div className="!mt-0 pt-2.5 sm:pt-3">
         <div className="relative">
           <div
             ref={categoryScrollerRef}
@@ -410,71 +478,31 @@ export default function StartupSearch({ initialStartups, initialTotal, cities }:
       {/* ── Search + Toggle Row ── */}
       <div className="space-y-3">
         {/* Main Search Row */}
-        <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3">
-          <div className="relative flex-1 min-w-0">
-            <Search className="absolute left-3.5 sm:left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 z-10" />
-            <input
-              ref={searchInputRef}
-              type="text"
+        <div className="flex flex-col sm:flex-row sm:items-start gap-2.5 sm:gap-3">
+          <div className="flex-1 min-w-0">
+            <SmartSearchBox
               value={query}
-              onChange={e => { hasUserInteracted.current = true; setQuery(e.target.value); setShowTypeahead(true); setTypeaheadIdx(-1); }}
-              onFocus={() => { if (query.length >= 2) setShowTypeahead(true); }}
-              onBlur={() => { setTimeout(() => setShowTypeahead(false), 150); }}
-              onKeyDown={e => {
-                if (!showTypeahead || typeaheadSuggestions.length === 0) return;
-                if (e.key === 'ArrowDown') { e.preventDefault(); setTypeaheadIdx(i => Math.min(i + 1, typeaheadSuggestions.length - 1)); }
-                else if (e.key === 'ArrowUp') { e.preventDefault(); setTypeaheadIdx(i => Math.max(i - 1, -1)); }
-                else if (e.key === 'Enter' && typeaheadIdx >= 0) { e.preventDefault(); router.push(`/startups/${typeaheadSuggestions[typeaheadIdx].slug}`); setShowTypeahead(false); }
-                else if (e.key === 'Escape') { setShowTypeahead(false); }
+              onChange={(v) => {
+                hasUserInteracted.current = true;
+                setQuery(v);
+                if (!v.trim() && funding === 'all') setFunding(''); // "All" only existed to override the text
               }}
-              inputMode="search" enterKeyHint="search" placeholder="Search startups by name, tagline, founder or category..."
-              className="w-full pl-10 sm:pl-12 pr-10 py-2 sm:py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-sm font-jakarta"
-              role="combobox" aria-expanded={showTypeahead && typeaheadSuggestions.length > 0} aria-autocomplete="list"
+              noun="startups"
+              examples={STARTUP_EXAMPLES}
+              loading={loading && !!query.trim()}
+              suggestions={suggestions}
+              resultCount={query.trim() && !loading ? total : null}
+              chips={understood?.chips}
+              relaxed={understood?.relaxed}
+              onRemoveChip={(chip) => { hasUserInteracted.current = true; setQuery(q => removeChipFromQuery(q, chip)); }}
+              onOpenChange={setSearchOpen}
             />
-            {query && (
-              <button onClick={() => { hasUserInteracted.current = true; setQuery(''); setShowTypeahead(false); }} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full z-10" aria-label="Clear search">
-                <X className="w-3.5 h-3.5 text-gray-400" />
-              </button>
-            )}
-
-            {/* Typeahead dropdown */}
-            {showTypeahead && typeaheadSuggestions.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 overflow-hidden" role="listbox">
-                {typeaheadSuggestions.map((s, i) => (
-                  <Link
-                    key={s.slug}
-                    href={`/startups/${s.slug}`}
-                    onClick={() => setShowTypeahead(false)}
-                    className={`flex items-center gap-3 px-4 py-2.5 text-sm font-jakarta transition-colors ${
-                      i === typeaheadIdx
-                        ? 'bg-brand/10 dark:bg-brand/20'
-                        : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
-                    }`}
-                    role="option" aria-selected={i === typeaheadIdx}
-                  >
-                    {s.logoUrl ? (
-                      <Image src={s.logoUrl} alt="" width={24} height={24} className="w-6 h-6 rounded-md object-contain bg-white dark:bg-gray-900" />
-                    ) : (
-                      <div className="w-6 h-6 rounded-md bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-                        <Building2 className="w-3.5 h-3.5 text-gray-400" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <span className="text-gray-900 dark:text-white font-semibold truncate block">{s.name}</span>
-                    </div>
-                    {s.category && (
-                      <span className="text-[10px] text-gray-400 font-medium shrink-0">{categoryShortLabel(s.category)}</span>
-                    )}
-                  </Link>
-                ))}
-              </div>
-            )}
           </div>
 
           <div className="flex gap-2 sm:gap-3 shrink-0">
           <button
             onClick={() => setShowAdvanced(!showAdvanced)}
-            className={`flex items-center justify-center gap-2 px-4 py-2 sm:py-2.5 rounded-xl border font-jakarta text-sm font-semibold transition-all select-none min-h-[44px] sm:min-h-0 ${
+            className={`flex items-center justify-center gap-2 px-4 py-2 sm:py-2.5 rounded-xl border font-jakarta text-sm font-semibold transition-all select-none min-h-[44px] sm:min-h-0 sm:h-12 ${
               showAdvanced || activeFiltersCount > 0
                 ? 'border-brand bg-brand/5 text-brand shadow-sm'
                 : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -495,7 +523,7 @@ export default function StartupSearch({ initialStartups, initialTotal, cities }:
             <select
               value={sort}
               onChange={e => { hasUserInteracted.current = true; setSort(e.target.value); setCurrentPage(1); }}
-              className={`appearance-none flex items-center gap-2 pl-9 pr-8 py-2 sm:py-2.5 rounded-xl border font-jakarta text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand cursor-pointer min-h-[44px] sm:min-h-0 ${
+              className={`appearance-none flex items-center gap-2 pl-9 pr-8 py-2 sm:py-2.5 rounded-xl border font-jakarta text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand cursor-pointer min-h-[44px] sm:min-h-0 sm:h-12 ${
                 sort
                   ? 'border-brand bg-brand/5 text-brand shadow-sm'
                   : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300'
@@ -511,7 +539,7 @@ export default function StartupSearch({ initialStartups, initialTotal, cities }:
 
         {/* Collapsible Advanced Filters Grid */}
         {showAdvanced && (
-          <div className="bg-gray-50/50 dark:bg-gray-900/30 border border-gray-200/60 dark:border-gray-800 rounded-2xl p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-scale-in">
+          <div className="bg-gray-50/50 dark:bg-gray-900/30 border border-gray-200/60 dark:border-gray-800 rounded-2xl p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-scale-in max-h-[45vh] overflow-y-auto overscroll-contain">
             {/* Stage Filter */}
             <div className="flex flex-col">
               <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1 font-jakarta">Funding Stage</label>
@@ -653,15 +681,44 @@ export default function StartupSearch({ initialStartups, initialTotal, cities }:
           )}
 
           {/* Results Count & View Toggle */}
-          <div className="flex items-center justify-between gap-3 text-sm text-gray-500 dark:text-gray-400 font-jakarta">
-            <p aria-live="polite">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 text-sm text-gray-500 dark:text-gray-400 font-jakarta">
+            <p aria-live="polite" className="w-full sm:w-auto">
               {loading ? (
                 <span className="flex items-center gap-1.5"><Loader2 className="w-4 h-4 animate-spin" /> Finding startups...</span>
               ) : (
                 <>Found <span className="font-bold text-navy dark:text-white">{total}</span> {total === 1 ? 'startup' : 'startups'}</>
               )}
             </p>
-            <div role="group" aria-label="View" className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 w-full sm:w-auto">
+            {/* Funding toggle — same 36px height as the view buttons; counts reflect the other active filters */}
+            <div role="radiogroup" aria-label="Funding" className="flex flex-1 sm:flex-none h-9 p-0.5 rounded-lg bg-gray-100 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700">
+              {FUNDING_OPTIONS.map(opt => {
+                const active = shownFunding === opt.value;
+                return (
+                  <button
+                    key={opt.value || 'all'}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => handleFundingChange(opt.value)}
+                    className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap px-1.5 sm:px-3 h-full rounded-md text-xs font-bold font-jakarta transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+                      active
+                        ? 'bg-white dark:bg-gray-900 text-navy dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                    }`}
+                  >
+                    {opt.value === 'funded' && <TrendingUp className={`hidden sm:block w-3.5 h-3.5 ${active ? 'text-brand' : ''}`} />}
+                    <span>{opt.label}</span>
+                    <span className={`tabular-nums text-[10px] sm:text-[11px] font-semibold px-1 sm:px-1.5 rounded ${
+                      active ? 'bg-brand/10 text-brand' : 'bg-gray-200/70 dark:bg-gray-700/70 text-gray-500 dark:text-gray-400'
+                    }`}>
+                      {counts[opt.key]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div role="group" aria-label="View" className="flex items-center gap-1.5 shrink-0">
               <button
                 onClick={() => setViewMode('grid')}
                 aria-pressed={viewMode === 'grid'}
@@ -679,8 +736,10 @@ export default function StartupSearch({ initialStartups, initialTotal, cities }:
                 <List className="w-4 h-4" />
               </button>
             </div>
+            </div>
           </div>
         </div>
+      </div>
       </div>
 
       <h2 className="sr-only">Startup results</h2>
