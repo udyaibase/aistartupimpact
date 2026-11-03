@@ -5,8 +5,9 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const days = parseInt(searchParams.get('days') || '7');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    // Bounded whole numbers: they go into the query as parameters.
+    const days = Math.min(Math.max(parseInt(searchParams.get('days') || '7', 10) || 7, 1), 90);
+    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '10', 10) || 10, 1), 50);
 
     // Get popular searches from the last N days
     const popularSearches = await sql`
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
         COUNT(DISTINCT "sessionId") as "uniqueUsers",
         MAX("createdAt") as "lastSearchedAt"
       FROM "SearchQuery"
-      WHERE "createdAt" >= NOW() - INTERVAL '${days} days'
+      WHERE "createdAt" >= NOW() - make_interval(days => ${days}::int)
       GROUP BY "normalizedQuery"
       HAVING COUNT(*) >= 2
       ORDER BY "searchCount" DESC, "uniqueUsers" DESC

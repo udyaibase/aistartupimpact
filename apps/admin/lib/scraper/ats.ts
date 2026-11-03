@@ -111,6 +111,16 @@ function fromDescription(description: string, given: { skills?: string[]; salary
   };
 }
 
+/** True only when the link's host is Greenhouse itself (never a look-alike path or host on another domain). */
+function isGreenhouseHost(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === 'greenhouse.io' || host.endsWith('.greenhouse.io');
+  } catch {
+    return false;
+  }
+}
+
 async function greenhouse(b: Extract<Board, { ats: 'greenhouse' }>): Promise<Built[] | null> {
   const api = `https://boards-api${b.eu ? '.eu' : ''}.greenhouse.io/v1/boards/${encodeURIComponent(b.token)}/jobs?content=true`;
   const data = await fetchJson<{ jobs?: any[] }>(api);
@@ -121,7 +131,7 @@ async function greenhouse(b: Extract<Board, { ats: 'greenhouse' }>): Promise<Bui
     return {
       id: String(j.id), title: j.title, jobPageUrl: j.absolute_url || null,
       // On Greenhouse-hosted pages #app jumps to the form; companies hosting the board themselves use their own page.
-      applicationUrl: j.absolute_url ? (/greenhouse\.io\//.test(j.absolute_url) ? `${j.absolute_url}#app` : j.absolute_url) : null, applicationEmail: null,
+      applicationUrl: j.absolute_url ? (isGreenhouseHost(j.absolute_url) ? `${j.absolute_url}#app` : j.absolute_url) : null, applicationEmail: null,
       description, shortDescription: firstLine(description), location,
       department: j.departments?.[0]?.name || null, workType: workTypeFrom(location, j.title),
       employmentType: normalizeEmploymentType(j.metadata?.find?.((m: any) => /employment|type/i.test(m?.name))?.value) || null,
