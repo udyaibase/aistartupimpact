@@ -63,7 +63,8 @@ const BY_LOWER = new Map(COUNTRIES.map((c) => [c.toLowerCase(), c]));
 export function normalizeCountry(input: string | null | undefined): string | null {
   const k = String(input ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
   if (!k) return null;
-  return BY_LOWER.get(k) ?? COUNTRY_ALIASES[k] ?? null;
+  // hasOwn: input like "__proto__" must never read a built-in property.
+  return BY_LOWER.get(k) ?? (Object.prototype.hasOwnProperty.call(COUNTRY_ALIASES, k) ? COUNTRY_ALIASES[k] : null);
 }
 
 // ── Cities ───────────────────────────────────────────────────────────────────
@@ -108,7 +109,7 @@ export function inferCityCountry(e: { city?: string; state?: string | null; lat?
     if (US_STATES.has(st)) return 'United States';
     if (CA_PROVINCES.has(st)) return 'Canada';
     if (AU_STATES.has(st)) return 'Australia';
-    if (REGION_COUNTRY[st]) return REGION_COUNTRY[st];
+    if (Object.prototype.hasOwnProperty.call(REGION_COUNTRY, st)) return REGION_COUNTRY[st];
   }
   const lat = Number(e.lat), lng = Number(e.lng);
   if (Number.isFinite(lat) && Number.isFinite(lng) && lat > 6 && lat < 37.5 && lng > 68 && lng < 97.5) return 'India';
@@ -178,9 +179,12 @@ export function matchCity(list: PlaceCity[], input: string | null | undefined, c
  * Kingdom"). Moves those to where they belong before matching; anything else is returned unchanged.
  */
 export function splitLegacyLocation(city: string, country: string): { city: string; country: string } {
-  const c = city.trim();
-  const remote = c.match(/^remote\b[\s,·:-]*(.*)$/i);
-  if (remote) return { city: '', country: country || (normalizeCountry(remote[1]) ?? '') };
+  const c = city.trim().slice(0, 200);
+  // "Remote", "Remote, India", "Remote - India": a prefix check and one trim, no backtracking on long input.
+  if (/^remote(?![a-z0-9])/i.test(c)) {
+    const rest = c.slice(6).replace(/^[\s,·:-]+/, '');
+    return { city: '', country: country || (normalizeCountry(rest) ?? '') };
+  }
   // A country typed as the city, unless it is also a city (Singapore, Hong Kong, Monaco).
   const asCountry = normalizeCountry(c);
   const alsoCity = CITY_DATABASE.some((e) => e.city.toLowerCase() === c.toLowerCase());

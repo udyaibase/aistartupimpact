@@ -14,19 +14,23 @@ const STORAGE_KEY = 'scroll-positions';
 const MAX_RESTORE_TIME = 3000;
 const RETRY_INTERVAL = 100;
 
-function getScrollMap(): Record<string, number> {
+// A Map, not a plain object: keys come from the URL, and must never reach object properties like __proto__.
+function getScrollMap(): Map<string, number> {
   try {
-    return JSON.parse(sessionStorage.getItem(STORAGE_KEY) || '{}');
+    const entries = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || '[]');
+    return new Map(Array.isArray(entries) ? entries.filter((e): e is [string, number] => Array.isArray(e) && typeof e[0] === 'string' && typeof e[1] === 'number') : []);
   } catch {
-    return {};
+    return new Map();
   }
 }
 
 function saveScroll(key: string, y: number) {
   try {
     const map = getScrollMap();
-    map[key] = y;
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+    map.delete(key);
+    map.set(key, y);
+    // Keep the 100 most recent pages.
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify([...map].slice(-100)));
   } catch { /* storage blocked or full: nothing to restore */ }
 }
 
@@ -39,7 +43,7 @@ export default function ScrollRestoration() {
   useEffect(() => {
     if (!cameFromHistory()) return;
 
-    const saved = getScrollMap()[currentKey()];
+    const saved = getScrollMap().get(currentKey()) ?? 0;
     if (!saved || saved < 10) return;
 
     restoringUntil.current = Date.now() + MAX_RESTORE_TIME;

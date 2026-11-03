@@ -21,6 +21,8 @@ describe('standard countries', () => {
     expect(normalizeCountry('india')).toBe('India');
     expect(normalizeCountry('Bengaluru')).toBeNull();
     expect(normalizeCountry('')).toBeNull();
+    expect(normalizeCountry('__proto__')).toBeNull();
+    expect(normalizeCountry('constructor')).toBeNull();
   });
 
   it('every country in the city list is a standard country', () => {
