@@ -615,11 +615,14 @@ export async function getAiToolBySlugDirect(slug: string) {
 
       // Fetch all cross-linked data in parallel
       const [stories, fundingRounds, userReviews, useCases] = await Promise.all([
+        // Articles linked to the tool or @-tagging it in the body.
         sql`
-          SELECT id, title, slug, excerpt, "coverImage", "publishedAt"::text AS "publishedAt"
-          FROM "Article"
-          WHERE "toolId" = ${tool.id} AND status = 'PUBLISHED' AND "deletedAt" IS NULL
+          SELECT id, title, slug, type::text AS type, excerpt, "coverImage", "publishedAt"::text AS "publishedAt"
+          FROM "Article" a
+          WHERE status = 'PUBLISHED' AND "deletedAt" IS NULL
+            AND ("toolId" = ${tool.id} OR EXISTS (SELECT 1 FROM "ArticleToolMention" m WHERE m."articleId" = a.id AND m."toolId" = ${tool.id}))
           ORDER BY "publishedAt" DESC
+          LIMIT 5
         `,
         tool.startupId
           ? sql`

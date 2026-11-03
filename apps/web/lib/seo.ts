@@ -343,9 +343,7 @@ export function buildArticleMetadata(article: Omit<ArticleSeoFields, 'title'> & 
   const d = domain(seo);
   const siteName = seo?.metaTitle?.split('–')[0]?.trim() || DEFAULT_NAME;
   const twitterHandle = seo?.twitterHandle || DEFAULT_TWITTER;
-  const isStory = article.type === 'STORY';
-  const isOpinion = article.type === 'OPINION';
-  const path = isOpinion ? `/opinions/${article.slug}` : isStory ? `/stories/${article.slug}` : `/news/${article.slug}`;
+  const path = articlePath(article.type, article.slug);
   const canonical = `${d}${path}`;
   const description = article.excerpt || '';
   const images = article.coverImage
@@ -402,4 +400,9 @@ export interface ArticleData {
   tags?: string[];
   publisherName?: string;
   publisherLogoUrl?: string;
+}
+
+/** Public path of an article: stories and opinions have their own sections, everything else is under /news. */
+export function articlePath(type: string | null | undefined, slug: string): string {
+  return type === 'OPINION' ? `/opinions/${slug}` : type === 'STORY' ? `/stories/${slug}` : `/news/${slug}`;
 }

@@ -9,6 +9,8 @@ import { sql, getArticleBySlugDirect, getRelatedArticlesDirect } from '@/lib/db'
 import { defaultHeroArticle, defaultLatestStories, defaultIndiaAI } from '@/lib/fallbacks';
 import { buildArticleMetadata, generateArticleSchema, generateBreadcrumbSchema } from '@/lib/seo';
 import { articleBodyHtml } from '@/lib/article-body';
+import { getArticleEntityCards } from '@/lib/article-entities';
+import EntityHoverCards from '@/components/article/EntityHoverCards';
 import TrackView from '@/components/TrackView';
 import ShareMenu from '@/components/shared/ShareMenu';
 import ArticleActions from '@/components/ArticleActions';
@@ -53,6 +55,8 @@ export default async function ArticlePage(props: { params: Promise<{ slug: strin
     d ? new Date(d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '';
 
   const bodyHtml = articleBodyHtml(article);
+
+  const entityCards = await getArticleEntityCards(bodyHtml);
 
   // Shown under /news, so only article types that live in the news section.
   const relatedArticles = await getRelatedArticlesDirect(article.id, ['NEWS', 'TOOL_REVIEW', 'GUIDE', 'COMPARISON', 'REPORT', 'SPONSORED', 'STARTUP_UPDATE'], 3);
@@ -149,7 +153,7 @@ export default async function ArticlePage(props: { params: Promise<{ slug: strin
             <div className="aspect-[16/9] bg-gradient-to-br from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl my-6 sm:my-8" />
           )}
 
-          <div className="article-content prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+          <EntityHoverCards cards={entityCards}><div className="article-content prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: bodyHtml }} /></EntityHoverCards>
 
           {/* Likes, Comments, Share */}
           <ArticleActions

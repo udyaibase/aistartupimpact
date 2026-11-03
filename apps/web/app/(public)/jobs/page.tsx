@@ -8,6 +8,7 @@ import JobFilters, { SortDropdown } from '@/components/jobs/JobFilters';
 import SubscribeForm from '@/components/SubscribeForm';
 import JobListClient from './JobListClient';
 import JobSearchBar from '@/components/jobs/JobSearchBar';
+import JobsStickyBar from '@/components/jobs/JobsStickyBar';
 
 export const metadata: Metadata = {
   title: 'AI Jobs in India — Find Your Next Role in Artificial Intelligence',
@@ -182,13 +183,28 @@ export default async function JobsPage(props: PageProps) {
         </div>
       </div>
 
-      {/* Search bar */}
-      <JobSearchBar initialQuery={q} initialLocation={locationFilter} />
+      {/* Search bar (+ mobile filter row): sticky under the site header */}
+      <JobsStickyBar>
+        <JobSearchBar initialQuery={q} initialLocation={locationFilter} />
+        <JobFilters
+          part="mobile"
+          currentCategory={category}
+          currentWorkType={workType}
+          currentExperience={experience}
+          currentVisa={visa}
+          currentSort={sort}
+          currentSalaryDisclosed={salaryDisclosed}
+          currentDatePosted={datePosted}
+          total={total}
+          workTypeCounts={workTypeCounts}
+        />
+      </JobsStickyBar>
 
       {/* Main layout: sidebar + jobs */}
-      <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 mt-6">
-        {/* Filters (desktop sidebar + mobile bar/sheet) */}
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 mt-3">
+        {/* Filters: desktop sidebar */}
         <JobFilters
+          part="desktop"
           currentCategory={category}
           currentWorkType={workType}
           currentExperience={experience}

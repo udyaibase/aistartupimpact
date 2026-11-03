@@ -47,20 +47,24 @@ export default async function DashboardPage() {
     totalTools,
     pendingTools,
     totalSubscribers,
+    confirmedSubscribers,
     totalEvents,
     totalWebUsers,
     totalFounders,
   ] = await Promise.all([
-    prisma.article.count(),
-    prisma.article.count({ where: { status: 'PUBLISHED' } }),
-    prisma.article.count({ where: { status: 'IN_REVIEW' } }),
-    prisma.startup.count(),
-    prisma.startup.count({ where: { isApproved: false } }),
-    prisma.aiTool.count(),
-    prisma.aiTool.count({ where: { status: 'PENDING' } }),
+    // Deleted rows are soft-deleted (deletedAt set) and stay in the tables, so every count excludes them.
+    prisma.article.count({ where: { deletedAt: null } }),
+    prisma.article.count({ where: { deletedAt: null, status: 'PUBLISHED' } }),
+    prisma.article.count({ where: { deletedAt: null, status: 'IN_REVIEW' } }),
+    prisma.startup.count({ where: { deletedAt: null } }),
+    prisma.startup.count({ where: { deletedAt: null, isApproved: false } }),
+    prisma.aiTool.count({ where: { deletedAt: null } }),
+    prisma.aiTool.count({ where: { deletedAt: null, status: 'PENDING' } }),
+    // Total matches the Subscribers page heading; the badge uses its "Active" rule (active and email confirmed).
     prisma.newsletterSubscriber.count(),
+    prisma.newsletterSubscriber.count({ where: { isActive: true, emailVerified: true } }),
     prisma.event.count({ where: { deletedAt: null } }),
-    prisma.webUser.count(),
+    prisma.webUser.count({ where: { deletedAt: null } }),
     prisma.unifiedUser.count({ where: { founderProfile: { isNot: null } } }),
   ]);
 
@@ -88,6 +92,7 @@ export default async function DashboardPage() {
     {
       label: 'Subscribers',
       value: totalSubscribers.toLocaleString(),
+      badge: `${confirmedSubscribers.toLocaleString()} Confirmed`,
       icon: Mail,
     },
     {
@@ -104,6 +109,7 @@ export default async function DashboardPage() {
   ];
 
   const recentArticles = await prisma.article.findMany({
+    where: { deletedAt: null },
     take: 5,
     orderBy: { createdAt: 'desc' },
     select: {
@@ -126,7 +132,7 @@ export default async function DashboardPage() {
   }));
 
   const scheduledArticlesRaw = await prisma.article.findMany({
-    where: { status: 'SCHEDULED' },
+    where: { status: 'SCHEDULED', deletedAt: null },
     take: 5,
     orderBy: { scheduledAt: 'asc' },
     select: {

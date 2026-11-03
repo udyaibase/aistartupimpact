@@ -2,7 +2,7 @@
 
 import { neon } from '@neondatabase/serverless';
 import { requireActionAuth } from '@/lib/api-auth';
-import { logAuditEvent } from '@/lib/audit-log';
+import { canDelete, logAuditEvent } from '@/lib/audit-log';
 import { revalidatePath } from 'next/cache';
 import { refreshPublic } from '@/lib/refresh-public';
 
@@ -15,14 +15,16 @@ export async function getJobsAction() {
   try {
     const jobs = await sql`
       SELECT jl.id, jl.slug, jl.title, jl.category, jl."workType", jl."listingTier",
-             (jl.status = 'OPEN') AS "isActive", jl."isFeatured", jl."applicationsCount", jl."viewsCount",
+             (jl.status = 'OPEN') AS "isActive", jl.status::text AS status, jl."moderationHold",
+             (jl."expiresAt" IS NOT NULL AND jl."expiresAt" <= NOW()) AS expired, jl."expiresAt"::text AS "expiresAt",
+             jl."isFeatured", jl."applicationsCount", jl."viewsCount",
              jl."publishedAt"::text, jl."createdAt"::text,
              e."companyName"
       FROM "JobBoardListing" jl
       JOIN "JobBoardEmployer" e ON e.id = jl."employerId"
       WHERE jl."deletedAt" IS NULL
       ORDER BY jl."createdAt" DESC
-      LIMIT 200
+      LIMIT 1000
     `;
     return { success: true, data: jobs };
   } catch (error: any) {
@@ -57,6 +59,92 @@ export async function deleteJobAction(id: string) {
   }
 }
 
+// ─── Bulk actions ─────────────────────────────────────────────────────────────
+
+export type BulkJobOp = 'open' | 'pause' | 'close' | 'renew' | 'feature' | 'unfeature' | 'delete';
+const BULK_OPS: BulkJobOp[] = ['open', 'pause', 'close', 'renew', 'feature', 'unfeature', 'delete'];
+const MAX_BULK = 500;
+
+/**
+ * One operation on many listings. Same status rules as the website (lib/jobs/listing-status.ts): OPEN ⇔ isActive,
+ * a job under moderation review stays hidden, and the first publish date is never moved. Opening or renewing an
+ * expired job gives it 30 more days, so it doesn't end up "open" but invisible. Delete is Super Admin only.
+ */
+export async function bulkJobAction(ids: string[], op: BulkJobOp) {
+  if (!BULK_OPS.includes(op)) return { success: false as const, error: 'Unknown action.' };
+  const { error } = await requireActionAuth(op === 'delete' ? ['SUPER_ADMIN'] : undefined);
+  if (error) return { success: false as const, error };
+  if (op === 'delete') {
+    const { allowed, error: deleteError } = await canDelete();
+    if (!allowed) return { success: false as const, error: deleteError || 'Only Super Admins can delete job listings.' };
+  }
+  const list = [...new Set((Array.isArray(ids) ? ids : []).filter((x) => typeof x === 'string' && x.length <= 64))];
+  if (!list.length) return { success: false as const, error: 'Select at least one job.' };
+  if (list.length > MAX_BULK) return { success: false as const, error: `Select up to ${MAX_BULK} jobs at a time.` };
+
+  try {
+    let rows: { id: string }[] = [];
+    switch (op) {
+      case 'open':
+        rows = await sql`
+          UPDATE "JobBoardListing" SET status = 'OPEN', "isActive" = NOT "moderationHold", "closedAt" = NULL, "closeReason" = NULL,
+            "publishedAt" = COALESCE("publishedAt", NOW()),
+            "expiresAt" = CASE WHEN "expiresAt" IS NOT NULL AND "expiresAt" <= NOW() THEN NOW() + INTERVAL '30 days' ELSE "expiresAt" END,
+            "updatedAt" = NOW()
+          WHERE id = ANY(${list}::text[]) AND "deletedAt" IS NULL RETURNING id` as { id: string }[];
+        break;
+      case 'pause':
+        rows = await sql`
+          UPDATE "JobBoardListing" SET status = 'PAUSED', "isActive" = false, "closedAt" = NULL, "closeReason" = NULL, "updatedAt" = NOW()
+          WHERE id = ANY(${list}::text[]) AND "deletedAt" IS NULL AND status <> 'PAUSED' RETURNING id` as { id: string }[];
+        break;
+      case 'close':
+        rows = await sql`
+          UPDATE "JobBoardListing" SET status = 'CLOSED', "isActive" = false, "closedAt" = NOW(), "closeReason" = 'MANUAL', "updatedAt" = NOW()
+          WHERE id = ANY(${list}::text[]) AND "deletedAt" IS NULL AND status <> 'CLOSED' RETURNING id` as { id: string }[];
+        break;
+      case 'renew':
+        // +30 days from today or from the current closing date, whichever is later; jobs closed only because they
+        // expired go live again.
+        rows = await sql`
+          UPDATE "JobBoardListing" SET
+            "expiresAt" = GREATEST(NOW(), COALESCE("expiresAt", NOW())) + INTERVAL '30 days',
+            status = CASE WHEN status = 'CLOSED' AND "closeReason" = 'EXPIRED' THEN 'OPEN'::"JobBoardListingStatus" ELSE status END,
+            "isActive" = CASE WHEN status = 'OPEN' OR (status = 'CLOSED' AND "closeReason" = 'EXPIRED') THEN NOT "moderationHold" ELSE false END,
+            "closedAt" = CASE WHEN status = 'CLOSED' AND "closeReason" = 'EXPIRED' THEN NULL ELSE "closedAt" END,
+            "closeReason" = CASE WHEN status = 'CLOSED' AND "closeReason" = 'EXPIRED' THEN NULL ELSE "closeReason" END,
+            "updatedAt" = NOW()
+          WHERE id = ANY(${list}::text[]) AND "deletedAt" IS NULL RETURNING id` as { id: string }[];
+        break;
+      case 'feature':
+        rows = await sql`
+          UPDATE "JobBoardListing" SET "isFeatured" = true,
+            "featuredUntil" = COALESCE(GREATEST("expiresAt", NOW() + INTERVAL '1 day'), NOW() + INTERVAL '30 days'), "updatedAt" = NOW()
+          WHERE id = ANY(${list}::text[]) AND "deletedAt" IS NULL RETURNING id` as { id: string }[];
+        break;
+      case 'unfeature':
+        rows = await sql`
+          UPDATE "JobBoardListing" SET "isFeatured" = false, "featuredUntil" = NULL, "updatedAt" = NOW()
+          WHERE id = ANY(${list}::text[]) AND "deletedAt" IS NULL AND "isFeatured" = true RETURNING id` as { id: string }[];
+        break;
+      case 'delete':
+        rows = await sql`
+          UPDATE "JobBoardListing" SET "deletedAt" = NOW(), "isActive" = false, status = 'CLOSED', "closedAt" = NOW(), "closeReason" = 'MANUAL', "updatedAt" = NOW()
+          WHERE id = ANY(${list}::text[]) AND "deletedAt" IS NULL RETURNING id` as { id: string }[];
+        break;
+    }
+    await logAuditEvent({
+      action: op === 'delete' ? 'DELETE' : 'UPDATE', resourceType: 'JOB_LISTING', resourceName: `Bulk ${op}`,
+      after: { bulkAction: op, requested: list.length, changed: rows.length, ids: rows.map((r) => r.id).slice(0, 100) },
+    });
+    revalidatePath('/jobs-board');
+    if (rows.length) await refreshPublic(['jobs', 'home']);
+    return { success: true as const, changed: rows.length, skipped: list.length - rows.length };
+  } catch (err: any) {
+    console.error('[Admin Jobs Board Bulk]', op, err?.message);
+    return { success: false as const, error: 'Couldn’t apply that to the selected jobs. Try again.' };
+  }
+}
 
 // ─── Job CRUD Actions ─────────────────────────────────────────────────────────
 

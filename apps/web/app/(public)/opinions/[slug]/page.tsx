@@ -7,6 +7,8 @@ import { Clock, Calendar, ChevronRight, MapPin, Briefcase, Star, ExternalLink } 
 import { sql, getOpinionBySlugDirect, getRelatedContentForOpinion } from '@/lib/db';
 import { generateArticleSchema, generateBreadcrumbSchema, generatePersonSchema, withArticleSeo } from '@/lib/seo';
 import { articleBodyHtml } from '@/lib/article-body';
+import { getArticleEntityCards } from '@/lib/article-entities';
+import EntityHoverCards from '@/components/article/EntityHoverCards';
 import ShareButton from '@/components/ShareButton';
 import ArticleActions from '@/components/ArticleActions';
 import SubscribeForm from '@/components/SubscribeForm';
@@ -101,6 +103,8 @@ export default async function OpinionDetailPage(props: { params: Promise<{ slug:
   ]);
 
   const bodyHtml = articleBodyHtml(article);
+
+  const entityCards = await getArticleEntityCards(bodyHtml);
 
   const articleUrl = `${SITE_URL}/opinions/${article.slug}`;
 
@@ -218,7 +222,7 @@ export default async function OpinionDetailPage(props: { params: Promise<{ slug:
             </div>
           )}
 
-          <div className="article-content prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+          <EntityHoverCards cards={entityCards}><div className="article-content prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: bodyHtml }} /></EntityHoverCards>
 
           <div className="mt-8 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200/60 dark:border-gray-700/40">
             <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta italic">

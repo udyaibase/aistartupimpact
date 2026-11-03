@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useState, useMemo } from 'react';
-import { IndianRupee, MapPin, Building2, Calendar, TrendingUp, Download, Users, Map as MapIcon, Lock } from 'lucide-react';
+import { IndianRupee, MapPin, Building2, Calendar, TrendingUp, Users, Map as MapIcon, Lock } from 'lucide-react';
 import { useUser } from '@/components/UserProvider';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 
 import { standardizeCityName } from '@udyaibase/utils/src/cities';
+import FundingDownloads from './FundingDownloads';
 
 interface FundingRound {
   id: string;
@@ -47,7 +48,6 @@ export default function FundingDashboard({ data: rawData }: { data: FundingRound
   const [filterCity, setFilterCity] = useState('All');
   const [filterAmountMin, setFilterAmountMin] = useState(0);
   const [filterAmountMax, setFilterAmountMax] = useState(Infinity);
-  const [showEmailModal, setShowEmailModal] = useState(false);
   const [visibleRows, setVisibleRows] = useState(20);
   const ROWS_PER_PAGE = 20;
 
@@ -301,101 +301,9 @@ export default function FundingDashboard({ data: rawData }: { data: FundingRound
     })).slice(-12);
   }, [data]);
 
-  // Handle PDF download with email gate
-  const handleDownloadReport = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setShowEmailModal(true);
-  };
-
-  const handleEmailSubmit = async (email: string, subscribeNewsletter = false) => {
-    try {
-      const response = await fetch('/api/funding-report/download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, subscribeNewsletter })
-      });
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        setShowEmailModal(false);
-        // Start the download now; a copy of the link is emailed too.
-        window.location.href = result.data.downloadUrl;
-      } else {
-        alert('Failed to process your request. Please try again.');
-      }
-    } catch (error) {
-      console.error('Download error:', error);
-      alert('An error occurred. Please try again.');
-    }
-  };
-
   return (
     <div className="space-y-4 sm:space-y-8">
-      {/* Email Gate Modal */}
-      {showEmailModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-modal p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 sm:p-8 max-w-md w-full shadow-2xl">
-            <h3 className="font-sora font-bold text-lg sm:text-2xl mb-1.5 sm:mb-2">Download AI Startups Funding Report 2026</h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-4 sm:mb-6 text-xs sm:text-sm">
-              Get the complete analysis with sector breakdowns, investor profiles, and city-wise funding distribution.
-            </p>
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              const formEl = e.target as HTMLFormElement;
-              const email = (formEl.elements.namedItem('email') as HTMLInputElement).value;
-              const subscribeNewsletter = (formEl.elements.namedItem('subscribe') as HTMLInputElement).checked;
-              handleEmailSubmit(email, subscribeNewsletter);
-            }}>
-              <input
-                type="email"
-                name="email"
-                placeholder="Enter your email"
-                required
-                className="input-field w-full mb-3"
-              />
-              <label className="flex items-start gap-2 mb-4 cursor-pointer">
-                <input type="checkbox" name="subscribe" className="mt-0.5 rounded border-gray-300" />
-                <span className="text-xs text-gray-500 dark:text-gray-400">I agree to receive the Udyaibase newsletter with AI startup news and insights. Unsubscribe anytime.</span>
-              </label>
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowEmailModal(false)}
-                  className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-2.5 bg-brand text-white rounded-lg hover:bg-brand-600 transition-colors font-semibold"
-                >
-                  Download PDF
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Hero CTA Banner */}
-      <div className="card p-4 sm:p-8 bg-gradient-to-br from-brand-50 via-purple-50 to-pink-50 dark:from-brand-900/20 dark:via-purple-900/20 dark:to-pink-900/20 border-2 border-brand/20">
-        <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center md:gap-x-6 md:gap-y-2">
-          <h2 className="font-sora font-extrabold text-lg sm:text-2xl text-navy dark:text-white md:col-start-1 md:row-start-1">
-            Free AI Funding Report
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400 text-sm sm:text-lg leading-relaxed md:col-start-1 md:row-start-2">
-            Complete analysis of {data.length} funding rounds • Sector breakdowns • Investor profiles • City distribution
-          </p>
-          <button
-            onClick={handleDownloadReport}
-            className="btn-brand gap-2 whitespace-nowrap w-full md:w-auto mt-1 md:mt-0 md:col-start-2 md:row-start-1"
-          >
-            <Download className="w-4 h-4" />
-            Download Free PDF
-          </button>
-        </div>
-      </div>
+      <FundingDownloads />
 
       {/* Top Stats Cards - Redesigned with Trend Deltas */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">

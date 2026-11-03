@@ -8,6 +8,8 @@ import StorySaveButton from '@/components/StorySaveButton';
 import { sql, getArticleBySlugDirect, getArticlesDirect } from '@/lib/db';
 import { buildArticleMetadata, withArticleSeo, generateArticleSchema, generateBreadcrumbSchema } from '@/lib/seo';
 import { articleBodyHtml } from '@/lib/article-body';
+import { getArticleEntityCards } from '@/lib/article-entities';
+import EntityHoverCards from '@/components/article/EntityHoverCards';
 import ShareButton from '@/components/ShareButton';
 import ArticleActions from '@/components/ArticleActions';
 import SubscribeForm from '@/components/SubscribeForm';
@@ -47,6 +49,8 @@ export default async function OpinionArticlePage(props: { params: Promise<{ slug
     d ? new Date(d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '';
 
   const bodyHtml = articleBodyHtml(article);
+
+  const entityCards = await getArticleEntityCards(bodyHtml);
 
   const relatedArticles = (related || []).filter((a: any) => a.slug !== params.slug).slice(0, 3);
 
@@ -133,7 +137,7 @@ export default async function OpinionArticlePage(props: { params: Promise<{ slug
             <div className="aspect-[16/9] bg-gradient-to-br from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl my-6 sm:my-8" />
           )}
 
-          <div className="article-content prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+          <EntityHoverCards cards={entityCards}><div className="article-content prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: bodyHtml }} /></EntityHoverCards>
 
           <ArticleActions
             slug={article.slug}

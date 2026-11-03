@@ -10,6 +10,7 @@ import { uploadToMediaLibrary } from "@/lib/media";
 import { cleanArticleHtml } from "@/lib/article-html";
 import { articleHtml, htmlWordCount } from "@udyaibase/utils/article-content";
 import { generateSlug } from "@udyaibase/utils/slug";
+import { mentionPaths, syncArticleMentions } from "@/lib/article-mentions";
 
 /**
  * Articles. Writers draft and submit for review; only editors (Super Admin, Editor-in-Chief) publish, schedule,
@@ -207,6 +208,11 @@ export async function saveArticleAction(payload: ArticlePayload, articleId?: str
     console.error("[articles] save failed:", error?.code ?? "", error?.message);
     return { success: false as const, error: "Couldn't save the article. Try again." };
   }
+  // Startups and tools @-tagged in the body, for their profile pages. A failure here never loses the article.
+  const profilePaths = await syncArticleMentions(id, html).catch((e) => {
+    console.error("[articles] mention sync failed:", e?.message);
+    return [] as string[];
+  });
 
   const statusChanged = !existing || existing.status !== status;
   const touchesSite = status === "PUBLISHED" || existing?.status === "PUBLISHED";
@@ -218,7 +224,7 @@ export async function saveArticleAction(payload: ArticlePayload, articleId?: str
       });
     }
     if (statusChanged) revalidatePath("/articles");
-    if (touchesSite) await refreshPublic(PUBLIC_SECTIONS);
+    if (touchesSite) await refreshPublic(PUBLIC_SECTIONS, profilePaths);
   }
   const notice = !publisher && status === "IN_REVIEW" && payload.status !== "IN_REVIEW" && payload.status !== "DRAFT"
     ? "Sent for review. An editor will publish it."
@@ -331,7 +337,7 @@ export async function updateArticleStatusAction(id: string, status: string) {
   await logAuditEvent({ action: "UPDATE", resourceType: "ARTICLE", resourceId: id, resourceName: a.title, before: { status: a.status }, after: { status } });
   revalidatePath("/articles");
   revalidatePath("/dashboard");
-  if (status === "PUBLISHED" || a.status === "PUBLISHED") await refreshPublic(PUBLIC_SECTIONS);
+  if (status === "PUBLISHED" || a.status === "PUBLISHED") await refreshPublic(PUBLIC_SECTIONS, await mentionPaths(id).catch(() => []));
   return { success: true as const };
 }
 
@@ -349,7 +355,7 @@ export async function deleteArticleAction(id: string) {
     await logAuditEvent({ action: 'DELETE', resourceType: 'ARTICLE', resourceId: id, before: { title: before.title, slug: before.slug } });
     revalidatePath("/articles");
     revalidatePath("/dashboard");
-    if (before.status === "PUBLISHED") await refreshPublic(PUBLIC_SECTIONS);
+    if (before.status === "PUBLISHED") await refreshPublic(PUBLIC_SECTIONS, await mentionPaths(id).catch(() => []));
     return { success: true };
   } catch (error: any) {
     console.error("[articles] delete failed:", error?.message);
@@ -385,6 +391,8 @@ export async function duplicateArticleAction(sourceId: string) {
           "focusKeyword", "canonicalUrl", "ogImage", "keyTakeaways", ${user.id}, NOW(), NOW()
         FROM "Article" WHERE id = ${sourceId}`,
       prisma.$executeRaw`INSERT INTO "ArticleTag" ("articleId", "tagId") SELECT ${newId}, "tagId" FROM "ArticleTag" WHERE "articleId" = ${sourceId}`,
+      prisma.$executeRaw`INSERT INTO "ArticleStartupMention" ("articleId", "startupId") SELECT ${newId}, "startupId" FROM "ArticleStartupMention" WHERE "articleId" = ${sourceId}`,
+      prisma.$executeRaw`INSERT INTO "ArticleToolMention" ("articleId", "toolId") SELECT ${newId}, "toolId" FROM "ArticleToolMention" WHERE "articleId" = ${sourceId}`,
     ]);
 
     revalidatePath("/articles");

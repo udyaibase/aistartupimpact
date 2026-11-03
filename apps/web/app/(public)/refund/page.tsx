@@ -5,7 +5,7 @@ export default function RefundPage() {
         Refund & Cancellation Policy
       </h1>
       <div className="prose prose-lg dark:prose-invert prose-blue max-w-none">
-        <p className="text-sm text-gray-500 mb-8"><strong>Last updated:</strong> October 31, 2026</p>
+        <p className="text-sm text-gray-500 mb-8"><strong>Last updated:</strong> November 3, 2026</p>
 
         <p>
           Udyaibase provides various digital services, including premium tool listings, sponsored directory placements, job board postings, event tickets, and advertising slots. This Refund & Cancellation Policy outlines the financial terms governing purchases made on our platform.
@@ -91,6 +91,16 @@ export default function RefundPage() {
           <li>Hosts can also refund an individual ticket in full; the refund goes back to the original payment method.</li>
           <li>Other refund requests follow the host&apos;s own policy, shown on the event page. Contact the host first; if they don&apos;t respond, email us.</li>
           <li>Refunds usually reach your bank within 5–7 working days.</li>
+        </ul>
+
+        <h2>5A. Funding Datasets (Excel)</h2>
+        <p>
+          Funding datasets are digital files delivered as soon as payment succeeds, so they are generally not refundable once downloaded.
+        </p>
+        <ul>
+          <li>If you were charged but never received a working download link, or were charged twice, you get a full refund.</li>
+          <li>If the file is materially different from what was described at checkout (for example, far fewer startups than shown), contact us within 7 days of purchase and we will fix it or refund you.</li>
+          <li>A refund ends the download link. A GST credit note is issued against the original invoice.</li>
         </ul>
 
         <h2>6. Failed Transactions</h2>

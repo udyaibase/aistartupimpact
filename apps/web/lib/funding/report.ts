@@ -2,15 +2,20 @@ import crypto from 'crypto';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import { getAllFundingRoundsDirect } from '@/lib/db';
 import { standardizeCityName } from '@udyaibase/utils/src/cities';
+import { PACK_KEYS, PACKS } from '@/lib/funding/packs';
 
 /**
- * "AI Startups Funding Report", built on demand from the live funding tracker.
+ * Free "AI Startups Funding Snapshot", built on demand from the live funding tracker. A summary only: rounds from
+ * the last SNAPSHOT_LAG_DAYS are left out (they're in the paid Excel datasets), lists stop at the top 5, and there
+ * is no row-level data or investor list. The last page says what the paid datasets add.
  * Amounts in USD: rounds stored only in INR are converted at INR_PER_USD (stated in the report).
  * Standard PDF fonts can't draw the rupee sign, so the report sticks to USD and ASCII.
  */
 
 const INR_PER_USD = 84;
 const TOKEN_DAYS = 7;
+export const SNAPSHOT_LAG_DAYS = 90;
+const TOP = 5;
 
 interface Round {
   roundType: string | null; amountUsd: number | null; amountInr: number | null; announcedAt: string | null;
@@ -36,7 +41,7 @@ function group(rounds: Round[], key: (r: Round) => string | null, top: number) {
   return [...m.entries()].map(([k, v]) => ({ key: k, ...v })).sort((a, b) => b.amount - a.amount || b.count - a.count).slice(0, top);
 }
 
-export function summarise(rounds: Round[]) {
+export function summarise(rounds: Round[], top = 10) {
   const amounts = rounds.map(usd).filter((n) => n > 0).sort((a, b) => a - b);
   const total = amounts.reduce((s, n) => s + n, 0);
   const median = amounts.length ? amounts[Math.floor(amounts.length / 2)] : 0;
@@ -56,11 +61,11 @@ export function summarise(rounds: Round[]) {
   }
   return {
     total, median, rounds: rounds.length, startups: new Set(rounds.map((r) => r.startupName)).size,
-    largest: [...rounds].sort((a, b) => usd(b) - usd(a)).slice(0, 15),
-    byStage: group(rounds, (r) => label(r.roundType), 10),
-    bySector: group(rounds, (r) => r.startupCategory, 10),
-    byCity: group(rounds, (r) => (r.headquartersCity ? standardizeCityName(r.headquartersCity) : null), 10),
-    investors: [...investors.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15),
+    largest: [...rounds].sort((a, b) => usd(b) - usd(a)).slice(0, top),
+    byStage: group(rounds, (r) => label(r.roundType), top),
+    bySector: group(rounds, (r) => r.startupCategory, top),
+    byCity: group(rounds, (r) => (r.headquartersCity ? standardizeCityName(r.headquartersCity) : null), top),
+    investors: [...investors.entries()].sort((a, b) => b[1] - a[1]).slice(0, top),
     quarters: [...quarters.entries()].sort(([a], [b]) => a.localeCompare(b)).slice(-8),
     convertedInr: rounds.some((r) => !r.amountUsd && r.amountInr),
   };
@@ -118,20 +123,28 @@ class Writer {
   }
 }
 
+/** Rounds announced before the snapshot cutoff (the newest ones are for the paid datasets). */
+export function snapshotRounds<T extends { announcedAt: string | null }>(rounds: T[], now = Date.now()): { rounds: T[]; cutoff: Date } {
+  const cutoff = new Date(now - SNAPSHOT_LAG_DAYS * 864e5);
+  return { cutoff, rounds: rounds.filter((r) => { const t = r.announcedAt ? Date.parse(r.announcedAt) : NaN; return !Number.isNaN(t) && t < cutoff.getTime(); }) };
+}
+
 export async function buildFundingReportPdf(): Promise<Uint8Array> {
-  const rounds = (await getAllFundingRoundsDirect()) as unknown as Round[];
-  const s = summarise(rounds);
+  const { rounds, cutoff } = snapshotRounds((await getAllFundingRoundsDirect()) as unknown as Round[]);
+  const s = summarise(rounds, TOP);
+  const dataUpTo = cutoff.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' });
   const doc = await PDFDocument.create();
-  doc.setTitle('AI Startups Funding Report - Udyaibase');
+  doc.setTitle('AI Startups Funding Snapshot - Udyaibase');
   doc.setAuthor('Udyaibase');
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   const date = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' });
-  const w = new Writer(doc, font, bold, `Udyaibase AI Startups Funding Report - generated ${date} - udyaibase.com/funding`);
+  const w = new Writer(doc, font, bold, `Udyaibase AI Startups Funding Snapshot - generated ${date} - udyaibase.com/funding`);
 
   w.text('UDYAIBASE', { size: 10, bold: true, color: BRAND, gap: 14 });
-  w.text('AI Startups Funding Report', { size: 26, bold: true, gap: 10 });
-  w.text(`AI startup funding tracked by Udyaibase, with a focus on India. Generated ${date}.`, { size: 11, color: MUTED, gap: 24 });
+  w.text('AI Startups Funding Snapshot', { size: 26, bold: true, gap: 10 });
+  w.text(`AI startup funding tracked by Udyaibase, with a focus on India. Generated ${date}.`, { size: 11, color: MUTED, gap: 6 });
+  w.text(`Data up to ${dataUpTo}. The latest ${SNAPSHOT_LAG_DAYS} days are in the full datasets.`, { size: 11, bold: true, color: BRAND, gap: 24 });
 
   const kpis: [string, string][] = [
     ['Total raised', money(s.total)], ['Funding rounds', String(s.rounds)], ['Startups funded', String(s.startups)],
@@ -145,7 +158,7 @@ export async function buildFundingReportPdf(): Promise<Uint8Array> {
   }
 
   if (s.quarters.length) { w.heading('Funding by quarter'); w.bars(s.quarters.map(([key, amount]) => ({ key, amount }))); }
-  w.heading('By stage');
+  w.heading('Top stages');
   w.table([{ title: 'STAGE', x: 50 }, { title: 'ROUNDS', x: 380, right: true }, { title: 'AMOUNT', x: 545, right: true }], s.byStage.map((g) => [g.key, String(g.count), money(g.amount)]));
   if (s.bySector.length) {
     w.heading('Top sectors');
@@ -163,10 +176,22 @@ export async function buildFundingReportPdf(): Promise<Uint8Array> {
       return [r.startupName, label(r.roundType), d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : '-', money(usd(r))];
     }),
   );
-  if (s.investors.length) {
-    w.heading('Most active investors');
-    w.table([{ title: 'INVESTOR', x: 50 }, { title: 'DEALS', x: 545, right: true }], s.investors.map(([name, n]) => [name, String(n)]));
+  w.newPage();
+  w.text('Get the full dataset', { size: 20, bold: true, color: BRAND, gap: 10 });
+  w.text('This snapshot is a summary. The full datasets are Excel files you can filter, sort and sum:', { size: 11, gap: 14 });
+  for (const line of [
+    `- The latest funding rounds, including the last ${SNAPSHOT_LAG_DAYS} days left out here`,
+    '- Every startup and every round, not just the top 5',
+    '- Investor leaderboard with portfolios, and lead investors on every round',
+    '- Pick the period, sectors, stages and cities you need, in INR or USD',
+    '- Full Dataset adds founders, websites, LinkedIn, valuations and sources',
+  ]) w.text(line, { size: 11, gap: 8 });
+  w.y -= 8;
+  for (const k of PACK_KEYS) {
+    const p = PACKS[k];
+    w.text(`${p.name}: ${p.limit ? `${p.limit.toLocaleString('en-IN')} startups` : 'every startup and field, 12 months of updates'} - Rs ${(p.totalPaise / 100).toLocaleString('en-IN')}`, { size: 11, bold: k === 'FULL', gap: 7 });
   }
+  w.text('Prices include GST. Buy at udyaibase.com/funding', { size: 11, color: MUTED, gap: 6 });
   w.heading('About this data');
   w.text('Rounds are collected from public announcements and founder submissions on Udyaibase.', { size: 9.5, color: MUTED });
   if (s.convertedInr) w.text(`Rounds reported only in INR are converted at Rs ${INR_PER_USD} per USD.`, { size: 9.5, color: MUTED });

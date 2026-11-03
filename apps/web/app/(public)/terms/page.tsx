@@ -5,7 +5,7 @@ export default function TermsPage() {
         Terms & Conditions
       </h1>
       <div className="prose prose-sm dark:prose-invert prose-blue max-w-none">
-        <p className="text-sm text-gray-500 mb-8"><strong>Last updated:</strong> October 31, 2026</p>
+        <p className="text-sm text-gray-500 mb-8"><strong>Last updated:</strong> November 3, 2026</p>
 
         <p>
           Welcome to Udyaibase. By accessing or using our website, newsletters, funding resources, directories, event platform, job board, and related services (collectively, &quot;Services&quot;), you agree to abide by and be bound by the following Terms & Conditions. If you do not agree with any of these terms, please do not use our Services.
@@ -75,9 +75,19 @@ export default function TermsPage() {
           <li>Promo emails for events are sent by Udyaibase, in our layout, only to people who asked to hear about events in their area, and always include an unsubscribe link.</li>
         </ul>
 
+        <h2>7B. Funding Data Downloads</h2>
+        <ul>
+          <li>The free Funding Snapshot (PDF) and the paid funding datasets (Excel) both need a verified email: we send a 6-digit code to confirm the address is yours. Downloading either also subscribes that email to the Udyaibase newsletter, as stated next to the checkbox you tick. You can unsubscribe at any time.</li>
+          <li>Paid dataset prices are shown including 18% GST. A GST tax invoice is emailed after payment. Each purchase is a one-time payment; nothing renews automatically.</li>
+          <li>Your download link works for the period and number of downloads shown at purchase (7 days and 5 downloads for Starter, Growth, Pro and Scale; 12 months for Full Dataset). Every download is built from the latest data for the choices you made when buying.</li>
+          <li><strong>Data licence:</strong> datasets are licensed for use by the buyer and their organisation for research, analysis and internal work. You may quote figures and short extracts with credit to Udyaibase. You may not resell, republish, share or redistribute a dataset, in full or in substantial part, or use it to build a competing database. Each file is marked with the buyer&apos;s email and order number.</li>
+          <li>Funding data comes from public announcements, press coverage and founder submissions. We work to keep it accurate but cannot guarantee it is complete or error-free. Please tell us about corrections at support@udyaibase.com.</li>
+          <li>Refunds for datasets are covered by our <a href="/refund">Refund Policy</a>.</li>
+        </ul>
+
         <h2>8. Newsletter and Marketing Communications</h2>
         <p>
-          We send marketing emails only with your explicit consent, obtained through a double opt-in process. You can unsubscribe at any time using the one-click unsubscribe link in every email. By subscribing, you consent to receiving newsletters, event updates, and promotional content. Your consent can be withdrawn at any time without affecting the lawfulness of processing done prior to withdrawal. See our <a href="/privacy">Privacy Policy</a> for details on how we handle your data.
+          We send marketing emails only with your explicit consent, obtained through a double opt-in process, or by confirming your email with a one-time code and ticking a consent box (for example, when downloading funding data). You can unsubscribe at any time using the one-click unsubscribe link in every email. By subscribing, you consent to receiving newsletters, event updates, and promotional content. Your consent can be withdrawn at any time without affecting the lawfulness of processing done prior to withdrawal. See our <a href="/privacy">Privacy Policy</a> for details on how we handle your data.
         </p>
 
         <h2>9. External Links</h2>
