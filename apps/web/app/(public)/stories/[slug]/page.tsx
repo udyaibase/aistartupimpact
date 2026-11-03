@@ -9,6 +9,8 @@ import { sql, getArticleBySlugDirect, getRelatedArticlesDirect } from '@/lib/db'
 import { defaultFounderSpotlights } from '@/lib/fallbacks';
 import { buildArticleMetadata, generateArticleSchema, generateBreadcrumbSchema } from '@/lib/seo';
 import { articleBodyHtml } from '@/lib/article-body';
+import { getArticleEntityCards } from '@/lib/article-entities';
+import EntityHoverCards from '@/components/article/EntityHoverCards';
 import ShareButton from '@/components/ShareButton';
 import ArticleActions from '@/components/ArticleActions';
 import SubscribeForm from '@/components/SubscribeForm';
@@ -52,6 +54,8 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
     d ? new Date(d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '';
 
   const bodyHtml = articleBodyHtml(story);
+
+  const entityCards = await getArticleEntityCards(bodyHtml);
 
   const relatedStories = await getRelatedArticlesDirect(story.id, ['STORY', 'FOUNDER_STORY'], 3);
 
@@ -142,7 +146,7 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
             </div>
           )}
 
-          <div className="article-content prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+          <EntityHoverCards cards={entityCards}><div className="article-content prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: bodyHtml }} /></EntityHoverCards>
 
           {/* Likes, Comments, Share */}
           <ArticleActions

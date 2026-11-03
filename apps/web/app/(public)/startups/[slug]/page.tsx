@@ -1,3 +1,4 @@
+import { articlePath } from '@/lib/seo';
 import Link from 'next/link';
 import Image from 'next/image';
 import { cache } from 'react';
@@ -94,20 +95,26 @@ const getStartup = cache(async (slug: string) => {
         WHERE "startupId" = ${s.id}
         ORDER BY "announcedAt" DESC
       `,
+      // Articles about this startup: linked directly, or @-tagging it or one of its tools in the body.
       sql`
-        SELECT title, slug, "publishedAt"::text AS "publishedAt"
-        FROM "Article"
+        SELECT title, slug, type::text AS type, "publishedAt"::text AS "publishedAt"
+        FROM "Article" a
         WHERE status = 'PUBLISHED' AND "deletedAt" IS NULL
-          AND "startupId" = ${s.id}
+          AND type NOT IN ('STORY', 'STARTUP_UPDATE')
+          AND ("startupId" = ${s.id}
+            OR EXISTS (SELECT 1 FROM "ArticleStartupMention" m WHERE m."articleId" = a.id AND m."startupId" = ${s.id})
+            OR EXISTS (SELECT 1 FROM "ArticleToolMention" m JOIN "AiTool" t ON t.id = m."toolId" WHERE m."articleId" = a.id AND t."startupId" = ${s.id}))
         ORDER BY "publishedAt" DESC
         LIMIT 4
       `,
       sql`
         SELECT title, slug, excerpt, "publishedAt"::text AS "publishedAt"
-        FROM "Article"
+        FROM "Article" a
         WHERE status = 'PUBLISHED' AND "deletedAt" IS NULL
           AND type = 'STORY'
-          AND "startupId" = ${s.id}
+          AND ("startupId" = ${s.id}
+            OR EXISTS (SELECT 1 FROM "ArticleStartupMention" m WHERE m."articleId" = a.id AND m."startupId" = ${s.id})
+            OR EXISTS (SELECT 1 FROM "ArticleToolMention" m JOIN "AiTool" t ON t.id = m."toolId" WHERE m."articleId" = a.id AND t."startupId" = ${s.id}))
         ORDER BY "publishedAt" DESC
         LIMIT 3
       `,
@@ -1102,10 +1109,10 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
           {/* <EmbedBadge urlSlug={startup.slug} type="startups" /> */}
 
 
-          {/* Founder Stories */}
+          {/* Stories */}
           {startup.founderStories?.length > 0 && (
             <div className="card p-5">
-              <h4 className="font-sora font-bold text-xs text-navy dark:text-white mb-4">Founder Stories</h4>
+              <h4 className="font-sora font-bold text-xs text-navy dark:text-white mb-4">Stories</h4>
               <div className="space-y-3">
                 {startup.founderStories.map((story: any) => (
                   <Link key={story.slug} href={`/stories/${story.slug}`} className="group block">
@@ -1125,7 +1132,7 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
               <h4 className="font-sora font-bold text-xs text-navy dark:text-white mb-4">Related News</h4>
               <div className="space-y-3">
                 {startup.relatedNews.map((n: any) => (
-                  <Link key={n.slug} href={`/news/${n.slug}`} className="group block">
+                  <Link key={n.slug} href={articlePath(n.type, n.slug)} className="group block">
                     <h5 className="text-xs font-jakarta text-link dark:text-blue-400 group-hover:text-blue-800 dark:group-hover:text-blue-300 hover:underline group-hover:underline transition-colors leading-snug line-clamp-2">{n.title}</h5>
                     <span className="text-xs text-gray-400 font-jakarta">
                       {new Date(n.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}

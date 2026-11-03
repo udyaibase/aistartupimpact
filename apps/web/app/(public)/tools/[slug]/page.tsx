@@ -1,3 +1,4 @@
+import { articlePath } from '@/lib/seo';
 import { jsonLd as jsonLdHtml } from "@/lib/json-ld";
 import Link from 'next/link';
 import Image from 'next/image';
@@ -627,18 +628,18 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
             />
           )}
 
-          {/* Founder Story */}
+          {/* Articles linked to or tagging this tool */}
           {stories.length > 0 && (
             <div className="card p-5 bg-gradient-to-br from-brand-50 to-brand-100/30 dark:from-brand-900/20 dark:to-gray-800 border-brand-100 dark:border-brand-900/50">
               <h4 className="font-sora font-extrabold text-sm text-brand mb-4 flex items-center gap-2">
-                <Sparkles className="w-4 h-4" /> Founder Story
+                <Sparkles className="w-4 h-4" /> Featured in
               </h4>
               <div className="space-y-4">
                 {stories.map((story: any) => (
-                  <Link key={story.id} href={`/news/${story.slug}`} className="block group">
+                  <Link key={story.id} href={articlePath(story.type, story.slug)} className="block group">
                     <h5 className="font-sora font-bold text-sm text-navy dark:text-white group-hover:text-brand leading-snug transition-colors">{story.title}</h5>
                     <p className="text-xs text-gray-500 font-jakarta mt-1 line-clamp-2">{story.excerpt}</p>
-                    <span className="text-xs font-bold uppercase tracking-wider text-brand mt-2 inline-flex items-center gap-1 group-hover:translate-x-1 transition-transform">Read Story <ArrowRight className="w-3 h-3" /></span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-brand mt-2 inline-flex items-center gap-1 group-hover:translate-x-1 transition-transform">Read <ArrowRight className="w-3 h-3" /></span>
                   </Link>
                 ))}
               </div>
