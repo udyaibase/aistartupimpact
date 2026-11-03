@@ -2,11 +2,23 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { Briefcase, Search, Eye, Users, Trash2, ExternalLink, CheckCircle, XCircle, Loader2, Plus, Pencil } from 'lucide-react';
-import { getJobsAction, toggleJobActiveAction, deleteJobAction } from './actions';
+import { Briefcase, Search, Eye, Users, Trash2, ExternalLink, CheckCircle, XCircle, Loader2, Plus, Pencil, X, Star, PauseCircle, PlayCircle, Ban, CalendarPlus } from 'lucide-react';
+import { getJobsAction, toggleJobActiveAction, deleteJobAction, bulkJobAction, type BulkJobOp } from './actions';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { Pagination } from '@/components/Pagination';
 
 const PAGE_SIZE = 20;
+
+/** Bulk actions: button label, past tense for the result line, and a confirmation for the ones that hide jobs. */
+const BULK_LABELS: Record<BulkJobOp, { label: string; done: string; icon: typeof Trash2; confirm?: string }> = {
+  open: { label: 'Open', done: 'opened', icon: PlayCircle },
+  pause: { label: 'Pause', done: 'paused', icon: PauseCircle, confirm: 'They disappear from the jobs page until opened again. Applications and candidates are kept.' },
+  close: { label: 'Close', done: 'closed', icon: Ban, confirm: 'They stop taking applications and leave the jobs page. You can open them again later.' },
+  renew: { label: 'Renew +30 days', done: 'renewed', icon: CalendarPlus },
+  feature: { label: 'Feature', done: 'featured', icon: Star },
+  unfeature: { label: 'Unfeature', done: 'unfeatured', icon: XCircle },
+  delete: { label: 'Delete', done: 'deleted', icon: Trash2, confirm: 'They are removed from the job board and the admin list. Only Super Admins can do this.' },
+};
 
 interface Job {
   id: string;
@@ -16,6 +28,10 @@ interface Job {
   workType: string;
   listingTier: string;
   isActive: boolean;
+  status: 'DRAFT' | 'OPEN' | 'PAUSED' | 'CLOSED';
+  moderationHold: boolean;
+  expired: boolean;
+  expiresAt: string | null;
   isFeatured: boolean;
   applicationsCount: number;
   viewsCount: number;
@@ -34,6 +50,10 @@ export default function AdminJobsBoardPage() {
   const [deleteTyped, setDeleteTyped] = useState('');
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkConfirm, setBulkConfirm] = useState<BulkJobOp | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     fetchJobs();
@@ -79,12 +99,34 @@ export default function AdminJobsBoardPage() {
       j.companyName.toLowerCase().includes(search.toLowerCase())
     );
 
-  // Reset page when filters change
-  useMemo(() => { setPage(1); }, [filter, search]);
+  // Reset page and selection when filters change
+  useMemo(() => { setPage(1); setSelectedIds(new Set()); }, [filter, search]);
 
   const totalFiltered = filtered.length;
   const totalPages = Math.ceil(totalFiltered / PAGE_SIZE);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every(j => selectedIds.has(j.id));
+  const toggleOne = (id: string, on: boolean) => setSelectedIds(prev => {
+    const next = new Set(prev);
+    if (on) next.add(id); else next.delete(id);
+    return next;
+  });
+
+  const runBulk = async (op: BulkJobOp) => {
+    setBulkBusy(true);
+    const res = await bulkJobAction([...selectedIds], op);
+    setBulkBusy(false);
+    setBulkConfirm(null);
+    if (!res.success) {
+      if (op === 'delete') setPermissionError(res.error); else setNotice(res.error);
+      return;
+    }
+    const done = BULK_LABELS[op].done;
+    setNotice(`${res.changed} job${res.changed === 1 ? '' : 's'} ${done}${res.skipped ? ` · ${res.skipped} already ${done} or unchanged` : ''}.`);
+    setSelectedIds(new Set());
+    await fetchJobs();
+  };
 
   const activeCount = jobs.filter(j => j.isActive).length;
   const inactiveCount = jobs.filter(j => !j.isActive).length;
@@ -96,7 +138,7 @@ export default function AdminJobsBoardPage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 ${selectedIds.size > 0 ? 'pb-24' : ''}`}>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white flex items-center gap-2">
@@ -142,6 +184,13 @@ export default function AdminJobsBoardPage() {
         />
       </div>
 
+      {notice && (
+        <div role="status" className="flex items-center justify-between gap-3 px-4 py-2.5 bg-green-50 dark:bg-green-900/20 text-sm text-green-800 dark:text-green-300 font-jakarta border border-green-100 dark:border-green-800 rounded-xl">
+          {notice}
+          <button onClick={() => setNotice(null)} aria-label="Dismiss" className="p-1 rounded hover:bg-green-100 dark:hover:bg-green-900/40"><X className="w-3.5 h-3.5" /></button>
+        </div>
+      )}
+
       {/* Error */}
       {error && (
         <div className="px-6 py-3 bg-red-50 dark:bg-red-900/20 text-sm text-red-600 dark:text-red-400 font-jakarta border border-red-100 dark:border-red-800 rounded-xl">
@@ -154,6 +203,16 @@ export default function AdminJobsBoardPage() {
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50 dark:bg-gray-800/50 text-left">
+              <th className="pl-4 pr-1 py-3 w-10">
+                <input
+                  type="checkbox"
+                  aria-label={allFilteredSelected ? 'Clear selection' : `Select all ${filtered.length} jobs`}
+                  title={`Select all ${filtered.length} jobs in this view`}
+                  checked={allFilteredSelected}
+                  onChange={(e) => setSelectedIds(e.target.checked ? new Set(filtered.map(j => j.id)) : new Set())}
+                  className="w-4 h-4 text-brand border-gray-300 rounded focus:ring-brand"
+                />
+              </th>
               <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Job</th>
               <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden md:table-cell">Company</th>
               <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden lg:table-cell">Category</th>
@@ -165,19 +224,31 @@ export default function AdminJobsBoardPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} className="px-6 py-12 text-center"><Loader2 className="w-6 h-6 animate-spin text-brand mx-auto" /></td></tr>
+              <tr><td colSpan={8} className="px-6 py-12 text-center"><Loader2 className="w-6 h-6 animate-spin text-brand mx-auto" /></td></tr>
             ) : paginated.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center">
+                <td colSpan={8} className="px-6 py-12 text-center">
                   <Briefcase className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
                   <p className="text-sm text-gray-400 font-jakarta">No job listings {filter !== 'all' ? `(${filter})` : ''} found</p>
                 </td>
               </tr>
             ) : paginated.map((job) => (
-              <tr key={job.id} className="border-t border-gray-50 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
+              <tr key={job.id} className={`border-t border-gray-50 dark:border-gray-800 transition-colors ${selectedIds.has(job.id) ? 'bg-brand/5 dark:bg-brand/10' : 'hover:bg-gray-50/50 dark:hover:bg-gray-800/30'}`}>
+                <td className="pl-4 pr-1 py-4">
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${job.title}`}
+                    checked={selectedIds.has(job.id)}
+                    onChange={(e) => toggleOne(job.id, e.target.checked)}
+                    className="w-4 h-4 text-brand border-gray-300 rounded focus:ring-brand"
+                  />
+                </td>
                 <td className="px-6 py-4">
                   <div>
-                    <h4 className="font-sora font-semibold text-sm text-navy dark:text-white line-clamp-1">{job.title}</h4>
+                    <h4 className="font-sora font-semibold text-sm text-navy dark:text-white line-clamp-1 flex items-center gap-1.5">
+                      {job.isFeatured && <Star className="w-3.5 h-3.5 shrink-0 fill-amber-400 text-amber-400" aria-label="Featured" />}
+                      <span className="truncate">{job.title}</span>
+                    </h4>
                     <div className="flex items-center gap-2 mt-1">
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded font-jakarta ${
                         job.listingTier === 'FEATURED' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
@@ -218,6 +289,11 @@ export default function AdminJobsBoardPage() {
                   >
                     {job.isActive ? <><CheckCircle className="w-3 h-3" /> Active</> : <><XCircle className="w-3 h-3" /> Inactive</>}
                   </button>
+                  {(job.status !== 'OPEN' || job.expired || job.moderationHold) && (
+                    <p className="text-[11px] text-gray-400 font-jakarta mt-1">
+                      {job.moderationHold ? 'On review hold' : job.expired ? 'Expired' : job.status === 'PAUSED' ? 'Paused' : job.status === 'CLOSED' ? 'Closed' : 'Draft'}
+                    </p>
+                  )}
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-1">
@@ -247,6 +323,45 @@ export default function AdminJobsBoardPage() {
           onPageChange={setPage}
         />
       </div>
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-40 w-[calc(100vw-2rem)] sm:w-auto max-w-4xl bg-gray-900 dark:bg-gray-800 text-white px-3 sm:px-4 py-2.5 rounded-xl shadow-2xl border border-gray-700 flex items-center gap-2 overflow-x-auto" role="toolbar" aria-label="Bulk actions">
+          <span className="text-sm font-semibold font-jakarta whitespace-nowrap px-1">{selectedIds.size} selected</span>
+          <div className="w-px h-6 bg-gray-700 shrink-0" />
+          {(['open', 'pause', 'close', 'renew', 'feature', 'unfeature'] as const).map((op) => {
+            const L = BULK_LABELS[op];
+            return (
+              <button key={op} disabled={bulkBusy} onClick={() => (L.confirm ? setBulkConfirm(op) : runBulk(op))}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/20 whitespace-nowrap disabled:opacity-50">
+                <L.icon className="w-3.5 h-3.5" /> {L.label}
+              </button>
+            );
+          })}
+          <button disabled={bulkBusy} onClick={() => setBulkConfirm('delete')}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-red-600 hover:bg-red-700 whitespace-nowrap disabled:opacity-50">
+            <Trash2 className="w-3.5 h-3.5" /> Delete
+          </button>
+          {bulkBusy && <Loader2 className="w-4 h-4 animate-spin shrink-0" />}
+          <button onClick={() => setSelectedIds(new Set())} aria-label="Clear selection" className="p-1.5 text-gray-400 hover:text-white shrink-0">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {bulkConfirm && (
+        <ConfirmModal
+          open
+          onClose={() => setBulkConfirm(null)}
+          onConfirm={() => runBulk(bulkConfirm)}
+          loading={bulkBusy}
+          title={`${BULK_LABELS[bulkConfirm].label} ${selectedIds.size} job${selectedIds.size === 1 ? '' : 's'}?`}
+          message={BULK_LABELS[bulkConfirm].confirm ?? ''}
+          confirmLabel={BULK_LABELS[bulkConfirm].label}
+          variant={bulkConfirm === 'delete' ? 'danger' : 'warning'}
+          requireTyping={bulkConfirm === 'delete'}
+        />
+      )}
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
