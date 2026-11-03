@@ -150,11 +150,19 @@ export async function getToolClickAnalyticsAction(period: string = '7 days') {
       : [];
     const viewMap = new Map(profileViews.map(v => [v.pathname, Number(v.views)]));
 
+    // CTR = clicks made on the tool's own page ÷ views of that page. Clicks from the homepage, search etc.
+    // never had a profile view, so dividing all clicks by profile views overstated it (often above 100%).
+    const detailClicks = new Map<string, number>();
+    for (const c of allClicks) {
+      if (c.sourcePage === 'TOOL_DETAIL') detailClicks.set(c.toolId, (detailClicks.get(c.toolId) ?? 0) + 1);
+    }
+
     const toolMap = new Map(toolDetails.map(t => [t.id, t]));
     const topTools = toolCounts.map(t => {
       const tool = toolMap.get(t.value);
       const views = tool ? (viewMap.get(`/tools/${tool.slug}`) ?? 0) : 0;
-      const ctr = views > 0 ? ((t.count / views) * 100).toFixed(1) : '0.0';
+      const fromProfile = detailClicks.get(t.value) ?? 0;
+      const ctr = views > 0 ? (Math.min(fromProfile / views, 1) * 100).toFixed(1) : null;
       return {
         id: t.value,
         name: tool?.name ?? 'Unknown',
@@ -162,6 +170,7 @@ export async function getToolClickAnalyticsAction(period: string = '7 days') {
         logoUrl: tool?.logoUrl ?? null,
         category: tool?.ToolCategory?.name ?? 'Uncategorized',
         clicks: t.count,
+        profileClicks: fromProfile,
         profileViews: views,
         ctr,
       };

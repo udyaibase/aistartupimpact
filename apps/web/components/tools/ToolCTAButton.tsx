@@ -50,7 +50,7 @@ export function ToolCTAButton({
     <a
       href={href}
       target="_blank"
-      rel="noopener noreferrer"
+      rel="nofollow noopener noreferrer"
       onClick={handleClick}
       className={`${baseClasses} ${variantClasses[variant]} ${className}`}
       aria-label={`Visit ${toolName} website`}
