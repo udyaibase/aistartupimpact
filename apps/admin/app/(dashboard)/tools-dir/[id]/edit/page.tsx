@@ -1,5 +1,6 @@
 'use client';
 
+import { CityPicker, CountryPicker } from '@/components/LocationFields';
 import { useState, useRef, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, Upload, Loader2, Save, Plus, X } from 'lucide-react';
@@ -42,6 +43,7 @@ interface Tool {
   launchYear?: number;
   founderNames?: string[];
   headquartersCountry?: string;
+  headquartersCity?: string;
   screenshotUrls?: string[];
   screenshotMeta?: Record<string, any>;
   twitterUrl?: string;
@@ -259,6 +261,7 @@ export default function EditToolPage() {
         launchYear: formData.launchYear,
         founderNames: founderNamesArray,
         headquartersCountry: formData.headquartersCountry,
+        headquartersCity: formData.headquartersCity,
         avgRating: formData.avgRating,
         listingTier: formData.listingTier,
         status: formData.status,
@@ -770,14 +773,12 @@ export default function EditToolPage() {
               <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta">
                 Headquarters
               </label>
-              <input
-                type="text"
-                name="headquartersCountry"
-                value={formData.headquartersCountry || ''}
-                onChange={handleChange}
-                className="input-field text-sm"
-                placeholder="USA, India, etc."
-              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <CountryPicker value={formData.headquartersCountry || ''} clearable placeholder="Country"
+                  onChange={(c) => setFormData((prev: any) => (prev ? { ...prev, headquartersCountry: c ?? '', headquartersCity: c === prev.headquartersCountry ? prev.headquartersCity : '' } : prev))} />
+                <CityPicker value={formData.headquartersCity || ''} country={formData.headquartersCountry || null} placeholder="City"
+                  onChange={(c) => setFormData((prev: any) => (prev ? { ...prev, headquartersCity: c?.city ?? '', headquartersCountry: prev.headquartersCountry || c?.country || '' } : prev))} />
+              </div>
             </div>
           </div>
 

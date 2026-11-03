@@ -51,6 +51,7 @@ export interface ToolData {
   hasApi?: boolean;
   hasMobileApp?: boolean;
   headquartersCountry?: string;
+  headquartersCity?: string;
   founderNames?: string[];
   useCases?: Array<{ id: string; text: string }>;
 }
@@ -281,7 +282,7 @@ export function generateToolFAQs(tool: ToolData): FAQ[] {
   if (tool.founderNames && tool.founderNames.length > 0) {
     faqs.push({
       question: `Who created ${tool.name}?`,
-      answer: `${tool.name} was created by ${tool.founderNames.join(', ')}${tool.headquartersCountry ? ` and is based in ${tool.headquartersCountry}` : ''}. The team focuses on ${tool.category || 'AI technology'} innovation.`
+      answer: `${tool.name} was created by ${tool.founderNames.join(', ')}${tool.headquartersCity || tool.headquartersCountry ? ` and is based in ${[tool.headquartersCity, tool.headquartersCountry].filter(Boolean).join(', ')}` : ''}. The team focuses on ${tool.category || 'AI technology'} innovation.`
     });
   }
 

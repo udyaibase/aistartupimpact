@@ -4,6 +4,7 @@ import React, { useState, useMemo, useRef, useEffect, useDeferredValue } from 'r
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import { useListRestore } from '@/hooks/useListRestore';
 import { Star, Zap, ArrowRight, CheckSquare, Square, X, BarChart, Search, Grid3X3, List, Loader2, SlidersHorizontal, ChevronDown, ChevronRight, SearchX } from 'lucide-react';
 import BookmarkButton from './BookmarkButton';
 import UpvoteButton from './tools/UpvoteButton';
@@ -81,6 +82,7 @@ interface ToolsListProps {
 }
 
 type SortOption = 'relevance' | 'rating' | 'upvotes' | 'name' | 'newest';
+const SORT_OPTIONS: SortOption[] = ['relevance', 'rating', 'upvotes', 'name', 'newest'];
 type ViewMode = 'grid' | 'list';
 
 const ITEMS_PER_PAGE = 30;
@@ -367,6 +369,54 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
       }
     }
   };
+
+  // Mirror the filters into the URL (replace, not push: filtering doesn't add history entries). The path is left
+  // alone, since category pages put the subcategory there themselves.
+  const filterQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    const put = (k: string, v: string, fallback = '') => { if (v && v !== fallback) params.set(k, v); };
+    put('q', searchQuery.trim());
+    if (!scopeCategory) put('category', selectedCategory, 'all');
+    if (!onSubcategoryChange) put('sub', selectedSubcategory, 'all');
+    put('pricing', selectedPricing, 'all');
+    put('tags', selectedTagIds.join(','));
+    put('trial', freeTrialOnly ? '1' : '');
+    put('sort', sortBy, searchQuery.trim() ? 'relevance' : 'rating');
+    put('view', viewMode, 'grid');
+    return params.toString();
+  }, [searchQuery, selectedCategory, selectedSubcategory, selectedPricing, selectedTagIds, freeTrialOnly, sortBy, viewMode, scopeCategory, onSubcategoryChange]);
+
+  // Filters live in the URL, so Back from a tool, a refresh or a shared link shows the same list. They are read
+  // after mounting (category pages are pre-rendered, so the server can't know them), and the URL isn't written
+  // until it has been read.
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const q = sp.get('q');
+    if (q) setSearchQuery(q);
+    if (!scopeCategory && sp.get('category')) setSelectedCategory(sp.get('category')!);
+    if (!onSubcategoryChange && sp.get('sub')) setSelectedSubcategory(sp.get('sub')!);
+    if (sp.get('pricing')) setSelectedPricing(sp.get('pricing')!);
+    const s = sp.get('sort');
+    if (s && SORT_OPTIONS.includes(s as SortOption)) setSortBy(s as SortOption);
+    else if (q) setSortBy('relevance');
+    if (sp.get('view') === 'list') setViewMode('list');
+    const tags = sp.get('tags')?.split(',').filter(Boolean);
+    if (tags?.length) setSelectedTagIds(tags);
+    if (sp.get('trial') === '1') setFreeTrialOnly(true);
+    // Once, on arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Skip the first run: it happens with the defaults, before the URL's filters above are applied.
+  const firstSync = useRef(true);
+  useEffect(() => {
+    if (firstSync.current) { firstSync.current = false; return; }
+    const url = `${window.location.pathname}${filterQuery ? `?${filterQuery}` : ''}`;
+    if (url !== window.location.pathname + window.location.search) window.history.replaceState(window.history.state, '', url);
+  }, [filterQuery]);
+
+  // Back from a tool (or a refresh) shows as many tools as before, at the same scroll position.
+  useListRestore('tools', filterQuery, visibleCount, (n) => setVisibleCount(Math.max(ITEMS_PER_PAGE, Math.min(n, 2000))));
 
   const onSubcategoryChangeRef = useRef(onSubcategoryChange);
   onSubcategoryChangeRef.current = onSubcategoryChange;

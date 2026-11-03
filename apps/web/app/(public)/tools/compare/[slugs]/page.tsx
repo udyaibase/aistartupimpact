@@ -1,4 +1,5 @@
 import { jsonLd } from "@/lib/json-ld";
+import { formatPlace } from '@udyaibase/utils/src/locations';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Metadata } from 'next';
@@ -63,7 +64,7 @@ export default async function ComparePage(props: { params: Promise<{ slugs: stri
     { label: 'Free Trial', icon: Calendar, values: tt.map(t => t.freeTrialDays ? `${t.freeTrialDays} days` : 'No'), higherIsBetter: true },
     { label: 'API Access', icon: Zap, values: tt.map(t => t.hasApi ? 'Yes' : 'No'), isBoolean: true },
     { label: 'Mobile App', icon: Smartphone, values: tt.map(t => t.hasMobileApp ? 'Yes' : 'No'), isBoolean: true },
-    { label: 'HQ', icon: Globe, values: tt.map(t => t.headquartersCountry || '—') },
+    { label: 'HQ', icon: Globe, values: tt.map(t => formatPlace(t.headquartersCity, t.headquartersCountry) || '—') },
     { label: 'Launch Year', icon: Calendar, values: tt.map(t => t.launchYear || '—') },
   ];
 

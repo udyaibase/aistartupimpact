@@ -6,6 +6,7 @@ const config: Config = {
     './app/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
     './lib/**/*.{js,ts,jsx,tsx,mdx}',
+    '../../packages/utils/src/**/*.tsx',
   ],
   darkMode: 'class',
   theme: {

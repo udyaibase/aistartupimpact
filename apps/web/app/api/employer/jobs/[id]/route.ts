@@ -3,6 +3,7 @@ import { prisma } from '@udyaibase/database';
 import { getEmployerSession } from '@/lib/employer-auth';
 import { setListingStatus } from '@/lib/jobs/listing-status';
 import { draftFromRow, draftToData, publishProblems, type JobDraft } from '@/lib/jobs/composer';
+import { standardJobLocation } from '@/lib/jobs/location';
 import { uniqueJobSlug } from '@/lib/jobs/slug';
 import { can, forbidden, canSeeJob } from '@/lib/employer/permissions';
 import { refreshPaths, refreshSections } from '@/lib/revalidate';
@@ -55,7 +56,9 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
     }
 
     const draft = { ...draftFromRow(job), ...(body.draft as Partial<JobDraft>) };
-    const data = draftToData(draft);
+    const loc = await standardJobLocation(draftToData(draft));
+    if (!loc.ok) return NextResponse.json({ error: loc.error, field: loc.field }, { status: 400 });
+    const data = loc.data;
     if (!data.title) return NextResponse.json({ error: 'Add a job title.', field: 'title' }, { status: 400 });
 
     if (job.status === 'OPEN' || job.status === 'PAUSED') {

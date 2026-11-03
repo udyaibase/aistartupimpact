@@ -1,5 +1,6 @@
 'use client';
 
+import { CityPicker, CountryPicker } from '@/components/LocationFields';
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -616,18 +617,20 @@ export default function NewJobPage() {
             </div>
           </div>
 
-          {form.workType !== 'REMOTE' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 font-jakarta">City</label>
-                <input type="text" value={form.city} onChange={e => updateField('city', e.target.value)} className="input-field" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 font-jakarta">Country</label>
-                <input type="text" value={form.country} onChange={e => updateField('country', e.target.value)} className="input-field" />
-              </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="job-country" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 font-jakarta">Country</label>
+              <CountryPicker id="job-country" value={form.country}
+                onChange={(c) => { updateField('country', c ?? ''); if (c !== form.country) updateField('city', ''); }} />
             </div>
-          )}
+            {form.workType !== 'REMOTE' && (
+              <div>
+                <label htmlFor="job-city" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 font-jakarta">City</label>
+                <CityPicker id="job-city" value={form.city} country={form.country || null}
+                  onChange={(c) => { updateField('city', c?.city ?? ''); if (c && !form.country) updateField('country', c.country); }} />
+              </div>
+            )}
+          </div>
 
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={form.visaSponsorship} onChange={e => updateField('visaSponsorship', e.target.checked)}

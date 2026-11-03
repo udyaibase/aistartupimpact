@@ -4,6 +4,7 @@ import { requireFounderAuth } from '@/lib/founder-auth';
 import { sendAdminReviewAlert, sendChangesUnderReviewEmail, sendSubmissionReceivedEmail } from '@/lib/founder-email';
 import { prisma } from '@udyaibase/database';
 import { revalidatePath } from 'next/cache';
+import { checkLocation } from '@/lib/locations';
 
 interface StartupSubmission {
   name: string;
@@ -53,6 +54,12 @@ interface StartupSubmission {
 export async function submitStartupAction(data: StartupSubmission) {
   try {
     const session = await requireFounderAuth();
+    // Headquarters only from the standard city list.
+    if (data.headquartersCity) {
+      const loc = await checkLocation({ city: data.headquartersCity });
+      if (!loc.ok) return { success: false, error: loc.error };
+      data = { ...data, headquartersCity: loc.city ?? undefined };
+    }
 
     // Generate clean SEO-friendly slug (no random hash)
     const { slugify } = await import('@/lib/slug-utils');
@@ -244,6 +251,12 @@ export async function submitStartupAction(data: StartupSubmission) {
 export async function updateStartupAction(id: string, data: StartupSubmission) {
   try {
     const session = await requireFounderAuth();
+    // Headquarters only from the standard city list.
+    if (data.headquartersCity) {
+      const loc = await checkLocation({ city: data.headquartersCity });
+      if (!loc.ok) return { success: false, error: loc.error };
+      data = { ...data, headquartersCity: loc.city ?? undefined };
+    }
 
     // Verify ownership using raw query
     const startups = await prisma.$queryRaw<any[]>`

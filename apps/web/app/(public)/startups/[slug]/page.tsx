@@ -1,5 +1,6 @@
 import { articlePath } from '@/lib/seo';
 import Link from 'next/link';
+import BackToListLink from '@/components/shared/BackToListLink';
 import Image from 'next/image';
 import { cache } from 'react';
 import { Metadata } from 'next';
@@ -443,7 +444,7 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
       <nav className="flex items-center gap-1.5 text-xs sm:text-sm font-jakarta text-gray-400 mb-6">
         <Link href="/" className="hover:text-brand">Home</Link>
         <ChevronRight className="w-3 h-3" />
-        <Link href="/startups" className="hover:text-brand">Startups</Link>
+        <BackToListLink scope="startups" href="/startups" className="hover:text-brand">Startups</BackToListLink>
         <ChevronRight className="w-3 h-3" />
         <span className="text-gray-600 dark:text-gray-300">{startup.name}</span>
       </nav>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { detectCategory } from '@/lib/categories';
-import { standardizeCityName } from '@udyaibase/utils/src/cities';
+import { checkLocation } from '@/lib/locations';
 import { apiRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
@@ -33,7 +33,10 @@ export async function POST(req: NextRequest) {
     // Auto-detect category if not provided
     const finalCategory = category || detectCategory(`${name} ${tagline} ${description || ''}`);
 
-    const finalCity = headquartersCity ? standardizeCityName(headquartersCity) : null;
+    // Headquarters only from the standard city list.
+    const loc = await checkLocation({ city: typeof headquartersCity === 'string' ? headquartersCity : '' });
+    if (!loc.ok) return NextResponse.json({ error: loc.error, field: 'headquartersCity' }, { status: 400 });
+    const finalCity = loc.city;
 
     // Insert startup
     const result = await sql`

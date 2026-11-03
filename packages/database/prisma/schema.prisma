@@ -143,6 +143,8 @@ model AiTool {
   hasMobileApp         Boolean                  @default(false)
   launchYear           Int?
   headquartersCountry  String?
+  /// City of the headquarters (standard city list); headquartersCountry holds its country.
+  headquartersCity     String?
   founderNames         String[]
   avgRating            Float                    @default(0)
   reviewCount          Int                      @default(0)

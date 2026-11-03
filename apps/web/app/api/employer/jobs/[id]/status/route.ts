@@ -7,6 +7,7 @@ import { getEmployerSession } from '@/lib/employer-auth';
 import { setListingStatus } from '@/lib/jobs/listing-status';
 import { canPublish } from '@/lib/jobs/trust';
 import { draftFromRow, publishProblems } from '@/lib/jobs/composer';
+import { standardJobLocation } from '@/lib/jobs/location';
 import { can, forbidden } from '@/lib/employer/permissions';
 import { refreshPaths, refreshSections } from '@/lib/revalidate';
 import { maybeStartTrial } from '@/lib/employer/trial';
@@ -65,6 +66,12 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     const problems = publishProblems(draftFromRow(listing));
     if (problems.length) {
       return NextResponse.json({ error: problems[0].message, field: problems[0].field, problems }, { status: 400 });
+    }
+    // Only listed places go live (older jobs may still hold a free-text city).
+    const loc = await standardJobLocation({ workType: listing.workType, city: listing.city, country: listing.country });
+    if (!loc.ok) return NextResponse.json({ error: `${loc.error} Open the job to fix it.`, field: loc.field }, { status: 400 });
+    if (loc.data.city !== listing.city || loc.data.country !== listing.country) {
+      await prisma.jobBoardListing.update({ where: { id }, data: { city: loc.data.city, country: loc.data.country, location: loc.data.location } });
     }
     const open = await prisma.jobBoardListing.count({ where: { employerId: session.id, status: 'OPEN', deletedAt: null } });
     const plan = effectivePlan(employer);

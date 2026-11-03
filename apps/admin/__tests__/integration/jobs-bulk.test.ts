@@ -10,6 +10,7 @@ vi.mock('@/lib/api-auth', () => auth);
 vi.mock('@/lib/audit-log', () => audit);
 vi.mock('@/lib/refresh-public', () => refresh);
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+vi.mock('@/lib/locations', () => ({ checkLocation: vi.fn(async () => ({ ok: true, city: null, state: null, country: null })) }));
 
 import { bulkJobAction } from '@/app/(dashboard)/jobs-board/actions';
 

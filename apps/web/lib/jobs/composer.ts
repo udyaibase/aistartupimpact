@@ -219,7 +219,7 @@ export function draftToData(input: Partial<JobDraft>) {
     workType: oneOf(WORK_TYPES, d.workType, 'HYBRID') as any,
     city: city || null,
     country: country || null,
-    location: d.workType === 'REMOTE' ? (country ? `Remote · ${country}` : 'Remote') : [city, country].filter(Boolean).join(', ') || null,
+    location: jobLocationLabel(d.workType, city, country),
     salaryCurrency: currency,
     salaryPeriod: 'yearly',
     salaryMin,
@@ -243,11 +243,17 @@ export function draftToData(input: Partial<JobDraft>) {
   };
 }
 
+/** The display location saved with a job ("Bengaluru, India", "Remote · India"). */
+export function jobLocationLabel(workType: string, city: string | null, country: string | null): string | null {
+  return workType === 'REMOTE' ? (country ? `Remote · ${country}` : 'Remote') : [city, country].filter(Boolean).join(', ') || null;
+}
+
 /** Field-level reasons a draft can't go live yet. Empty means publishable. */
 export function publishProblems(d: JobDraft): { field: keyof JobDraft; message: string }[] {
   const p: { field: keyof JobDraft; message: string }[] = [];
   if (d.title.trim().length < 3) p.push({ field: 'title', message: 'Add a job title.' });
-  if (d.workType !== 'REMOTE' && !d.city.trim()) p.push({ field: 'city', message: 'Add the city for an on-site or hybrid role.' });
+  if (!d.country.trim()) p.push({ field: 'country', message: 'Choose the country for this role.' });
+  if (d.workType !== 'REMOTE' && !d.city.trim()) p.push({ field: 'city', message: 'Choose the city for an on-site or hybrid role.' });
   if (d.salaryMin && d.salaryMax && parseFloat(d.salaryMax) < parseFloat(d.salaryMin)) p.push({ field: 'salaryMax', message: 'Maximum salary is lower than the minimum.' });
   if (d.description.trim().length < 100) p.push({ field: 'description', message: 'Write at least a short paragraph about the role (100+ characters).' });
   if (d.applicationType === 'EXTERNAL') {

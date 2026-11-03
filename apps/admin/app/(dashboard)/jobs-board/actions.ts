@@ -5,6 +5,7 @@ import { requireActionAuth } from '@/lib/api-auth';
 import { canDelete, logAuditEvent } from '@/lib/audit-log';
 import { revalidatePath } from 'next/cache';
 import { refreshPublic } from '@/lib/refresh-public';
+import { checkLocation } from '@/lib/locations';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -303,9 +304,22 @@ export async function checkDuplicateJobAction(title: string, startupId: string) 
   }
 }
 
+/** City and country only from the standard lists; the display label is rebuilt from them (as on the website). */
+async function standardJobLocation<T extends Partial<JobFormData>>(data: T): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
+  if (data.city === undefined && data.country === undefined) return { ok: true, data };
+  const loc = await checkLocation({ city: data.city ?? '', country: data.country ?? '' });
+  if (!loc.ok) return { ok: false, error: loc.error };
+  const city = loc.city;
+  const location = data.workType === 'REMOTE' ? (loc.country ? `Remote · ${loc.country}` : 'Remote') : [city, loc.country].filter(Boolean).join(', ') || null;
+  return { ok: true, data: { ...data, city: city ?? undefined, country: loc.country ?? undefined, location: location ?? undefined } };
+}
+
 export async function createJobAction(data: JobFormData) {
   const { error } = await requireActionAuth();
   if (error) return { success: false, error };
+  const loc = await standardJobLocation(data);
+  if (!loc.ok) return { success: false, error: loc.error };
+  data = loc.data;
 
   try {
     if (!data.title?.trim()) return { success: false, error: 'Title is required' };
@@ -374,6 +388,9 @@ export async function createJobAction(data: JobFormData) {
 export async function updateJobAction(id: string, data: Partial<JobFormData>) {
   const { error } = await requireActionAuth();
   if (error) return { success: false, error };
+  const loc = await standardJobLocation(data);
+  if (!loc.ok) return { success: false, error: loc.error };
+  data = loc.data;
 
   try {
     if (data.startupId) {

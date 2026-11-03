@@ -3,12 +3,12 @@
 import { neon } from '@neondatabase/serverless';
 import { revalidatePath } from 'next/cache';
 import { calculateImpactScore } from '@/lib/impact-score';
-import { standardizeCityName } from '@udyaibase/utils/src/cities';
 import { logAuditEvent, canDelete } from '@/lib/audit-log';
 import { startupApprovalHtml } from '@udyaibase/utils';
 import { sendEmailFireAndForget } from '@/lib/email-send';
 import { requireActionAuth } from '@/lib/api-auth';
 import { refreshPublic } from '@/lib/refresh-public';
+import { checkLocation } from '@/lib/locations';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -164,7 +164,10 @@ export async function createStartupAction(data: {
       cityId = cityMatch.length > 0 ? (cityMatch[0] as any).id : null;
     }
     
-    const finalCity = data.headquartersCity ? standardizeCityName(data.headquartersCity) : null;
+    // Headquarters only from the standard city list.
+    const loc = await checkLocation({ city: data.headquartersCity ?? '' });
+    if (!loc.ok) return { success: false, error: loc.error };
+    const finalCity = loc.city;
     
     const result = await sql`
       INSERT INTO "Startup" (
@@ -295,7 +298,10 @@ export async function updateStartupAction(id: string, data: {
       ? JSON.stringify(data.socialLinks)
       : null;
 
-    const finalCity = data.headquartersCity ? standardizeCityName(data.headquartersCity) : null;
+    // Headquarters only from the standard city list.
+    const loc = await checkLocation({ city: data.headquartersCity ?? '' });
+    if (!loc.ok) return { success: false, error: loc.error };
+    const finalCity = loc.city;
 
     // Resolve cityId for the update
     let updateCityId: string | null = null;

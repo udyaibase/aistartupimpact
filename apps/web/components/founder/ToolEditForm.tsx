@@ -1,5 +1,8 @@
 'use client';
 
+import { CityPicker, CountryPicker } from '@udyaibase/utils/src/LocationPickers';
+import { useExtraCities } from '@/components/shared/useExtraCities';
+import { CITY_REQUEST } from '@/lib/city-request';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
@@ -29,6 +32,7 @@ interface AiTool {
   launchYear?: number;
   founderNames?: string[];
   headquartersCountry?: string | null;
+  headquartersCity?: string | null;
   status: string;
   [key: string]: any;
 }
@@ -96,6 +100,7 @@ export default function ToolEditForm({ tool }: ToolEditFormProps) {
     setDraftLoaded(true);
   }, [tool.id]);
 
+  const extraCities = useExtraCities();
   const [formData, setFormData] = useState({
     name: tool.name,
     tagline: tool.tagline,
@@ -113,6 +118,7 @@ export default function ToolEditForm({ tool }: ToolEditFormProps) {
     launchYear: tool.launchYear || new Date().getFullYear(),
     founderNames: tool.founderNames?.join(', ') || '',
     headquartersCountry: tool.headquartersCountry || '',
+    headquartersCity: tool.headquartersCity || '',
     features: existingFeatures,
     useCases: existingUseCases,
     logoUrl: tool.logoUrl || '',
@@ -260,6 +266,7 @@ export default function ToolEditForm({ tool }: ToolEditFormProps) {
         launchYear: formData.launchYear,
         founderNames: founderNamesArray.length > 0 ? founderNamesArray : undefined,
         headquartersCountry: formData.headquartersCountry || undefined,
+        headquartersCity: formData.headquartersCity || undefined,
         features: featuresArray,
         useCases: useCasesArray,
         logoUrl: formData.logoUrl || undefined,
@@ -674,15 +681,12 @@ export default function ToolEditForm({ tool }: ToolEditFormProps) {
           <label htmlFor="headquartersCountry" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Headquarters
           </label>
-          <input
-            type="text"
-            id="headquartersCountry"
-            name="headquartersCountry"
-            value={formData.headquartersCountry}
-            onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
-            placeholder="e.g. United States, India"
-          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <CountryPicker id="headquartersCountry" value={formData.headquartersCountry ?? ''} clearable
+              onChange={(c) => setFormData((prev: typeof formData) => ({ ...prev, headquartersCountry: c ?? '', headquartersCity: c === prev.headquartersCountry ? prev.headquartersCity : '' }))} />
+            <CityPicker id="headquartersCity" value={formData.headquartersCity ?? ''} country={formData.headquartersCountry || null} extraCities={extraCities} requestHref={CITY_REQUEST}
+              onChange={(c) => setFormData((prev: typeof formData) => ({ ...prev, headquartersCity: c?.city ?? '', headquartersCountry: prev.headquartersCountry || c?.country || '' }))} />
+          </div>
         </div>
       </div>
 
