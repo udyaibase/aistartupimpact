@@ -8,7 +8,7 @@ import { endPlanNow } from '../plans/actions';
 import { refreshPublic, requestCreditNote } from '@/lib/refresh-public';
 
 /**
- * Billing overview and refunds for employer plans and event-host purchases (Pro, Boost).
+ * Billing overview and refunds for employer plans, event-host purchases (Pro, Boost) and funding-data downloads.
  * Online payments are refunded through Razorpay; manual (invoice/UPI) grants are only recorded,
  * since that money goes back by bank transfer. Super admins only.
  */
@@ -17,7 +17,7 @@ const DAY = 864e5;
 
 export interface BillingPayment {
   id: string;
-  source: 'EMPLOYER' | 'HOST';
+  source: 'EMPLOYER' | 'HOST' | 'FUNDING';
   accountId: string;
   account: string;
   email: string;
@@ -35,6 +35,7 @@ export interface BillingPayment {
 }
 
 const PRODUCT: Record<string, string> = { FEATURED: 'Employer · Featured', PREMIUM: 'Employer · Premium', PRO: 'Host · Pro', BOOST: 'Host · Event Boost' };
+const FUNDING_PACK: Record<string, string> = { STARTER: 'Starter (50)', GROWTH: 'Growth (250)', PRO: 'Pro (500)', SCALE: 'Scale (1,000)', FULL: 'Full Dataset' };
 
 /** Indian financial year start (1 April, IST) for a date. */
 function fyStart(now: Date) {
@@ -56,15 +57,16 @@ export async function billingOverviewAction() {
   // Net revenue (paid minus refunded), excluding GST, per range and source.
   const revenue = async (from: Date, to: Date | null) => {
     const where = { status: 'SUCCESS' as const, paidAt: { gte: from, ...(to ? { lt: to } : {}) } };
-    const [emp, host, tickets] = await Promise.all([
+    const [emp, host, tickets, funding] = await Promise.all([
       prisma.jobBoardPayment.findMany({ where, select: { amountPaise: true, totalPaise: true, refundAmountPaise: true } }),
       prisma.organizerPayment.findMany({ where, select: { amountPaise: true, totalPaise: true, refundAmountPaise: true } }),
       prisma.eventRegistration.aggregate({ where: { paymentStatus: 'PAID', paidAt: { gte: from, ...(to ? { lt: to } : {}) } }, _sum: { platformFeePaise: true } }),
+      prisma.fundingDataPurchase.findMany({ where, select: { amountPaise: true, totalPaise: true, refundAmountPaise: true } }),
     ]);
     // A refund is of the GST-inclusive total; take the same share off the pre-GST amount.
     const net = (rows: { amountPaise: number; totalPaise: number; refundAmountPaise: number | null }[]) =>
       rows.reduce((n, r) => n + r.amountPaise - Math.round(((r.refundAmountPaise ?? 0) * r.amountPaise) / Math.max(1, r.totalPaise)), 0);
-    return { employer: net(emp), host: net(host), ticketFees: tickets._sum.platformFeePaise ?? 0 };
+    return { employer: net(emp), host: net(host), fundingData: net(funding), ticketFees: tickets._sum.platformFeePaise ?? 0 };
   };
 
   const soon = new Date(now.getTime() + 7 * DAY);
@@ -79,6 +81,7 @@ export async function billingOverviewAction() {
     Promise.all([
       prisma.jobBoardPayment.count({ where: { status: 'FAILED', createdAt: { gte: new Date(now.getTime() - 30 * DAY) } } }),
       prisma.organizerPayment.count({ where: { status: 'FAILED', createdAt: { gte: new Date(now.getTime() - 30 * DAY) } } }),
+      prisma.fundingDataPurchase.count({ where: { status: 'FAILED', createdAt: { gte: new Date(now.getTime() - 30 * DAY) } } }),
     ]),
     listPayments(),
   ]);
@@ -97,13 +100,13 @@ export async function billingOverviewAction() {
       ...expiringEmployers.map((e) => ({ kind: 'EMPLOYER' as const, id: e.id, name: e.companyName, email: e.email, plan: e.plan, endsAt: e.planExpiresAt!.toISOString() })),
       ...expiringHosts.map((h) => ({ kind: 'HOST' as const, id: h.id, name: h.company || h.name, email: h.email, plan: 'PRO', endsAt: h.planExpiresAt!.toISOString() })),
     ].sort((a, b) => a.endsAt.localeCompare(b.endsAt)),
-    failed30d: failed[0] + failed[1],
+    failed30d: failed[0] + failed[1] + failed[2],
     payments: recent,
   };
 }
 
 async function listPayments(): Promise<BillingPayment[]> {
-  const [emp, host] = await Promise.all([
+  const [emp, host, funding] = await Promise.all([
     prisma.jobBoardPayment.findMany({
       where: { status: { in: ['SUCCESS', 'FAILED'] } }, orderBy: { createdAt: 'desc' }, take: 100,
       include: { Employer: { select: { id: true, companyName: true, email: true } } },
@@ -112,6 +115,7 @@ async function listPayments(): Promise<BillingPayment[]> {
       where: { status: { in: ['SUCCESS', 'FAILED'] } }, orderBy: { createdAt: 'desc' }, take: 100,
       include: { organizer: { select: { id: true, name: true, company: true, email: true } } },
     }),
+    prisma.fundingDataPurchase.findMany({ where: { status: { in: ['SUCCESS', 'FAILED'] } }, orderBy: { createdAt: 'desc' }, take: 100 }),
   ]);
   const rows: BillingPayment[] = [
     ...emp.map((p) => ({
@@ -126,6 +130,15 @@ async function listPayments(): Promise<BillingPayment[]> {
       invoiceNumber: p.invoiceNumber, createdAt: p.createdAt.toISOString(), paidAt: p.paidAt?.toISOString() ?? null,
       refundedAt: p.refundedAt?.toISOString() ?? null, refundAmountPaise: p.refundAmountPaise, refundReason: p.refundReason, creditNoteNumber: p.creditNoteNumber,
     })),
+    ...funding.map((p) => {
+      const bill = (p.billingDetails ?? {}) as { billingName?: string };
+      return {
+        id: p.id, source: 'FUNDING' as const, accountId: p.email, account: bill.billingName || p.email, email: p.email,
+        product: `Funding data · ${FUNDING_PACK[p.pack] ?? p.pack}`, totalPaise: p.totalPaise, status: p.status, online: true,
+        invoiceNumber: p.invoiceNumber, createdAt: p.createdAt.toISOString(), paidAt: p.paidAt?.toISOString() ?? null,
+        refundedAt: p.refundedAt?.toISOString() ?? null, refundAmountPaise: p.refundAmountPaise, refundReason: p.refundReason, creditNoteNumber: p.creditNoteNumber,
+      };
+    }),
   ];
   return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 100);
 }
@@ -154,12 +167,13 @@ const rupees = (paise: number) => `₹${(paise / 100).toLocaleString('en-IN', { 
  * Refund one payment, fully or partly, once. Optionally end what it bought: the plan (employer, host Pro)
  * or the Boost on that event. The customer is emailed. GST: the invoice needs a credit note from accounts.
  */
-export async function refundPaymentAction(input: { source: 'EMPLOYER' | 'HOST'; id: string; amountRupees: number; reason: string; endAccess: boolean }) {
+export async function refundPaymentAction(input: { source: 'EMPLOYER' | 'HOST' | 'FUNDING'; id: string; amountRupees: number; reason: string; endAccess: boolean }) {
   const { session, error } = await requireActionAuth(['SUPER_ADMIN']);
   if (error) return { success: false as const, error };
   const reason = input.reason.trim().slice(0, 300);
   if (reason.length < 3) return { success: false as const, error: 'Add a short reason (it’s kept in the audit log).' };
 
+  if (input.source === 'FUNDING') return refundFundingPurchase(input, reason, session?.user?.email ?? 'admin');
   const p = input.source === 'EMPLOYER'
     ? await prisma.jobBoardPayment.findUnique({ where: { id: input.id }, include: { Employer: { select: { id: true, email: true, companyName: true } } } })
     : await prisma.organizerPayment.findUnique({ where: { id: input.id }, include: { organizer: { select: { id: true, email: true, name: true } } } });
@@ -219,4 +233,43 @@ ${input.endAccess ? `<p style="margin:0 0 12px;font-size:15px;line-height:1.6">$
     });
   }
   return { success: true as const, refundId, online };
+}
+
+/**
+ * Refund a funding-data purchase. Any recorded refund stops its download link (the web app checks refundedAt);
+ * the buyer keeps files already downloaded. Credit note and email as for other payments.
+ */
+async function refundFundingPurchase(input: { id: string; amountRupees: number }, reason: string, adminEmail: string) {
+  const p = await prisma.fundingDataPurchase.findUnique({ where: { id: input.id } });
+  if (!p) return { success: false as const, error: 'Payment not found.' };
+  if (p.status !== 'SUCCESS') return { success: false as const, error: 'Only successful payments can be refunded.' };
+  if (p.refundedAt) return { success: false as const, error: 'This payment was already refunded.' };
+  const amountPaise = Math.round(Number(input.amountRupees) * 100);
+  if (!Number.isFinite(amountPaise) || amountPaise <= 0 || amountPaise > p.totalPaise) {
+    return { success: false as const, error: `Enter an amount between ₹1 and ${rupees(p.totalPaise)}.` };
+  }
+  if (!p.razorpayPaymentId) return { success: false as const, error: 'No Razorpay payment id on this record, so it can’t be refunded online.' };
+  const r = await razorpayRefund(p.razorpayPaymentId, amountPaise, { purpose: 'ADMIN_REFUND', paymentRecord: p.id });
+  if (!r.ok) return { success: false as const, error: r.error };
+
+  await prisma.fundingDataPurchase.update({
+    where: { id: p.id },
+    data: { refundedAt: new Date(), refundId: r.id, refundAmountPaise: amountPaise, refundReason: reason, refundedByEmail: adminEmail },
+  });
+  await requestCreditNote('funding', p.id);
+  await logAuditEvent({
+    action: 'UPDATE', resourceType: 'BILLING_PAYMENT', resourceId: p.id, resourceName: 'FUNDING refund',
+    before: { refundedAt: null }, after: { refundAmountPaise: amountPaise, refundId: r.id, online: true, reason },
+  });
+  sendEmailFireAndForget({
+    to: p.email,
+    subject: `Your refund of ${rupees(amountPaise)} from Udyaibase`,
+    type: 'billing_refund',
+    html: `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1f2937;max-width:560px;margin:0 auto;padding:24px">
+<h1 style="font-size:20px;margin:0 0 8px">We’ve refunded ${rupees(amountPaise)}</h1>
+<p style="margin:0 0 12px;font-size:15px;line-height:1.6">It goes back to the card, UPI or account you paid with, usually within 5–7 working days.${p.invoiceNumber ? ` This relates to invoice ${p.invoiceNumber}.` : ''}</p>
+<p style="margin:0 0 12px;font-size:15px;line-height:1.6">The download link for this funding dataset no longer works.</p>
+<p style="margin:0;font-size:13px;color:#6b7280">Questions? Reply to this email.</p></div>`,
+  });
+  return { success: true as const, refundId: r.id, online: true };
 }

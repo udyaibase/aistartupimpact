@@ -4,9 +4,12 @@ import { sendEmail } from '@/lib/email/send';
 import { BILLING_SELECT, GSTIN_RE, formatBillingAddress, panFromGstin, profileFromRow, type BillingProfile } from '@/lib/billing/details';
 import { GST_STATES } from '@/lib/billing/gst-states';
 import { planSoldName } from '@/lib/employer/plans';
+import { isPackKey, PACKS } from '@/lib/funding/packs';
+
+const fundingPackName = (k: string) => (isPackKey(k) ? PACKS[k].name : k);
 
 /**
- * GST tax invoices for employer plans and event-host purchases (Pro, Event Boost).
+ * GST tax invoices for employer plans, event-host purchases (Pro, Event Boost) and funding-data downloads.
  *
  * - Seller details come from env: INVOICE_SELLER_NAME, INVOICE_SELLER_GSTIN, INVOICE_SELLER_ADDRESS, INVOICE_SAC
  *   (to be confirmed by the CA), optional INVOICE_SELLER_EMAIL, INVOICE_SELLER_CIN, INVOICE_PREFIX (default UTPL).
@@ -21,7 +24,7 @@ import { planSoldName } from '@/lib/employer/plans';
 export { GSTIN_RE } from '@/lib/billing/details';
 export { GST_STATES } from '@/lib/billing/gst-states';
 
-export type InvoiceTable = 'employer' | 'organizer';
+export type InvoiceTable = 'employer' | 'organizer' | 'funding';
 
 export function sellerConfig() {
   const name = process.env.INVOICE_SELLER_NAME;
@@ -85,6 +88,18 @@ interface PaymentRow {
 const ACCOUNT_SELECT = { email: true, ...BILLING_SELECT } as const;
 
 async function loadPayment(table: InvoiceTable, id: string) {
+  if (table === 'funding') {
+    // No account: the bill-to entered at checkout stands in for a billing profile.
+    const p = await prisma.fundingDataPurchase.findUnique({ where: { id } });
+    if (!p) return null;
+    const details = (p.billingDetails ?? {}) as Partial<Record<keyof typeof ACCOUNT_SELECT, unknown>>;
+    const name = typeof details.billingName === 'string' && details.billingName ? details.billingName : p.email;
+    return {
+      pay: { ...p, periodStart: p.paidAt, periodEnd: p.accessExpiresAt } as PaymentRow, ownerId: p.email, accountName: name,
+      account: { ...details, email: p.email } as Partial<Record<keyof BillingProfile, unknown>> & { email: string },
+      description: `Udyaibase funding dataset (${fundingPackName(p.pack)}), digital download`,
+    };
+  }
   if (table === 'employer') {
     const p = await prisma.jobBoardPayment.findUnique({ where: { id }, include: { Employer: { select: { id: true, companyName: true, ...ACCOUNT_SELECT } } } });
     if (!p) return null;
@@ -106,7 +121,16 @@ async function loadPayment(table: InvoiceTable, id: string) {
 type PaymentPatch = { invoiceNumber?: string; billingSnapshot?: object; invoiceEmailedAt?: Date; creditNoteNumber?: string; creditNoteAt?: Date; creditNoteEmailedAt?: Date };
 async function setPaymentFields(table: InvoiceTable, id: string, data: PaymentPatch, tx = prisma) {
   if (table === 'employer') await tx.jobBoardPayment.update({ where: { id }, data });
+  else if (table === 'funding') await tx.fundingDataPurchase.update({ where: { id }, data });
   else await tx.organizerPayment.update({ where: { id }, data });
+}
+
+/** The numbering columns of a payment, read inside the numbering transaction. */
+async function numbersOf(tx: typeof prisma, table: InvoiceTable, id: string) {
+  const select = { invoiceNumber: true, billingSnapshot: true, creditNoteNumber: true } as const;
+  if (table === 'employer') return tx.jobBoardPayment.findUnique({ where: { id }, select });
+  if (table === 'funding') return tx.fundingDataPurchase.findUnique({ where: { id }, select });
+  return tx.organizerPayment.findUnique({ where: { id }, select });
 }
 
 export interface IssuedInvoice {
@@ -134,9 +158,7 @@ export async function issueInvoice(table: InvoiceTable, paymentId: string): Prom
     const issuedOn = pay.paidAt ?? pay.createdAt;
     const fresh: BillingSnapshot = { ...profileFromRow(loaded.account, loaded.account.email), accountName: loaded.accountName, accountEmail: loaded.account.email };
     await prisma.$transaction(async (tx) => {
-      const current = table === 'employer'
-        ? await tx.jobBoardPayment.findUnique({ where: { id: pay.id }, select: { invoiceNumber: true, billingSnapshot: true } })
-        : await tx.organizerPayment.findUnique({ where: { id: pay.id }, select: { invoiceNumber: true, billingSnapshot: true } });
+      const current = await numbersOf(tx as typeof prisma, table, pay.id);
       let number = current?.invoiceNumber ?? null;
       if (!number) {
         const fy = financialYear(issuedOn);
@@ -354,8 +376,10 @@ export async function emailInvoice(table: InvoiceTable, paymentId: string, opts:
 <tr><td style="padding:6px 0;color:#6b7280">Billed to</td><td style="padding:6px 0;text-align:right">${esc(inv.snapshot.billingName || inv.snapshot.accountName)}</td></tr>
 <tr><td style="padding:6px 0;color:#6b7280;border-top:1px solid #e5e7eb">Total paid (incl. GST)</td><td style="padding:6px 0;text-align:right;font-weight:600;border-top:1px solid #e5e7eb">₹${(inv.totalPaise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td></tr>
 </table>
-<p style="margin:0 0 8px"><a href="${billingUrl}" style="display:inline-block;background:#A50F15;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 20px;border-radius:10px">View billing</a></p>
-<p style="margin:12px 0 0;font-size:13px;color:#6b7280">You can download all your invoices from the billing page. Reply to this email with any questions.</p></div>`,
+${table === 'funding'
+    ? '<p style="margin:12px 0 0;font-size:13px;color:#6b7280">Keep this email for your records. Reply to it with any questions.</p></div>'
+    : `<p style="margin:0 0 8px"><a href="${billingUrl}" style="display:inline-block;background:#A50F15;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 20px;border-radius:10px">View billing</a></p>
+<p style="margin:12px 0 0;font-size:13px;color:#6b7280">You can download all your invoices from the billing page. Reply to this email with any questions.</p></div>`}`,
   });
   if (!r.success) return { ok: false, error: 'Couldn’t send the email. Try again in a minute.' };
   await setPaymentFields(table, paymentId, { invoiceEmailedAt: new Date() });
@@ -366,13 +390,16 @@ export async function emailInvoice(table: InvoiceTable, paymentId: string, opts:
 export async function sendPendingInvoices(limit = 50): Promise<number> {
   if (!invoicesEnabled()) return 0;
   const since = new Date(Date.now() - 45 * 864e5); // don't surprise people with very old invoices on first enable
-  const [emp, org] = await Promise.all([
-    prisma.jobBoardPayment.findMany({ where: { status: 'SUCCESS', totalPaise: { gt: 0 }, invoiceEmailedAt: null, paidAt: { gte: since } }, select: { id: true }, take: limit }),
-    prisma.organizerPayment.findMany({ where: { status: 'SUCCESS', totalPaise: { gt: 0 }, invoiceEmailedAt: null, paidAt: { gte: since } }, select: { id: true }, take: limit }),
+  const where = { status: 'SUCCESS' as const, totalPaise: { gt: 0 }, invoiceEmailedAt: null, paidAt: { gte: since } };
+  const [emp, org, fund] = await Promise.all([
+    prisma.jobBoardPayment.findMany({ where, select: { id: true }, take: limit }),
+    prisma.organizerPayment.findMany({ where, select: { id: true }, take: limit }),
+    prisma.fundingDataPurchase.findMany({ where, select: { id: true }, take: limit }),
   ]);
   let sent = 0;
   for (const p of emp) if ((await emailInvoice('employer', p.id)).ok) sent++;
   for (const p of org) if ((await emailInvoice('organizer', p.id)).ok) sent++;
+  for (const p of fund) if ((await emailInvoice('funding', p.id)).ok) sent++;
   return sent;
 }
 
@@ -413,9 +440,7 @@ export async function issueCreditNote(table: InvoiceTable, paymentId: string): P
   if (!pay.creditNoteNumber) {
     const refundedAt = pay.refundedAt!;
     await prisma.$transaction(async (tx) => {
-      const current = table === 'employer'
-        ? await tx.jobBoardPayment.findUnique({ where: { id: pay.id }, select: { creditNoteNumber: true } })
-        : await tx.organizerPayment.findUnique({ where: { id: pay.id }, select: { creditNoteNumber: true } });
+      const current = await numbersOf(tx as typeof prisma, table, pay.id);
       if (current?.creditNoteNumber) return;
       const fy = financialYear(refundedAt);
       const counter = await tx.invoiceCounter.upsert({ where: { fy: `CN:${fy}` }, create: { fy: `CN:${fy}`, next: 2 }, update: { next: { increment: 1 } } });
@@ -498,12 +523,14 @@ export async function emailCreditNote(table: InvoiceTable, paymentId: string, op
 export async function sendPendingCreditNotes(limit = 50): Promise<number> {
   if (!invoicesEnabled()) return 0;
   const where = { refundedAt: { not: null }, refundAmountPaise: { gt: 0 }, creditNoteEmailedAt: null } as const;
-  const [emp, org] = await Promise.all([
+  const [emp, org, fund] = await Promise.all([
     prisma.jobBoardPayment.findMany({ where, select: { id: true }, take: limit }),
     prisma.organizerPayment.findMany({ where, select: { id: true }, take: limit }),
+    prisma.fundingDataPurchase.findMany({ where, select: { id: true }, take: limit }),
   ]);
   let sent = 0;
   for (const p of emp) if ((await emailCreditNote('employer', p.id)).ok) sent++;
   for (const p of org) if ((await emailCreditNote('organizer', p.id)).ok) sent++;
+  for (const p of fund) if ((await emailCreditNote('funding', p.id)).ok) sent++;
   return sent;
 }

@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     return new NextResponse(Buffer.from(cache.pdf), {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="udyaibase-ai-funding-report-${new Date().toISOString().slice(0, 10)}.pdf"`,
+        'Content-Disposition': `attachment; filename="udyaibase-ai-funding-snapshot-${new Date().toISOString().slice(0, 10)}.pdf"`,
         'Cache-Control': 'private, no-store',
         'X-Robots-Tag': 'noindex',
       },

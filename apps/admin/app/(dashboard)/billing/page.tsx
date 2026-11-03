@@ -14,7 +14,7 @@ const card = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-
 const input = 'min-h-[38px] px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20';
 
 function RevenueCard({ label, r }: { label: string; r: Rev }) {
-  const total = r.employer + r.host + r.ticketFees;
+  const total = r.employer + r.host + r.fundingData + r.ticketFees;
   return (
     <div className={`${card} p-4`}>
       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
@@ -22,6 +22,7 @@ function RevenueCard({ label, r }: { label: string; r: Rev }) {
       <dl className="mt-2 space-y-0.5 text-xs text-gray-600 dark:text-gray-400">
         <div className="flex justify-between"><dt>Employer plans</dt><dd className="tabular-nums">{rupees(r.employer)}</dd></div>
         <div className="flex justify-between"><dt>Host Pro &amp; Boosts</dt><dd className="tabular-nums">{rupees(r.host)}</dd></div>
+        <div className="flex justify-between"><dt>Funding data</dt><dd className="tabular-nums">{rupees(r.fundingData)}</dd></div>
         <div className="flex justify-between"><dt>Ticket fees</dt><dd className="tabular-nums">{rupees(r.ticketFees)}</dd></div>
       </dl>
     </div>
@@ -35,6 +36,7 @@ function RefundDialog({ p, onClose, onDone }: { p: BillingPayment; onClose: () =
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const boost = p.product.includes('Boost');
+  const funding = p.source === 'FUNDING';
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -65,10 +67,14 @@ function RefundDialog({ p, onClose, onDone }: { p: BillingPayment; onClose: () =
           <label htmlFor="rf-reason" className="block text-sm font-semibold text-gray-900 dark:text-white mb-1">Reason</label>
           <input id="rf-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} placeholder="e.g. Charged twice, cancelled within 7 days" className={`${input} w-full`} />
         </div>
-        <label className="flex items-start gap-2 text-sm text-gray-800 dark:text-gray-200 cursor-pointer">
-          <input type="checkbox" checked={endAccess} onChange={(e) => setEndAccess(e.target.checked)} className="mt-0.5 w-4 h-4 accent-brand" />
-          {boost ? 'End the Boost on that event now' : 'End their paid plan now (drops to Free)'}
-        </label>
+        {funding ? (
+          <p className="text-xs text-gray-600 dark:text-gray-400">Their download link stops working once the refund is recorded.</p>
+        ) : (
+          <label className="flex items-start gap-2 text-sm text-gray-800 dark:text-gray-200 cursor-pointer">
+            <input type="checkbox" checked={endAccess} onChange={(e) => setEndAccess(e.target.checked)} className="mt-0.5 w-4 h-4 accent-brand" />
+            {boost ? 'End the Boost on that event now' : 'End their paid plan now (drops to Free)'}
+          </label>
+        )}
         <p className="text-xs text-gray-500">GST: ask accounts to issue a credit note against the original invoice.</p>
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
@@ -101,7 +107,7 @@ export default function BillingAdminPage() {
     <div className="space-y-5 font-jakarta">
       <div>
         <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2"><Receipt className="w-5 h-5 text-brand" /> Billing</h1>
-        <p className="text-xs text-gray-500 mt-0.5">Revenue excludes GST and is net of refunds. Employer plans and host Pro/Boosts; ticket fees are Udyaibase’s share of paid tickets.</p>
+        <p className="text-xs text-gray-500 mt-0.5">Revenue excludes GST and is net of refunds. Employer plans, host Pro/Boosts and funding data; ticket fees are Udyaibase’s share of paid tickets.</p>
       </div>
 
       {message && <p role="status" className="text-sm text-green-700 dark:text-green-400">{message}</p>}

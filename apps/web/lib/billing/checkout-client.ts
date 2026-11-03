@@ -22,7 +22,8 @@ export interface CheckoutOrder {
   prefill?: Record<string, string>;
 }
 
-export type CheckoutOutcome = { ok: true } | { ok: false; cancelled?: boolean; error: string };
+/** `data` is the verify route's JSON (e.g. a download link). */
+export type CheckoutOutcome = { ok: true; data?: Record<string, unknown> } | { ok: false; cancelled?: boolean; error: string };
 
 export async function payWithRazorpay(order: CheckoutOrder, verifyUrl: string): Promise<CheckoutOutcome> {
   if (!(await loadCheckout()) || !window.Razorpay) return { ok: false, error: 'Couldn’t load the payment window. Check your connection or ad blocker.' };
@@ -35,7 +36,7 @@ export async function payWithRazorpay(order: CheckoutOrder, verifyUrl: string): 
         try {
           const v = await fetch(verifyUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(r) });
           const d = await v.json().catch(() => ({}));
-          resolve(v.ok ? { ok: true } : { ok: false, error: d.error || 'We couldn’t confirm the payment yet. It will activate within a few minutes.' });
+          resolve(v.ok ? { ok: true, data: d } : { ok: false, error: d.error || 'We couldn’t confirm the payment yet. It will activate within a few minutes.' });
         } catch {
           resolve({ ok: false, error: 'Payment taken, but we couldn’t confirm it from this device. It will activate within a few minutes.' });
         }

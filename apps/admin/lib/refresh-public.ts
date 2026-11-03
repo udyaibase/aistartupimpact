@@ -41,7 +41,7 @@ export function withPublicRefresh<A extends unknown[]>(sections: PublicSection[]
  * After a refund: ask the web app to issue and email the GST credit note (apps/web/app/api/webhooks/credit-note).
  * Never throws; the web app's daily cron issues any credit note this call missed.
  */
-export async function requestCreditNote(table: 'employer' | 'organizer', paymentId: string): Promise<void> {
+export async function requestCreditNote(table: 'employer' | 'organizer' | 'funding', paymentId: string): Promise<void> {
   const secret = process.env.INTERNAL_API_SECRET;
   if (!secret) return;
   const base = (process.env.WEB_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://udyaibase.com').replace(/\/$/, '');

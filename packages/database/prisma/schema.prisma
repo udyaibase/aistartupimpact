@@ -182,6 +182,7 @@ model AiTool {
   FounderUser          FounderUser?             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   Startup              Startup?                 @relation(fields: [startupId], references: [id])
   Article              Article[]
+  ArticleMentions      ArticleToolMention[]
   ToolCon              ToolCon[]
   ToolPro              ToolPro[]
   ToolReview           ToolReview[]
@@ -271,6 +272,8 @@ model Article {
   FounderAuthor                                 FounderUser?           @relation("ArticleFounderAuthor", fields: [founderAuthorId], references: [id], onDelete: SetNull)
   ArticleCoAuthor                               ArticleCoAuthor[]
   ArticleTag                                    ArticleTag[]
+  StartupMentions                               ArticleStartupMention[]
+  ToolMentions                                  ArticleToolMention[]
   ArticleVersion                                ArticleVersion[]
   Comment                                       Comment[]
   ContentActivityLog                            ContentActivityLog[]
@@ -300,6 +303,30 @@ model ArticleCoAuthor {
   User      User    @relation(fields: [userId], references: [id])
 
   @@id([articleId, userId])
+}
+
+/// Startups @-tagged (or linked) in an article's body. Kept in sync on every admin save; read by startup profiles.
+model ArticleStartupMention {
+  articleId String
+  startupId String
+  createdAt DateTime @default(now())
+  Article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  Startup   Startup  @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, startupId])
+  @@index([startupId])
+}
+
+/// AI tools @-tagged (or linked) in an article's body. Kept in sync on every admin save; read by tool profiles.
+model ArticleToolMention {
+  articleId String
+  toolId    String
+  createdAt DateTime @default(now())
+  Article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  Tool      AiTool   @relation(fields: [toolId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, toolId])
+  @@index([toolId])
 }
 
 model ArticleTag {
@@ -1197,6 +1224,7 @@ model Startup {
   AiTool                                     AiTool[]
   Article                                    Article[]
   FundingRound                               FundingRound[]
+  ArticleMentions                            ArticleStartupMention[]
   Job                                        Job[]
   StartupReview                              StartupReview[]
   SavedStartup                               SavedStartup[]
@@ -4047,6 +4075,50 @@ model OrganizerPayment {
 }
 
 /// Sequential GST invoice numbers per financial year (April to March), shared by all portals.
+/// Paid funding-data downloads (Excel) bought on /funding. No account: the buyer is identified by a verified email.
+model FundingDataPurchase {
+  id                  String                @id @default(cuid())
+  email               String
+  /// STARTER | GROWTH | PRO | SCALE | FULL (lib/funding/packs.ts)
+  pack                String
+  /// Startups in the file; null = every startup (FULL).
+  startupLimit        Int?
+  /// The buyer's choices (date range, sectors, stages, cities, currency, sheets), reused on every re-download.
+  filters             Json
+  /// Startups matching the filters when bought, for support questions.
+  matchedAtPurchase   Int
+  amountPaise         Int
+  gstPaise            Int
+  totalPaise          Int
+  razorpayOrderId     String                @unique
+  razorpayPaymentId   String?               @unique
+  status              JobBoardPaymentStatus @default(PENDING)
+  /// Bill-to entered at checkout (name, state, optional GSTIN), in the billing-profile shape.
+  billingDetails      Json
+  consentAt           DateTime
+  consentText         String
+  accessExpiresAt     DateTime?
+  downloadCount       Int                   @default(0)
+  lastDownloadAt      DateTime?
+  invoiceNumber       String?
+  billingSnapshot     Json?
+  invoiceEmailedAt    DateTime?
+  creditNoteNumber    String?
+  creditNoteAt        DateTime?
+  creditNoteEmailedAt DateTime?
+  createdAt           DateTime              @default(now())
+  paidAt              DateTime?
+  failedAt            DateTime?
+  refundedAt          DateTime?
+  refundId            String?
+  refundAmountPaise   Int?
+  refundReason        String?
+  refundedByEmail     String?
+
+  @@index([email, createdAt])
+  @@index([status, paidAt])
+}
+
 model InvoiceCounter {
   fy   String @id
   next Int    @default(1)

@@ -4,12 +4,14 @@ import { webhookSignatureValid } from '@/lib/billing/razorpay';
 import { activatePayment } from '@/lib/employer/billing';
 import { activateOrganizerPayment } from '@/lib/events/billing';
 import { confirmTicketPayment, markTicketPaymentFailed } from '@/lib/events/tickets';
+import { activateFundingPurchase, markFundingPurchaseFailed } from '@/lib/funding/purchase';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * Razorpay webhook for subscriptions sold in the portals (events: payment.captured, order.paid, payment.failed).
- * Employer plans and event-host plans/boosts; other products on the account (e.g. founder ads) are ignored.
+ * Employer plans, event-host plans/boosts, event tickets and funding-data downloads; other products on the account
+ * (e.g. founder ads) are ignored.
  */
 export async function POST(request: NextRequest) {
   const raw = await request.text();
@@ -24,7 +26,14 @@ export async function POST(request: NextRequest) {
   const isEmployer = purpose === 'EMPLOYER_PLAN';
   const isHost = purpose === 'ORGANIZER_PLAN' || purpose === 'ORGANIZER_BOOST';
   const isTicket = purpose === 'EVENT_TICKET';
-  if (!entity?.order_id || (!isEmployer && !isHost && !isTicket)) return NextResponse.json({ status: 'ignored' });
+  const isFunding = purpose === 'FUNDING_DATA';
+  if (!entity?.order_id || (!isEmployer && !isHost && !isTicket && !isFunding)) return NextResponse.json({ status: 'ignored' });
+
+  if (isFunding) {
+    if (body.event === 'payment.captured' || body.event === 'order.paid') return NextResponse.json({ status: await activateFundingPurchase(entity.order_id, String(entity.id)) });
+    if (body.event === 'payment.failed') await markFundingPurchaseFailed(entity.order_id);
+    return NextResponse.json({ status: 'ok' });
+  }
 
   if (isTicket) {
     if (body.event === 'payment.captured' || body.event === 'order.paid') return NextResponse.json({ status: await confirmTicketPayment(entity.order_id, String(entity.id)) });
