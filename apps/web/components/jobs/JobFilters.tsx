@@ -2,6 +2,7 @@
 
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { clsx } from 'clsx';
 import { SlidersHorizontal, X, ChevronDown } from 'lucide-react';
 
@@ -58,12 +59,14 @@ interface JobFiltersProps {
   currentDatePosted?: string;
   total: number;
   workTypeCounts?: WorkTypeCount[];
+  /** Render only the desktop sidebar or only the mobile filter row (the page puts the row in its sticky search bar). */
+  part?: 'desktop' | 'mobile';
 }
 
 export default function JobFilters({
   currentCategory, currentWorkType, currentExperience,
   currentVisa, currentSort, total, workTypeCounts = [],
-  currentSalaryDisclosed, currentDatePosted,
+  currentSalaryDisclosed, currentDatePosted, part,
 }: JobFiltersProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -122,9 +125,10 @@ export default function JobFilters({
 
   return (
     <>
-      {/* ─── DESKTOP SIDEBAR ─── */}
+      {/* ─── DESKTOP SIDEBAR ─── sticks just below the sticky search bar (its bottom is --jobs-filter-top) */}
+      {part !== 'mobile' && (
       <aside className="hidden lg:block w-60 shrink-0">
-        <div className="sticky top-28 bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 p-5 shadow-sm max-h-[calc(100vh-8rem)] overflow-y-auto">
+        <div className="sticky top-[var(--jobs-filter-top,7rem)] bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 p-5 shadow-sm max-h-[calc(100vh-var(--jobs-filter-top,7rem)-1rem)] overflow-y-auto">
           <div className="flex items-center justify-between mb-5">
             <h3 className="font-sora font-bold text-base text-navy dark:text-white">Filters</h3>
             {activeFilterCount > 0 && (
@@ -213,7 +217,10 @@ export default function JobFilters({
         </div>
       </aside>
 
+      )}
+
       {/* ─── MOBILE: single row with filter + count + sort, plus bottom sheet ─── */}
+      {part !== 'desktop' && (
       <div className="lg:hidden">
         {/* Combined filter + count + sort row */}
         <div className="flex items-center justify-between gap-2">
@@ -245,8 +252,9 @@ export default function JobFilters({
           </p>
         </div>
 
-        {/* Compact bottom sheet — ~30% height, jobs visible behind */}
-        {mobileOpen && (
+        {/* Compact bottom sheet — ~30% height, jobs visible behind. Portaled: the row sits in a sticky bar that can
+            be transformed, which would otherwise trap this fixed overlay inside it. */}
+        {mobileOpen && createPortal(
           <div className="fixed inset-0 z-50">
             <div className="absolute inset-0 bg-black/30" onClick={() => setMobileOpen(false)} />
             <div className="absolute bottom-16 left-0 right-0 bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl animate-slide-up" style={{ maxHeight: '45vh' }}>
@@ -376,9 +384,11 @@ export default function JobFilters({
                 </button>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body,
         )}
       </div>
+      )}
     </>
   );
 }
