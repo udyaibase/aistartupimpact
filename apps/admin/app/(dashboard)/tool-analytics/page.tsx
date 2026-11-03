@@ -30,8 +30,9 @@ interface AnalyticsData {
     logoUrl: string | null;
     category: string;
     clicks: number;
+    profileClicks: number;
     profileViews: number;
-    ctr: string;
+    ctr: string | null;
   }>;
   sourcePerformance: Array<{
     source: string;
@@ -319,15 +320,23 @@ export default function ToolAnalyticsPage() {
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      <span className="text-xs text-gray-400 font-jakarta block">{tool.profileViews.toLocaleString()} views</span>
-                      <span className="text-sm font-bold text-navy dark:text-white font-sora">{tool.clicks.toLocaleString()} clicks</span>
+                      <span className="text-sm font-bold text-navy dark:text-white font-sora block">{tool.clicks.toLocaleString()} clicks</span>
+                      <span
+                        className="text-xs text-gray-400 font-jakarta"
+                        title="Clicks from this tool's page ÷ views of that page. Clicks from the homepage or search don't need a page view, so total clicks can be higher than views."
+                      >
+                        {tool.profileClicks.toLocaleString()} from page · {tool.profileViews.toLocaleString()} page views
+                      </span>
                     </div>
-                    <span className={`text-xs font-bold font-sora px-2 py-0.5 rounded-full ${
+                    <span
+                      title="Page CTR: clicks on the tool page ÷ views of the tool page"
+                      className={`text-xs font-bold font-sora px-2 py-0.5 rounded-full ${
+                      tool.ctr === null ? 'bg-gray-100 dark:bg-gray-800 text-gray-500' :
                       parseFloat(tool.ctr) >= 10 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
                       parseFloat(tool.ctr) >= 5 ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' :
                       'bg-gray-100 dark:bg-gray-800 text-gray-500'
                     }`}>
-                      {tool.ctr}% CTR
+                      {tool.ctr === null ? 'No page views' : `${tool.ctr}% CTR`}
                     </span>
                     <Link
                       href={`/tools/${tool.slug}`}

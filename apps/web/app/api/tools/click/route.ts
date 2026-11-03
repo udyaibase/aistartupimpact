@@ -45,6 +45,17 @@ function isBot(userAgent: string): boolean {
   return BOT_PATTERNS.some(p => ua.includes(p));
 }
 
+/**
+ * Only a person clicking a link counts. Browsers send Sec-Fetch-User: ?1 on navigations a user started;
+ * crawlers and link scanners that fetch /api/tools/click directly (rotating IPs, browser user agents) don't,
+ * so they still get redirected but are no longer counted. Sec-Fetch-Site is "same-origin" for a click on our
+ * pages, or "none" when the browser opens target=_blank as a fresh navigation; other sites linking here don't count.
+ */
+function isHumanClick(request: NextRequest): boolean {
+  const site = request.headers.get('sec-fetch-site');
+  return request.headers.get('sec-fetch-user') === '?1' && (site === 'same-origin' || site === 'none');
+}
+
 const VALID_SOURCES = ['TOOL_DETAIL', 'DIRECTORY', 'HOMEPAGE', 'SEARCH', 'RELATED', 'COMPARISON', 'OTHER'];
 
 export async function GET(request: NextRequest) {
@@ -84,16 +95,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid tool URL' }, { status: 400 });
     }
 
-    // Skip tracking for bots
+    // Skip tracking for bots and anything that isn't a click from our own pages
     const userAgent = request.headers.get('user-agent') || '';
-    if (!isBot(userAgent)) {
+    if (!isBot(userAgent) && isHumanClick(request)) {
       // Track click BEFORE redirect (await it — setImmediate doesn't work in serverless)
       try {
         const ip = clientIp(request);
         const ipHash = hashValue(ip);
         const sessionHash = hashValue(`${ip}-${userAgent}`);
         const referrer = request.headers.get('referer') || null;
-        const country = request.headers.get('cf-ipcountry') || null;
+        const country = request.headers.get('x-vercel-ip-country') || request.headers.get('cf-ipcountry') || null;
 
         await prisma.affiliateClick.create({
           data: {

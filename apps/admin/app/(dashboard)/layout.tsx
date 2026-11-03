@@ -4,6 +4,7 @@ import { AdminSidebar } from './components/Sidebar';
 import { AdminHeader } from './components/Header';
 import { SidebarProvider } from './components/Sidebar';
 import { redirect } from 'next/navigation';
+import { twoFactorBlock } from '@/lib/api-auth';
 
 export default async function AdminLayout({
   children,
@@ -15,6 +16,10 @@ export default async function AdminLayout({
   if (!session?.user) {
     redirect('/login');
   }
+
+  // Second line of defence behind middleware: no dashboard page renders for a session that owes a 2FA step.
+  const block = twoFactorBlock(session);
+  if (block) redirect(block.status === 401 ? '/verify-2fa' : '/setup-2fa');
 
   return (
     <SidebarProvider>

@@ -76,6 +76,14 @@ export async function saveSettingsAction(settings: Record<string, any>) {
   if (!session?.user || !ALLOWED.includes(session.user.role))
     return { success: false, error: "Unauthorized" };
 
+  // Requiring 2FA for everyone while your own isn't on would send you straight to setup — turn yours on first.
+  if (settings.require2FA === true && session.user.role === 'SUPER_ADMIN') {
+    const me = await prisma.user.findUnique({ where: { id: session.user.id }, select: { twoFactorEnabled: true } });
+    if (!me?.twoFactorEnabled) {
+      return { success: false, error: "Turn on two-factor authentication for your own account first, then require it for the team." };
+    }
+  }
+
   try {
     for (const [key, value] of Object.entries(settings)) {
       if (key === 'require2FA' && session.user.role !== 'SUPER_ADMIN') continue;

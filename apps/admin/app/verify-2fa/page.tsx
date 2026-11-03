@@ -60,8 +60,13 @@ export default function Verify2FAPage() {
         body: JSON.stringify(useBackup ? { backupCode: backupCode || token } : { token }),
       });
       const data = await res.json();
-      if (data.success) {
-        await update({ twoFactorPassed: true });
+      if (data.success && data.proof) {
+        // The proof is signed by the server; the session only counts as verified if it checks out.
+        const updated: any = await update({ twoFactorProof: data.proof });
+        if (!updated?.twoFactorVerified) {
+          setError("Couldn't confirm your sign-in. Refresh the page and try again.");
+          return;
+        }
         router.replace("/dashboard");
       } else {
         setError(data.error || "Invalid code");

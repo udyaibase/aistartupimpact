@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Shield, Loader2, LogOut, Copy, Check, CheckCircle2 } from "lucide-react";
 
 export default function Setup2FAPage() {
-  const { data: session } = useSession();
+  const { data: session, update } = useSession();
   const router = useRouter();
   const [step, setStep] = useState<"qr" | "verify" | "backup">("qr");
   const [qrCode, setQrCode] = useState("");
@@ -81,6 +81,8 @@ export default function Setup2FAPage() {
       const data = await res.json();
       if (data.success) {
         setBackupCodes(data.backupCodes);
+        // Enabling with a correct code also completes 2FA for this sign-in.
+        if (data.proof) await update({ twoFactorProof: data.proof });
         setStep("backup");
       } else {
         setError(data.error || "Invalid code");

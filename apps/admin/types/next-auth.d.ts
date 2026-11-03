@@ -33,8 +33,11 @@ declare module "next-auth/jwt" {
     slug: string;
     twoFactorEnabled?: boolean;
     twoFactorVerified?: boolean;
-    twoFactorPassed?: boolean;
     require2FA?: boolean;
+    /** Id of this sign-in; 2FA proofs are bound to it. */
+    sid?: string;
+    /** When the 2FA state was last re-read from the database. */
+    twoFactorCheckedAt?: number;
     lastActivity?: number;
   }
 }
