@@ -1,5 +1,6 @@
 'use server';
 
+import { checkLocation } from '@/lib/locations';
 import { requireFounderAuth } from '@/lib/founder-auth';
 import { sendAdminReviewAlert, sendSubmissionReceivedEmail } from '@/lib/founder-email';
 import { prisma } from '@udyaibase/database';
@@ -22,6 +23,7 @@ interface ToolSubmission {
   launchYear: number;
   founderNames?: string[];
   headquartersCountry?: string;
+  headquartersCity?: string;
   features: string[];
   useCases: string[];
   logoUrl?: string;
@@ -38,6 +40,12 @@ interface ToolSubmission {
 export async function submitToolAction(data: ToolSubmission) {
   try {
     const session = await requireFounderAuth();
+    // Headquarters city and country only from the standard lists.
+    if (data.headquartersCity || data.headquartersCountry) {
+      const loc = await checkLocation({ city: data.headquartersCity ?? '', country: data.headquartersCountry ?? '' });
+      if (!loc.ok) return { success: false, error: loc.error };
+      data = { ...data, headquartersCity: loc.city ?? undefined, headquartersCountry: loc.country ?? undefined };
+    }
     if (data.tagline) data.tagline = data.tagline.trim().slice(0, 100);
 
     // Generate slug from name
@@ -109,7 +117,7 @@ export async function submitToolAction(data: ToolSubmission) {
       INSERT INTO "AiTool" (
         id, name, slug, tagline, description, "websiteUrl", "affiliateUrl",
         "pricingModel", "pricingUrl", "startingPrice", "freeTrialDays", "demoVideoUrl", "hasApi", "hasMobileApp",
-        "launchYear", "founderNames", "headquartersCountry", "logoUrl", "screenshotUrls",
+        "launchYear", "founderNames", "headquartersCountry", "headquartersCity", "logoUrl", "screenshotUrls",
         "twitterUrl", "linkedinUrl", "socialLinks",
         "categoryId", "ownerId", "claimStatus", status, "submittedBy", "createdAt", "updatedAt"
       ) VALUES (
@@ -119,7 +127,7 @@ export async function submitToolAction(data: ToolSubmission) {
         ${data.freeTrialDays || null},
         ${data.demoVideoUrl || null},
         ${data.hasApi}, ${data.hasMobileApp}, ${data.launchYear},
-        ${data.founderNames || []}::text[], ${data.headquartersCountry || null},
+        ${data.founderNames || []}::text[], ${data.headquartersCountry || null}, ${data.headquartersCity || null},
         ${data.logoUrl || null}, ${data.screenshotUrls}::text[],
         ${data.twitterUrl || null}, ${data.linkedinUrl || null}, ${socialLinksJson}::jsonb,
         ${categoryId}, ${session.userId}, 'PENDING', 'PENDING', ${session.userId},
@@ -226,6 +234,12 @@ export async function submitToolAction(data: ToolSubmission) {
 export async function updateToolAction(id: string, data: ToolSubmission) {
   try {
     const session = await requireFounderAuth();
+    // Headquarters city and country only from the standard lists.
+    if (data.headquartersCity || data.headquartersCountry) {
+      const loc = await checkLocation({ city: data.headquartersCity ?? '', country: data.headquartersCountry ?? '' });
+      if (!loc.ok) return { success: false, error: loc.error };
+      data = { ...data, headquartersCity: loc.city ?? undefined, headquartersCountry: loc.country ?? undefined };
+    }
 
     // Verify ownership using raw SQL
     const tools = await prisma.$queryRaw<any[]>`
@@ -299,6 +313,7 @@ export async function updateToolAction(id: string, data: ToolSubmission) {
         "launchYear" = ${data.launchYear},
         "founderNames" = ${data.founderNames || []}::text[],
         "headquartersCountry" = ${data.headquartersCountry || null},
+        "headquartersCity" = ${data.headquartersCity || null},
         "logoUrl" = ${data.logoUrl || null},
         "screenshotUrls" = ${data.screenshotUrls}::text[],
         "twitterUrl" = ${data.twitterUrl || null},

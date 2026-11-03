@@ -3,6 +3,7 @@ import { sql } from '@/lib/db';
 import { getEmployerSession } from '@/lib/employer-auth';
 import { can, forbidden } from '@/lib/employer/permissions';
 import { refreshPaths, refreshSections } from '@/lib/revalidate';
+import { checkLocation } from '@/lib/locations';
 
 export const dynamic = 'force-dynamic';
 export async function GET() {
@@ -51,7 +52,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: true, connected: false });
     }
 
-    // Regular profile update
+    // Regular profile update. City and country only from the standard lists.
+    const loc = await checkLocation({ city: body.location, country: body.country });
+    if (!loc.ok) return NextResponse.json({ error: loc.error, field: loc.field === 'city' ? 'location' : 'country' }, { status: 400 });
     await sql`
       UPDATE "JobBoardEmployer"
       SET
@@ -60,8 +63,8 @@ export async function PUT(request: NextRequest) {
         "websiteUrl" = ${body.websiteUrl || null},
         "industry" = ${body.industry || null},
         "companySize" = ${body.companySize || null},
-        "location" = ${body.location || null},
-        "country" = ${body.country || null},
+        "location" = ${loc.city},
+        "country" = ${loc.country},
         "linkedinUrl" = ${body.linkedinUrl || null},
         "twitterUrl" = ${body.twitterUrl || null},
         "updatedAt" = NOW()

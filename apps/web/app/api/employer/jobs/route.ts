@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { getEmployerSession } from '@/lib/employer-auth';
 import { draftFromRow, draftToData, defaultClosesOn, type JobDraft } from '@/lib/jobs/composer';
+import { standardJobLocation } from '@/lib/jobs/location';
 import { uniqueJobSlug } from '@/lib/jobs/slug';
 import { can, forbidden, listingScope } from '@/lib/employer/permissions';
 
@@ -53,7 +54,9 @@ export async function POST(request: NextRequest) {
       draft = (body.draft ?? body) as Partial<JobDraft>;
     }
 
-    const data = draftToData(draft);
+    const loc = await standardJobLocation(draftToData(draft));
+    if (!loc.ok) return NextResponse.json({ error: loc.error, field: loc.field }, { status: 400 });
+    const data = loc.data;
     if (!data.title) return NextResponse.json({ error: 'Add a job title first.', field: 'title' }, { status: 400 });
 
     const employer = await prisma.jobBoardEmployer.findUnique({ where: { id: session.id }, select: { startupId: true } });

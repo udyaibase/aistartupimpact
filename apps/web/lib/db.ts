@@ -958,7 +958,7 @@ export async function getDirectoryToolsDirect(categorySlug?: string) {
       // Check if slug is a parent category or subcategory
       rows = await sql`
         SELECT t.id, t.name, t.slug, t.tagline, LEFT(t.description, 130) AS description, t."pricingModel", t."logoUrl", t."avgRating",
-               t."hasApi", t."hasMobileApp", t."freeTrialDays", t."upvoteCount", t."saveCount", t."launchYear", t."headquartersCountry", t."founderNames",
+               t."hasApi", t."hasMobileApp", t."freeTrialDays", t."upvoteCount", t."saveCount", t."launchYear", t."headquartersCountry", t."headquartersCity", t."founderNames",
                c.name AS "categoryName", c.slug AS "categorySlug",
                pc.name AS "parentCategoryName", pc.slug AS "parentCategorySlug",
                tfc.tier AS "campaignTier"
@@ -984,7 +984,7 @@ export async function getDirectoryToolsDirect(categorySlug?: string) {
     } else {
       rows = await sql`
         SELECT t.id, t.name, t.slug, t.tagline, LEFT(t.description, 130) AS description, t."pricingModel", t."logoUrl", t."avgRating",
-               t."hasApi", t."hasMobileApp", t."freeTrialDays", t."upvoteCount", t."saveCount", t."launchYear", t."headquartersCountry", t."founderNames",
+               t."hasApi", t."hasMobileApp", t."freeTrialDays", t."upvoteCount", t."saveCount", t."launchYear", t."headquartersCountry", t."headquartersCity", t."founderNames",
                c.name AS "categoryName", c.slug AS "categorySlug",
                pc.name AS "parentCategoryName", pc.slug AS "parentCategorySlug",
                tfc.tier AS "campaignTier"
@@ -1025,6 +1025,7 @@ export async function getDirectoryToolsDirect(categorySlug?: string) {
       saveCount: parseInt(t.saveCount) || 0,
       launchYear: t.launchYear || null,
       country: t.headquartersCountry || null,
+      city: t.headquartersCity || null,
       founderNames: t.founderNames || []
     }));
   } catch (e) {

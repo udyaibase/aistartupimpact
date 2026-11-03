@@ -1,5 +1,6 @@
 'use server';
 
+import { checkLocation } from '@/lib/locations';
 import { neon } from '@neondatabase/serverless';
 import { revalidatePath } from 'next/cache';
 import { logAuditEvent, canDelete } from '@/lib/audit-log';
@@ -19,7 +20,7 @@ export async function getToolsAction() {
       SELECT
         t.id, t.name, t.slug, t."slugChangedAt", t."previousSlugs", t.tagline, t.description, t."websiteUrl", t."logoUrl",
         t."pricingModel", t."avgRating", t."listingTier", t.status, t."claimStatus", t."contentReviewed",
-        t."founderNames", t."headquartersCountry", t."hasApi", t."hasMobileApp",
+        t."founderNames", t."headquartersCountry", t."headquartersCity", t."hasApi", t."hasMobileApp",
         t."pricingUrl", t."startingPrice", t."freeTrialDays", t."demoVideoUrl", t."ownerId",
         t."launchYear", t."screenshotUrls", t."screenshotMeta", t."affiliateUrl",
         t."twitterUrl", t."linkedinUrl", t."socialLinks",
@@ -194,6 +195,7 @@ export async function createToolAction(data: {
   launchYear?: number;
   founderNames?: string[];
   headquartersCountry?: string;
+  headquartersCity?: string;
   avgRating: number;
   listingTier?: string;
   status?: string;
@@ -207,6 +209,12 @@ export async function createToolAction(data: {
 }) {
   const { error } = await requireActionAuth();
   if (error) return { success: false, error };
+  // Headquarters city and country only from the standard lists.
+  if (data.headquartersCity || data.headquartersCountry) {
+    const loc = await checkLocation({ city: data.headquartersCity ?? '', country: data.headquartersCountry ?? '' });
+    if (!loc.ok) return { success: false, error: loc.error };
+    data = { ...data, headquartersCity: loc.city ?? undefined, headquartersCountry: loc.country ?? undefined };
+  }
   if (data.tagline) data.tagline = data.tagline.trim().slice(0, 100);
   try {
     // Check for duplicate name or slug
@@ -228,7 +236,7 @@ export async function createToolAction(data: {
         id, name, slug, tagline, description, "websiteUrl", "logoUrl", "affiliateUrl",
         "demoVideoUrl", "categoryId", "pricingModel", "pricingUrl", "startingPrice",
         "freeTrialDays", "hasApi", "hasMobileApp", "launchYear", "founderNames",
-        "headquartersCountry", "avgRating", "listingTier", status, "screenshotUrls",
+        "headquartersCountry", "headquartersCity", "avgRating", "listingTier", status, "screenshotUrls",
         "twitterUrl", "linkedinUrl", "socialLinks",
         "aiSuggestedEdits",
         "createdAt", "updatedAt"
@@ -240,7 +248,7 @@ export async function createToolAction(data: {
         ${data.pricingUrl || null}, ${data.startingPrice ? Math.round(data.startingPrice * 100) : null},
         ${data.freeTrialDays || null}, ${data.hasApi ?? false}, ${data.hasMobileApp ?? false},
         ${data.launchYear || new Date().getFullYear()},
-        ${data.founderNames || []}, ${data.headquartersCountry || null},
+        ${data.founderNames || []}, ${data.headquartersCountry || null}, ${data.headquartersCity || null},
         ${data.avgRating}, ${data.listingTier || 'FREE'}::"ListingTier",
         ${data.status || 'APPROVED'}::"ToolApprovalStatus",
         ${data.screenshotUrls || []},
@@ -323,6 +331,7 @@ export async function updateToolAction(id: string, data: {
   launchYear?: number;
   founderNames?: string[];
   headquartersCountry?: string;
+  headquartersCity?: string;
   avgRating: number;
   listingTier: string;
   status: string;
@@ -337,6 +346,12 @@ export async function updateToolAction(id: string, data: {
 }) {
   const { error } = await requireActionAuth();
   if (error) return { success: false, error };
+  // Headquarters city and country only from the standard lists.
+  if (data.headquartersCity || data.headquartersCountry) {
+    const loc = await checkLocation({ city: data.headquartersCity ?? '', country: data.headquartersCountry ?? '' });
+    if (!loc.ok) return { success: false, error: loc.error };
+    data = { ...data, headquartersCity: loc.city ?? undefined, headquartersCountry: loc.country ?? undefined };
+  }
   if (data.tagline) data.tagline = data.tagline.trim().slice(0, 100);
   try {
     const socialLinksJson = data.socialLinks && data.socialLinks.length > 0
@@ -363,6 +378,7 @@ export async function updateToolAction(id: string, data: {
         "launchYear" = ${data.launchYear || new Date().getFullYear()},
         "founderNames" = ${data.founderNames || []},
         "headquartersCountry" = ${data.headquartersCountry || null},
+        "headquartersCity" = ${data.headquartersCity || null},
         "avgRating" = ${data.avgRating},
         "listingTier" = ${data.listingTier}::"ListingTier",
         status = ${data.status}::"ToolApprovalStatus",

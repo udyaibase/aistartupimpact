@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, Clock, Loader2, RefreshCw, ShieldCheck, AlertTriangle } from "lucide-react";
 import { BUSINESS_TYPES } from "@/lib/events/payout-options";
+import CitySelect from "@/components/events/CitySelect";
 
 interface Payouts { status: string; bankLast4: string | null; beneficiary: string | null; note: string | null; updatedAt: string | null; started: boolean; feePct: number }
 
@@ -83,7 +84,9 @@ export default function PayoutsPanel() {
             </>
           )}
           <div className="sm:col-span-2"><label htmlFor="po-street" className={label}>Address</label><input id="po-street" value={f.street} onChange={(e) => set("street", e.target.value)} className={input} /></div>
-          <div><label htmlFor="po-city" className={label}>City</label><input id="po-city" value={f.city} onChange={(e) => set("city", e.target.value)} className={input} /></div>
+          <div><label htmlFor="po-city" className={label}>City</label>
+            <CitySelect id="po-city" country="India" value={f.city} placeholder="Search your city"
+              onChange={(c) => setF((x) => ({ ...x, city: c.name, state: c.state ?? x.state }))} /></div>
           <div><label htmlFor="po-state" className={label}>State</label><input id="po-state" value={f.state} onChange={(e) => set("state", e.target.value)} className={input} /></div>
           <div><label htmlFor="po-pin" className={label}>PIN code</label><input id="po-pin" inputMode="numeric" value={f.postalCode} onChange={(e) => set("postalCode", e.target.value.replace(/\D/g, ""))} maxLength={6} className={input} /></div>
           <div className="sm:col-span-2 pt-2 border-t border-gray-100 dark:border-gray-800"><p className="text-sm font-semibold text-gray-900 dark:text-white">Bank account for payouts</p></div>

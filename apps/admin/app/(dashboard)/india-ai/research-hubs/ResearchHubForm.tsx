@@ -1,5 +1,8 @@
 'use client';
 
+import { useState } from 'react';
+import { CityPicker } from '@/components/LocationFields';
+
 interface Props {
   action: (formData: FormData) => Promise<void>;
   defaultValues?: {
@@ -26,6 +29,8 @@ interface Props {
 }
 
 export default function ResearchHubForm({ action, defaultValues }: Props) {
+  const [city, setCity] = useState(defaultValues?.city ?? '');
+  const [state, setState] = useState(defaultValues?.state ?? '');
   const inputClass = 'w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm';
   const labelClass = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1';
 
@@ -47,12 +52,13 @@ export default function ResearchHubForm({ action, defaultValues }: Props) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className={labelClass}>City *</label>
-          <input name="city" required className={inputClass} defaultValue={defaultValues?.city} placeholder="Bengaluru" />
+          <label htmlFor="hub-city" className={labelClass}>City *</label>
+          <CityPicker id="hub-city" country="India" value={city} onChange={(c) => { setCity(c?.city ?? ''); if (c?.state) setState(c.state); }} />
+          <input type="hidden" name="city" value={city} required />
         </div>
         <div>
           <label className={labelClass}>State *</label>
-          <input name="state" required className={inputClass} defaultValue={defaultValues?.state} placeholder="Karnataka" />
+          <input name="state" required className={inputClass} value={state} onChange={(e) => setState(e.target.value)} placeholder="Filled from the city" />
         </div>
       </div>
 

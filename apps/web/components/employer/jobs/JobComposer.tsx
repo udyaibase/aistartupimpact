@@ -9,6 +9,9 @@ import {
   WORK_TYPES, publishProblems, salaryUnit, type JobDraft, type ScreeningQuestion,
 } from '@/lib/jobs/composer';
 import { Card, Field, Segmented, TagInput, Toggle, inputCls } from './fields';
+import { CityPicker, CountryPicker } from '@udyaibase/utils/src/LocationPickers';
+import { useExtraCities } from '@/components/shared/useExtraCities';
+import { CITY_REQUEST } from '@/lib/city-request';
 import { JobPreview, ListingStrength, type ComposerCompany } from './JobPreview';
 import StartFaster from './StartFaster';
 import PublishedScreen from './PublishedScreen';
@@ -53,6 +56,7 @@ export default function JobComposer({
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState<JobDraft>(initialDraft);
+  const extraCities = useExtraCities();
   const [id, setId] = useState(initialId);
   const [status, setStatus] = useState<Status>(initialStatus);
   const [slug, setSlug] = useState(initialSlug ?? '');
@@ -369,11 +373,13 @@ export default function JobComposer({
           <Card id="location" title="Location">
             <Segmented label="Where they’ll work" value={draft.workType} options={WORK_TYPES} onChange={(v) => update('workType', v)} />
             <div className="grid sm:grid-cols-2 gap-4">
-              <Field label="City" htmlFor="job-city" optional={draft.workType === 'REMOTE'} error={err('city')}>
-                <input id="job-city" value={draft.city} onChange={(e) => update('city', e.target.value)} placeholder="e.g. Bengaluru" autoComplete="address-level2" className={inputCls} {...aria('city')} />
+              <Field label="Country" htmlFor="job-country" error={err('country')}>
+                <CountryPicker id="job-country" value={draft.country}
+                  onChange={(c) => { update('country', c ?? ''); if (c !== draft.country) update('city', ''); }} />
               </Field>
-              <Field label="Country" htmlFor="job-country" optional>
-                <input id="job-country" value={draft.country} onChange={(e) => update('country', e.target.value)} placeholder="e.g. India" autoComplete="country-name" className={inputCls} />
+              <Field label="City" htmlFor="job-city" optional={draft.workType === 'REMOTE'} error={err('city')}>
+                <CityPicker id="job-city" value={draft.city} country={draft.country || null} extraCities={extraCities} requestHref={CITY_REQUEST}
+                  onChange={(c) => { update('city', c?.city ?? ''); if (c && !draft.country) update('country', c.country); }} />
               </Field>
             </div>
           </Card>

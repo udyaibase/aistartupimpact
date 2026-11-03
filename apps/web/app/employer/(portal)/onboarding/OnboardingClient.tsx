@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Building2, MapPin, Globe, Linkedin, Twitter, ArrowRight, CheckCircle, Upload, FileText } from 'lucide-react';
 import { completeEmployerOnboarding } from './actions';
+import { CityPicker, CountryPicker } from '@udyaibase/utils/src/LocationPickers';
+import { useExtraCities } from '@/components/shared/useExtraCities';
+import { CITY_REQUEST } from '@/lib/city-request';
 
 interface Employer {
   id: string;
@@ -35,6 +38,7 @@ const COMPANY_SIZES = [
 ];
 
 export default function OnboardingClient({ employer }: { employer: Employer }) {
+  const extraCities = useExtraCities();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -201,22 +205,18 @@ export default function OnboardingClient({ employer }: { employer: Employer }) {
             {/* Location + Country */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 font-jakarta">
-                  City / Location <span className="text-red-500">*</span>
+                <label htmlFor="emp-country" className="flex items-center gap-1.5 text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 font-jakarta">
+                  <Globe className="w-4 h-4 text-gray-400" /> Country <span className="text-red-500">*</span>
                 </label>
-                <div className="relative">
-                  <input type="text" value={formData.location} onChange={(e) => setFormData({ ...formData, location: e.target.value })} placeholder="Bangalore" required className="w-full px-4 py-3 pl-11 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-brand focus:border-transparent font-jakarta" />
-                  <MapPin className="absolute left-3.5 top-3.5 w-5 h-5 text-gray-400" />
-                </div>
+                <CountryPicker id="emp-country" value={formData.country}
+                  onChange={(c) => setFormData((f) => ({ ...f, country: c ?? '', location: c === f.country ? f.location : '' }))} />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 font-jakarta">
-                  Country <span className="text-red-500">*</span>
+                <label htmlFor="emp-city" className="flex items-center gap-1.5 text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 font-jakarta">
+                  <MapPin className="w-4 h-4 text-gray-400" /> City <span className="text-red-500">*</span>
                 </label>
-                <div className="relative">
-                  <input type="text" value={formData.country} onChange={(e) => setFormData({ ...formData, country: e.target.value })} placeholder="India" required className="w-full px-4 py-3 pl-11 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-brand focus:border-transparent font-jakarta" />
-                  <Globe className="absolute left-3.5 top-3.5 w-5 h-5 text-gray-400" />
-                </div>
+                <CityPicker id="emp-city" value={formData.location} country={formData.country || null} extraCities={extraCities} requestHref={CITY_REQUEST}
+                  onChange={(c) => setFormData((f) => ({ ...f, location: c?.city ?? '', country: f.country || c?.country || '' }))} />
               </div>
             </div>
 

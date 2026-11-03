@@ -5,8 +5,12 @@ import Image from 'next/image';
 import { Building2, Save, Link2, Unlink, ExternalLink, CheckCircle2 } from 'lucide-react';
 import ClaimStartup, { AskFounder } from '@/components/employer/ClaimStartup';
 import Link from 'next/link';
+import { CityPicker, CountryPicker } from '@udyaibase/utils/src/LocationPickers';
+import { useExtraCities } from '@/components/shared/useExtraCities';
+import { CITY_REQUEST } from '@/lib/city-request';
 
 export default function EmployerCompanyPage() {
+  const extraCities = useExtraCities();
   const [company, setCompany] = useState<any>(null);
   const [form, setForm] = useState({
     companyName: '', description: '', websiteUrl: '', industry: '',
@@ -206,10 +210,15 @@ export default function EmployerCompanyPage() {
                 </select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 font-jakarta mb-1.5">Location</label>
-                <input type="text" value={form.location} onChange={e => setForm(p => ({ ...p, location: e.target.value }))} className="input-field w-full" placeholder="San Francisco, CA" />
+                <label htmlFor="co-country" className="block text-xs font-bold uppercase tracking-wider text-gray-500 font-jakarta mb-1.5">Country</label>
+                <CountryPicker id="co-country" value={form.country} onChange={(c) => setForm(p => ({ ...p, country: c ?? '', location: c === p.country ? p.location : '' }))} />
+              </div>
+              <div>
+                <label htmlFor="co-city" className="block text-xs font-bold uppercase tracking-wider text-gray-500 font-jakarta mb-1.5">City</label>
+                <CityPicker id="co-city" value={form.location} country={form.country || null} extraCities={extraCities} requestHref={CITY_REQUEST}
+                  onChange={(c) => setForm(p => ({ ...p, location: c?.city ?? '', country: p.country || c?.country || '' }))} />
               </div>
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 font-jakarta mb-1.5">Company Size</label>

@@ -1,8 +1,11 @@
 'use server';
 
 import { prisma } from '@udyaibase/database';
+import { checkLocation } from '@/lib/locations';
 
 export async function submitFreeToolAction(draft: any) {
+  // The headquarters city from the standard list (with its country); anything else is left blank.
+  const hq = await checkLocation({ city: typeof draft?.hqCity === 'string' ? draft.hqCity : '' });
   try {
     if (!draft.name || !draft.websiteUrl || !draft.tagline || !draft.description) {
       return { success: false, error: 'Please complete all required fields (Name, URL, Tagline, Description).' };
@@ -43,7 +46,8 @@ export async function submitFreeToolAction(draft: any) {
         hasApi: draft.hasApi,
         hasMobileApp: draft.hasMobileApp,
         founderNames: draft.founderNames ? draft.founderNames.split(',').map((s: string) => s.trim()) : [],
-        headquartersCountry: draft.hqCity,
+        headquartersCity: hq.ok ? hq.city : null,
+        headquartersCountry: hq.ok ? hq.country : null,
         categoryId: firstCategory.id,
         updatedAt: new Date(),
 

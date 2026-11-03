@@ -3,6 +3,7 @@
 import { getEmployerSession, setEmployerSession } from '@/lib/employer-auth';
 import { prisma } from '@udyaibase/database';
 import { revalidatePath } from 'next/cache';
+import { checkLocation } from '@/lib/locations';
 
 export async function completeEmployerOnboarding(data: {
   logoUrl: string;
@@ -24,13 +25,16 @@ export async function completeEmployerOnboarding(data: {
       return { success: false, error: 'Description must be 1000 characters or less' };
     }
 
+    const loc = await checkLocation({ city: data.location, country: data.country }, { cityRequired: true, countryRequired: true });
+    if (!loc.ok) return { success: false, error: loc.error };
+
     const updated = await prisma.jobBoardEmployer.update({
       where: { id: session.id },
       data: {
         logoUrl: data.logoUrl || null,
         description: data.description.slice(0, 1000),
-        location: data.location.slice(0, 200),
-        country: data.country.slice(0, 100),
+        location: loc.city,
+        country: loc.country,
         industry: data.industry?.slice(0, 100) || undefined,
         companySize: data.companySize?.slice(0, 50) || undefined,
         linkedinUrl: data.linkedinUrl?.slice(0, 500) || null,

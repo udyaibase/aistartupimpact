@@ -1,4 +1,5 @@
 import { articlePath } from '@/lib/seo';
+import { formatPlace } from '@udyaibase/utils/src/locations';
 import { jsonLd as jsonLdHtml } from "@/lib/json-ld";
 import Link from 'next/link';
 import Image from 'next/image';
@@ -415,8 +416,8 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
             <h2 className="section-title mb-4">Overview</h2>
             <p className="text-gray-600 dark:text-gray-300 font-jakarta text-sm sm:text-base leading-relaxed whitespace-pre-line">{tool.description}</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-100 dark:border-gray-800">
-              {tool.headquartersCountry && (
-                <div><span className="text-xs text-gray-400 font-jakarta block">HQ</span><span className="font-sora font-bold text-sm text-navy dark:text-white">{tool.headquartersCountry}</span></div>
+              {(tool.headquartersCity || tool.headquartersCountry) && (
+                <div><span className="text-xs text-gray-400 font-jakarta block">HQ</span><span className="font-sora font-bold text-sm text-navy dark:text-white">{formatPlace(tool.headquartersCity, tool.headquartersCountry)}</span></div>
               )}
               {tool.founderNames?.length > 0 && (
                 <div><span className="text-xs text-gray-400 font-jakarta block">Founders</span><span className="font-sora font-bold text-sm text-navy dark:text-white">{tool.founderNames.join(', ')}</span></div>

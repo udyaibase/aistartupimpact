@@ -5,6 +5,8 @@ import { checkRateLimit, jdParseRateLimit } from '@/lib/rate-limit';
 import { fetchPublicHtml } from '@/lib/embed/safe-fetch';
 import { can, forbidden } from '@/lib/employer/permissions';
 import { openaiChat } from '@/lib/ops/ai';
+import { checkLocation } from '@/lib/locations';
+import { normalizeCountry } from '@udyaibase/utils/src/locations';
 import {
   CURRENCIES, EMPLOYMENT_TYPES, EXPERIENCE_BANDS, JOB_CATEGORIES, MAX_SKILLS, WORK_TYPES, salaryUnit, type JobDraft,
 } from '@/lib/jobs/composer';
@@ -145,8 +147,11 @@ export async function POST(request: NextRequest) {
   set('employmentType', fields.employmentType);
   set('experienceBand', fields.experienceBand);
   set('workType', fields.workType);
-  set('city', String(fields.city ?? '').slice(0, 80));
-  set('country', String(fields.country ?? '').slice(0, 80));
+  // Only standard places reach the form; an unknown city is left for the employer to pick.
+  const loc = await checkLocation({ city: String(fields.city ?? '').slice(0, 80), country: String(fields.country ?? '').slice(0, 80) });
+  const country = loc.ok ? loc.country : normalizeCountry(String(fields.country ?? ''));
+  if (country) set('country', country);
+  if (loc.ok && loc.city) set('city', loc.city);
   if (fields.salaryMinYearly || fields.salaryMaxYearly) {
     draft.salaryCurrency = currency;
     set('salaryMin', toUnit(fields.salaryMinYearly));
