@@ -15,6 +15,7 @@ import { useEditorMentions } from '@/components/useEditorMentions';
 import MediaPicker from '@/components/MediaPicker';
 import SEOScorePanel from '@/components/SEOScorePanel';
 import ImageAltTextManager from '@/components/ImageAltTextManager';
+import { shrinkImage, MAX_UPLOAD_BYTES } from '@/lib/shrink-image';
 import { uploadMediaAction, saveArticleAction, getArticleByIdAction, getCategoriesAction, type ArticlePayload } from './actions';
 
 /**
@@ -25,6 +26,7 @@ import { uploadMediaAction, saveArticleAction, getArticleByIdAction, getCategori
 const PUBLISHER_ROLES = ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'];
 const TYPES = ['NEWS', 'STORY', 'OPINION', 'GUIDE', 'COMPARISON', 'REPORT', 'SPONSORED'];
 const AUTOSAVE_MS = 30_000;
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
 const LIVE = ['PUBLISHED', 'SCHEDULED'];
 
 const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 120);
@@ -201,17 +203,80 @@ export default function ArticleEditor({ articleId }: { articleId?: string }) {
     });
   }, [articleId, snapshot]);
 
-  const uploadImage = async (e: React.ChangeEvent<HTMLInputElement>, set: (url: string) => void, busy: (b: boolean) => void) => {
+  const uploadImage = (e: React.ChangeEvent<HTMLInputElement>, set: (url: string) => void, busy: (b: boolean) => void) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (!file) return;
+    if (file) void uploadFile(file, set, busy);
+  };
+
+  const uploadFile = async (file: File, set: (url: string) => void, busy: (b: boolean) => void) => {
+    if (!IMAGE_TYPES.includes(file.type)) { alert('Upload a JPG, PNG, WebP, GIF or AVIF image.'); return; }
     busy(true);
+    const upload = await shrinkImage(file);
+    if (upload.size > MAX_UPLOAD_BYTES) {
+      busy(false);
+      alert(`This image is ${(upload.size / 1024 / 1024).toFixed(1)} MB. Use an image under 3.5 MB (GIFs can't be compressed here).`);
+      return;
+    }
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', upload);
     const json = await uploadMediaAction(formData).catch(() => null);
     busy(false);
     if (json?.success && json.data?.url) set(json.data.url);
-    else alert(json?.error || 'Failed to upload the image.');
+    else alert(json?.error || 'Failed to upload the image. Check your connection and try again.');
+  };
+
+  // Drag and drop: any image box (and the article body) accepts an image file dragged from the desktop.
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [uploadingInline, setUploadingInline] = useState(false);
+  const hasFiles = (e: React.DragEvent) => Array.from(e.dataTransfer.types).includes('Files');
+  const dropZone = (key: string, onFile: (file: File, e: React.DragEvent) => void) => canEdit ? {
+    onDragEnter: (e: React.DragEvent) => { if (hasFiles(e)) { e.preventDefault(); setDropTarget(key); } },
+    onDragOver: (e: React.DragEvent) => { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; if (dropTarget !== key) setDropTarget(key); } },
+    onDragLeave: (e: React.DragEvent) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropTarget((t) => (t === key ? null : t)); },
+    onDrop: (e: React.DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setDropTarget(null);
+      const file = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith('image/')) ?? e.dataTransfer.files[0];
+      if (file) onFile(file, e);
+    },
+  } : {};
+  const dropRing = (key: string) => (dropTarget === key ? ' !border-brand ring-4 ring-brand/15 bg-brand/5' : '');
+
+  // Dropping a file anywhere else would make the browser open it and leave the editor (losing unsaved work).
+  useEffect(() => {
+    const block = (e: DragEvent) => { if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault(); };
+    const clear = () => setDropTarget(null);
+    window.addEventListener('dragover', block);
+    window.addEventListener('drop', block);
+    window.addEventListener('drop', clear);
+    window.addEventListener('dragend', clear);
+    return () => {
+      window.removeEventListener('dragover', block);
+      window.removeEventListener('drop', block);
+      window.removeEventListener('drop', clear);
+      window.removeEventListener('dragend', clear);
+    };
+  }, []);
+
+  /** Uploads an image dropped or pasted into the body and inserts it where it was dropped (or at the cursor). */
+  const uploadInline = (file: File, at?: { x: number; y: number }) => {
+    if (at) {
+      const doc = document as Document & { caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null };
+      let range: Range | null = null;
+      if (doc.caretRangeFromPoint) range = doc.caretRangeFromPoint(at.x, at.y);
+      else if (doc.caretPositionFromPoint) {
+        const pos = doc.caretPositionFromPoint(at.x, at.y);
+        if (pos) { range = document.createRange(); range.setStart(pos.offsetNode, pos.offset); range.collapse(true); }
+      }
+      inlineRange.current = range && editorRef.current?.contains(range.startContainer) ? range : null;
+    } else {
+      const sel = window.getSelection();
+      inlineRange.current = sel && sel.rangeCount && editorRef.current?.contains(sel.anchorNode) ? sel.getRangeAt(0).cloneRange() : null;
+    }
+    void uploadFile(file, insertImage, setUploadingInline);
   };
 
   const handleUpdateImageAlt = (src: string, alt: string) => {
@@ -249,6 +314,8 @@ export default function ArticleEditor({ articleId }: { articleId?: string }) {
   // Paste: rebuild clipboard content from clean tags, so Docs/Word/web formatting never breaks the article.
   const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
     e.preventDefault();
+    const pastedImage = Array.from(e.clipboardData.files).find((f) => IMAGE_TYPES.includes(f.type));
+    if (pastedImage && !e.clipboardData.getData('text/plain')) { uploadInline(pastedImage); return; }
     const html = e.clipboardData.getData('text/html');
     const clean = html ? sanitizePastedHtml(html) : textToHtml(e.clipboardData.getData('text/plain'));
     if (clean) document.execCommand('insertHTML', false, clean);
@@ -437,18 +504,23 @@ export default function ArticleEditor({ articleId }: { articleId?: string }) {
             <input type="file" ref={fileInputRef} onChange={(e) => uploadImage(e, setCoverImage, setUploadingCover)} accept="image/jpeg,image/png,image/webp,image/gif,image/avif" className="hidden" />
 
             {coverImage ? (
-              <div className="mb-8 relative group rounded-xl overflow-hidden aspect-video bg-gray-100 dark:bg-gray-800">
-                <img src={coverImage} alt="Cover" className="w-full h-full object-cover" />
+              <div {...dropZone('cover-main', (f) => uploadFile(f, setCoverImage, setUploadingCover))} className={`mb-8 relative group rounded-xl overflow-hidden aspect-video bg-gray-100 dark:bg-gray-800 border-2 border-transparent${dropRing('cover-main')}`}>
+                <img src={coverImage} alt="Cover" className={`w-full h-full object-cover ${uploadingCover ? 'opacity-50' : ''}`} />
+                {(dropTarget === 'cover-main' || uploadingCover) && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-white text-sm font-semibold font-jakarta pointer-events-none">
+                    {uploadingCover ? 'Uploading…' : 'Drop to replace the cover'}
+                  </div>
+                )}
                 <button onClick={() => setCoverImage(null)} aria-label="Remove cover image" className="absolute top-3 right-3 p-1.5 bg-black/50 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-4 h-4" /></button>
               </div>
             ) : (
-              <button onClick={() => fileInputRef.current?.click()} disabled={uploadingCover} className={`w-full mb-8 py-8 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-xl text-center transition-colors group ${uploadingCover ? 'opacity-50 cursor-not-allowed' : 'hover:border-brand/40 cursor-pointer'}`}>
+              <button {...dropZone('cover-main', (f) => uploadFile(f, setCoverImage, setUploadingCover))} onClick={() => fileInputRef.current?.click()} disabled={uploadingCover} className={`w-full mb-8 py-8 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-xl text-center transition-colors group ${uploadingCover ? 'opacity-50 cursor-not-allowed' : 'hover:border-brand/40 cursor-pointer'}${dropRing('cover-main')}`}>
                 {uploadingCover ? (
                   <span className="text-sm text-gray-400">Uploading...</span>
                 ) : (
                   <>
                     <Upload className="w-5 h-5 text-gray-300 dark:text-gray-600 mx-auto group-hover:text-brand/50 transition-colors" />
-                    <p className="text-xs text-gray-300 dark:text-gray-600 font-jakarta mt-1.5 group-hover:text-brand/50">Add a cover image</p>
+                    <p className="text-xs text-gray-300 dark:text-gray-600 font-jakarta mt-1.5 group-hover:text-brand/50">{dropTarget === 'cover-main' ? 'Drop to upload' : 'Add a cover image — click or drag an image here'}</p>
                   </>
                 )}
               </button>
@@ -489,8 +561,17 @@ export default function ArticleEditor({ articleId }: { articleId?: string }) {
 
               {canEdit && <SelectionToolbar editorRef={editorRef} containerRef={editorWrapRef} onChange={onBodyChange} />}
 
+              {(dropTarget === 'body' || uploadingInline) && (
+                <div className="pointer-events-none absolute inset-0 z-10 rounded-xl border-2 border-dashed border-brand bg-brand/5 flex items-start justify-center pt-6">
+                  <span className="px-3 py-1.5 rounded-full bg-brand text-white text-xs font-semibold font-jakarta shadow">
+                    {uploadingInline ? 'Uploading image…' : 'Drop to insert the image here'}
+                  </span>
+                </div>
+              )}
+
               <div ref={editorRef} contentEditable={canEdit && !loading} suppressContentEditableWarning
                 onPaste={handlePaste}
+                {...dropZone('body', (f, e) => uploadInline(f, { x: e.clientX, y: e.clientY }))}
                 onInput={() => { onBodyChange(); trackCursorLine(); checkForMention(); }}
                 onKeyUp={() => { trackCursorLine(); checkForMention(); }}
                 onClick={trackCursorLine}
@@ -647,25 +728,31 @@ export default function ArticleEditor({ articleId }: { articleId?: string }) {
                           {([
                             ['Cover Image', '(hero, 16:9)', coverImage, setCoverImage, uploadingCover, fileInputRef, 'h-24', '16:9'],
                             ['Thumbnail', '(card preview, 4:3)', thumbnailImage, setThumbnailImage, uploadingThumbnail, thumbnailInputRef, 'h-20', '4:3'],
-                          ] as const).map(([label, hint, value, set, busy, ref, h, ratio]) => (
+                          ] as const).map(([label, hint, value, set, busy, ref, h, ratio]) => {
+                            const zone = `side-${label}`;
+                            const setBusy = label === 'Thumbnail' ? setUploadingThumbnail : setUploadingCover;
+                            return (
                             <div key={label}>
                               <p className={sideLabel}>{label} <span className="normal-case font-normal text-gray-400">{hint}</span></p>
-                              <div onClick={() => ref.current?.click()} className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer ${value ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/10' : 'border-gray-300 dark:border-gray-600 hover:border-brand'}`}>
+                              <div {...dropZone(zone, (f) => uploadFile(f, set, setBusy))} onClick={() => ref.current?.click()} className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer ${value ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/10' : 'border-gray-300 dark:border-gray-600 hover:border-brand'}${dropRing(zone)}`}>
                                 {value ? (
                                   <>
-                                    <img src={value} alt={label} className={`w-full ${h} object-cover rounded-lg mb-2`} />
-                                    <button onClick={(e) => { e.stopPropagation(); set(null); }} className="text-xs text-red-500 hover:underline">Remove</button>
+                                    <img src={value} alt={label} className={`w-full ${h} object-cover rounded-lg mb-2 ${busy ? 'opacity-50' : ''}`} />
+                                    {busy ? <p className="text-xs text-gray-400 font-jakarta">Uploading…</p>
+                                      : dropTarget === zone ? <p className="text-xs text-brand font-semibold font-jakarta">Drop to replace</p>
+                                      : <button onClick={(e) => { e.stopPropagation(); set(null); }} className="text-xs text-red-500 hover:underline">Remove</button>}
                                   </>
                                 ) : (
                                   <>
                                     <Upload className="w-6 h-6 text-gray-300 dark:text-gray-600 mx-auto mb-1" />
-                                    <p className="text-sm text-gray-400 font-jakarta">{busy ? 'Uploading...' : 'Click to upload'}</p>
-                                    <p className="text-xs text-gray-300 dark:text-gray-600 font-jakarta mt-0.5">{ratio} · JPG, PNG, WebP · up to 10 MB</p>
+                                    <p className="text-sm text-gray-400 font-jakarta">{busy ? 'Uploading…' : dropTarget === zone ? 'Drop to upload' : 'Click or drag an image here'}</p>
+                                    <p className="text-xs text-gray-300 dark:text-gray-600 font-jakarta mt-0.5">{ratio} · JPG, PNG, WebP · large photos are resized automatically</p>
                                   </>
                                 )}
                               </div>
                             </div>
-                          ))}
+                          );
+                          })}
                         </div>
                       )}
                       {panel.id === 'takeaways' && (

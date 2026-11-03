@@ -13,6 +13,11 @@ const nextConfig = {
   // The career scraper renders JavaScript-heavy pages with headless Chromium; on Vercel it uses @sparticuz/chromium,
   // whose compressed browser must ship with that one function.
   serverExternalPackages: ['@sparticuz/chromium', 'puppeteer-core'],
+  // Image uploads go through Server Actions (default limit 1 MB). The editor shrinks big photos first;
+  // this leaves headroom while staying under Vercel's 4.5 MB request limit.
+  experimental: {
+    serverActions: { bodySizeLimit: '4mb' },
+  },
   outputFileTracingIncludes: {
     '/api/admin/scrape-careers': ['../../node_modules/@sparticuz/chromium/bin/**'],
   },
