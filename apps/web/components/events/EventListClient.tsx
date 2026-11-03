@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { Calendar, MapPin, Video, Users, Clock, ExternalLink } from 'lucide-react';
+import { Calendar, MapPin, Video, Users, Clock, ExternalLink, BadgeCheck } from 'lucide-react';
 
 const PAGE_SIZE = 15;
 
@@ -22,6 +22,8 @@ interface Event {
   capacity?: number;
   timezone: string;
   organizerName?: string;
+  /** Set only while the tagged startup is verified. */
+  hostStartupName?: string | null;
   organizerAvatar?: string;
   sourceUrl?: string;
   sourceName?: string;
@@ -85,7 +87,7 @@ function EventCard({ event }: { event: Event }) {
   const isExternal = !!event.sourceUrl;
   const displayOrganizer = isExternal
     ? (event.subtitle?.startsWith('Hosted by ') ? event.subtitle.replace('Hosted by ', '') : null)
-    : event.organizerName;
+    : event.hostStartupName || event.organizerName;
 
   return (
     <Link href={`/events/${event.slug}`} prefetch={false} className="block card p-4 sm:p-5 hover:border-gray-300 dark:hover:border-gray-600 transition-colors group cursor-pointer">
@@ -110,7 +112,9 @@ function EventCard({ event }: { event: Event }) {
               </span>
               {(displayOrganizer || isExternal) && (
                 <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta mt-0.5">
-                  {displayOrganizer ? `By ${displayOrganizer}` : ''}{isExternal && event.sourceName ? <span className="text-gray-400 dark:text-gray-500">{displayOrganizer ? ' · ' : ''}via {event.sourceName}</span> : ''}
+                  {displayOrganizer ? `By ${displayOrganizer}` : ''}
+                  {event.hostStartupName && <BadgeCheck className="inline w-3.5 h-3.5 ml-1 -mt-0.5 text-blue-600" aria-label="Verified startup" />}
+                  {isExternal && event.sourceName ? <span className="text-gray-400 dark:text-gray-500">{displayOrganizer ? ' · ' : ''}via {event.sourceName}</span> : ''}
                 </p>
               )}
             </div>

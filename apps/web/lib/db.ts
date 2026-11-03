@@ -30,7 +30,7 @@ export async function getArticleBySlugDirect(slug: string) {
       SELECT
         a.id, a.title, a.slug, a.type, a.excerpt, a.content,
         a."coverImage", a."thumbnailImage", a."readTimeMinutes", a."viewCount", a."isFeatured",
-        a."likeCount",
+        a."likeCount", a."seoTitle", a."seoDescription", a."canonicalUrl", a."ogImage", a."noIndex",
         a."publishedAt"::text AS "publishedAt",
         a."createdAt"::text AS "createdAt",
         a."updatedAt"::text AS "updatedAt",
@@ -231,6 +231,7 @@ export async function getOpinionBySlugDirect(slug: string) {
         a.id, a.title, a.slug, a.type, a.excerpt, a.content,
         a."coverImage", a."thumbnailImage", a."readTimeMinutes", a."viewCount", a."isFeatured",
         a."likeCount", a."agreeCount", a."disagreeCount", a."keyTakeaways",
+        a."seoTitle", a."seoDescription", a."canonicalUrl", a."ogImage", a."noIndex",
         a."publishedAt"::text AS "publishedAt",
         a."createdAt"::text AS "createdAt",
         a."updatedAt"::text AS "updatedAt",

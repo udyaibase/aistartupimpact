@@ -25,9 +25,10 @@ export async function checkMissedCrons(now = new Date()) {
 /**
  * For cron routes that already catch their own errors: records the run from the response status
  * (5xx or a thrown error = failed and alerted). Unauthorized calls (401) aren't runs and aren't recorded.
- * Every recorded run also runs the shared health checks (missed jobs, email limits, AI spend).
+ * Every recorded run also runs the shared health checks (missed jobs, email limits, AI spend), except for jobs that
+ * run every few minutes (opts.checks = false): the slower jobs already run them often enough.
  */
-export async function trackCronRoute(job: keyof typeof CRON_JOBS, handler: () => Promise<Response>): Promise<Response> {
+export async function trackCronRoute(job: keyof typeof CRON_JOBS, handler: () => Promise<Response>, opts: { checks?: boolean } = {}): Promise<Response> {
   const started = new Date();
   let res: Response;
   try {
@@ -47,6 +48,7 @@ export async function trackCronRoute(job: keyof typeof CRON_JOBS, handler: () =>
   if (!ok) {
     await opsAlert(`cron-failed:${job}`, `Scheduled job failed: ${CRON_JOBS[job].label}`, [`HTTP ${res.status}: ${String(body?.error ?? 'no details')}`, `Time: ${new Date().toISOString()}`]).catch(() => {});
   }
+  if (opts.checks === false) return res;
   const { runOpsChecks } = await import('@/lib/ops/checks');
   await runOpsChecks().catch((e) => console.error('[ops checks]', e));
   return res;

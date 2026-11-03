@@ -6,6 +6,7 @@ import { generateShortCode, isSlugReserved } from "@/lib/events/short-code";
 import { sanitizeUserHtml, htmlToPlainText } from "@/lib/sanitize";
 import { refreshPaths, refreshSections } from '@/lib/revalidate';
 import { applyFirstEventBoost } from "@/lib/events/free-boost";
+import { canTagStartup, publishDecision } from "@/lib/events/trust";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,18 @@ export async function POST(request: NextRequest) {
       venueName, address, venueMapUrl, meetingLink, description,
       capacity, coverImageUrl,
     } = data;
+
+    // "Hosted by <startup>": only a verified startup, tagged by one of its own people.
+    const startupId = typeof data.startupId === 'string' && data.startupId ? data.startupId : null;
+    if (startupId) {
+      const host = await prisma.eventOrganizer.findUnique({ where: { id: session.organizerId }, select: { email: true } });
+      if (!(await canTagStartup([session.email, host?.email ?? ''], startupId))) {
+        return NextResponse.json({ success: false, code: "startup_not_allowed", error: "You can only tag a verified startup you belong to." }, { status: 403 });
+      }
+    }
+    // New independent organizers' first events wait for review; verified organizers and startups publish at once.
+    const decision = await publishDecision(session.organizerId, { taggedStartup: !!startupId });
+    const published = decision === "PUBLISHED";
 
     if (!title || !startAt || !endAt) {
       return NextResponse.json({ success: false, error: "Title, start date, and end date are required." }, { status: 400 });
@@ -76,10 +89,11 @@ export async function POST(request: NextRequest) {
         subtitle: subtitle || null,
         category: category || "CONFERENCE",
         format: format || "IN_PERSON",
-        status: "PUBLISHED",
+        status: decision,
+        startupId,
         startAt: new Date(startAt),
         endAt: new Date(endAt),
-        featuredUntil: await featuredUntilFor(session.organizerId, new Date(endAt)),
+        featuredUntil: published ? await featuredUntilFor(session.organizerId, new Date(endAt)) : null,
         timezone: "Asia/Kolkata",
         venueName: venueName || null,
         address: address || null,
@@ -90,7 +104,8 @@ export async function POST(request: NextRequest) {
         capacity: capacity ? parseInt(capacity) : null,
         coverImageUrl: coverImageUrl || null,
         visibility: "PUBLIC",
-        publishedAt: new Date(),
+        publishedAt: published ? new Date() : null,
+        reviewNote: published ? null : "First event from a new organizer",
         // Store venue map URL - we'll put it in the address field combined
         // Actually better: store map link as part of the venue info
       },
@@ -112,9 +127,15 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    await applyFirstEventBoost(session.organizerId, event.id).catch((e) => console.error('[free boost]', e));
-    refreshSections(['events', 'home']);
-    return NextResponse.json({ success: true, data: { id: event.id, slug: event.slug, shortCode: event.shortCode } });
+    if (published) {
+      await applyFirstEventBoost(session.organizerId, event.id).catch((e) => console.error('[free boost]', e));
+      refreshSections(['events', 'home']);
+    }
+    return NextResponse.json({
+      success: true,
+      data: { id: event.id, slug: event.slug, shortCode: event.shortCode, status: decision },
+      ...(published ? {} : { message: "Your event is saved and waiting for a quick review by our team (usually within a day). We'll email you when it's live." }),
+    });
   } catch (error: any) {
     console.error("Organizer create event error:", error);
     if (error.code === "P2002") {

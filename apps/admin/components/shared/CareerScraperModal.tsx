@@ -14,16 +14,8 @@ interface ScrapedJob {
   applicationUrl: string | null;
   category: string;
   employmentType: string | null;
-  _kekaDetail?: {
-    id: number;
-    fullDescription: string | null;
-    experience: string | null;
-    experienceMin: number | null;
-    experienceMax: number | null;
-    salaryRange: any;
-    skills: string[];
-    publishedOn: string | null;
-  };
+  /** Set when the job came from a job-board feed: everything is already here, no second fetch needed. */
+  detail?: DetailedJob;
 }
 
 interface DetailedJob {
@@ -65,6 +57,7 @@ export default function CareerScraperModal({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [scraped, setScraped] = useState(false);
   const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number; title: string } | null>(null);
+  const [scrapeInfo, setScrapeInfo] = useState<{ ats: string | null; source: string; truncated: boolean } | null>(null);
 
   if (!isOpen) return null;
 
@@ -89,6 +82,7 @@ export default function CareerScraperModal({
         setError('No job listings found on this page. Try the direct careers or jobs page URL.');
       } else {
         setJobs(data.jobs);
+        setScrapeInfo({ ats: data.ats ?? null, source: data.source, truncated: !!data.truncated });
         setScraped(true);
       }
     } catch {
@@ -139,22 +133,8 @@ export default function CareerScraperModal({
   const fetchJobDetail = async (job: ScrapedJob, isBulk = false): Promise<DetailedJob> => {
     const listData = buildListData(job);
 
-    // Keka HR: we already have full detail from the API — no need to re-fetch
-    if (job._kekaDetail) {
-      const kd = job._kekaDetail;
-      // fullDescription is already structured text (converted from HTML server-side)
-      const cleanDesc = kd.fullDescription || listData.description;
-      return {
-        ...listData,
-        description: cleanDesc,
-        experienceMin: kd.experienceMin,
-        experienceMax: kd.experienceMax,
-        salaryMin: kd.salaryRange?.minSalary || null,
-        salaryMax: kd.salaryRange?.maxSalary || null,
-        salaryCurrency: kd.salaryRange?.currency || null,
-        skills: Array.isArray(kd.skills) ? kd.skills : [],
-      };
-    }
+    // From a job-board feed: full details already arrived with the list.
+    if (job.detail) return { ...listData, ...job.detail, title: job.detail.title || listData.title, category: job.detail.category || listData.category };
 
     if (!job.jobPageUrl) return listData;
     try {
@@ -192,13 +172,20 @@ export default function CareerScraperModal({
     if (selectedJobs.length === 0) return;
 
     setError('');
-    const detailedJobs: DetailedJob[] = [];
 
-    for (let i = 0; i < selectedJobs.length; i++) {
-      setBulkProgress({ current: i + 1, total: selectedJobs.length, title: selectedJobs[i].title });
-      const detailed = await fetchJobDetail(selectedJobs[i], true);
-      detailedJobs.push(detailed);
-    }
+    // A few at a time: faster than one by one, gentle on the career site and the AI quota.
+    const detailedJobs: DetailedJob[] = new Array(selectedJobs.length);
+    let next = 0;
+    let done = 0;
+    setBulkProgress({ current: 0, total: selectedJobs.length, title: selectedJobs[0].title });
+    await Promise.all(Array.from({ length: Math.min(3, selectedJobs.length) }, async () => {
+      while (next < selectedJobs.length) {
+        const i = next++;
+        detailedJobs[i] = await fetchJobDetail(selectedJobs[i], true);
+        done++;
+        setBulkProgress({ current: done, total: selectedJobs.length, title: selectedJobs[i].title });
+      }
+    }));
 
     setBulkProgress(null);
 
@@ -279,7 +266,9 @@ export default function CareerScraperModal({
           <>
             <div className="flex items-center justify-between px-5 py-3 bg-gray-50 dark:bg-gray-800/50">
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300 font-jakarta">
-                Found {jobs.length} job{jobs.length !== 1 ? 's' : ''} — click a job to fetch full details
+                Found {jobs.length} job{jobs.length !== 1 ? 's' : ''}
+                {scrapeInfo?.ats ? ` from the ${scrapeInfo.ats} job board — full details included` : ' — click a job to fetch full details'}
+                {scrapeInfo?.truncated && <span className="block text-xs text-amber-600 mt-0.5">This page is very long, so some jobs may be missing. If the company uses a job board (Greenhouse, Lever…), paste that link instead.</span>}
               </span>
               {(onImportMultiple || onBulkCreate) && (
                 <button onClick={toggleAll} className="text-xs text-brand hover:underline font-jakarta">

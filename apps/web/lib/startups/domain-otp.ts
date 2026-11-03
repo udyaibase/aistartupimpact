@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { emailCodeAllowed } from '@/lib/rate-limit';
 import { sql } from '@/lib/db';
 import { sendEmail } from '@/lib/email/send';
 
@@ -15,6 +16,9 @@ type Result = { ok: true; cooldown?: number } | { ok: false; error: string; stat
 /** Sends a 6-digit code to a work email to prove control of a startup's domain. */
 export async function sendDomainCode(opts: { email: string; purpose: string; startupName: string; requester: string }): Promise<Result> {
   const { email, purpose } = opts;
+  if (!(await emailCodeAllowed(email, purpose))) {
+    return { ok: false, status: 429, error: 'Too many codes requested for this email. Try again in 15 minutes.' };
+  }
   const recent = await sql`
     SELECT EXTRACT(EPOCH FROM (NOW() - "createdAt"))::int AS age FROM "EmailOtp"
     WHERE email = ${email} AND purpose = ${purpose} ORDER BY "createdAt" DESC LIMIT 1

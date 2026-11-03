@@ -1193,6 +1193,7 @@ model Startup {
   category                                   String?                  @db.VarChar(100)
   businessType                               String?
   status                                     CompanyStatus            @default(ACTIVE)
+  Event                                      Event[]
   AiTool                                     AiTool[]
   Article                                    Article[]
   FundingRound                               FundingRound[]
@@ -2203,6 +2204,11 @@ model EventOrganizer {
   companyEmailVerified   Boolean              @default(false)
   companyEmailVerifiedAt DateTime?
   status                 EventOrganizerStatus @default(PENDING_VERIFICATION)
+  /// Verified organizer: an admin approved their first event, so later events publish without review.
+  verifiedAt             DateTime?
+  /// Suspended by an admin (status SUSPENDED): upcoming events were cancelled and sign-in is blocked.
+  suspendedAt            DateTime?
+  suspendReason          String?
   createdAt              DateTime             @default(now())
   updatedAt              DateTime             @updatedAt
   lastLoginAt            DateTime?
@@ -2250,6 +2256,12 @@ model EventOrganizer {
   /// The free Event Boost on the first published event.
   freeBoostUsedAt     DateTime?
   planGraceNoticeAt   DateTime?
+  /// Billing cycle of the current Pro plan.
+  planCycle           JobBoardBillingCycle @default(MONTHLY)
+  /// First yearly Pro purchase at the founding price (first 20 hosts); the price holds for 24 months.
+  foundingMemberAt    DateTime?
+  /// Set when Pro lapsed to Free after becoming a founding host: the founding price no longer applies.
+  foundingLostAt      DateTime?
 
   // Payouts for paid tickets (Razorpay Route linked account). Bank details go to Razorpay only.
   payoutAccountId   String?
@@ -2551,6 +2563,8 @@ enum EventFormat {
   HYBRID
 }
 
+/// PENDING_REVIEW: not public. A new independent organizer's first event waits for admin approval, and an event
+/// hidden after repeated reports (ContentReport, entityType EVENT) waits for review. Only admins move it on.
 enum EventStatus {
   DRAFT
   PUBLISHED
@@ -2558,6 +2572,7 @@ enum EventStatus {
   POSTPONED
   COMPLETED
   ARCHIVED
+  PENDING_REVIEW
 }
 
 enum EventVisibility {
@@ -2605,6 +2620,12 @@ model Event {
   category                    EventCategory
   format                      EventFormat
   status                      EventStatus     @default(DRAFT)
+  /// Hosted by this startup ("Hosted by NeuralPay"): only a verified startup, tagged by one of its own people.
+  startupId                   String?
+  /// Admin review: when it was approved (or declined), why it waits, and when reports hid it.
+  reviewedAt                  DateTime?
+  reviewNote                  String?
+  heldAt                      DateTime?
   // Date & Time
   startAt                     DateTime
   endAt                       DateTime
@@ -2652,6 +2673,7 @@ model Event {
 
   // Relations
   organizer       EventOrganizer        @relation(fields: [organizerId], references: [id])
+  Startup         Startup?              @relation(fields: [startupId], references: [id], onDelete: SetNull)
   speakers        EventSpeaker[]
   agendaItems     EventAgendaItem[]
   ticketTiers     EventTicketTier[]
@@ -2667,6 +2689,7 @@ model Event {
   @@index([status, visibility])
   @@index([startAt])
   @@index([organizerId])
+  @@index([startupId])
   @@index([category])
   @@index([format])
   @@index([latitude, longitude])
@@ -3149,11 +3172,13 @@ enum JobBoardApplicationSource {
   OTHER
 }
 
+/// How a workspace proved it runs a startup: a work-email code, a DNS TXT record, an admin, or the founder portal.
 enum JobBoardClaimMethod {
   DOMAIN_OTP
   ADMIN
   FOUNDER
   LEGACY_UNVERIFIED
+  DNS_TXT
 }
 
 enum JobBoardEmailStatus {
@@ -3163,10 +3188,20 @@ enum JobBoardEmailStatus {
   FAILED
 }
 
+/// FEATURED and PREMIUM are the pre-Nov 2026 names (read as PRO and SCALE); new purchases use the others.
 enum JobBoardPlan {
   FREE
   FEATURED
   PREMIUM
+  GROWTH
+  PRO
+  SCALE
+}
+
+/// Billing cycle for employer plans and event host Pro.
+enum JobBoardBillingCycle {
+  MONTHLY
+  ANNUAL
 }
 
 model JobBoardEmployer {
@@ -3197,6 +3232,12 @@ model JobBoardEmployer {
   trialStartedAt      DateTime?
   /// "Your plan has ended, renew within 3 days" email, once per lapse.
   planGraceNoticeAt   DateTime?
+  /// Billing cycle of the current paid plan.
+  planCycle           JobBoardBillingCycle @default(MONTHLY)
+  /// First annual purchase at the founding price (first 50 workspaces); the price holds for 24 months.
+  foundingMemberAt    DateTime?
+  /// Set when the plan lapsed to Free after becoming a founding member: the founding price no longer applies.
+  foundingLostAt      DateTime?
   /// GST invoice details (optional; B2B buyers add a GSTIN).
   billingName         String?
   billingGstin        String?
@@ -3830,10 +3871,13 @@ enum JobBoardTeamRole {
   INTERVIEWER
 }
 
+/// PENDING = invited by an owner; REQUESTED = asked to join (owners approve); DECLINED = request turned down.
 enum JobBoardTeamStatus {
   PENDING
   ACTIVE
   REMOVED
+  REQUESTED
+  DECLINED
 }
 
 /// Teammates of an employer hiring workspace. The workspace account itself is the original owner.
@@ -3872,6 +3916,9 @@ model JobBoardPayment {
   id                  String                @id @default(cuid())
   employerId          String
   plan                JobBoardPlan
+  cycle               JobBoardBillingCycle  @default(MONTHLY)
+  /// Paid at the founding-member price (annual only).
+  foundingPrice       Boolean               @default(false)
   amountPaise         Int
   gstPaise            Int
   totalPaise          Int
@@ -3962,6 +4009,10 @@ model OrganizerPayment {
   id                  String                @id @default(cuid())
   organizerId         String
   kind                String // "PRO" | "BOOST"
+  /// Pro only: 30 days or a year.
+  cycle               JobBoardBillingCycle @default(MONTHLY)
+  /// Paid at the founding-host price (yearly Pro only).
+  foundingPrice       Boolean              @default(false)
   eventId             String?
   amountPaise         Int
   gstPaise            Int

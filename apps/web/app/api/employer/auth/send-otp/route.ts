@@ -3,7 +3,7 @@ import { sql } from '@/lib/db';
 import crypto from 'crypto';
 import { otpEmailHtml } from '@udyaibase/utils';
 import { sendEmail } from '@/lib/email/send';
-import { authRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
+import { authRateLimit, checkRateLimit, getClientIdentifier, emailCodeAllowed } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +22,10 @@ export async function POST(request: NextRequest) {
     const email = String(body.email ?? '').toLowerCase().trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) || email.length > 254) {
       return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 });
+    }
+
+    if (!(await emailCodeAllowed(email, 'employer_signup'))) {
+      return NextResponse.json({ error: 'Too many codes requested for this email. Try again in 15 minutes.' }, { status: 429 });
     }
 
     // Per-address cooldown, so nobody can flood an inbox.

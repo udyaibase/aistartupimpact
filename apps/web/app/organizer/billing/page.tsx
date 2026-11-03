@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
 import { requirePermission } from "@/lib/organizer-auth/require-permission";
 import { hostPlanStatus, upcomingWhere } from "@/lib/events/billing";
-import { EVENT_BOOST, HOST_PLANS, registrationLimit } from "@/lib/events/plans";
+import { EVENT_BOOST, HOST_FOUNDING_LIMIT, HOST_PLANS, hostFoundingEligible, hostProPricePaise, registrationLimit } from "@/lib/events/plans";
 import { razorpayKeys, withGst } from "@/lib/billing/razorpay";
 import { invoicesEnabled } from "@/lib/billing/invoice";
 import HostBillingClient from "@/components/organizer/billing/HostBillingClient";
@@ -22,7 +22,7 @@ export default async function HostBillingPage(props: { searchParams: Promise<{ b
     );
   }
   const sp = await props.searchParams;
-  const [status, events, payments, billing] = await Promise.all([
+  const [status, events, payments, billing, foundingHosts] = await Promise.all([
     hostPlanStatus(session.organizerId),
     prisma.event.findMany({
       where: upcomingWhere(session.organizerId),
@@ -36,10 +36,12 @@ export default async function HostBillingPage(props: { searchParams: Promise<{ b
       where: { organizerId: session.organizerId, status: { in: ["SUCCESS", "FAILED"] } },
       orderBy: { createdAt: "desc" },
       take: 24,
-      select: { id: true, kind: true, eventId: true, amountPaise: true, gstPaise: true, totalPaise: true, status: true, paidAt: true, createdAt: true, periodStart: true, periodEnd: true, invoiceNumber: true, invoiceEmailedAt: true, refundAmountPaise: true, creditNoteNumber: true },
+      select: { id: true, kind: true, cycle: true, eventId: true, amountPaise: true, gstPaise: true, totalPaise: true, status: true, paidAt: true, createdAt: true, periodStart: true, periodEnd: true, invoiceNumber: true, invoiceEmailedAt: true, refundAmountPaise: true, creditNoteNumber: true },
     }),
-    prisma.eventOrganizer.findUnique({ where: { id: session.organizerId }, select: { ...BILLING_SELECT, email: true } }),
+    prisma.eventOrganizer.findUnique({ where: { id: session.organizerId }, select: { ...BILLING_SELECT, email: true, foundingMemberAt: true, foundingLostAt: true } }),
+    prisma.eventOrganizer.count({ where: { foundingMemberAt: { not: null } } }),
   ]);
+  const founding = billing ? hostFoundingEligible(billing, billing.foundingMemberAt ? 0 : foundingHosts) : false;
   const titles = Object.fromEntries(events.map((e) => [e.id, e.title]));
   const now = new Date();
 
@@ -48,6 +50,13 @@ export default async function HostBillingPage(props: { searchParams: Promise<{ b
       current={status!.plan.key}
       expiresAt={status!.expiresAt ? new Date(status!.expiresAt).toISOString() : null}
       usage={{ upcoming: status!.upcoming, team: status!.team, promo: status!.promo }}
+      cycle={status!.cycle}
+      pro={{
+        monthly: withGst(hostProPricePaise("MONTHLY")),
+        yearly: withGst(hostProPricePaise("ANNUAL")),
+        yearlyFounding: withGst(hostProPricePaise("ANNUAL", { founding: true })),
+      }}
+      founding={{ eligible: founding, member: !!billing?.foundingMemberAt && founding, placesLeft: Math.max(0, HOST_FOUNDING_LIMIT - foundingHosts) }}
       plans={(["FREE", "PRO"] as const).map((k) => ({ ...HOST_PLANS[k], price: withGst(HOST_PLANS[k].pricePaise) }))}
       boost={{ ...EVENT_BOOST, price: withGst(EVENT_BOOST.pricePaise) }}
       events={events.map((e) => ({
@@ -56,7 +65,7 @@ export default async function HostBillingPage(props: { searchParams: Promise<{ b
         limit: registrationLimit(status!.plan, e), waitlisted: e._count.registrations,
       }))}
       payments={payments.map((p) => ({
-        id: p.id, label: p.kind === "PRO" ? "Pro plan" : `Event Boost${p.eventId && titles[p.eventId] ? ` · ${titles[p.eventId]}` : ""}`,
+        id: p.id, label: p.kind === "PRO" ? `Pro plan${p.cycle === "ANNUAL" ? " (annual)" : ""}` : `Event Boost${p.eventId && titles[p.eventId] ? ` · ${titles[p.eventId]}` : ""}`,
         status: p.status, date: (p.paidAt ?? p.createdAt).toISOString(),
         periodStart: p.kind === "PRO" ? p.periodStart?.toISOString() ?? null : null, periodEnd: p.kind === "PRO" ? p.periodEnd?.toISOString() ?? null : null,
         amountPaise: p.amountPaise, gstPaise: p.gstPaise, totalPaise: p.totalPaise, refundedPaise: p.refundAmountPaise ?? 0,

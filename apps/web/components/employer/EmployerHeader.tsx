@@ -148,6 +148,16 @@ function AccountMenu({ employer, shell }: Props) {
     window.location.href = d?.redirect || '/founder/login';
   };
 
+  const [switching, setSwitching] = useState<string | null>(null);
+  const switchTo = async (employerId: string) => {
+    setSwitching(employerId);
+    const res = await fetch('/api/employer/workspaces/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employerId }) }).catch(() => null);
+    const d = await res?.json().catch(() => ({}));
+    if (res?.ok && d?.redirect) { window.location.href = d.redirect; return; }
+    setSwitching(null);
+    window.alert(d?.error || 'Couldn’t switch. Try again.');
+  };
+
   const item = 'flex items-center gap-2.5 w-full text-left px-4 py-2 text-[13px] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors';
 
   return (
@@ -177,6 +187,18 @@ function AccountMenu({ employer, shell }: Props) {
             <Link href="/employer/team" onClick={() => setOpen(false)} className={item}><Users className="w-4 h-4 text-gray-400" /> Team</Link>
             {can(role, 'account.manage') && <Link href="/employer/settings" onClick={() => setOpen(false)} className={item}><Settings className="w-4 h-4 text-gray-400" /> Settings</Link>}
           </div>
+          {!!shell.otherWorkspaces?.length && (
+            <div className="py-1 border-t border-gray-100 dark:border-gray-800">
+              <p className="px-4 pt-1.5 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Switch team</p>
+              {shell.otherWorkspaces.map((w) => (
+                <button key={w.employerId} onClick={() => switchTo(w.employerId)} disabled={!!switching} className={`${item} disabled:opacity-50`}>
+                  <ArrowLeftRight className="w-4 h-4 text-gray-400" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate">{w.companyName}</span>
+                  <span className="text-[11px] text-gray-400">{switching === w.employerId ? '…' : ROLE_LABEL[w.role]}</span>
+                </button>
+              ))}
+            </div>
+          )}
           <div className="py-1 border-t border-gray-100 dark:border-gray-800">
             {shell.startupProfilePath && (
               <a href={shell.startupProfilePath} target="_blank" rel="noopener" onClick={() => setOpen(false)} className={item}>

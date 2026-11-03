@@ -33,7 +33,7 @@ describe('Admin plan grants', () => {
   it('only super admins can grant plans', async () => {
     const { grantPlanAction } = await import('@/app/(dashboard)/plans/actions');
     asRole('EDITOR_IN_CHIEF');
-    const r = await grantPlanAction({ kind: 'EMPLOYER', id: 'e1', plan: 'FEATURED', days: 30, amountRupees: 5900, reference: 'INV-1' });
+    const r = await grantPlanAction({ kind: 'EMPLOYER', id: 'e1', plan: 'PRO', days: 30, amountRupees: 5899, reference: 'INV-1' });
     expect(r.success).toBe(false);
     expect(db.jobBoardEmployer.update).not.toHaveBeenCalled();
   });
@@ -41,20 +41,23 @@ describe('Admin plan grants', () => {
   it('validates days and requires a reference', async () => {
     const { grantPlanAction } = await import('@/app/(dashboard)/plans/actions');
     asRole('SUPER_ADMIN');
-    expect((await grantPlanAction({ kind: 'EMPLOYER', id: 'e1', plan: 'FEATURED', days: 0, amountRupees: 0, reference: 'INV-1' })).success).toBe(false);
-    expect((await grantPlanAction({ kind: 'EMPLOYER', id: 'e1', plan: 'FEATURED', days: 30, amountRupees: 0, reference: 'x' })).success).toBe(false);
-    expect((await grantPlanAction({ kind: 'EMPLOYER', id: 'e1', plan: 'PRO', days: 30, amountRupees: 0, reference: 'INV-1' })).success).toBe(false);
+    expect((await grantPlanAction({ kind: 'EMPLOYER', id: 'e1', plan: 'PRO', days: 0, amountRupees: 0, reference: 'INV-1' })).success).toBe(false);
+    expect((await grantPlanAction({ kind: 'EMPLOYER', id: 'e1', plan: 'PRO', days: 30, amountRupees: 0, reference: 'x' })).success).toBe(false);
+    // Retired names and unknown values are refused; only Growth, Pro and Scale can be granted.
+    expect((await grantPlanAction({ kind: 'EMPLOYER', id: 'e1', plan: 'FEATURED', days: 30, amountRupees: 0, reference: 'INV-1' })).success).toBe(false);
+    expect((await grantPlanAction({ kind: 'EMPLOYER', id: 'e1', plan: 'BOGUS', days: 30, amountRupees: 0, reference: 'INV-1' })).success).toBe(false);
   });
 
   it('grants an employer plan: 30 days, job limit, featured jobs, payment row with GST split', async () => {
     const { grantPlanAction } = await import('@/app/(dashboard)/plans/actions');
     asRole('SUPER_ADMIN');
     db.jobBoardEmployer.findUnique.mockResolvedValue({ companyName: 'Acme', plan: 'FREE', planExpiresAt: null });
-    const r = await grantPlanAction({ kind: 'EMPLOYER', id: 'e1', plan: 'FEATURED', days: 30, amountRupees: 5900, reference: 'INV-1' });
+    const r = await grantPlanAction({ kind: 'EMPLOYER', id: 'e1', plan: 'PRO', days: 30, amountRupees: 5900, reference: 'INV-1' });
     expect(r.success).toBe(true);
     const upd = db.jobBoardEmployer.update.mock.calls[0][0];
-    expect(upd.data.plan).toBe('FEATURED');
-    expect(upd.data.maxActiveJobs).toBe(5);
+    expect(upd.data.plan).toBe('PRO');
+    expect(upd.data.planCycle).toBe('MONTHLY');
+    expect(upd.data.maxActiveJobs).toBe(15);
     expect(Math.round((upd.data.planExpiresAt.getTime() - Date.now()) / DAY)).toBe(30);
     expect(db.jobBoardListing.updateMany.mock.calls[0][0].data.isFeatured).toBe(true);
     const pay = db.jobBoardPayment.create.mock.calls[0][0].data;
@@ -69,11 +72,23 @@ describe('Admin plan grants', () => {
     const { grantPlanAction } = await import('@/app/(dashboard)/plans/actions');
     asRole('SUPER_ADMIN');
     const end = new Date(Date.now() + 10 * DAY);
+    // A legacy Premium workspace extended with Scale (its successor) stacks too.
     db.jobBoardEmployer.findUnique.mockResolvedValue({ companyName: 'Acme', plan: 'PREMIUM', planExpiresAt: end });
-    await grantPlanAction({ kind: 'EMPLOYER', id: 'e1', plan: 'PREMIUM', days: 30, amountRupees: 0, reference: 'comp' });
+    await grantPlanAction({ kind: 'EMPLOYER', id: 'e1', plan: 'SCALE', days: 30, amountRupees: 0, reference: 'comp' });
     const upd = db.jobBoardEmployer.update.mock.calls[0][0];
     expect(Math.round((upd.data.planExpiresAt.getTime() - Date.now()) / DAY)).toBe(40);
-    expect(upd.data.maxActiveJobs).toBe(50);
+    expect(upd.data.maxActiveJobs).toBe(40);
+  });
+
+  it('Growth has no featured placement; a 365-day grant is a yearly plan', async () => {
+    const { grantPlanAction } = await import('@/app/(dashboard)/plans/actions');
+    asRole('SUPER_ADMIN');
+    db.jobBoardEmployer.findUnique.mockResolvedValue({ companyName: 'Acme', plan: 'FREE', planExpiresAt: null });
+    await grantPlanAction({ kind: 'EMPLOYER', id: 'e1', plan: 'GROWTH', days: 365, amountRupees: 29488, reference: 'NEFT-1' });
+    const upd = db.jobBoardEmployer.update.mock.calls[0][0];
+    expect(upd.data.planCycle).toBe('ANNUAL');
+    expect(db.jobBoardListing.updateMany).not.toHaveBeenCalled();
+    expect(db.jobBoardPayment.create.mock.calls[0][0].data.cycle).toBe('ANNUAL');
   });
 
   it('host Pro: features upcoming events until they end or the plan does, never shortening a Boost', async () => {

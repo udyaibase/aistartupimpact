@@ -10,6 +10,12 @@ function gitValue(cmd) {
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // The career scraper renders JavaScript-heavy pages with headless Chromium; on Vercel it uses @sparticuz/chromium,
+  // whose compressed browser must ship with that one function.
+  serverExternalPackages: ['@sparticuz/chromium', 'puppeteer-core'],
+  outputFileTracingIncludes: {
+    '/api/admin/scrape-careers': ['../../node_modules/@sparticuz/chromium/bin/**'],
+  },
   env: {
     BUILD_TIME: new Date().toISOString(),
     BUILD_COMMIT_SHA: gitValue("git rev-parse HEAD"),

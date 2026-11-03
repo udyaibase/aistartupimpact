@@ -57,3 +57,39 @@ export async function requestCreditNote(table: 'employer' | 'organizer', payment
     console.error('[requestCreditNote] failed', err instanceof Error ? err.message : err);
   }
 }
+
+/** Tell the web app an admin approved an event, so its go-live steps run now (the daily cron catches any miss). */
+export async function requestEventApproved(eventId: string): Promise<void> {
+  const secret = process.env.INTERNAL_API_SECRET;
+  if (!secret) return;
+  const base = (process.env.WEB_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://udyaibase.com').replace(/\/$/, '');
+  try {
+    const res = await fetch(`${base}/api/webhooks/event-approved`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
+      body: JSON.stringify({ eventId }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) console.error('[requestEventApproved] web app answered', res.status);
+  } catch (err) {
+    console.error('[requestEventApproved] failed', err instanceof Error ? err.message : err);
+  }
+}
+
+/** Tell the web app an organizer was suspended, so attendees of the cancelled events are emailed and refunded now. */
+export async function requestOrganizerSuspended(organizerId: string): Promise<void> {
+  const secret = process.env.INTERNAL_API_SECRET;
+  if (!secret) return;
+  const base = (process.env.WEB_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://udyaibase.com').replace(/\/$/, '');
+  try {
+    const res = await fetch(`${base}/api/webhooks/organizer-suspended`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
+      body: JSON.stringify({ organizerId }),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!res.ok) console.error('[requestOrganizerSuspended] web app answered', res.status);
+  } catch (err) {
+    console.error('[requestOrganizerSuspended] failed', err instanceof Error ? err.message : err);
+  }
+}

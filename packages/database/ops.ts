@@ -10,6 +10,7 @@ export const CRON_JOBS: Record<string, { label: string; maxGapHours: number }> =
   'data-retention': { label: 'Data retention and plan maintenance (daily)', maxGapHours: 26 },
   'daily-digest': { label: 'Admin daily digest (daily)', maxGapHours: 26 },
   'india-ai-stats': { label: 'India AI stats refresh (every 6 hours)', maxGapHours: 8 },
+  'publish-scheduled': { label: 'Publish scheduled articles (every 10 minutes)', maxGapHours: 1 },
 };
 
 /** Resend plan limits from env: RESEND_DAILY_LIMIT (default 100, the free plan) and RESEND_MONTHLY_LIMIT (default 3000). */

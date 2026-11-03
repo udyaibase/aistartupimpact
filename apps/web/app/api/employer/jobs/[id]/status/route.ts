@@ -40,7 +40,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     }),
     prisma.jobBoardEmployer.findUnique({
       where: { id: session.id },
-      select: { email: true, passwordHash: true, requireJobApproval: true, emailVerified: true, maxActiveJobs: true, plan: true, planExpiresAt: true, firstJobPublishedAt: true, startupId: true, startupClaimMethod: true },
+      select: { email: true, passwordHash: true, requireJobApproval: true, emailVerified: true, maxActiveJobs: true, plan: true, planExpiresAt: true, firstJobPublishedAt: true, startupId: true, startupClaimMethod: true, Startup: { select: { isVerified: true } } },
     }),
   ]);
   if (!listing || !employer) return NextResponse.json({ error: 'Job not found.' }, { status: 404 });
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         await prisma.jobBoardListing.update({ where: { id }, data: { expiresAt: new Date(now.getTime() + RENEW_DAYS * 86_400_000), expiryNudgeAt: null } });
       }
       await setListingStatus(id, 'OPEN');
-      // A workspace's first published job starts its free Featured trial (before featuredFor, so it's featured too).
+      // A workspace's first published job starts its free Pro trial (before featuredFor, so it's featured too).
       if (!employer.firstJobPublishedAt) await maybeStartTrial(session.id);
       const firstPublish = !listing.publishedAt;
       await prisma.jobBoardListing.update({

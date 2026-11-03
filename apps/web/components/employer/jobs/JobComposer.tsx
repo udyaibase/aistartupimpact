@@ -186,7 +186,7 @@ export default function JobComposer({
         if (data.code === 'email_unverified') {
           setActionError(<>Verify your email before publishing. Your job is saved as a draft. <a href="#verify-email" className="font-semibold underline">Verify now</a></>);
         } else if (data.code === 'startup_unverified') {
-          setActionError(<>Verify your startup before publishing. Your job is saved as a draft. <Link href="/employer/company" className="font-semibold underline">Verify now</Link></>);
+          setActionError(<>Only a verified startup can publish jobs, and only its founder can verify it. Your job is saved as a draft. <Link href="/employer/company" className="font-semibold underline">Ask your founder</Link></>);
         } else {
           setActionError(data.error || 'Couldn’t publish. Try again.');
           if (data.field) { setErrors((e) => ({ ...e, [data.field]: data.error })); focusField(data.field); }

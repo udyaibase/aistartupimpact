@@ -136,9 +136,10 @@ export async function screenApplication(applicationId: string, employerId: strin
   if (existing?.status === 'PENDING' && Date.now() - existing.createdAt.getTime() < 120_000) return { ok: true, status: 'cached' };
 
   const status = await planStatus(employerId);
-  if (!status || status.plan.aiScreensPerPeriod === 0) return { ok: false, code: 'plan', message: 'AI screening is on the Featured and Premium plans.' };
+  if (!status || status.plan.aiScreensPerPeriod === 0) return { ok: false, code: 'plan', message: 'AI screening isn’t included in this plan.' };
+  if (status.phase === 'grace') return { ok: false, code: 'quota', message: 'AI screening is paused until you renew your plan.' };
   if (opts.auto && !status.aiAutoScreen) return { ok: false, code: 'disabled', message: 'Auto-screening is off.' };
-  if (status.ai.left <= 0) return { ok: false, code: 'quota', message: `You've used all ${status.ai.limit} AI screenings this month.` };
+  if (status.ai.left <= 0) return { ok: false, code: 'quota', message: `You've used all ${status.ai.limit} AI screenings for this ${status.plan.key === 'FREE' ? 'month' : 'period'}. Upgrade for more.` };
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return { ok: false, code: 'not_configured', message: 'AI screening isn’t available right now.' };

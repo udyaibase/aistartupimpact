@@ -35,18 +35,18 @@ export default function RefundPage() {
           <li>Cancellations requested less than 5 business days before the scheduled date will not be refunded, though we may allow rescheduling at our discretion.</li>
         </ul>
 
-        <h2>4. Employer Plans (Featured, Premium) and Event Host Plans (Pro, Event Boost)</h2>
+        <h2>4. Employer Plans (Growth, Pro, Scale) and Event Host Plans (Pro, Event Boost)</h2>
 
         <h3>4.1 How plans work</h3>
         <ul>
-          <li>Plans are <strong>prepaid for 30 days</strong> and <strong>do not renew automatically</strong>. Nothing is charged unless you choose to pay again.</li>
-          <li>We email you 3 days before a plan ends. Renewing early adds 30 days to your current end date, so you never lose days.</li>
+          <li>Employer plans and event host Pro are <strong>prepaid monthly (30 days) or yearly (365 days)</strong>. Plans <strong>do not renew automatically</strong>. Nothing is charged unless you choose to pay again.</li>
+          <li>We email you 3 days before a plan ends. Renewing the same plan early adds the new period to your current end date, so you never lose days. Switching to a different plan or billing period starts the new period on the day you pay.</li>
           <li>An <strong>Event Boost</strong> is a one-time purchase for one event and lasts until that event ends.</li>
         </ul>
 
         <h3>4.2 Free trial and free Event Boost</h3>
         <ul>
-          <li>A new employer workspace gets a <strong>7-day Featured trial</strong> when it publishes its first job. No card is needed and nothing is charged. When the trial ends, the workspace moves to the Free plan unless you choose a plan.</li>
+          <li>A new employer workspace gets a <strong>7-day Pro trial</strong> when it publishes its first job. No card is needed and nothing is charged. When the trial ends, the workspace moves to the Free plan unless you choose a plan.</li>
           <li>An event host&apos;s <strong>first published event gets a free Event Boost</strong>.</li>
           <li>Trials and free Boosts are one per account and one per company or startup. As nothing is paid for them, they are not refundable or exchangeable for credit.</li>
         </ul>
@@ -61,7 +61,7 @@ export default function RefundPage() {
         <h3>4.4 Refunds for plans</h3>
         <ul>
           <li><strong>Charged by mistake or twice:</strong> full refund. Tell us within 7 days of the payment.</li>
-          <li><strong>Paid but didn&apos;t use it:</strong> full refund if you ask within <strong>7 days of payment</strong> and haven&apos;t used a paid feature in that time. For employer plans, that means no AI candidate reviews run and no jobs published or reopened beyond the Free plan limit. For Pro, no promo email sent and no event published beyond the Free plan limit. Available once per account.</li>
+          <li><strong>Paid but didn&apos;t use it:</strong> full refund if you ask within <strong>7 days of payment</strong> (<strong>14 days for a yearly plan</strong>) and haven&apos;t used a paid feature in that time. For employer plans, that means no AI candidate reviews run beyond the Free plan&apos;s monthly allowance, no jobs published or reopened beyond the Free plan limit, and no teammates invited beyond the Free plan&apos;s seats. For Pro, no promo email sent and no event published beyond the Free plan limit. Available once per account.</li>
           <li><strong>Cancelling during a plan:</strong> there are no partial or pro-rata refunds. The plan stays active until the end of the period you paid for.</li>
           <li><strong>When something went wrong on our side</strong> (for example, a job held by mistake during a moderation review, or the platform being unavailable for more than 24 hours): we add the lost days to your plan, or more, as a goodwill credit.</li>
           <li>No refunds are given because a role was filled early, an event sold out, or a listing received fewer applicants or registrations than hoped.</li>

@@ -3,17 +3,23 @@ import crypto from 'crypto';
 import { prisma } from '@udyaibase/database';
 import { sql } from '@/lib/db';
 import { setEmployerSession } from '@/lib/employer-auth';
-import { authRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
+import { authRateLimit, checkRateLimit, emailCodeAllowed, getClientIdentifier } from '@/lib/rate-limit';
 import { checkDomainCode } from '@/lib/startups/domain-otp';
-import { sendMemberLoginCode } from '@/lib/employer/team';
+import { resendPendingInvites, sendMemberLoginCode } from '@/lib/employer/team';
+import { needsTwoFactor, signInMemberships, twoFactorChallenge } from '@/lib/employer/sign-in';
+import { ROLE_LABEL } from '@/lib/employer/roles';
 
 export const dynamic = 'force-dynamic';
 
 const PURPOSE = 'employer_member_login';
 
 /**
- * Passwordless sign-in for teammates. { step: 'send', email } then { step: 'verify', email, code, employerId? }.
- * "send" always answers the same way so it can't be used to discover who is on a team.
+ * Email-code sign-in to the employer portal, for owners and teammates alike.
+ * { step: 'send', email } then { step: 'verify', email, code, employerId? }.
+ * - "send" always answers the same way, so it can't be used to discover who is on a team.
+ * - An unexpired invite counts: entering the code accepts it. Expired invites are re-sent instead.
+ * - Several teams: the code is checked first, then the person chooses one.
+ * - An account owner with two-step sign-in continues to the two-step step (never a code alone).
  */
 export async function POST(request: NextRequest) {
   const { success } = await checkRateLimit(authRateLimit, getClientIdentifier(request));
@@ -23,12 +29,14 @@ export async function POST(request: NextRequest) {
   const email = String(b.email ?? '').trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 });
 
-  const memberships = await prisma.jobBoardTeamMember.findMany({
-    where: { email, status: 'ACTIVE', Employer: { isActive: true, deactivatedAt: null } },
-    include: { Employer: { select: { id: true, email: true, companyName: true, slug: true, plan: true } } },
-  });
+  const memberships = await signInMemberships(email);
 
   if (b.step !== 'verify') {
+    // Checked for every address (member or not), so the answer never reveals who is on a team.
+    if (!(await emailCodeAllowed(email, PURPOSE))) {
+      return NextResponse.json({ error: 'Too many codes requested for this email. Try again in 15 minutes.' }, { status: 429 });
+    }
+    if (!memberships.length) await resendPendingInvites(email);
     if (memberships.length) {
       const recent = await sql`SELECT EXTRACT(EPOCH FROM (NOW() - "createdAt"))::int AS age FROM "EmailOtp" WHERE email = ${email} AND purpose = ${PURPOSE} ORDER BY "createdAt" DESC LIMIT 1`;
       const age = (recent[0] as { age: number } | undefined)?.age;
@@ -40,7 +48,7 @@ export async function POST(request: NextRequest) {
         await sendMemberLoginCode(email, code);
       }
     }
-    return NextResponse.json({ success: true, message: 'If this email is on a hiring team, we sent it a 6-digit code.' });
+    return NextResponse.json({ success: true, message: 'If this email is on a hiring team, we sent it a 6-digit code. If your invitation expired, we sent you a new one.' });
   }
 
   const code = String(b.code ?? '').replace(/\D/g, '');
@@ -56,12 +64,27 @@ export async function POST(request: NextRequest) {
     if (!stored || stored.length !== hashed.length || !crypto.timingSafeEqual(Buffer.from(stored), Buffer.from(hashed))) {
       return checkDomainCode({ email, purpose: PURPOSE, code }).then((r) => NextResponse.json({ error: r.ok ? 'Choose a workspace.' : r.error }, { status: r.ok ? 400 : r.status }));
     }
-    return NextResponse.json({ choose: memberships.map((m) => ({ employerId: m.employerId, companyName: m.Employer.companyName })) });
+    return NextResponse.json({
+      choose: memberships.map((m) => ({
+        employerId: m.employerId, companyName: m.Employer.companyName, logoUrl: m.Employer.logoUrl,
+        role: ROLE_LABEL[m.role], invited: m.status === 'PENDING',
+      })),
+    });
   }
 
   const r = await checkDomainCode({ email, purpose: PURPOSE, code });
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
-  await prisma.jobBoardTeamMember.update({ where: { id: chosen.id }, data: { lastActiveAt: new Date() } });
+
+  if (needsTwoFactor(chosen)) {
+    return NextResponse.json({ requires2FA: true, challengeToken: await twoFactorChallenge(chosen.employerId) });
+  }
+  // The code proves the address, so a pending invite is accepted now (same as clicking the invite link).
+  await prisma.jobBoardTeamMember.update({
+    where: { id: chosen.id },
+    data: chosen.status === 'PENDING'
+      ? { status: 'ACTIVE', acceptedAt: new Date(), lastActiveAt: new Date(), inviteTokenHash: null, inviteExpiresAt: null }
+      : { lastActiveAt: new Date() },
+  });
   const e = chosen.Employer;
   await setEmployerSession({ id: e.id, email: e.email, companyName: e.companyName, slug: e.slug, plan: e.plan, onboardingCompleted: true }, { id: chosen.id, email: chosen.email });
   return NextResponse.json({ success: true, redirect: chosen.role === 'INTERVIEWER' ? '/employer/applications' : '/employer/dashboard' });

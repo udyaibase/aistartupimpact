@@ -1,4 +1,5 @@
 import { prisma } from '@udyaibase/database';
+import { isRealInbox } from '@/lib/employer/owners';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 import { button, esc, shell } from '@/lib/jobs/apply-emails';
 import { eraseApplication } from '@/lib/jobs/candidate-status';
@@ -113,7 +114,7 @@ async function hiringInboxes(employerId: string, workspaceEmail: string): Promis
     select: { email: true },
     take: 10,
   });
-  return Array.from(new Set([workspaceEmail, ...members.map((m) => m.email)].map((x) => x.toLowerCase())));
+  return Array.from(new Set([...(isRealInbox(workspaceEmail) ? [workspaceEmail] : []), ...members.map((m) => m.email)].map((x) => x.toLowerCase())));
 }
 
 function sendWaitingEmail(to: string, jobs: { title: string; id: string; n: number }[]) {

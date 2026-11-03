@@ -124,8 +124,9 @@ export default function TeamManager({ initialTeam, jobs, initialRequireApproval,
     setBusy(null);
   }
 
-  const active = team.filter((t) => t.status !== 'PENDING');
+  const active = team.filter((t) => t.status === 'ACTIVE' || t.status === 'OWNER_ACCOUNT');
   const pending = team.filter((t) => t.status === 'PENDING');
+  const requests = team.filter((t) => t.status === 'REQUESTED');
   const isMe = (t: TeamRow) => (t.id ? t.id === me.memberId : !me.memberId && t.email.toLowerCase() === me.email.toLowerCase());
 
   return (
@@ -180,6 +181,28 @@ export default function TeamManager({ initialTeam, jobs, initialRequireApproval,
         {error && <p role="alert" className="text-sm text-red-700 dark:text-red-400">{error}</p>}
       </div>
 
+      {canManage && requests.length > 0 && (
+        <section aria-labelledby="requests-title" className={card}>
+          <h2 id="requests-title" className="portal-section-title px-4 sm:px-5 pt-4 pb-1">Requests to join · {requests.length}</h2>
+          <p className="px-4 sm:px-5 pb-2 text-[13px] text-gray-500">They can’t see anything until you approve. Approved people join as Recruiters; change the role after.</p>
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+            {requests.map((t) => (
+              <li key={t.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 px-4 sm:px-5 py-3">
+                <p className="flex-1 min-w-0 text-sm font-semibold text-gray-900 dark:text-white truncate">{t.email}</p>
+                <div className="flex items-center gap-2">
+                  <button type="button" disabled={busy === t.id}
+                    onClick={() => call(`/api/employer/team/${t.id}`, { method: 'PATCH', body: JSON.stringify({ action: 'approve' }) }, t.id!, `${t.email} joined as Recruiter.`)}
+                    className="min-h-[40px] px-3 rounded-[10px] bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-semibold disabled:opacity-50">Approve</button>
+                  <button type="button" disabled={busy === t.id}
+                    onClick={() => call(`/api/employer/team/${t.id}`, { method: 'PATCH', body: JSON.stringify({ action: 'decline' }) }, t.id!, `Declined ${t.email}.`)}
+                    className="min-h-[40px] px-3 rounded-[10px] border border-gray-300 dark:border-gray-700 text-sm font-semibold text-gray-700 dark:text-gray-300 disabled:opacity-50">Decline</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section aria-labelledby="members-title" className={card}>
         <h2 id="members-title" className="portal-section-title px-4 sm:px-5 pt-4 pb-2">Members · {active.length}</h2>
         <ul className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -195,7 +218,7 @@ export default function TeamManager({ initialTeam, jobs, initialRequireApproval,
                 </div>
               </div>
               <div className="flex items-center gap-2 sm:shrink-0">
-                {t.id && canManage && !isMe(t) ? (
+                {t.id && canManage && !isMe(t) && !t.accountOwner ? (
                   <>
                     <label htmlFor={`role-${t.id}`} className="sr-only">Role for {t.email}</label>
                     <select id={`role-${t.id}`} value={t.role} disabled={busy === t.id}
@@ -216,7 +239,7 @@ export default function TeamManager({ initialTeam, jobs, initialRequireApproval,
                   </>
                 ) : (
                   <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-                    {ROLE_LABEL[t.role]}{t.status === 'OWNER_ACCOUNT' ? ' · account' : ''}{t.role === 'INTERVIEWER' && t.jobIds.length > 0 ? ` · ${accessLabel(t.jobIds)}` : ''}
+                    {ROLE_LABEL[t.role]}{t.accountOwner ? ' · account' : ''}{t.role === 'INTERVIEWER' && t.jobIds.length > 0 ? ` · ${accessLabel(t.jobIds)}` : ''}
                   </span>
                 )}
               </div>

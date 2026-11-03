@@ -3,6 +3,7 @@ import { prisma } from "@udyaibase/database";
 import JobsWidgetView, { type JobsWidgetConfig } from "@/components/embed/JobsWidgetView";
 import EmbedEmptyState from "@/components/embed/EmbedEmptyState";
 import { getCareersCompany, getCareersJobs } from "@/lib/jobs/careers";
+import { effectivePlan } from "@/lib/employer/plans";
 
 export const revalidate = 60;
 
@@ -18,7 +19,12 @@ export default async function JobsEmbedPage({ params }: { params: Promise<{ widg
   if (!widget || !widget.active) return <EmbedEmptyState />;
   const company = await getCareersCompany({ id: widget.employerId });
   if (!company) return <EmbedEmptyState />;
-  const jobs = await getCareersJobs(widget.employerId, widget.departments);
+  const [jobs, employer] = await Promise.all([
+    getCareersJobs(widget.employerId, widget.departments),
+    prisma.jobBoardEmployer.findUnique({ where: { id: widget.employerId }, select: { plan: true, planExpiresAt: true, planIsTrial: true } }),
+  ]);
+  // Free always shows the link; paid plans may hide it (and it comes back if the plan lapses).
+  const canHideBranding = !!employer && effectivePlan(employer).customBranding;
 
   const config: JobsWidgetConfig = {
     id: widget.id,
@@ -42,7 +48,7 @@ export default async function JobsEmbedPage({ params }: { params: Promise<{ widg
     showDepartment: widget.showDepartment,
     showSalary: widget.showSalary,
     showSkills: widget.showSkills,
-    showPoweredBy: widget.showPoweredBy,
+    showPoweredBy: widget.showPoweredBy || !canHideBranding,
     company: { name: company.name, logoUrl: company.logoUrl, slug: company.slug },
   };
 

@@ -176,6 +176,9 @@ export default async function JobsPage(props: PageProps) {
           <Link href="/employer/signup" className="text-sm font-semibold font-jakarta text-gray-600 dark:text-gray-400 hover:text-brand transition-colors underline underline-offset-2">
             Hiring? Post a job
           </Link>
+          <Link href="/hire/pricing" className="text-sm font-semibold font-jakarta text-gray-600 dark:text-gray-400 hover:text-brand transition-colors underline underline-offset-2">
+            Pricing
+          </Link>
         </div>
       </div>
 

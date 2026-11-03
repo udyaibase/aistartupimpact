@@ -150,8 +150,9 @@ export default function AdminEmployersPage() {
                 </td>
                 <td className="px-6 py-4 hidden lg:table-cell">
                   <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded font-jakarta ${
-                    emp.plan === 'PREMIUM' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'
-                    : emp.plan === 'FEATURED' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+                    emp.plan === 'SCALE' || emp.plan === 'PREMIUM' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'
+                    : emp.plan === 'PRO' || emp.plan === 'FEATURED' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+                    : emp.plan === 'GROWTH' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
                     : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
                   }`}>
                     {emp.plan}

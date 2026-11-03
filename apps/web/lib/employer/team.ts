@@ -1,10 +1,15 @@
 import crypto from 'crypto';
+import { effectivePlan } from '@/lib/employer/plans';
 import { prisma } from '@udyaibase/database';
 import type { EmployerRole } from '@/lib/employer-auth';
 import { sendEmail } from '@/lib/email/send';
 import { ROLE_LABEL } from '@/lib/employer/roles';
+import { isRealInbox } from '@/lib/employer/owners';
 import { employerContext } from '@/lib/employer/applications';
 import { emailDomain, emailMatchesDomain, isFreeMailDomain, websiteDomain } from '@/lib/jobs/trust';
+
+/** Safety cap for plans with unlimited seats. */
+const MAX_SEATS_CAP = 200;
 
 const SITE = (process.env.NEXT_PUBLIC_SITE_URL || 'https://udyaibase.com').replace(/\/$/, '');
 export const INVITE_TTL_DAYS = 7;
@@ -31,28 +36,33 @@ export interface TeamRow {
   email: string;
   name: string | null;
   role: EmployerRole;
-  status: 'OWNER_ACCOUNT' | 'PENDING' | 'ACTIVE';
+  status: 'OWNER_ACCOUNT' | 'PENDING' | 'ACTIVE' | 'REQUESTED';
   invitedAt: string | null;
   inviteExpired: boolean;
   /** Interviewers: the jobs they can see. Empty = all jobs. */
   jobIds: string[];
+  /** The owner whose email is the workspace account: can't be removed or demoted here. */
+  accountOwner: boolean;
 }
 
 /** Workspace account (always an owner) plus active and pending teammates. */
 export async function listTeam(employerId: string): Promise<TeamRow[]> {
   const [employer, members] = await Promise.all([
     prisma.jobBoardEmployer.findUnique({ where: { id: employerId }, select: { email: true, FounderUser: { select: { name: true } } } }),
-    prisma.jobBoardTeamMember.findMany({ where: { employerId, status: { in: ['PENDING', 'ACTIVE'] } }, orderBy: [{ status: 'asc' }, { invitedAt: 'asc' }] }),
+    prisma.jobBoardTeamMember.findMany({ where: { employerId, status: { in: ['PENDING', 'ACTIVE', 'REQUESTED'] } }, orderBy: [{ status: 'asc' }, { invitedAt: 'asc' }] }),
   ]);
   const now = Date.now();
+  // The account owner normally has their own OWNER row; show the account line only for older workspaces without one.
+  const accountHasRow = !!employer && members.some((m) => m.email.toLowerCase() === employer.email.toLowerCase());
   return [
-    ...(employer && !employer.email.endsWith('@udyaibase.com')
-      ? [{ id: null, email: employer.email, name: employer.FounderUser?.name ?? null, role: 'OWNER' as const, status: 'OWNER_ACCOUNT' as const, invitedAt: null, inviteExpired: false, jobIds: [] }]
+    ...(employer && isRealInbox(employer.email) && !accountHasRow
+      ? [{ id: null, email: employer.email, name: employer.FounderUser?.name ?? null, role: 'OWNER' as const, status: 'OWNER_ACCOUNT' as const, invitedAt: null, inviteExpired: false, jobIds: [], accountOwner: true }]
       : []),
     ...members.map((m) => ({
-      id: m.id, email: m.email, name: m.name, role: m.role, status: m.status as 'PENDING' | 'ACTIVE',
+      id: m.id, email: m.email, name: m.name, role: m.role, status: m.status as 'PENDING' | 'ACTIVE' | 'REQUESTED',
       invitedAt: m.invitedAt.toISOString(), inviteExpired: m.status === 'PENDING' && !!m.inviteExpiresAt && m.inviteExpiresAt.getTime() < now,
       jobIds: m.role === 'INTERVIEWER' ? m.jobIds : [],
+      accountOwner: !!employer && m.role === 'OWNER' && m.email.toLowerCase() === employer.email.toLowerCase(),
     })),
   ];
 }
@@ -119,7 +129,7 @@ export async function teamCompanyDomain(employerId: string): Promise<string | nu
 
 export type InviteResult =
   | { ok: true; memberId: string }
-  | { ok: false; status: number; error: string; field?: string; code?: 'outside_domain'; domain?: string };
+  | { ok: false; status: number; error: string; field?: string; code?: 'outside_domain' | 'seat_limit'; domain?: string };
 
 /**
  * The one place teammates are invited (employer Team page and founder portal both call it).
@@ -150,13 +160,23 @@ export async function inviteTeammate(opts: {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) || email.length > 254) {
     return { ok: false, status: 400, error: 'Enter a valid email address.', field: 'email' };
   }
-  const employer = await prisma.jobBoardEmployer.findUnique({ where: { id: opts.employerId }, select: { email: true } });
+  const employer = await prisma.jobBoardEmployer.findUnique({ where: { id: opts.employerId }, select: { email: true, plan: true, planExpiresAt: true, planIsTrial: true } });
   if (!employer) return { ok: false, status: 404, error: 'Workspace not found.' };
   if (employer.email.toLowerCase() === email) return { ok: false, status: 409, error: 'That’s the workspace owner’s email already.', field: 'email' };
   const existing = await prisma.jobBoardTeamMember.findUnique({ where: { employerId_email: { employerId: opts.employerId, email } } });
   if (existing?.status === 'ACTIVE') return { ok: false, status: 409, error: `${email} is already on your team.`, field: 'email' };
-  const seats = await prisma.jobBoardTeamMember.count({ where: { employerId: opts.employerId, status: { in: ['PENDING', 'ACTIVE'] } } });
-  if (!existing && seats >= 25) return { ok: false, status: 403, error: 'You’ve reached 25 teammates. Remove someone or contact us.' };
+  // Seats include the workspace owner. Over the limit after a downgrade, existing people keep access; only new invites stop.
+  const plan = effectivePlan(employer);
+  const maxSeats = plan.maxSeats ?? MAX_SEATS_CAP;
+  const seats = 1 + await prisma.jobBoardTeamMember.count({ where: { employerId: opts.employerId, status: { in: ['PENDING', 'ACTIVE'] } } });
+  if (!existing && seats >= maxSeats) {
+    return {
+      ok: false, status: 403, code: 'seat_limit',
+      error: plan.maxSeats === null
+        ? `You’ve reached ${MAX_SEATS_CAP} people. Contact us to add more.`
+        : `The ${plan.name} plan includes ${plan.maxSeats} seats, including you. Remove someone or upgrade for more.`,
+    };
+  }
 
   if (opts.role === 'RECRUITER' && !opts.confirmOutsideDomain) {
     const domain = await teamCompanyDomain(opts.employerId);
@@ -182,6 +202,40 @@ export async function inviteTeammate(opts: {
   return { ok: true, memberId: member.id };
 }
 
+/**
+ * Lost or expired invite link: when someone asks for a sign-in code but has only pending invites, send each
+ * invitation again with a new link (the old link stops working). Callers rate-limit per email.
+ */
+export async function resendPendingInvites(email: string): Promise<number> {
+  const pending = await prisma.jobBoardTeamMember.findMany({
+    where: { email: email.trim().toLowerCase(), status: 'PENDING', Employer: { isActive: true, deactivatedAt: null } },
+    select: { id: true, employerId: true, role: true, invitedByEmail: true },
+    take: 5,
+  });
+  for (const m of pending) {
+    const token = newInviteToken();
+    await prisma.jobBoardTeamMember.update({
+      where: { id: m.id },
+      data: { inviteTokenHash: hashToken(token), inviteExpiresAt: new Date(Date.now() + INVITE_TTL_DAYS * 86_400_000) },
+    });
+    await sendInviteEmail({ employerId: m.employerId, to: email, role: m.role as EmployerRole, inviterEmail: m.invitedByEmail, inviterName: null, token });
+  }
+  return pending.length;
+}
+
+/** Tells someone their request to join a hiring team was approved. */
+export function sendJoinApprovedEmail(to: string, company: string) {
+  void sendEmail({
+    to,
+    subject: `You’re in: ${company}'s hiring team on Udyaibase`,
+    type: 'employer_join_approved',
+    html: shell(`
+<h1 style="font-size:20px;margin:0 0 8px">You’re on ${esc(company)}'s hiring team</h1>
+<p style="margin:0 0 20px;font-size:15px;line-height:1.6">An owner approved your request. Sign in with a code sent to this email; no password needed.</p>
+<p style="margin:0 0 24px">${btn(`${SITE}/employer/login`, 'Sign in')}</p>`),
+  });
+}
+
 /** Owner alert: a teammate published a job under the workspace's name. */
 export function sendTeammatePublishedEmail(opts: { to: string; who: string; jobTitle: string; slug: string; jobId: string }) {
   void sendEmail({
@@ -204,7 +258,7 @@ export async function ownerInboxes(employerId: string): Promise<string[]> {
     prisma.jobBoardTeamMember.findMany({ where: { employerId, status: 'ACTIVE', role: 'OWNER' }, select: { email: true }, take: 10 }),
   ]);
   // Placeholder workspaces (created by the founder portal or admin) have no inbox of their own.
-  const account = employer && employer.passwordHash !== '' && !employer.email.endsWith('@udyaibase.com') ? [employer.email] : [];
+  const account = employer && employer.passwordHash !== '' && isRealInbox(employer.email) ? [employer.email] : [];
   return Array.from(new Set([...account, ...owners.map((o) => o.email)].map((e) => e.toLowerCase())));
 }
 

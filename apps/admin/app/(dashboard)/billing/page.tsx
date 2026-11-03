@@ -112,10 +112,11 @@ export default function BillingAdminPage() {
         <RevenueCard label="This financial year" r={data.revenue.fy} />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
         {[
-          ['Featured employers', data.active.featured],
-          ['Premium employers', data.active.premium],
+          ['Growth employers', data.active.growth],
+          ['Pro employers', data.active.pro],
+          ['Scale employers', data.active.scale],
           ['Pro hosts', data.active.hostPro],
           ['Failed payments (30 days)', data.failed30d],
         ].map(([label, n]) => (

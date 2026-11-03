@@ -15,29 +15,26 @@ export async function GET(req: NextRequest) {
   }
 
   const pattern = `%${q}%`;
+  const prefix = `${q}%`;
 
   try {
-    const [startups, tools, founders] = await Promise.all([
+    // Only entries listed in the public directory, so every tag links to a live page. Founders aren't taggable:
+    // founder portal accounts are private and have no public page.
+    const [startups, tools] = await Promise.all([
       prisma.$queryRaw`
         SELECT id, name, slug, "logoUrl" as avatar, "tagline"
         FROM "Startup"
-        WHERE "deletedAt" IS NULL
+        WHERE "deletedAt" IS NULL AND "isApproved" = true
           AND name ILIKE ${pattern}
-        ORDER BY name ASC
+        ORDER BY (lower(name) = lower(${q})) DESC, (name ILIKE ${prefix}) DESC, length(name), name
         LIMIT 4
       ` as Promise<any[]>,
       prisma.$queryRaw`
         SELECT id, name, slug, "logoUrl" as avatar, "tagline"
         FROM "AiTool"
-        WHERE name ILIKE ${pattern}
-        ORDER BY name ASC
-        LIMIT 4
-      ` as Promise<any[]>,
-      prisma.$queryRaw`
-        SELECT id, name, avatar, company, role
-        FROM "FounderUser"
-        WHERE name ILIKE ${pattern}
-        ORDER BY name ASC
+        WHERE "deletedAt" IS NULL AND status = 'APPROVED'
+          AND name ILIKE ${pattern}
+        ORDER BY (lower(name) = lower(${q})) DESC, (name ILIKE ${prefix}) DESC, length(name), name
         LIMIT 4
       ` as Promise<any[]>,
     ]);
@@ -58,14 +55,6 @@ export async function GET(req: NextRequest) {
         slug: t.slug,
         avatar: t.avatar,
         subtitle: t.tagline || '',
-      })),
-      ...founders.map((f: any) => ({
-        type: 'founder' as const,
-        id: f.id,
-        name: f.name,
-        slug: `founder-${f.id}`,
-        avatar: f.avatar,
-        subtitle: [f.role, f.company].filter(Boolean).join(' at ') || '',
       })),
     ];
 

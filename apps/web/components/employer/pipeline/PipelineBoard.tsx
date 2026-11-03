@@ -282,7 +282,7 @@ export default function PipelineBoard({
           <span className="text-gray-700 dark:text-gray-300">Let AI read every resume against your job and flag the best ones.</span>
           {ai.canBuy
             ? <Link href="/employer/billing" className="ml-auto min-h-[36px] inline-flex items-center text-[13px] font-semibold text-gray-900 dark:text-white hover:underline">See plans</Link>
-            : <span className="ml-auto text-xs text-gray-500">Featured and Premium plans</span>}
+            : <span className="ml-auto text-xs text-gray-500">Ask your workspace owner to upgrade</span>}
         </div>
       )}
 

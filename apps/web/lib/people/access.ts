@@ -1,4 +1,5 @@
 import { prisma } from '@udyaibase/database';
+import { ownerChangeProblem } from '@/lib/employer/owners';
 import { ROLE_LABEL } from '@/lib/employer/roles';
 
 /**
@@ -66,8 +67,16 @@ export async function peopleWithAccess(founderUserId: string): Promise<PersonAcc
 export async function removeHiringAccess(founderUserId: string, email: string): Promise<number> {
   const workspaces = await founderWorkspaces(founderUserId);
   if (!workspaces.length) return 0;
-  const r = await prisma.jobBoardTeamMember.updateMany({
+  const rows = await prisma.jobBoardTeamMember.findMany({
     where: { employerId: { in: workspaces.map((w) => w.id) }, email: { equals: norm(email), mode: 'insensitive' }, status: { in: ['ACTIVE', 'PENDING'] } },
+    select: { id: true, employerId: true },
+  });
+  // Never leave a workspace without an owner, and never remove its account owner.
+  const removable: string[] = [];
+  for (const m of rows) if (!(await ownerChangeProblem(m.employerId, m.id, 'remove'))) removable.push(m.id);
+  if (!removable.length) return 0;
+  const r = await prisma.jobBoardTeamMember.updateMany({
+    where: { id: { in: removable } },
     data: { status: 'REMOVED', inviteTokenHash: null, inviteExpiresAt: null },
   });
   return r.count;

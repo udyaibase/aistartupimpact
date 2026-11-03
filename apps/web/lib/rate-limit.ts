@@ -64,6 +64,28 @@ export const gstinLookupRateLimit = redis ? new Ratelimit({
   prefix: "ratelimit:gstin",
 }) : null;
 
+/** New companies added at signup: one per email address a day (stops directory spam). */
+export const companyCreateRateLimit = redis ? new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(1, "24 h"),
+  analytics: true,
+  prefix: "ratelimit:newcompany",
+}) : null;
+
+/** Codes sent to one email address (sign-in, verification, claims): stops anyone flooding an inbox. */
+export const emailCodeRateLimit = redis ? new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(3, "15 m"), // per email address and purpose
+  analytics: true,
+  prefix: "ratelimit:emailcode",
+}) : null;
+
+/** False when this email already received EMAIL_CODE limit codes for this purpose in the last 15 minutes. */
+export async function emailCodeAllowed(email: string, purpose: string): Promise<boolean> {
+  const { success } = await checkRateLimit(emailCodeRateLimit, `${purpose}:${email.trim().toLowerCase()}`);
+  return success;
+}
+
 // Client IP for rate limiting (spoof-resistant; see lib/client-ip.ts)
 export function getClientIdentifier(request: Request): string {
   return clientIp(request);

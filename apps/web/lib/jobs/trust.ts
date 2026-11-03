@@ -58,19 +58,27 @@ export interface TrustFields {
   emailVerified: boolean;
   startupId: string | null;
   startupClaimMethod: string | null;
+  /** The linked startup's own verification (done only in the founder portal, or by an admin). */
+  Startup?: { isVerified: boolean } | null;
 }
 
 /** Claim methods that prove the employer really hires for the startup. */
-export const VERIFIED_CLAIM_METHODS = ['DOMAIN_OTP', 'ADMIN', 'FOUNDER'] as const;
+export const VERIFIED_CLAIM_METHODS = ['DOMAIN_OTP', 'DNS_TXT', 'ADMIN', 'FOUNDER'] as const;
 
 /** A startup link is trusted only when proven by company-domain OTP, by the startup's verified founder, or set by an admin. */
 export function isClaimVerified(e: Pick<TrustFields, 'startupId' | 'startupClaimMethod'>): boolean {
   return !!e.startupId && (VERIFIED_CLAIM_METHODS as readonly string[]).includes(e.startupClaimMethod ?? '');
 }
 
-/** Every job must belong to a verified startup; there is no "unverified company" path. */
+/**
+ * Jobs are published only by a verified startup's own workspace: the startup is verified (founder portal or admin)
+ * and the workspace's link to it is trusted (opened or adopted by the founder, or set by an admin).
+ * Everyone else can draft; there is no "unverified company" path.
+ */
 export function canPublish(e: TrustFields): { ok: boolean; reason?: string; code?: 'email_unverified' | 'startup_unverified' } {
   if (!e.emailVerified) return { ok: false, code: 'email_unverified', reason: 'Verify your email before publishing. Your job is saved as a draft.' };
-  if (!isClaimVerified(e)) return { ok: false, code: 'startup_unverified', reason: 'Verify your startup before publishing. Your job is saved as a draft.' };
+  if (!isClaimVerified(e) || !e.Startup?.isVerified) {
+    return { ok: false, code: 'startup_unverified', reason: 'Only a verified startup can publish jobs. Ask your founder to verify the startup on Udyaibase; your job is saved as a draft.' };
+  }
   return { ok: true };
 }

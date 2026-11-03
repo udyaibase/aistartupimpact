@@ -6,9 +6,9 @@ import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
 
-// Generate secure random token
+// Generate secure random token ("ub_" marks Udyaibase tokens in a DNS zone; older tokens keep working)
 function generateToken(): string {
-  return crypto.randomBytes(16).toString('hex');
+  return `ub_${crypto.randomBytes(16).toString('hex')}`;
 }
 
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {

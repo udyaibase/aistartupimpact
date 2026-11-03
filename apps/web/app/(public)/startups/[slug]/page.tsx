@@ -155,7 +155,7 @@ const getStartup = cache(async (slug: string) => {
         FROM "JobBoardListing" jl
         LEFT JOIN "JobBoardEmployer" e ON e.id = jl."employerId"
         WHERE e."startupId" = ${s.id}
-          AND e."startupClaimMethod" IN ('DOMAIN_OTP', 'ADMIN', 'FOUNDER')
+          AND e."startupClaimMethod" IN ('DOMAIN_OTP', 'DNS_TXT', 'ADMIN', 'FOUNDER')
           AND jl.status = 'OPEN' AND jl."moderationHold" = false AND jl."deletedAt" IS NULL
           AND (jl."expiresAt" IS NULL OR jl."expiresAt" > NOW()) AND jl."showOnProfile" = true
         ORDER BY jl."publishedAt" DESC

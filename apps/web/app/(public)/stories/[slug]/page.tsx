@@ -8,7 +8,7 @@ import StorySaveButton from '@/components/StorySaveButton';
 import { sql, getArticleBySlugDirect, getRelatedArticlesDirect } from '@/lib/db';
 import { defaultFounderSpotlights } from '@/lib/fallbacks';
 import { buildArticleMetadata, generateArticleSchema, generateBreadcrumbSchema } from '@/lib/seo';
-import { sanitizeHtml } from '@/lib/sanitize';
+import { articleBodyHtml } from '@/lib/article-body';
 import ShareButton from '@/components/ShareButton';
 import ArticleActions from '@/components/ArticleActions';
 import SubscribeForm from '@/components/SubscribeForm';
@@ -51,11 +51,7 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
   const formatDate = (d: string) =>
     d ? new Date(d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '';
 
-  const bodyHtml = sanitizeHtml(
-    typeof story.content === 'object'
-      ? (story.content?.html || story.content?.text || story.excerpt || '')
-      : String(story.content || story.excerpt || '')
-  );
+  const bodyHtml = articleBodyHtml(story);
 
   const relatedStories = await getRelatedArticlesDirect(story.id, ['STORY', 'FOUNDER_STORY'], 3);
 

@@ -108,6 +108,18 @@ export async function GET(request: NextRequest) {
             emailChangeTokenExpiry: null,
           },
         });
+        // The account owner's OWNER row follows the account email.
+        const oldEmail = employer.email.toLowerCase(), newEmail = employer.pendingEmail!.toLowerCase();
+        const [oldRow, newRow] = await Promise.all([
+          tx.jobBoardTeamMember.findUnique({ where: { employerId_email: { employerId: employer.id, email: oldEmail } } }),
+          tx.jobBoardTeamMember.findUnique({ where: { employerId_email: { employerId: employer.id, email: newEmail } } }),
+        ]);
+        if (newRow) {
+          await tx.jobBoardTeamMember.update({ where: { id: newRow.id }, data: { role: 'OWNER', status: 'ACTIVE', jobIds: [], inviteTokenHash: null, inviteExpiresAt: null } });
+          if (oldRow) await tx.jobBoardTeamMember.update({ where: { id: oldRow.id }, data: { status: 'REMOVED' } });
+        } else if (oldRow) {
+          await tx.jobBoardTeamMember.update({ where: { id: oldRow.id }, data: { email: newEmail } });
+        }
       });
 
       return redirectWithMessage('Email changed successfully! Please log in again.', true);

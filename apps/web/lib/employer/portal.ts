@@ -21,6 +21,8 @@ export interface EmployerShell {
   founderPortal?: boolean;
   viewerName?: string | null;
   viewerEmail?: string;
+  /** Other hiring teams this person can switch to without signing in again. */
+  otherWorkspaces?: { employerId: string; companyName: string; role: 'OWNER' | 'RECRUITER' | 'INTERVIEWER' }[];
 }
 
 /** Candidates nobody has opened yet, on this employer's live (non-deleted) jobs. */
@@ -154,7 +156,7 @@ export async function getEmployerHome(employerId: string): Promise<EmployerHome>
     : !!(employer.logoUrl && employer.description && employer.websiteUrl && employer.location));
 
   const setup: SetupStep[] = [
-    { key: 'claim', label: 'Claim your startup', hint: 'Verify a work email so jobs carry your startup’s name and logo.', href: '/employer/company', done: claimDone },
+    { key: 'claim', label: 'Get your startup verified', hint: 'Only its founder can verify it on Udyaibase. Send them the link from your Company page; then your jobs can go live.', href: '/employer/company', done: claimDone },
     { key: 'profile', label: 'Complete your company profile', hint: 'Logo, short description, website and location.', href: '/employer/company', done: profileDone },
     { key: 'first_job', label: 'Post your first job', hint: 'Paste a job description and we’ll fill in the form.', href: '/employer/jobs/new', done: !!employer?.firstJobPublishedAt || roles.length > 0 },
     { key: 'verify_email', label: 'Verify your email', hint: 'Required before a job can go live.', href: '#verify-email', done: !!employer?.emailVerified },

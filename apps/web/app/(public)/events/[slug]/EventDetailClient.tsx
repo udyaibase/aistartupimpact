@@ -14,9 +14,12 @@ import {
   ChevronRight,
   Globe,
   ExternalLink,
+  BadgeCheck,
 } from "lucide-react";
 import RegistrationModal from "./RegistrationModal";
 import ShareMenu from "@/components/shared/ShareMenu";
+import ReportButton from "@/components/shared/ReportButton";
+import { EVENT_REPORT_REASONS } from "@/lib/events/report-reasons";
 
 interface Event {
   id: string;
@@ -45,6 +48,10 @@ interface Event {
   registrationDeadline?: string;
   approvalRequired: boolean;
   organizerName?: string;
+  organizerVerified?: boolean;
+  /** Set only while the tagged startup is verified. */
+  hostStartupName?: string | null;
+  hostStartupSlug?: string | null;
   organizerAvatar?: string;
 }
 
@@ -210,7 +217,7 @@ export default function EventDetailClient({
             const isExternal = !!event.sourceUrl;
             const displayOrganizer = isExternal
               ? (event.subtitle?.startsWith('Hosted by ') ? event.subtitle.replace('Hosted by ', '') : null)
-              : event.organizerName;
+              : event.hostStartupName || event.organizerName;
             return (displayOrganizer || isExternal) ? (
               <div className="flex items-center gap-2.5 px-1">
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand to-brand-600 flex items-center justify-center shrink-0 shadow-sm">
@@ -224,7 +231,11 @@ export default function EventDetailClient({
                   {displayOrganizer ? (
                     <>
                       <p className="text-xs text-gray-400 font-jakarta leading-none">Hosted by</p>
-                      <p className="text-sm font-semibold text-navy dark:text-white font-jakarta">{displayOrganizer}</p>
+                      <p className="text-sm font-semibold text-navy dark:text-white font-jakarta">
+                        {event.hostStartupSlug ? <Link href={`/startups/${event.hostStartupSlug}`} className="hover:underline">{displayOrganizer}</Link> : displayOrganizer}
+                        {event.hostStartupName && <span className="ml-1.5 inline-flex items-center gap-0.5 text-[11px] font-semibold text-blue-700 dark:text-blue-300"><BadgeCheck className="w-3.5 h-3.5" aria-hidden /> Verified startup</span>}
+                        {!event.hostStartupName && event.organizerVerified && <span className="ml-1.5 inline-flex items-center gap-0.5 text-[11px] font-semibold text-green-700 dark:text-green-400"><BadgeCheck className="w-3.5 h-3.5" aria-hidden /> Verified organizer</span>}
+                      </p>
                     </>
                   ) : null}
                   {isExternal && event.sourceName && (
@@ -344,6 +355,12 @@ export default function EventDetailClient({
               entityType="EVENT"
               entityId={event.id}
             />
+            {!event.sourceUrl && (
+              <div className="text-center">
+                <ReportButton endpoint={`/api/events/${encodeURIComponent(event.slug)}/report`} title={event.title} noun="event" reasons={EVENT_REPORT_REASONS}
+                  note="Legitimate hosts never ask for payment outside the registration page." />
+              </div>
+            )}
           </div>
         </div>
       </div>

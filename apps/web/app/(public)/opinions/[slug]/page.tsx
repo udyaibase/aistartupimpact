@@ -5,8 +5,8 @@ import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { Clock, Calendar, ChevronRight, MapPin, Briefcase, Star, ExternalLink } from 'lucide-react';
 import { sql, getOpinionBySlugDirect, getRelatedContentForOpinion } from '@/lib/db';
-import { generateArticleSchema, generateBreadcrumbSchema, generatePersonSchema } from '@/lib/seo';
-import { sanitizeHtml } from '@/lib/sanitize';
+import { generateArticleSchema, generateBreadcrumbSchema, generatePersonSchema, withArticleSeo } from '@/lib/seo';
+import { articleBodyHtml } from '@/lib/article-body';
 import ShareButton from '@/components/ShareButton';
 import ArticleActions from '@/components/ArticleActions';
 import SubscribeForm from '@/components/SubscribeForm';
@@ -29,7 +29,7 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
     ? [{ url: article.coverImage, width: 1200, height: 630, alt: article.title }]
     : [{ url: `${SITE_URL}/og-image.png`, width: 1200, height: 630 }];
 
-  return {
+  return withArticleSeo({
     title: article.title,
     description: article.excerpt || '',
     alternates: { canonical },
@@ -51,7 +51,7 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
       description: article.excerpt || '',
       images: images.map(i => i.url),
     },
-  };
+  }, article);
 }
 
 export async function generateStaticParams() {
@@ -100,11 +100,7 @@ export default async function OpinionDetailPage(props: { params: Promise<{ slug:
     getRelatedContentForOpinion(article.id, allTagIds, article.primaryTagId || null),
   ]);
 
-  const bodyHtml = sanitizeHtml(
-    typeof article.content === 'object'
-      ? ((article.content as any)?.html || (article.content as any)?.text || article.excerpt || '')
-      : String(article.content || article.excerpt || '')
-  );
+  const bodyHtml = articleBodyHtml(article);
 
   const articleUrl = `${SITE_URL}/opinions/${article.slug}`;
 

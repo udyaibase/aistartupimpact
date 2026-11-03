@@ -195,16 +195,9 @@ export default function ClaimStartupClient({ startup, startupId }: ClaimStartupC
                     <Shield className="w-8 h-8 text-blue-600 dark:text-blue-400" />
                   </div>
                   <h1 className="text-3xl font-bold mb-2 text-navy dark:text-white">Verify Domain Ownership</h1>
-                  <p className="text-gray-600 dark:text-gray-400">Prove you work at {startup.name} with a work email, or add a DNS record to {domain}</p>
+                  <p className="text-gray-600 dark:text-gray-400">Add a DNS record to {domain} to prove {startup.name} is yours. No DNS access? Use a work email below.</p>
                 </div>
 
-            {/* Faster option: work email on the startup's domain */}
-            <div className="bg-white dark:bg-gray-900 border-2 border-green-200 dark:border-green-900/50 rounded-xl p-6 mb-6">
-              <h3 className="font-bold text-lg mb-1 text-navy dark:text-white">Quickest: verify with your work email</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">We send a 6-digit code to an email on {domain}. Takes about a minute.</p>
-              <EmailVerify startupId={startupId} startupName={startup.name} domain={domain} suggestedEmail="" onDone={() => setStep('success')} />
-            </div>
-            <p className="text-center text-sm font-semibold text-gray-500 mb-6">Or verify with DNS</p>
 
             {/* Instructions */}
             <div className="bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800 rounded-xl p-6 mb-6">
@@ -229,10 +222,10 @@ export default function ClaimStartupClient({ startup, startupId }: ClaimStartupC
                   </label>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 px-4 py-3 bg-white dark:bg-gray-700 border dark:border-gray-600 rounded-lg font-mono text-sm text-navy dark:text-white">
-                      _udyaibase-verify
+                      @
                     </code>
                     <button
-                      onClick={() => copyToClipboard('_udyaibase-verify')}
+                      onClick={() => copyToClipboard('@')}
                       className="p-3 hover:bg-blue-100 dark:hover:bg-blue-900 rounded-lg transition-colors"
                       title="Copy"
                     >
@@ -240,7 +233,7 @@ export default function ClaimStartupClient({ startup, startupId }: ClaimStartupC
                     </button>
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Some providers may require you to enter just "_udyaibase-verify" or the full subdomain
+                    "@" means the root of your domain{domain ? ` (${domain})` : ''}. Some providers want this field left blank or the domain itself instead.
                   </p>
                 </div>
 
@@ -288,7 +281,7 @@ export default function ClaimStartupClient({ startup, startupId }: ClaimStartupC
                   </div>
                   <div className="flex gap-2">
                     <span className="text-gray-500 dark:text-gray-400 w-20">Name:</span>
-                    <span className="text-navy dark:text-white font-semibold">_udyaibase-verify</span>
+                    <span className="text-navy dark:text-white font-semibold">@</span>
                   </div>
                   <div className="flex gap-2">
                     <span className="text-gray-500 dark:text-gray-400 w-20">Value:</span>
@@ -355,6 +348,13 @@ export default function ClaimStartupClient({ startup, startupId }: ClaimStartupC
             <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-4">
               ⏱ DNS propagation may take 5-10 minutes. You can close this page and come back later.
             </p>
+
+            {/* Alternative: work email on the startup's domain */}
+            <p className="text-center text-sm font-semibold text-gray-500 mt-8 mb-4">No access to DNS? Verify with a work email instead</p>
+            <div className="bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-800 rounded-xl p-6">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">We send a 6-digit code to an email on {domain}.</p>
+              <EmailVerify startupId={startupId} startupName={startup.name} domain={domain} suggestedEmail="" onDone={() => setStep('success')} />
+            </div>
               </>
             )}
           </div>
