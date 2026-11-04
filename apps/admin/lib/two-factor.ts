@@ -30,6 +30,11 @@ export function generateTOTPSecret(email: string) {
   return { secret: secret.base32, otpauthUrl: secret.otpauth_url! };
 }
 
+/** The authenticator link for an existing secret (same label as generateTOTPSecret). */
+export function totpAuthUrl(email: string, secret: string): string {
+  return speakeasy.otpauthURL({ secret, encoding: 'base32', label: `${APP_NAME} (${email})`, issuer: APP_NAME });
+}
+
 export async function generateQRCode(otpauthUrl: string): Promise<string> {
   return QRCode.toDataURL(otpauthUrl);
 }
