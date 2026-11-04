@@ -9,6 +9,12 @@ describe('ownMediaKey', () => {
     expect(ownMediaKey(`${base}/avatar/a.png?v=2`, `${base}/`)).toBe('avatar/a.png');
   });
 
+  it('handles a very long run of trailing slashes quickly', () => {
+    const started = Date.now();
+    expect(ownMediaKey(`${base}/a.png`, `${base}${'/'.repeat(200_000)}`)).toBe('a.png');
+    expect(Date.now() - started).toBeLessThan(200);
+  });
+
   it('never touches a file that isn’t ours', () => {
     expect(ownMediaKey('https://lh3.googleusercontent.com/a/photo', base)).toBeNull();
     expect(ownMediaKey('https://media.udyaibase.com.evil.test/a.png', base)).toBeNull();

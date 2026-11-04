@@ -170,10 +170,10 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
     if (draft) {
       try {
         const d = JSON.parse(draft);
-        if (d.formData) setFormData(d.formData);
+        // Merged, because team size isn't in the draft. Founder details from an older draft are ignored.
+        if (d.formData) setFormData((prev) => ({ ...prev, ...d.formData, employeeCount: prev.employeeCount }));
         if (d.faqs) setFaqs(d.faqs);
         if (d.fundingRounds) setFundingRounds(d.fundingRounds);
-        if (d.foundersDetails) setFoundersDetails(d.foundersDetails);
         if (d.socialLinks) setSocialLinks(d.socialLinks);
       } catch {
         localStorage.removeItem(NEW_DRAFT_KEY);
@@ -186,8 +186,12 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
 
   useEffect(() => {
     if (!isNew || !draftLoaded) return;
-    localStorage.setItem(NEW_DRAFT_KEY, JSON.stringify({ formData, faqs, fundingRounds, foundersDetails, socialLinks }));
-  }, [isNew, formData, faqs, fundingRounds, foundersDetails, socialLinks, draftLoaded]);
+    // Browser storage is readable by anyone using this computer, so the draft holds public company details only:
+    // never people's details or team size.
+    const { name, tagline, description, websiteUrl, linkedinUrl, twitterUrl, foundedYear, headquartersCity, stage, status, logoUrl, category, businessType } = formData;
+    const companyDetails = { name, tagline, description, websiteUrl, linkedinUrl, twitterUrl, foundedYear, headquartersCity, stage, status, logoUrl, category, businessType };
+    localStorage.setItem(NEW_DRAFT_KEY, JSON.stringify({ formData: companyDetails, faqs, fundingRounds, socialLinks }));
+  }, [isNew, formData, faqs, fundingRounds, socialLinks, draftLoaded]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;

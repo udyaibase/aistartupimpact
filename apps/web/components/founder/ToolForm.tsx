@@ -105,7 +105,8 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
     if (draft) {
       try {
         const { formData: dForm, faqs: dFaqs, screenshots: dScreenshots, socialLinks: dSocial } = JSON.parse(draft);
-        if (dForm) setFormData(dForm);
+        // Merged, because founder names aren't in the draft. Names from an older draft are ignored.
+        if (dForm) setFormData((prev) => ({ ...prev, ...dForm, founderNames: prev.founderNames }));
         if (dFaqs) setFaqs(dFaqs);
         if (dScreenshots) setScreenshots(dScreenshots);
         if (dSocial) setSocialLinks(dSocial);
@@ -159,7 +160,9 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
   useEffect(() => {
     if (!draftLoaded) return;
     const draftKey = isNew ? NEW_DRAFT_KEY : `draft_founder_edit_tool_${tool.id}`;
-    localStorage.setItem(draftKey, JSON.stringify({ formData, faqs, screenshots, socialLinks }));
+    // Browser storage is readable by anyone using this computer, so the draft never holds people's names.
+    const { founderNames: _names, ...companyDetails } = formData;
+    localStorage.setItem(draftKey, JSON.stringify({ formData: companyDetails, faqs, screenshots, socialLinks }));
   }, [formData, faqs, screenshots, socialLinks, draftLoaded, tool.id]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {

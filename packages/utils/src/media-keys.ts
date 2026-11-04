@@ -9,7 +9,10 @@ export const mediaVariantKeys = (key: string) => [key, ...LOGO_SIZES.map((w) => 
 /** The storage key of a file in our own public bucket, or null for anything else (a Google photo, another site). */
 export function ownMediaKey(url: string | null | undefined, publicBase = process.env.R2_PUBLIC_URL): string | null {
   if (!url || !publicBase) return null;
-  const base = publicBase.replace(/\/+$/, '');
+  // A plain loop, not a regular expression, so a long run of slashes can't slow this down.
+  let end = publicBase.length;
+  while (end > 0 && publicBase[end - 1] === '/') end -= 1;
+  const base = publicBase.slice(0, end);
   if (!url.startsWith(`${base}/`)) return null;
   let key: string;
   try {
