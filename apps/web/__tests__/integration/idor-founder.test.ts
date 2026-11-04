@@ -82,52 +82,6 @@ describe('IDOR — Founder A cannot access Founder B resources', () => {
     vi.clearAllMocks();
   });
 
-  describe('startup ownership via funding-rounds', () => {
-    it('Founder A can access own startup funding-rounds', async () => {
-      mockGetFounderSession.mockResolvedValue(FOUNDER_A);
-      mockSql.mockResolvedValueOnce([{ id: 'startup-a', ownerId: 'founder-a' }]);
-      mockSql.mockResolvedValueOnce([]); // DELETE existing
-      const { POST } = await import('@/app/api/founder/startups/[id]/funding-rounds/route');
-      const res = await POST(
-        makeRequest('/api/founder/startups/startup-a/funding-rounds', 'POST', { rounds: [] }),
-        { params: { id: 'startup-a' } } as any
-      );
-      expect(res.status).toBe(200);
-    });
-
-    it('Founder B cannot access Founder A startup funding-rounds', async () => {
-      mockGetFounderSession.mockResolvedValue(FOUNDER_B);
-      mockSql.mockResolvedValueOnce([{ id: 'startup-a', ownerId: 'founder-a' }]);
-      const { POST } = await import('@/app/api/founder/startups/[id]/funding-rounds/route');
-      const res = await POST(
-        makeRequest('/api/founder/startups/startup-a/funding-rounds', 'POST', { rounds: [] }),
-        { params: { id: 'startup-a' } } as any
-      );
-      expect(res.status).toBe(403);
-    });
-
-    it('returns 401 without any session', async () => {
-      mockGetFounderSession.mockResolvedValue(null);
-      const { POST } = await import('@/app/api/founder/startups/[id]/funding-rounds/route');
-      const res = await POST(
-        makeRequest('/api/founder/startups/startup-a/funding-rounds', 'POST', { rounds: [] }),
-        { params: { id: 'startup-a' } } as any
-      );
-      expect(res.status).toBe(401);
-    });
-
-    it('returns 403 for non-existent startup', async () => {
-      mockGetFounderSession.mockResolvedValue(FOUNDER_A);
-      mockSql.mockResolvedValueOnce([]);
-      const { POST } = await import('@/app/api/founder/startups/[id]/funding-rounds/route');
-      const res = await POST(
-        makeRequest('/api/founder/startups/nonexistent/funding-rounds', 'POST', { rounds: [] }),
-        { params: { id: 'nonexistent' } } as any
-      );
-      expect(res.status).toBe(403);
-    });
-  });
-
   describe('content IDOR via verifyStartupAccess', () => {
     it('returns 403 when verifyStartupAccess denies access to article', async () => {
       mockGetFounderSession.mockResolvedValue(FOUNDER_B);

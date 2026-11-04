@@ -3,6 +3,13 @@
 import { neon } from '@neondatabase/serverless';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { eraseFounderRecords, findUnusedMedia, prisma } from '@udyaibase/database';
+import { mediaVariantKeys, ownMediaKey } from '@udyaibase/utils';
+import { twoFactorBlock } from '@/lib/api-auth';
+import { logAuditEvent } from '@/lib/audit-log';
+import { r2, R2_BUCKET } from '@/lib/media';
+import { refreshPublic } from '@/lib/refresh-public';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -133,21 +140,37 @@ export async function getFounderByIdAction(founderId: string) {
 export async function deleteFounderAction(founderId: string) {
   try {
     const session: any = await getServerSession(authOptions);
-    
+
     if (!session?.user || session.user.role !== 'SUPER_ADMIN') {
       return { success: false, error: 'Only Super Admins can delete founders' };
     }
+    if (twoFactorBlock(session)) return { success: false, error: 'Complete two-factor verification first' };
 
-    // Delete founder (CASCADE will handle related records)
-    await sql`
-      DELETE FROM "FounderUser"
-      WHERE id = ${founderId}
-    `;
+    const founder = await prisma.founderUser.findUnique({ where: { id: founderId }, select: { name: true } });
+    const erased = await eraseFounderRecords(founderId);
+    if (!erased) return { success: false, error: 'Founder not found' };
 
+    await prisma.founderActivityLog.create({ data: { founderId, action: 'account_deleted', metadata: { by: 'admin' } } })
+      .catch(() => { /* the audit entry below still records it */ });
+    await logAuditEvent({ action: 'DELETE', resourceType: 'USER', resourceId: founderId, resourceName: founder?.name ?? 'Founder' });
+
+    // Files last, and never failing the delete: the records are already gone.
+    const own = erased.mediaUrls.filter((u) => ownMediaKey(u));
+    for (const url of await findUnusedMedia(own).catch(() => [] as string[])) {
+      const key = ownMediaKey(url)!;
+      try {
+        for (const k of mediaVariantKeys(key)) await r2.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: k }));
+        await prisma.mediaAsset.deleteMany({ where: { key } });
+      } catch (err) {
+        console.error('[media] could not delete', key, err instanceof Error ? err.message : 'unknown error');
+      }
+    }
+
+    await refreshPublic(['startups', 'tools', 'home']);
     return { success: true };
   } catch (error: any) {
-    console.error('Delete founder error:', error);
-    return { success: false, error: error.message || 'Failed to delete founder' };
+    console.error('Delete founder error:', error instanceof Error ? error.message : 'unknown error');
+    return { success: false, error: 'Failed to delete founder' };
   }
 }
 

@@ -154,7 +154,10 @@ const getStartup = cache(async (slug: string) => {
          ORDER BY "impactScore" DESC NULLS LAST LIMIT 3)
       `,
       s.claimedBy
-        ? sql`SELECT name, role, bio, avatar, linkedin, twitter, website FROM "FounderUser" WHERE id = ${s.claimedBy} LIMIT 1`
+        ? sql`SELECT name, role, bio, avatar, linkedin, twitter, website FROM "FounderUser"
+             WHERE id = ${s.claimedBy} AND "deactivatedAt" IS NULL
+               AND COALESCE((SELECT public_profile FROM founder_settings WHERE user_id = ${s.claimedBy} LIMIT 1), true)
+             LIMIT 1`
         : Promise.resolve([]),
       sql`
         SELECT jl.id, jl.title, jl.slug, jl.city AS location, jl."workType" AS type,

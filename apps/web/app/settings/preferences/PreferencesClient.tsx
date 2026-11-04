@@ -1,13 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { updatePreferences } from './actions';
 import {
   Search, Rocket, Briefcase, Lightbulb, GraduationCap, TrendingUp,
-  MapPin, Loader2, X, Check, ArrowLeft
+  MapPin, Loader2, X, Check
 } from 'lucide-react';
-import Link from 'next/link';
 
 const INTENTS = [
   { value: 'exploring_tools', label: 'Explore AI Tools', icon: Search },
@@ -28,9 +26,9 @@ export default function PreferencesClient({
   categories: Category[];
   initialPrefs: { primaryIntent: string | null; categoryIds: string[]; cityId: string | null; cityName: string | null } | null;
 }) {
-  const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   const [primaryIntent, setPrimaryIntent] = useState<string | null>(initialPrefs?.primaryIntent || null);
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(
@@ -67,13 +65,16 @@ export default function PreferencesClient({
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveError('');
     const result = await updatePreferences({
       primaryIntent,
       categoryIds: Array.from(selectedCategories),
       cityId,
-    });
+    }).catch(() => ({ success: false }));
     setSaving(false);
-    if (result.success) {
+    if (!result.success) {
+      setSaveError('Couldn’t save your preferences. Please try again.');
+    } else {
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     }
@@ -81,10 +82,6 @@ export default function PreferencesClient({
 
   return (
     <div className="space-y-8">
-      <Link href="/profile" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 mb-4">
-        <ArrowLeft className="w-4 h-4" /> Back to profile
-      </Link>
-
       {/* Intent */}
       <section>
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-3">What brings you here?</h2>
@@ -193,6 +190,7 @@ export default function PreferencesClient({
         >
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <><Check className="w-4 h-4" /> Saved</> : 'Save preferences'}
         </button>
+        {saveError && <p role="alert" className="text-sm text-red-600 dark:text-red-400 mt-2">{saveError}</p>}
       </div>
     </div>
   );

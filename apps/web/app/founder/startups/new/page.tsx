@@ -1,9 +1,12 @@
 import { requireFounderAuth } from '@/lib/founder-auth';
 import { prisma } from '@udyaibase/database';
+import { redirect } from 'next/navigation';
 import StartupForm from '@/components/founder/StartupForm';
+import { founderAtStartupLimit } from '@/lib/founder/limits';
 
 export default async function NewStartupPage() {
   const session = await requireFounderAuth();
+  if (await founderAtStartupLimit(session.userId)) redirect('/founder/startups');
 
   const user = await prisma.founderUser.findUnique({
     where: { id: session.userId },
@@ -29,13 +32,13 @@ export default async function NewStartupPage() {
   } : undefined;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+        <h1 className="portal-title">
           Submit Your Startup
         </h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-2">
+        <p className="portal-subtitle">
           Share your startup with the AI community. Our team will review your submission within 2-3 business days.
         </p>
       </div>

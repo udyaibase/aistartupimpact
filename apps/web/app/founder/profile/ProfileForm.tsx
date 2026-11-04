@@ -184,7 +184,7 @@ export default function ProfileForm({ founder }: ProfileFormProps) {
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Profile Image Upload */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">
+        <h2 className="portal-section-title mb-6">
           Profile Picture
         </h2>
         
@@ -238,7 +238,7 @@ export default function ProfileForm({ founder }: ProfileFormProps) {
 
       {/* Profile Info Card */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">
+        <h2 className="portal-section-title mb-6">
           Personal Information
         </h2>
 
@@ -366,7 +366,7 @@ export default function ProfileForm({ founder }: ProfileFormProps) {
 
       {/* Social Links Card */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">
+        <h2 className="portal-section-title mb-6">
           Social Links
         </h2>
 
@@ -429,7 +429,7 @@ export default function ProfileForm({ founder }: ProfileFormProps) {
 
       {/* Account Info Card */}
       <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+        <h2 className="portal-section-title mb-4">
           Account Information
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">

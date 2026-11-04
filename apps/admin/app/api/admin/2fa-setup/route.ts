@@ -3,13 +3,35 @@ import { requireApiAuth } from "@/lib/api-auth";
 import { prisma } from "@udyaibase/database";
 import { logAuditEvent } from "@/lib/audit-log";
 import {
-  generateTOTPSecret, generateQRCode, verifyTOTPToken,
+  generateTOTPSecret, generateQRCode, totpAuthUrl, verifyTOTPToken,
   encryptSecret, decryptSecret, generateBackupCodes, hashBackupCodes,
   createTwoFactorProof, TwoFactorConfigError,
 } from "@/lib/two-factor";
 import { USER_2FA_SELECT, clearCodeFailures, currentSignInId, isLocked, lockedResponse, recordCodeFailure, wrongCodeResponse } from "@/lib/two-factor-guard";
 
 const STAFF_ROLES = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "SENIOR_WRITER", "WRITER", "AD_MANAGER", "CONTRIBUTOR", "EVENT_ORGANIZER"];
+
+/**
+ * One pending secret per setup: asking again returns the same one, so the QR code already scanned stays valid after
+ * a page refresh, a second tab or a double request (React runs the setup page's request twice in development).
+ * Two requests racing for a new secret both end up with whichever was stored first.
+ */
+async function pendingSecret(user: { id: string; email: string; twoFactorSecret: string | null }): Promise<string> {
+  if (user.twoFactorSecret) {
+    try {
+      return decryptSecret(user.twoFactorSecret);
+    } catch (err) {
+      if (err instanceof TwoFactorConfigError) throw err;
+      // Encrypted with an earlier key: unusable, so start again below.
+    }
+  }
+  await prisma.user.updateMany({
+    where: { id: user.id, twoFactorEnabled: false, twoFactorSecret: user.twoFactorSecret },
+    data: { twoFactorSecret: encryptSecret(generateTOTPSecret(user.email).secret) },
+  });
+  const stored = await prisma.user.findUnique({ where: { id: user.id }, select: { twoFactorSecret: true } });
+  return decryptSecret(stored!.twoFactorSecret!);
+}
 
 /**
  * Turning 2FA on: "generate" stores a pending secret and returns its QR code; "verify" checks a code from the app,
@@ -39,9 +61,8 @@ export async function POST(request: NextRequest) {
     if (isLocked(user)) return lockedResponse(user.lockedUntil);
 
     if (action === "generate") {
-      const { secret, otpauthUrl } = generateTOTPSecret(user.email);
-      const qrCode = await generateQRCode(otpauthUrl);
-      await prisma.user.update({ where: { id: user.id }, data: { twoFactorSecret: encryptSecret(secret) } });
+      const secret = await pendingSecret(user);
+      const qrCode = await generateQRCode(totpAuthUrl(user.email, secret));
       return NextResponse.json({ success: true, qrCode, secret });
     }
 

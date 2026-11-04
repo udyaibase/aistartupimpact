@@ -9,6 +9,8 @@ export {
   startupApprovalHtml,
   toolApprovalHtml,
   startupRejectionHtml,
+  toolRejectionHtml,
+  claimInviteHtml,
   userInvitationHtml,
   submissionReceivedHtml,
   verificationEmailHtml,
@@ -32,8 +34,18 @@ export {
   companyEmailOtpHtml,
   employerPasswordResetHtml,
   securityAlertHtml,
+  accountLockoutHtml,
+  founderNudgeHtml,
+  listingEditDecisionHtml,
   eventPromotionHtml,
   dailyDigestHtml,
 } from './src/email-templates';
 export type { EventEmailData, DigestData } from './src/email-templates';
 
+export { actionsIn, describeActivity, describeDevice } from './src/founder-activity';
+export type { ActivityCategory, FounderActivity } from './src/founder-activity';
+
+export { LOGO_SIZES, sizedKey, mediaVariantKeys, ownMediaKey } from './src/media-keys';
+
+export { IDENTITY_FIELDS, canonicalValue, changedListingFields, decideListingEdit, listingFieldLabel, listingValueText, registrableDomain, sameListingValue, websiteDomain } from './src/listing-edit-policy';
+export type { ListingFields, ListingType } from './src/listing-edit-policy';

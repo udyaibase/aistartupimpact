@@ -85,7 +85,7 @@ export default function DNSVerificationModal({ unverifiedStartups }: DNSVerifica
             </p>
             <div className="space-y-2.5 max-h-40 overflow-y-auto">
               {unverifiedStartups.map((startup) => (
-                <div key={startup.id} className="flex items-center justify-between gap-3 p-2 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 hover:border-yellow-500/40 transition-colors">
+                <div key={startup.id} className="flex items-center justify-between gap-3 p-2 bg-white dark:bg-gray-900 rounded-[14px] border border-gray-200 dark:border-gray-800 hover:border-yellow-500/40 transition-colors">
                   <span className="font-semibold text-sm text-gray-900 dark:text-white truncate">
                     {startup.name}
                   </span>

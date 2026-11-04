@@ -102,6 +102,55 @@ export function toolApprovalHtml(name: string, founderName: string, slug: string
   </p>`);
 }
 
+function esc(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+export function toolRejectionHtml(name: string, founderName: string, reason: string): string {
+  const dashboardUrl = `${getSiteUrl()}/founder/tools`;
+  return emailWrapper(`
+  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 8px;">Hi ${esc(founderName || 'there')},</p>
+  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
+    Thanks for submitting <strong>${esc(name)}</strong> to Udyaibase. We can't approve the listing as it stands. Here's what our team needs you to change:
+  </p>
+  <div style="background: #fdf2f2; border: 1px solid #fca5a5; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+    <p style="color: #7f1d1d; font-size: 15px; line-height: 1.6; margin: 0; white-space: pre-line;">${esc(reason)}</p>
+  </div>
+  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
+    Update your listing and save it, and it goes back to our team for another review.
+  </p>
+  <div style="margin: 32px 0;">
+    ${primaryButton(dashboardUrl, 'Edit your tool')}
+  </div>`);
+}
+
+/** One-time invitation to claim a listing. Sent only after approval, and only to a company's public role address. */
+export function claimInviteHtml(opts: { name: string; slug: string; unsubscribeUrl: string; viewsLast30Days?: number }): string {
+  const claimUrl = `${getSiteUrl()}/startups/${encodeURIComponent(opts.slug)}?utm_source=claim_invite&utm_medium=email`;
+  const views = opts.viewsLast30Days && opts.viewsLast30Days >= 5
+    ? `<p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 16px;">Your profile was viewed <strong>${opts.viewsLast30Days} times</strong> in the last 30 days.</p>`
+    : '';
+  return emailWrapper(`
+  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 16px;">Hi ${esc(opts.name)} team,</p>
+  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 16px;">
+    ${esc(opts.name)} has a profile on Udyaibase, a directory of AI startups in India. We built it from public information, so some details may be out of date.
+  </p>
+  ${views}
+  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 8px;">Claiming it is free. Once you prove you own your domain, you can:</p>
+  <ul style="color: #374151; font-size: 16px; line-height: 1.7; margin: 0 0 24px; padding-left: 20px;">
+    <li>Correct your details and add your founders and funding</li>
+    <li>Get a Verified badge on your profile</li>
+    <li>See how many people view your profile</li>
+    <li>Post jobs and share company updates</li>
+  </ul>
+  <div style="margin: 32px 0;">
+    ${primaryButton(claimUrl, `Claim ${esc(opts.name)}`)}
+  </div>
+  <p style="color: #6b7280; font-size: 13px; line-height: 1.6; margin: 0;">
+    We found this address on your website and we'll only send this once. If it isn't relevant, you can ignore it or <a href="${opts.unsubscribeUrl}" style="color: #6b7280;">opt out</a>.
+  </p>`);
+}
+
 export function startupRejectionHtml(
   name: string,
   founderName: string,
@@ -562,6 +611,54 @@ export function employerPasswordResetHtml(companyName: string, resetUrl: string)
 }
 
 // ── Employer: Security Alert ─────────────────────────────────────────────
+
+/** Founder tips and reports. Never used for account or security email, which can't be turned off. */
+export function founderNudgeHtml(opts: { name: string; title: string; paragraphs: string[]; ctaLabel: string; ctaUrl: string; unsubscribeUrl: string }): string {
+  const body = opts.paragraphs.map((p) => `<p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 16px;">${esc(p)}</p>`).join('');
+  return emailWrapper(`
+  <h2 style="color: #111827; font-size: 20px; margin-bottom: 8px;">${esc(opts.title)}</h2>
+  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 16px;">Hi ${esc(opts.name || 'there')},</p>
+  ${body}
+  <div style="margin: 32px 0;">
+    ${primaryButton(opts.ctaUrl, esc(opts.ctaLabel))}
+  </div>
+  <p style="color: #6b7280; font-size: 13px; line-height: 1.6; margin: 0;">
+    You’re getting this because you have a founder account on Udyaibase. <a href="${opts.unsubscribeUrl}" style="color: #6b7280;">Stop these tips</a>. Udyaibase Technologies Pvt Ltd, Vijayawada, Andhra Pradesh, India.
+  </p>`);
+}
+
+/** The result of an admin's review of a listing edit. */
+export function listingEditDecisionHtml(opts: { name: string; listingName: string; fields: string; approved: boolean; note?: string; badgeRemoved?: boolean; manageUrl: string }): string {
+  const note = opts.note ? `<div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 16px;"><p style="color: #374151; font-size: 15px; line-height: 1.6; margin: 0; white-space: pre-line;">${esc(opts.note)}</p></div>` : '';
+  const badge = opts.badgeRemoved ? `<p style="color: #374151; font-size: 16px; line-height: 1.6;">Your website moved to a new domain, so your Verified badge has been removed. Verify the new domain to get it back.</p>` : '';
+  return emailWrapper(`
+  <p style="color: #374151; font-size: 16px; line-height: 1.6;">Hi ${esc(opts.name || 'there')},</p>
+  <p style="color: #374151; font-size: 16px; line-height: 1.6;">${opts.approved
+    ? `We approved your changes to <strong>${esc(opts.listingName)}</strong> (${esc(opts.fields)}). They’re now live.`
+    : `We didn’t approve your changes to <strong>${esc(opts.listingName)}</strong> (${esc(opts.fields)}). Your listing is still live, showing what it showed before.`}</p>
+  ${note}${badge}
+  <div style="margin: 32px 0;">${primaryButton(opts.manageUrl, 'Open your listing')}</div>`);
+}
+
+/** Tells someone their account was locked. A wrong 2FA code means the password was already right, so it says so. */
+export function accountLockoutHtml(opts: { name: string; reason: 'password' | 'two_factor'; minutes: number; resetUrl: string }): string {
+  const what = opts.reason === 'two_factor'
+    ? 'Someone entered the correct password for your Udyaibase account, then entered a wrong verification code too many times.'
+    : 'Someone entered the wrong password for your Udyaibase account too many times.';
+  const advice = opts.reason === 'two_factor'
+    ? 'If this wasn’t you, <strong>your password is known to someone else</strong>. Change it now. Your verification code stopped them signing in.'
+    : 'If this wasn’t you, we recommend changing your password.';
+  return emailWrapper(`
+  <h2 style="color: #dc2626; font-size: 20px; margin-bottom: 8px;">Security alert</h2>
+  <p style="color: #374151; font-size: 16px; line-height: 1.6;">Hi ${esc(opts.name || 'there')},</p>
+  <p style="color: #374151; font-size: 16px; line-height: 1.6;">${what}</p>
+  <p style="color: #374151; font-size: 16px; line-height: 1.6;">To protect you, we’ve locked sign-in for ${opts.minutes} minutes.</p>
+  <p style="color: #374151; font-size: 16px; line-height: 1.6;">${advice}</p>
+  <div style="margin: 32px 0;">
+    ${primaryButton(opts.resetUrl, 'Change my password')}
+  </div>
+  <p style="color: #6b7280; font-size: 14px; line-height: 1.6;">If this was you, wait ${opts.minutes} minutes and try again.</p>`, '#dc2626');
+}
 
 export function securityAlertHtml(companyName: string, attempts: number, lockoutMinutes: number, resetUrl: string): string {
   return emailWrapper(`

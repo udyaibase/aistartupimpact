@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { teamContext } from "@/lib/founder/access";
+import { logFounderActivity } from '@/lib/founder/activity';
+import { maskEmail } from '@/lib/mask';
 import { prisma } from "@udyaibase/database";
 import { getFounderSession } from "@/lib/founder-auth";
-import { canChangeRole, canRemoveMember } from "@/lib/founder-team-permissions";
+import { canChangeRole, canRemoveMember, canManageTeam } from "@/lib/founder-team-permissions";
 import { verifyOTP } from "@/lib/action-otp";
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from "@/lib/rate-limit";
 import { removeHiringAccess } from "@/lib/people/access";
@@ -20,8 +23,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (!rlOk) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
 
     const { id } = await params;
+    const team = await teamContext(session);
+    if (!canManageTeam(team.role)) return NextResponse.json({ success: false, error: "Only the owner or an admin can change the team." }, { status: 403 });
 
-    const member = await prisma.founderTeamMember.findFirst({ where: { id, founderId: session.userId } });
+    const member = await prisma.founderTeamMember.findFirst({ where: { id, founderId: team.ownerId } });
     if (!member) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
 
     const { role, otpToken, otpCode } = await request.json();
@@ -41,12 +46,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ success: false, error: "Cannot change your own role" }, { status: 400 });
     }
 
-    const actorRole = "OWNER" as const;
+    const actorRole = team.role;
     if (!canChangeRole(actorRole, member.role, role)) {
       return NextResponse.json({ success: false, error: "Not authorized to change this role" }, { status: 403 });
     }
 
     await prisma.founderTeamMember.update({ where: { id }, data: { role } });
+    await logFounderActivity(team.ownerId, 'team_role_changed', { request, metadata: { member: maskEmail(member.email), role } });
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("[founder/team/[id] PUT]", err);
@@ -64,8 +70,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     if (!rlOk) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
 
     const { id } = await params;
+    const team = await teamContext(session);
+    if (!canManageTeam(team.role)) return NextResponse.json({ success: false, error: "Only the owner or an admin can change the team." }, { status: 403 });
 
-    const member = await prisma.founderTeamMember.findFirst({ where: { id, founderId: session.userId } });
+    const member = await prisma.founderTeamMember.findFirst({ where: { id, founderId: team.ownerId } });
     if (!member) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
 
     if (member.role === "OWNER") {
@@ -101,12 +109,13 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     }
 
     await prisma.founderTeamMember.updateMany({
-      where: { id, founderId: session.userId },
+      where: { id, founderId: team.ownerId },
       data: { status: "REVOKED" },
     });
     // Offboarding in one step: also end their access to this founder's hiring workspaces.
-    const hiringRemoved = alsoHiring ? await removeHiringAccess(session.userId, member.email) : 0;
+    const hiringRemoved = alsoHiring ? await removeHiringAccess(team.ownerId, member.email) : 0;
 
+    await logFounderActivity(team.ownerId, 'team_member_removed', { request, metadata: { member: maskEmail(member.email) } });
     return NextResponse.json({ success: true, hiringRemoved });
   } catch (err) {
     console.error("[founder/team/[id] DELETE]", err);

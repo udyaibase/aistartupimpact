@@ -1,72 +1,30 @@
 import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
 import { getFounderSession } from '@/lib/founder-auth';
-import { getUnifiedSession } from '@/lib/unified-auth';
-import FounderNav from '@/components/founder/FounderNav';
+import { founderFromCookies } from '@/lib/founder/account';
+import { workspaceOwnerIds } from '@/lib/founder/access';
+import FounderHeader from '@/components/founder/FounderHeader';
+import FounderMobileNav from '@/components/founder/FounderMobileNav';
+import { getFounderShell } from '@/lib/founder/portal';
 import FounderSidebar from '@/components/founder/FounderSidebar';
 import { SidebarProvider } from '@/components/ui/SidebarContext';
 import { sql } from '@/lib/db';
 import DNSVerificationModal from '@/components/founder/DNSVerificationModal';
 import CompanyEmailBanner from '@/components/CompanyEmailBanner';
 
-const USER_JWT_SECRET = new TextEncoder().encode(
-  process.env.USER_JWT_SECRET!
-);
-
 export default async function FounderLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  let session: any = null;
-
-  // Try unified session first (user has founderId linked)
-  const unifiedSession = await getUnifiedSession();
-  if (unifiedSession?.founderId) {
-    session = {
-      userId: unifiedSession.founderId,
-      email: unifiedSession.email,
-      name: unifiedSession.name,
-      avatar: unifiedSession.avatar,
-    };
-  }
-
-  // Fallback: legacy founder session
-  if (!session) {
-    session = await getFounderSession();
-  }
-
-  // Fallback: user-token cookie → find founder by email
-  if (!session) {
-    try {
-      const cookieStore = await cookies();
-      const userToken = cookieStore.get('user-token')?.value;
-      if (userToken) {
-        const { payload } = await jwtVerify(userToken, USER_JWT_SECRET);
-        const email = (payload as any).email;
-        if (email) {
-          const founders = await sql`
-            SELECT id, email, name, avatar FROM "FounderUser"
-            WHERE email = ${email.toLowerCase()} AND status != 'SUSPENDED'
-            LIMIT 1
-          `;
-          if (founders.length > 0) {
-            session = {
-              userId: founders[0].id,
-              email: founders[0].email,
-              name: founders[0].name,
-              avatar: founders[0].avatar,
-            };
-          }
-        }
-      }
-    } catch {}
-  }
-
-  if (!session) {
+  const founderSession = await getFounderSession();
+  if (!founderSession) {
+    // Signed in, but the account can't use the portal right now: say why. Otherwise, sign in.
+    const account = await founderFromCookies();
+    if (account && (account.status === 'SUSPENDED' || account.deactivatedAt)) redirect('/account/reactivate');
     redirect('/auth/login');
   }
+  const [profile] = await sql`SELECT avatar FROM "FounderUser" WHERE id = ${founderSession.userId} LIMIT 1`;
+  const session = { ...founderSession, avatar: profile?.avatar ?? null };
 
   // Query unverified startups owned by the founder
   const unverifiedStartups = await sql`
@@ -74,24 +32,27 @@ export default async function FounderLayout({
     WHERE "ownerId" = ${session.userId} AND "isVerified" = false AND "deletedAt" IS NULL
   `;
 
+  const shell = await getFounderShell(session.userId, session.name, await workspaceOwnerIds(session)).catch(() => ({
+    workspaceName: session.name, logoUrl: null, startupSlug: null, verified: false, listings: [],
+  }));
+
   return (
     <SidebarProvider storageKey="founder-sidebar-collapsed">
-      <div className="flex h-screen bg-page dark:bg-page-dark overflow-hidden">
+      <div className="founder-portal flex h-[100dvh] bg-page dark:bg-page-dark overflow-hidden">
         {/* Sidebar */}
         <div className="hidden md:block">
-          <FounderSidebar />
+          <FounderSidebar shell={shell} />
         </div>
 
         {/* Main area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <FounderNav session={session} />
-          <main className="flex-1 overflow-y-auto p-4 sm:p-6 pb-20 md:pb-6">
-            <div className="max-w-7xl mx-auto">
-              <CompanyEmailBanner userType="founder" />
-              {children}
-            </div>
+          <FounderHeader session={session} shell={shell} />
+          <main className="relative flex-1 overflow-y-auto overscroll-contain px-4 md:px-8 lg:px-10 py-4 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-4">
+            <CompanyEmailBanner userType="founder" />
+            {children}
           </main>
         </div>
+        <FounderMobileNav shell={shell} />
 
         {/* DNS Verification Reminder Modal */}
         <DNSVerificationModal unverifiedStartups={unverifiedStartups as any[]} />

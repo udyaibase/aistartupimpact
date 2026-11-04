@@ -8,6 +8,7 @@ const m = vi.hoisted(() => ({
   getToken: vi.fn(),
   findUnique: vi.fn(),
   update: vi.fn(),
+  updateMany: vi.fn(),
   queryRawUnsafe: vi.fn(),
   logAuditEvent: vi.fn(),
 }));
@@ -17,7 +18,7 @@ vi.mock('next-auth/jwt', () => ({ getToken: (...a: any[]) => m.getToken(...a) })
 vi.mock('next-auth/providers/google', () => ({ default: () => ({ id: 'google' }) }));
 vi.mock('@udyaibase/database', () => ({
   prisma: {
-    user: { findUnique: (...a: any[]) => m.findUnique(...a), update: (...a: any[]) => m.update(...a) },
+    user: { findUnique: (...a: any[]) => m.findUnique(...a), update: (...a: any[]) => m.update(...a), updateMany: (...a: any[]) => m.updateMany(...a) },
     $queryRawUnsafe: (...a: any[]) => m.queryRawUnsafe(...a),
   },
 }));
@@ -169,6 +170,47 @@ describe('POST /api/admin/2fa-setup', () => {
     const res = await (await load())(req({ action: 'generate' }));
     expect(res.status).toBe(409);
     expect(m.update).not.toHaveBeenCalled();
+  });
+
+  it('keeps one pending secret: asking twice returns the same QR secret, so a scanned code stays valid', async () => {
+    m.getServerSession.mockResolvedValue(staffSession());
+    const pending = encryptSecret(SECRET);
+    m.findUnique.mockResolvedValue(dbUser({ twoFactorEnabled: false, twoFactorSecret: pending }));
+    const post = await load();
+    const [a, b] = await Promise.all([post(req({ action: 'generate' })), post(req({ action: 'generate' }))]);
+    expect((await a.json()).secret).toBe(SECRET);
+    expect((await b.json()).secret).toBe(SECRET);
+    expect(m.update).not.toHaveBeenCalled();
+    expect(m.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('two first requests racing both get whichever secret was stored', async () => {
+    m.getServerSession.mockResolvedValue(staffSession());
+    let stored: string | null = null;
+    m.updateMany.mockImplementation(async ({ data }: any) => { stored ??= data.twoFactorSecret; return { count: 1 }; });
+    m.findUnique.mockImplementation(async ({ select }: any) => (select.email
+      ? dbUser({ twoFactorEnabled: false, twoFactorSecret: null })
+      : { twoFactorSecret: stored }));
+    const post = await load();
+    const [a, b] = await Promise.all([post(req({ action: 'generate' })), post(req({ action: 'generate' }))]);
+    const [sa, sb] = [(await a.json()).secret, (await b.json()).secret];
+    expect(sa).toBe(sb);
+    expect(sa).toBe(decryptSecret(stored!));
+    // Only ever replaces the value it read, so the second request can't overwrite the first.
+    expect(m.updateMany.mock.calls[0][0].where).toMatchObject({ twoFactorEnabled: false, twoFactorSecret: null });
+  });
+
+  it('a pending secret from an old encryption key is replaced, not a dead end', async () => {
+    m.getServerSession.mockResolvedValue(staffSession());
+    let stored: string | null = null;
+    m.updateMany.mockImplementation(async ({ data }: any) => { stored = data.twoFactorSecret; return { count: 1 }; });
+    const unreadable = 'v2:00112233445566778899aabb:00112233445566778899aabbccddeeff:00112233';
+    m.findUnique.mockImplementation(async ({ select }: any) => (select.email
+      ? dbUser({ twoFactorEnabled: false, twoFactorSecret: unreadable })
+      : { twoFactorSecret: stored }));
+    const res = await (await load())(req({ action: 'generate' }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).secret).toBe(decryptSecret(stored!));
   });
 
   it('enables 2FA with a correct code and returns backup codes', async () => {

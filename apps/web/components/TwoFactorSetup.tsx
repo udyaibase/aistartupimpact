@@ -19,6 +19,9 @@ export default function TwoFactorSetup({ isEnabled, apiBasePath, onClose, onSucc
   const [qrCode, setQrCode] = useState('');
   const [secret, setSecret] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
+  const [disablePassword, setDisablePassword] = useState('');
+  // Employer accounts are separate and keep their own check.
+  const askPassword = apiBasePath !== '/api/employer';
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [copiedSecret, setCopiedSecret] = useState(false);
@@ -79,7 +82,7 @@ export default function TwoFactorSetup({ isEnabled, apiBasePath, onClose, onSucc
       const res = await fetch(`${apiBasePath}/2fa-disable`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: verificationCode }),
+        body: JSON.stringify({ token: verificationCode, password: disablePassword }),
       });
       const data = await res.json();
       if (data.success) { onSuccess(); onClose(); }
@@ -221,6 +224,9 @@ export default function TwoFactorSetup({ isEnabled, apiBasePath, onClose, onSucc
               <p className="text-sm text-red-700 dark:text-red-300">Disabling 2FA will make your account less secure.</p>
             </div>
             <form onSubmit={handleDisable} className="space-y-4">
+              {askPassword && (
+                <input type="password" autoComplete="current-password" aria-label="Your password (leave empty if you only use Google)" placeholder="Your password (leave empty if you only use Google)" value={disablePassword} onChange={(e) => setDisablePassword(e.target.value)} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-base text-gray-900 dark:text-white" />
+              )}
               <input type="text" value={verificationCode} onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000" maxLength={6} className="w-full px-4 py-3 text-center text-2xl font-mono tracking-widest bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all" autoFocus />
               <button type="submit" disabled={loading || verificationCode.length !== 6} className="w-full px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl transition-all disabled:opacity-50">
                 {loading ? 'Disabling...' : 'Disable 2FA'}

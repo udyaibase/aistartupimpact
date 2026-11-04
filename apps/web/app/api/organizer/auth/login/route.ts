@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isTwoFactorOn } from '@/lib/auth/account-two-factor';
 import { verifyTurnstileToken } from "@/lib/turnstile";
 import { prisma } from "@udyaibase/database";
 import { createOrganizerSession, verifyPassword } from "@/lib/organizer-auth";
 import { checkRateLimit, getClientIdentifier } from "@/lib/rate-limit";
 import { authRateLimit } from "@/lib/rate-limit";
 import { SignJWT } from "jose";
-import { securityAlertHtml } from "@udyaibase/utils";
+import { accountLockoutHtml } from "@udyaibase/utils";
 import { sendEmailFireAndForget } from "@/lib/email/send";
 
 const CHALLENGE_SECRET = new TextEncoder().encode(process.env.ORGANIZER_JWT_SECRET || process.env.USER_JWT_SECRET!);
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
       where: { email },
       select: {
         id: true, email: true, name: true, passwordHash: true, status: true,
-        twoFactorEnabled: true, failedLoginAttempts: true, lockedUntil: true, deactivatedAt: true,
+        failedLoginAttempts: true, lockedUntil: true, deactivatedAt: true,
       },
     });
 
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
         sendEmailFireAndForget({
           to: organizer.email,
           subject: 'Security Alert — Failed Login Attempts',
-          html: securityAlertHtml(organizer.name || 'Organizer', newAttempts, LOCKOUT_MINUTES, resetUrl),
+          html: accountLockoutHtml({ name: organizer.name || '', reason: 'password', minutes: LOCKOUT_MINUTES, resetUrl }),
           type: 'security_alert',
         });
 
@@ -118,7 +119,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    if (organizer.twoFactorEnabled) {
+    if (await isTwoFactorOn(organizer.email)) {
       const challengeToken = await new SignJWT({ userId: organizer.id, userType: 'organizer', purpose: '2fa-challenge' })
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()

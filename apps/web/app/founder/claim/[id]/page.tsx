@@ -17,7 +17,7 @@ export default async function ClaimStartupPage(props: PageProps) {
   // Fetch startup using raw query
   const startups = await prisma.$queryRaw<any[]>`
     SELECT 
-      id, name, slug, tagline, "websiteUrl", "logoUrl", "claimStatus", "ownerId"
+      id, name, slug, tagline, "websiteUrl", "logoUrl", "claimStatus", "ownerId", "isVerified"
     FROM "Startup"
     WHERE id = ${params.id}
     LIMIT 1
@@ -30,8 +30,8 @@ export default async function ClaimStartupPage(props: PageProps) {
     notFound();
   }
 
-  // Check if already claimed by someone else
-  if (startup.ownerId && startup.ownerId !== session.userId) {
+  // Already proven by another founder. Until then, whoever proves the domain becomes the owner.
+  if (startup.isVerified && startup.ownerId !== session.userId) {
     redirect('/founder/dashboard');
   }
 

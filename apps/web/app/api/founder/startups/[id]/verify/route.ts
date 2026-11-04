@@ -3,6 +3,10 @@ import { clientIp } from '@/lib/client-ip';
 import { requireFounderAuth } from '@/lib/founder-auth';
 import { prisma } from '@udyaibase/database';
 import { verifyDNS } from '@udyaibase/utils/src/verification/dns';
+import { claimToken } from '@/lib/startups/claim';
+import { founderAtStartupLimit, STARTUP_LIMIT_MESSAGE } from '@/lib/founder/limits';
+import { logFounderActivity } from '@/lib/founder/activity';
+import { markStartupVerified } from '@/lib/startups/ownership';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,9 +29,9 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
     // Get startup using raw query
     const startups = await prisma.$queryRaw<any[]>`
       SELECT 
-        id, name, "websiteUrl", "isVerified", "claimedBy", "verificationToken"
+        id, name, "websiteUrl", "isVerified", "ownerId", "verificationToken"
       FROM "Startup"
-      WHERE id = ${id}
+      WHERE id = ${id} AND "deletedAt" IS NULL
       LIMIT 1
     `;
 
@@ -40,15 +44,18 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
       );
     }
 
-    // Check if user is the claimer
-    if (startup.claimedBy !== session.userId) {
+    // Already verified: only its owner can continue.
+    if (startup.isVerified && startup.ownerId !== session.userId) {
       return NextResponse.json(
-        { error: 'You are not authorized to verify this startup' },
+        { error: `${startup.name} is already verified by another founder. Ask them to add you to their team.` },
         { status: 403 }
       );
     }
 
-    // Check if already verified
+    if (startup.ownerId !== session.userId && (await founderAtStartupLimit(session.userId, id))) {
+      return NextResponse.json({ error: STARTUP_LIMIT_MESSAGE }, { status: 400 });
+    }
+
     if (startup.isVerified) {
       return NextResponse.json({
         success: true,
@@ -70,7 +77,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
 
     const domain = extractDomain(startup.websiteUrl || '');
 
-    if (!domain || !startup.verificationToken) {
+    if (!domain) {
       return NextResponse.json(
         { error: 'Invalid verification setup' },
         { status: 400 }
@@ -78,20 +85,14 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
     }
 
     // Verify DNS record
-    const result = await verifyDNS(domain, startup.verificationToken);
+    const token = claimToken(startup, session.userId);
+    const result = await verifyDNS(domain, token);
     const isVerified = result.verified;
 
     if (isVerified) {
-      // Update startup as verified with VERIFIED status
-      await prisma.$executeRaw`
-        UPDATE "Startup"
-        SET "isVerified" = true,
-            "verifiedAt" = NOW(),
-            "verifiedDomain" = ${domain},
-            "claimStatus" = 'VERIFIED'::"ClaimStatus",
-            "updatedAt" = NOW()
-        WHERE id = ${id}
-      `;
+      // Proof given: this founder becomes the owner and everything we hold for the startup moves to them.
+      await markStartupVerified(prisma, id, domain, session.userId);
+      await logFounderActivity(session.userId, 'startup_claim_verified', { request, metadata: { startupId: id, method: 'dns' } });
 
       // Log successful verification using raw query
       await prisma.$executeRaw`
@@ -105,8 +106,8 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
           ${session.userId},
           'DNS_VERIFIED',
           'DNS',
-          ${startup.verificationToken},
-          ${'udyaibase-verify=' + startup.verificationToken},
+          ${token},
+          ${'udyaibase-verify=' + token},
           true,
           ${clientIp(request)},
           ${request.headers.get('user-agent') || null},
@@ -132,8 +133,8 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
           ${session.userId},
           'VERIFICATION_FAILED',
           'DNS',
-          ${startup.verificationToken},
-          ${'udyaibase-verify=' + startup.verificationToken},
+          ${token},
+          ${'udyaibase-verify=' + token},
           false,
           'DNS record not found',
           ${clientIp(request)},

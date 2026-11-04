@@ -52,3 +52,6 @@ export const prisma = new Proxy({} as PrismaClient, {
 
 export default prisma;
 export { PrismaClient, Prisma };
+export { eraseFounderRecords, findUnusedMedia } from './founder-erasure';
+export { decideListingEdits, readListingFields, restoreListingVersion, saveListingEdit } from './listing-edits';
+export type { EditActor, EditDecision, ListingEditResult } from './listing-edits';

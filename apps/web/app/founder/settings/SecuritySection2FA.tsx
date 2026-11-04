@@ -18,6 +18,7 @@ export default function TwoFactorSetup({ isEnabled, onClose, onSuccess, onError 
   const [qrCode, setQrCode] = useState('');
   const [secret, setSecret] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
+  const [disablePassword, setDisablePassword] = useState('');
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [copiedSecret, setCopiedSecret] = useState(false);
@@ -97,7 +98,7 @@ export default function TwoFactorSetup({ isEnabled, onClose, onSuccess, onError 
       const res = await fetch('/api/founder/2fa-disable', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: verificationCode }),
+        body: JSON.stringify({ token: verificationCode, password: disablePassword }),
       });
 
       const data = await res.json();
@@ -383,6 +384,7 @@ export default function TwoFactorSetup({ isEnabled, onClose, onSuccess, onError 
             </div>
 
             <form onSubmit={handleDisable} className="space-y-4">
+              <input type="password" autoComplete="current-password" aria-label="Your password (leave empty if you only use Google)" placeholder="Your password (leave empty if you only use Google)" value={disablePassword} onChange={(e) => setDisablePassword(e.target.value)} className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-base text-gray-900 dark:text-white" />
               <div>
                 <input
                   type="text"

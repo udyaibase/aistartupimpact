@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { teamContext } from "@/lib/founder/access";
+import { canManageTeam } from "@/lib/founder-team-permissions";
+import { logFounderActivity } from '@/lib/founder/activity';
+import { maskEmail } from '@/lib/mask';
 import { prisma } from "@udyaibase/database";
 import { getFounderSession } from "@/lib/founder-auth";
 import { founderTeamInviteHtml } from "@udyaibase/utils";
 import { sendEmailFireAndForget } from "@/lib/email/send";
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from "@/lib/rate-limit";
-import { canManageTeam } from "@/lib/founder-team-permissions";
 import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -19,12 +22,13 @@ export async function GET() {
     const session = await getFounderSession();
     if (!session) return NextResponse.json({ success: false }, { status: 401 });
 
+    const team = await teamContext(session);
     const members = await prisma.founderTeamMember.findMany({
-      where: { founderId: session.userId },
+      where: { founderId: team.ownerId },
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json({ success: true, members });
+    return NextResponse.json({ success: true, members, role: team.role, canManage: canManageTeam(team.role) });
   } catch (err) {
     console.error("[founder/team GET]", err);
     return NextResponse.json({ success: false, error: "Something went wrong" }, { status: 500 });
@@ -40,6 +44,9 @@ export async function POST(request: NextRequest) {
     const { success: rlOk } = await checkRateLimit(strictRateLimit, identifier);
     if (!rlOk) return NextResponse.json({ error: "Too many requests. Try again later." }, { status: 429 });
 
+    const team = await teamContext(session);
+    if (!canManageTeam(team.role)) return NextResponse.json({ success: false, error: "Only the owner or an admin can invite people." }, { status: 403 });
+
     const { email, role, name } = await request.json();
 
     if (!email || typeof email !== "string") return NextResponse.json({ success: false, error: "Email is required" }, { status: 400 });
@@ -48,9 +55,11 @@ export async function POST(request: NextRequest) {
     if (cleanEmail === session.email.toLowerCase()) return NextResponse.json({ success: false, error: "You cannot invite yourself" }, { status: 400 });
 
     const assignRole = VALID_ROLES.includes(role) ? role : "VIEWER";
+    // An admin can't create another admin. Only the owner can.
+    if (team.role !== "OWNER" && assignRole === "ADMIN") return NextResponse.json({ success: false, error: "Only the owner can invite an admin." }, { status: 403 });
 
     const existing = await prisma.founderTeamMember.findUnique({
-      where: { founderId_email: { founderId: session.userId, email: cleanEmail } },
+      where: { founderId_email: { founderId: team.ownerId, email: cleanEmail } },
     });
     if (existing && existing.status === "ACTIVE") {
       return NextResponse.json({ success: false, error: "Already an active team member" }, { status: 409 });
@@ -68,7 +77,7 @@ export async function POST(request: NextRequest) {
       });
     } else {
       member = await prisma.founderTeamMember.create({
-        data: { founderId: session.userId, email: cleanEmail, role: assignRole, inviteToken, expiresAt, name: name?.slice(0, 100) || null },
+        data: { founderId: team.ownerId, email: cleanEmail, role: assignRole, inviteToken, expiresAt, name: name?.slice(0, 100) || null },
       });
     }
 
@@ -81,6 +90,7 @@ export async function POST(request: NextRequest) {
       type: "founder_team_invite",
     });
 
+    await logFounderActivity(team.ownerId, 'team_member_invited', { request, metadata: { member: maskEmail(cleanEmail), role: assignRole } });
     return NextResponse.json({ success: true, member });
   } catch (err) {
     console.error("[founder/team POST]", err);

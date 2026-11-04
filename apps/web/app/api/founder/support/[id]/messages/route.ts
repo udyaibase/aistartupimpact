@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 import { requireFounderAuth } from '@/lib/founder-auth';
 import { addUserMessage } from '@/lib/support-tickets';
 import { sql } from '@/lib/db';
@@ -7,6 +8,9 @@ import { supportMessageSchema, validateInput, sanitizeText } from '@/lib/validat
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const { success: withinLimit } = await checkRateLimit(apiRateLimit, getClientIdentifier(request));
+  if (!withinLimit) return NextResponse.json({ success: false, error: 'Too many requests. Please try again later.' }, { status: 429 });
+
   const params = await props.params;
   try {
     const session = await requireFounderAuth();

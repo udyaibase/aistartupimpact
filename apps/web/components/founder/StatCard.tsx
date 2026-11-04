@@ -5,33 +5,23 @@ interface StatCardProps {
   title: string;
   value: string | number;
   icon: LucideIcon;
-  trend?: string;
+  /** Small line under the value, e.g. "This month" or "+12% vs last month". */
+  sub?: string;
   href?: string;
 }
 
-export default function StatCard({ title, value, icon: Icon, trend, href }: StatCardProps) {
+/** Same stat card as the employer and host portals. */
+export default function StatCard({ title, value, icon: Icon, sub, href }: StatCardProps) {
   const content = (
-    <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-4 hover:border-gray-300 dark:hover:border-gray-700 transition-colors">
-      <div className="flex items-center justify-between mb-3">
-        <Icon className="w-4 h-4 text-gray-400" />
-        {trend && (
-          <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
-            {trend}
-          </span>
-        )}
+    <div className={`h-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4 ${href ? 'hover:border-gray-300 dark:hover:border-gray-700 transition-colors' : ''}`}>
+      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400 mb-2">
+        <Icon className="w-4 h-4 shrink-0" aria-hidden />
+        <span className="text-[13px] font-medium font-jakarta">{title}</span>
       </div>
-      <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-        {title}
-      </h3>
-      <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-        {value}
-      </p>
+      <p className="font-sora font-bold text-2xl text-gray-900 dark:text-white tabular-nums">{value}</p>
+      {sub && <p className="text-xs font-jakarta mt-0.5 text-gray-500 dark:text-gray-400">{sub}</p>}
     </div>
   );
 
-  if (href) {
-    return <Link href={href}>{content}</Link>;
-  }
-
-  return content;
+  return href ? <Link href={href} className="block h-full">{content}</Link> : content;
 }

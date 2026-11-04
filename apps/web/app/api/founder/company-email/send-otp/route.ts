@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { checkRateLimit, emailCodeRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 import { prisma } from '@udyaibase/database';
 import { requireFounderAuth } from '@/lib/founder-auth';
 import { createOtp } from '@/lib/otp';
@@ -8,6 +9,9 @@ import { isDisposableEmail, isFreeEmailProvider, companyEmailOtpHtml, extractEma
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
+  const { success: withinLimit } = await checkRateLimit(emailCodeRateLimit, getClientIdentifier(request));
+  if (!withinLimit) return NextResponse.json({ success: false, error: 'Too many requests. Please try again later.' }, { status: 429 });
+
   try {
     const session = await requireFounderAuth();
     const { companyEmail } = await request.json();

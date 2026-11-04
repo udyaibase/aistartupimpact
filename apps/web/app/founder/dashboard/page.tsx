@@ -1,20 +1,31 @@
 import { requireFounderAuth } from '@/lib/founder-auth';
+import { workspaceOwnerIds } from '@/lib/founder/access';
 import { sql } from '@/lib/db';
-import { Rocket, Wrench, Eye, MousePointerClick, Plus, TrendingUp, Share2, Globe, Search, AtSign, Link2, BarChart3 } from 'lucide-react';
+import { Rocket, Wrench, Eye, MousePointerClick, Plus, TrendingUp, Share2, Globe, Search, Link2, ArrowRight, Check, Briefcase, CalendarDays } from 'lucide-react';
 import Link from 'next/link';
 import StatCard from '@/components/founder/StatCard';
 import ListingCard from '@/components/founder/ListingCard';
 
 export const revalidate = 10;
 
+function greeting() {
+  const hour = Number(new Intl.DateTimeFormat('en-IN', { hour: 'numeric', hour12: false, timeZone: 'Asia/Kolkata' }).format(new Date()));
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+const CARD = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px]';
+
 export default async function DashboardPage() {
   const session = await requireFounderAuth();
+  const ownerIds = await workspaceOwnerIds(session);
 
-  const [startups, tools, currentMonth, lastMonth] = await Promise.all([
+  const [startups, tools, currentMonth, lastMonth, counts, profile] = await Promise.all([
     sql`
       SELECT id, name, slug, tagline, "logoUrl", "claimStatus", "isVerified", "createdAt"
       FROM "Startup"
-      WHERE "ownerId" = ${session.userId}
+      WHERE "ownerId" = ANY(${ownerIds})
         AND "deletedAt" IS NULL
       ORDER BY "createdAt" DESC
       LIMIT 5
@@ -22,7 +33,7 @@ export default async function DashboardPage() {
     sql`
       SELECT id, name, slug, tagline, "logoUrl", status AS "claimStatus", "createdAt"
       FROM "AiTool"
-      WHERE "ownerId" = ${session.userId}
+      WHERE "ownerId" = ANY(${ownerIds})
         AND "deletedAt" IS NULL
       ORDER BY "createdAt" DESC
       LIMIT 5
@@ -35,20 +46,34 @@ export default async function DashboardPage() {
         COALESCE(SUM("directViews"), 0) AS "directViews",
         COALESCE(SUM("searchViews"), 0) AS "searchViews",
         COALESCE(SUM("socialViews"), 0) AS "socialViews",
-        COALESCE(SUM("referralViews"), 0) AS "referralViews"
-      FROM "FounderAnalytics"
-      WHERE "userId" = ${session.userId}
+        COALESCE(SUM("referralViews"), 0) + COALESCE(SUM("emailViews"), 0) AS "referralViews"
+      FROM "AnalyticsDaily"
+      WHERE (
+        ("entityType" = 'STARTUP' AND "entityId" IN (SELECT id FROM "Startup" WHERE "ownerId" = ANY(${ownerIds}) AND "deletedAt" IS NULL))
+        OR ("entityType" = 'TOOL' AND "entityId" IN (SELECT id FROM "AiTool" WHERE "ownerId" = ANY(${ownerIds}) AND "deletedAt" IS NULL))
+      )
         AND date >= DATE_TRUNC('month', CURRENT_DATE)
     `,
     sql`
       SELECT
         COALESCE(SUM(views), 0) AS "totalViews",
         COALESCE(SUM(clicks), 0) AS "totalClicks"
-      FROM "FounderAnalytics"
-      WHERE "userId" = ${session.userId}
+      FROM "AnalyticsDaily"
+      WHERE (
+        ("entityType" = 'STARTUP' AND "entityId" IN (SELECT id FROM "Startup" WHERE "ownerId" = ANY(${ownerIds}) AND "deletedAt" IS NULL))
+        OR ("entityType" = 'TOOL' AND "entityId" IN (SELECT id FROM "AiTool" WHERE "ownerId" = ANY(${ownerIds}) AND "deletedAt" IS NULL))
+      )
         AND date >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
         AND date < DATE_TRUNC('month', CURRENT_DATE)
     `,
+    // The lists above show the newest 5; these are the real totals.
+    sql`
+      SELECT
+        (SELECT COUNT(*)::int FROM "Startup" WHERE "ownerId" = ANY(${ownerIds}) AND "deletedAt" IS NULL) AS startups,
+        (SELECT COUNT(*)::int FROM "Startup" WHERE "ownerId" = ANY(${ownerIds}) AND "deletedAt" IS NULL AND "isVerified" = true) AS verified,
+        (SELECT COUNT(*)::int FROM "AiTool" WHERE "ownerId" = ANY(${ownerIds}) AND "deletedAt" IS NULL) AS tools
+    `,
+    sql`SELECT name, avatar, bio FROM "FounderUser" WHERE id = ${session.userId} LIMIT 1`,
   ]);
 
   const currentViews = Number(currentMonth[0]?.totalViews || 0);
@@ -106,105 +131,180 @@ export default async function DashboardPage() {
     { label: 'Referral', value: trafficSources.referral, icon: Link2, color: 'bg-cyan-500', pct: totalSourceViews > 0 ? Math.round((trafficSources.referral / totalSourceViews) * 100) : 0 },
   ];
 
+  const totals = counts[0] ?? { startups: 0, verified: 0, tools: 0 };
+  const me = profile[0];
+  const hello = String(me?.name ?? '').split(' ')[0] || 'there';
+  const setup = [
+    { key: 'startup', label: 'List your startup', hint: 'Add it to the directory so people can find you.', href: '/founder/startups/new', done: totals.startups > 0 },
+    { key: 'verify', label: 'Verify your startup', hint: 'Prove you own the domain to get the Verified badge and post jobs.', href: '/founder/startups', done: totals.verified > 0 },
+    { key: 'tool', label: 'List an AI tool', hint: 'Built an AI product? Add it to the tools directory so people can discover it.', href: '/founder/tools/new', done: totals.tools > 0 },
+    { key: 'profile', label: 'Complete your profile', hint: 'Add a photo and short bio so people know who’s behind it.', href: '/founder/profile', done: !!(me?.avatar && me?.bio) },
+  ];
+  const doneCount = setup.filter((step) => step.done).length;
+  const listings = [...startups.map((x: any) => ({ ...x, type: 'Startup' })), ...tools.map((x: any) => ({ ...x, type: 'Tool' }))];
+
   return (
-    <div className="space-y-6">
-      <div className="border-b border-gray-200 dark:border-gray-800 pb-4">
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-          <BarChart3 className="w-5 h-5 text-brand" />
-          Dashboard
-        </h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-          Overview of your listings, traffic sources & performance
-        </p>
+    <div className="font-jakarta">
+      {/* Greeting */}
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
+        <div>
+          <h1 className="portal-title">{greeting()}, {hello}</h1>
+          <p className="portal-subtitle">
+            {listings.length > 0
+              ? `${totals.startups} startup${totals.startups === 1 ? '' : 's'} and ${totals.tools} tool${totals.tools === 1 ? '' : 's'} listed. ${currentViews.toLocaleString('en-IN')} view${currentViews === 1 ? '' : 's'} this month.`
+              : 'List your startup to get discovered by investors, customers and talent.'}
+          </p>
+        </div>
+        {totals.startups === 0 ? (
+          <Link href="/founder/startups/new" className="btn-brand gap-2 shrink-0">
+            <Plus className="w-4 h-4" aria-hidden /> Submit your startup
+          </Link>
+        ) : (
+          <Link href="/founder/content" className="btn-brand gap-2 shrink-0">
+            <Plus className="w-4 h-4" aria-hidden /> Create
+          </Link>
+        )}
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <StatCard title="Startups" value={startups.length} icon={Rocket} href="/founder/startups" />
-        <StatCard title="Tools" value={tools.length} icon={Wrench} href="/founder/tools" />
-        <StatCard title="Views" value={currentViews.toLocaleString()} icon={Eye} trend={viewsTrendText} />
-        <StatCard title="Clicks" value={currentClicks.toLocaleString()} icon={MousePointerClick} />
-        <StatCard title="Shares" value={currentShares.toLocaleString()} icon={Share2} />
-        <StatCard title="CTR" value={`${ctr}%`} icon={TrendingUp} trend={ctrTrendText} />
-      </div>
+      {/* Setup checklist */}
+      {doneCount < setup.length && (
+        <section aria-labelledby="setup-title" className={`${CARD} p-4 sm:p-5 mb-6`}>
+          <div className="flex items-center justify-between gap-4 mb-3">
+            <h2 id="setup-title" className="portal-section-title">Finish setting up</h2>
+            <span className="text-sm text-gray-600 dark:text-gray-400 tabular-nums">{doneCount} of {setup.length} done</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden mb-4" role="progressbar" aria-valuemin={0} aria-valuemax={setup.length} aria-valuenow={doneCount} aria-label="Setup progress">
+            <div className="h-full bg-brand rounded-full" style={{ width: `${(doneCount / setup.length) * 100}%` }} />
+          </div>
+          <ol className="grid gap-1">
+            {setup.map((step) => (
+              <li key={step.key}>
+                {step.done ? (
+                  <div className="flex items-center gap-3 px-2 py-2.5 rounded-[10px]">
+                    <span className="w-6 h-6 rounded-full bg-green-600 text-white flex items-center justify-center shrink-0" aria-hidden><Check className="w-3.5 h-3.5" /></span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400 line-through decoration-gray-300">{step.label}</span>
+                    <span className="sr-only">Done</span>
+                  </div>
+                ) : (
+                  <Link href={step.href} className="flex items-center gap-3 px-2 py-2.5 rounded-[10px] hover:bg-gray-50 dark:hover:bg-gray-800/60 group">
+                    <span className="w-6 h-6 rounded-full border-2 border-gray-300 dark:border-gray-600 shrink-0" aria-hidden />
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm font-semibold text-gray-900 dark:text-white">{step.label}</span>
+                      <span className="block text-[13px] text-gray-600 dark:text-gray-400">{step.hint}</span>
+                    </span>
+                    <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-brand shrink-0" aria-hidden />
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
 
-      {/* Traffic Sources */}
-      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-5">
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">Traffic Sources (This Month)</h2>
+      {/* Stats */}
+      <section aria-label="Your listings at a glance" className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4 mb-6">
+        <StatCard title="Startup" value={totals.startups} icon={Rocket} href="/founder/startups" sub={`${totals.verified} verified`} />
+        <StatCard title="AI tool" value={totals.tools} icon={Wrench} href="/founder/tools" sub="Listed" />
+        <StatCard title="Views" value={currentViews.toLocaleString('en-IN')} icon={Eye} sub={viewsTrendText ? `${viewsTrendText} vs last month` : 'This month'} />
+        <StatCard title="Clicks" value={currentClicks.toLocaleString('en-IN')} icon={MousePointerClick} sub="This month" />
+        <StatCard title="Shares" value={currentShares.toLocaleString('en-IN')} icon={Share2} sub="This month" />
+        <StatCard title="Click rate" value={`${ctr}%`} icon={TrendingUp} sub={ctrTrendText ? `${ctrTrendText} vs last month` : 'This month'} />
+      </section>
+
+      {/* Traffic sources */}
+      <section aria-labelledby="traffic-title" className={`${CARD} p-4 sm:p-5 mb-6`}>
+        <h2 id="traffic-title" className="portal-section-title mb-4">Traffic sources <span className="font-jakarta font-normal text-sm text-gray-500 dark:text-gray-400">this month</span></h2>
         {totalSourceViews === 0 ? (
-          <p className="text-xs text-gray-400">No UTM data yet. Share your listings to start tracking traffic sources.</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">No visits yet this month. Share your listing’s link on LinkedIn or with your network, and you’ll see where your visitors come from here.</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
-            {sourceBreakdown.map((s) => (
-              <div key={s.label}>
+            {sourceBreakdown.map((source) => (
+              <div key={source.label}>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
-                    <s.icon className="w-3.5 h-3.5 text-gray-400" />
-                    <span className="text-xs text-gray-700 dark:text-gray-300">{s.label}</span>
+                    <source.icon className="w-4 h-4 text-gray-400" aria-hidden />
+                    <span className="text-[13px] text-gray-700 dark:text-gray-300">{source.label}</span>
                   </div>
-                  <span className="text-xs font-bold text-gray-900 dark:text-white">{s.value} <span className="text-gray-400 font-normal">({s.pct}%)</span></span>
+                  <span className="text-[13px] font-semibold text-gray-900 dark:text-white tabular-nums">{source.value} <span className="text-gray-500 font-normal">({source.pct}%)</span></span>
                 </div>
                 <div className="h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                  <div className={`h-full ${s.color} rounded-full transition-all`} style={{ width: `${s.pct}%` }} />
+                  <div className={`h-full ${source.color} rounded-full transition-all`} style={{ width: `${source.pct}%` }} />
                 </div>
               </div>
             ))}
           </div>
         )}
-      </div>
+      </section>
 
-      {/* Per-Listing Performance */}
-      {(startups.length > 0 || tools.length > 0) && (
-        <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-5">
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">Listing Performance</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+      {/* Listing performance */}
+      {listings.length > 0 && (
+        <section aria-labelledby="performance-title" className={`${CARD} mb-6`}>
+          <div className="px-4 sm:px-5 pt-4 pb-3">
+            <h2 id="performance-title" className="portal-section-title">Listing performance</h2>
+          </div>
+
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-gray-400 border-b border-gray-100 dark:border-gray-800">
-                  <th className="pb-2 pr-4 font-medium">Name</th>
-                  <th className="pb-2 px-2 font-medium text-center">Type</th>
-                  <th className="pb-2 px-2 font-medium text-center">Views</th>
-                  <th className="pb-2 px-2 font-medium text-center">Shares</th>
-                  <th className="pb-2 px-2 font-medium text-center">Social</th>
-                  <th className="pb-2 pl-2 font-medium text-center">Search</th>
+                <tr className="border-y border-gray-100 dark:border-gray-800 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">
+                  <th scope="col" className="px-5 py-2.5 font-semibold">Name</th>
+                  <th scope="col" className="px-3 py-2.5 font-semibold">Type</th>
+                  <th scope="col" className="px-3 py-2.5 font-semibold text-right">Views</th>
+                  <th scope="col" className="px-3 py-2.5 font-semibold text-right">Shares</th>
+                  <th scope="col" className="px-3 py-2.5 font-semibold text-right">Social</th>
+                  <th scope="col" className="px-5 py-2.5 font-semibold text-right">Search</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-                {[...startups.map((s: any) => ({ ...s, type: 'Startup' })), ...tools.map((t: any) => ({ ...t, type: 'Tool' }))].map((item: any) => {
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                {listings.map((item: any) => {
                   const a = analyticsMap.get(item.id) || { views: 0, shares: 0, socialViews: 0, searchViews: 0 };
                   return (
-                    <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
-                      <td className="py-2.5 pr-4 text-gray-700 dark:text-gray-300 truncate max-w-[200px] font-medium">{item.name}</td>
-                      <td className="py-2.5 px-2 text-center">
-                        <span className={`text-xs px-1.5 py-0.5 rounded ${item.type === 'Startup' ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400' : 'bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400'}`}>{item.type}</span>
-                      </td>
-                      <td className="py-2.5 px-2 text-center text-gray-900 dark:text-white font-semibold">{a.views}</td>
-                      <td className="py-2.5 px-2 text-center text-pink-500">{a.shares}</td>
-                      <td className="py-2.5 px-2 text-center text-purple-500">{a.socialViews}</td>
-                      <td className="py-2.5 pl-2 text-center text-green-500">{a.searchViews}</td>
+                    <tr key={item.id}>
+                      <td className="px-5 py-3 font-semibold text-gray-900 dark:text-white truncate max-w-[260px]">{item.name}</td>
+                      <td className="px-3 py-3"><span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">{item.type}</span></td>
+                      <td className="px-3 py-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{a.views}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{a.shares}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{a.socialViews}</td>
+                      <td className="px-5 py-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{a.searchViews}</td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
-        </div>
+
+          {/* Mobile cards */}
+          <ul className="md:hidden divide-y divide-gray-100 dark:divide-gray-800 border-t border-gray-100 dark:border-gray-800">
+            {listings.map((item: any) => {
+              const a = analyticsMap.get(item.id) || { views: 0, shares: 0, socialViews: 0, searchViews: 0 };
+              return (
+                <li key={item.id} className="px-4 py-3.5">
+                  <div className="flex items-center justify-between gap-3 mb-1">
+                    <span className="text-[15px] font-semibold text-gray-900 dark:text-white truncate">{item.name}</span>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 shrink-0">{item.type}</span>
+                  </div>
+                  <p className="text-[13px] text-gray-500 dark:text-gray-400 tabular-nums">{a.views} views · {a.shares} shares · {a.socialViews} social · {a.searchViews} search</p>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       )}
 
-      {/* Recent Listings */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Recent Startups</h2>
-            <Link href="/founder/startups" className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-medium">View all</Link>
+      {/* Recent listings */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6">
+        <section aria-labelledby="startups-title">
+          <div className="flex items-center justify-between gap-4 mb-3">
+            <h2 id="startups-title" className="portal-section-title">Your startup</h2>
+            {startups.length > 0 && <Link href="/founder/startups" className="text-sm font-semibold text-brand hover:underline">All startups</Link>}
           </div>
           {startups.length === 0 ? (
-            <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-6 text-center">
-              <Rocket className="w-8 h-8 text-gray-300 dark:text-gray-700 mx-auto mb-2" />
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">No startups yet</p>
-              <Link href="/founder/startups/new" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors">
-                <Plus className="w-3.5 h-3.5" /> Submit Startup
-              </Link>
+            <div className={`${CARD} px-4 py-8 text-center`}>
+              <span className="w-12 h-12 rounded-[12px] bg-gray-100 dark:bg-gray-800 text-gray-500 flex items-center justify-center mx-auto mb-3" aria-hidden><Rocket className="w-6 h-6" /></span>
+              <p className="text-[15px] font-semibold text-gray-900 dark:text-white">No startup yet</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-md mx-auto">List your startup so people can find it. We’ll review it and email you once it’s live.</p>
+              <Link href="/founder/startups/new" className="btn-brand gap-2 mt-4"><Plus className="w-4 h-4" aria-hidden /> Submit your startup</Link>
             </div>
           ) : (
             <div className="space-y-2">
@@ -213,20 +313,19 @@ export default async function DashboardPage() {
               ))}
             </div>
           )}
-        </div>
+        </section>
 
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Recent Tools</h2>
-            <Link href="/founder/tools" className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-medium">View all</Link>
+        <section aria-labelledby="tools-title">
+          <div className="flex items-center justify-between gap-4 mb-3">
+            <h2 id="tools-title" className="portal-section-title">Your AI tool</h2>
+            {tools.length > 0 && <Link href="/founder/tools" className="text-sm font-semibold text-brand hover:underline">All tools</Link>}
           </div>
           {tools.length === 0 ? (
-            <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-6 text-center">
-              <Wrench className="w-8 h-8 text-gray-300 dark:text-gray-700 mx-auto mb-2" />
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">No tools yet</p>
-              <Link href="/founder/tools/new" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors">
-                <Plus className="w-3.5 h-3.5" /> Submit Tool
-              </Link>
+            <div className={`${CARD} px-4 py-8 text-center`}>
+              <span className="w-12 h-12 rounded-[12px] bg-gray-100 dark:bg-gray-800 text-gray-500 flex items-center justify-center mx-auto mb-3" aria-hidden><Wrench className="w-6 h-6" /></span>
+              <p className="text-[15px] font-semibold text-gray-900 dark:text-white">No AI tool yet</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-md mx-auto">Built an AI product? List it so people can discover it in the tools directory.</p>
+              <Link href="/founder/tools/new" className="btn-brand gap-2 mt-4"><Plus className="w-4 h-4" aria-hidden /> Submit a tool</Link>
             </div>
           ) : (
             <div className="space-y-2">
@@ -235,28 +334,24 @@ export default async function DashboardPage() {
               ))}
             </div>
           )}
-        </div>
+        </section>
       </div>
 
-      {/* Cross-sell */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <a href="/employer/login" className="card p-4 flex items-center gap-3 hover:border-brand/30 transition-colors group">
-          <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center shrink-0 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-blue-600 dark:text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></svg>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-navy dark:text-white font-jakarta group-hover:text-brand transition-colors">Hiring? Post a job</p>
-            <p className="text-xs text-gray-400 font-jakarta">Reach 45K+ AI professionals</p>
-          </div>
-        </a>
-        <a href="/organizer/login" className="card p-4 flex items-center gap-3 hover:border-brand/30 transition-colors group">
-          <div className="w-9 h-9 rounded-lg bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center shrink-0 group-hover:bg-purple-100 dark:group-hover:bg-purple-900/30 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-purple-600 dark:text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-navy dark:text-white font-jakarta group-hover:text-brand transition-colors">Hosting an event? Create one</p>
-            <p className="text-xs text-gray-400 font-jakarta">List your AI event for free</p>
-          </div>
+      {/* Other portals */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+        <Link href="/founder/hiring" className={`${CARD} p-4 flex items-center gap-3 hover:border-gray-300 dark:hover:border-gray-700 transition-colors group`}>
+          <span className="w-10 h-10 rounded-[10px] bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 flex items-center justify-center shrink-0" aria-hidden><Briefcase className="w-5 h-5" /></span>
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-gray-900 dark:text-white group-hover:text-brand transition-colors">Hiring? Post a job</span>
+            <span className="block text-[13px] text-gray-600 dark:text-gray-400">Reach 45K+ AI professionals</span>
+          </span>
+        </Link>
+        <a href="/organizer/login" className={`${CARD} p-4 flex items-center gap-3 hover:border-gray-300 dark:hover:border-gray-700 transition-colors group`}>
+          <span className="w-10 h-10 rounded-[10px] bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 flex items-center justify-center shrink-0" aria-hidden><CalendarDays className="w-5 h-5" /></span>
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-gray-900 dark:text-white group-hover:text-brand transition-colors">Hosting an event? Create one</span>
+            <span className="block text-[13px] text-gray-600 dark:text-gray-400">List your AI event for free</span>
+          </span>
         </a>
       </div>
     </div>

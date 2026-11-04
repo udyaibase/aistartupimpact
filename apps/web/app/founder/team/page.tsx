@@ -4,9 +4,9 @@ import { useState, useEffect, useRef } from "react";
 import { Users, Plus, Loader2, Mail, Trash2, X, ChevronDown, ShieldCheck, Briefcase } from "lucide-react";
 
 const ROLES = [
-  { value: "ADMIN", label: "Admin", desc: "Full access, manage team" },
-  { value: "EDITOR", label: "Editor", desc: "Edit startup profile & content" },
-  { value: "VIEWER", label: "Viewer", desc: "View-only access" },
+  { value: "ADMIN", label: "Admin", desc: "Edit the listing and content, and manage the team" },
+  { value: "EDITOR", label: "Editor", desc: "Edit the listing, media, funding and content" },
+  { value: "VIEWER", label: "Viewer", desc: "See the dashboard and analytics, no editing" },
 ];
 
 interface OTPAction {
@@ -142,6 +142,8 @@ function OTPModal({
 export default function FounderTeamPage() {
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [canManage, setCanManage] = useState(true);
+  const [isOwner, setIsOwner] = useState(true);
   const [showInvite, setShowInvite] = useState(false);
   const [invEmail, setInvEmail] = useState("");
   const [invName, setInvName] = useState("");
@@ -177,7 +179,7 @@ export default function FounderTeamPage() {
         return r.json();
       })
       .then(d => {
-        if (d.success) setMembers(d.members || []);
+        if (d.success) { setMembers(d.members || []); setCanManage(d.canManage !== false); setIsOwner(d.role === 'OWNER'); }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -268,20 +270,20 @@ export default function FounderTeamPage() {
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-brand"/></div>;
 
   return (
-    <div className="max-w-3xl mx-auto space-y-5">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-sora font-bold text-lg text-navy dark:text-white flex items-center gap-2"><Users className="w-5 h-5 text-brand"/> Team</h1>
-          <p className="text-xs text-gray-500 font-jakarta">Invite members to help manage your startup</p>
+          <h1 className="portal-title">Team</h1>
+          <p className="portal-subtitle">Invite people to help manage your startup</p>
         </div>
-        <button onClick={() => setShowInvite(true)} className="inline-flex items-center gap-1.5 px-3 py-2 bg-brand hover:bg-brand-600 text-white text-xs font-bold font-jakarta rounded-lg">
+        {canManage && <button onClick={() => setShowInvite(true)} className="inline-flex items-center gap-1.5 px-3 py-2 bg-brand hover:bg-brand-600 text-white text-xs font-bold font-jakarta rounded-lg">
           <Plus className="w-3.5 h-3.5"/> Invite Member
-        </button>
+        </button>}
       </div>
 
       {msg && <p className={`text-xs font-jakarta px-3 py-2 rounded-lg ${msg.includes("sent") || msg.includes("Invite") || msg.includes("updated") || msg.includes("revoked") || msg.includes("removed for") ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400"}`}>{msg}</p>}
 
-      {showInvite && (
+      {canManage && showInvite && (
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-5 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-navy dark:text-white font-sora">Invite Team Member</h2>
@@ -314,10 +316,11 @@ export default function FounderTeamPage() {
 
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
         {members.length === 0 ? (
-          <div className="text-center py-12">
-            <Users className="w-8 h-8 text-gray-300 mx-auto mb-2"/>
-            <p className="text-sm text-gray-400 font-jakarta">No team members yet</p>
-            <p className="text-xs text-gray-300 font-jakarta mt-1">Invite your first team member to get started</p>
+          <div className="text-center py-12 px-4">
+            <Users className="w-8 h-8 text-gray-400 mx-auto mb-2" aria-hidden />
+            <p className="text-[15px] font-semibold text-gray-900 dark:text-white font-jakarta">It’s just you for now</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400 font-jakarta mt-1 max-w-md mx-auto">Invite a co-founder or teammate to help manage your listing, stories and updates. You choose what each person can do.</p>
+            {canManage && <button onClick={() => setShowInvite(true)} className="mt-4 inline-flex items-center gap-1.5 px-3 py-2 bg-brand hover:bg-brand-600 text-white text-sm font-semibold font-jakarta rounded-lg"><Plus className="w-3.5 h-3.5" aria-hidden /> Invite a teammate</button>}
           </div>
         ) : (
           <>
@@ -363,12 +366,12 @@ export default function FounderTeamPage() {
                     <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded-full ${m.status === "ACTIVE" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : m.status === "PENDING" ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" : "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400"}`}>{m.status}</span>
                   </div>
                   <div className="col-span-3 flex items-center justify-end gap-1">
-                    {m.status === "PENDING" && (
+                    {canManage && m.status === "PENDING" && (
                       <button onClick={() => handleResendInvite(m)} className="text-xs text-brand hover:text-brand-600 font-jakarta font-medium px-2 py-1 rounded hover:bg-brand/5">
                         Resend
                       </button>
                     )}
-                    {m.status !== "REVOKED" && m.role !== "OWNER" && (
+                    {canManage && m.status !== "REVOKED" && m.role !== "OWNER" && (
                       <button onClick={() => handleRevokeRequest(m)} className="p-1.5 text-gray-400 hover:text-red-500" title="Revoke access">
                         <Trash2 className="w-3.5 h-3.5"/>
                       </button>

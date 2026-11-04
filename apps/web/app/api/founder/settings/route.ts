@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { requireFounderAuth } from '@/lib/founder-auth';
+import { logFounderActivity } from '@/lib/founder/activity';
 
 export const dynamic = 'force-dynamic';
 /**
@@ -73,11 +74,8 @@ export async function PATCH(request: NextRequest) {
 
     // Convert camelCase to snake_case
     const updates: any = {};
-    if ('emailNotifications' in body) updates.email_notifications = body.emailNotifications;
-    if ('submissionUpdates' in body) updates.submission_updates = body.submissionUpdates;
-    if ('analyticsReports' in body) updates.analytics_reports = body.analyticsReports;
-    if ('publicProfile' in body) updates.public_profile = body.publicProfile;
-    if ('showEmail' in body) updates.show_email = body.showEmail;
+    if (typeof body.publicProfile === 'boolean') updates.public_profile = body.publicProfile;
+    if (typeof body.emailNotifications === 'boolean') updates.email_notifications = body.emailNotifications;
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json(
@@ -128,6 +126,9 @@ export async function PATCH(request: NextRequest) {
         WHERE user_id = ${session.userId}
       `;
     }
+
+    if ('public_profile' in updates) await logFounderActivity(session.userId, 'public_profile_changed', { request, metadata: { visible: updates.public_profile } });
+    if ('email_notifications' in updates) await logFounderActivity(session.userId, 'email_tips_changed', { request, metadata: { on: updates.email_notifications } });
 
     return NextResponse.json({
       success: true,

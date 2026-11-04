@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logFounderSignIn } from '@/lib/founder/activity';
+import { secondFactorChallenge } from '@/lib/auth/second-factor';
 import { sql } from '@/lib/db';
 import { verifyGoogleToken, isCompanyEmail, extractCompanyDomain, getCompanyNameFromDomain } from '@/lib/google-oauth';
 import { setFounderSession } from '@/lib/founder-auth';
@@ -86,21 +88,15 @@ export async function GET(request: NextRequest) {
         RETURNING *
       `;
       user = result;
-
-      // Add new Google OAuth user to newsletter subscribers
-      try {
-        await sql`
-          INSERT INTO "NewsletterSubscriber" (id, email, name, source, "isActive", "subscribedAt", tags)
-          VALUES (gen_random_uuid(), ${googleUser.email}, ${googleUser.name}, 'founder_google', true, NOW(), '{"founder"}')
-          ON CONFLICT (email) DO UPDATE SET "isActive" = true, source = COALESCE("NewsletterSubscriber".source, 'founder_google')
-        `;
-      } catch (subError) {
-        console.error('Failed to add Google OAuth user to newsletter:', subError);
-      }
     }
 
     // Set session
+    // Anyone with 2FA on signs in through the main form, which asks for their code.
+    if (await secondFactorChallenge(user[0].email)) {
+      return NextResponse.redirect(new URL('/auth/login', request.url));
+    }
     await setFounderSession(user[0].id, user[0].email, user[0].name, !!user[0].onboardingCompleted);
+    await logFounderSignIn(user[0].email, request, 'google');
 
     // Parse state to get return URL (validated to prevent open redirects)
     let returnTo = '/founder/dashboard';

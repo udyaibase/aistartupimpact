@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 import { requireFounderAuth } from '@/lib/founder-auth';
 import { createTicket, getTicketsForUser } from '@/lib/support-tickets';
 import { sql } from '@/lib/db';
@@ -24,6 +25,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const { success: withinLimit } = await checkRateLimit(apiRateLimit, getClientIdentifier(request));
+  if (!withinLimit) return NextResponse.json({ success: false, error: 'Too many requests. Please try again later.' }, { status: 429 });
+
   try {
     const session = await requireFounderAuth();
     const body = await request.json();

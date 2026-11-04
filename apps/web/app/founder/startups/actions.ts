@@ -1,9 +1,15 @@
 'use server';
 
 import { requireFounderAuth } from '@/lib/founder-auth';
-import { sendAdminReviewAlert, sendChangesUnderReviewEmail, sendSubmissionReceivedEmail } from '@/lib/founder-email';
-import { prisma } from '@udyaibase/database';
+import { sendAdminReviewAlert, sendSubmissionReceivedEmail } from '@/lib/founder-email';
+import { prisma, readListingFields, saveListingEdit } from '@udyaibase/database';
 import { revalidatePath } from 'next/cache';
+import { validateInput } from '@/lib/validation';
+import { startupSubmissionSchema } from '@/lib/founder/listing-validation';
+import { listingFieldLabel } from '@udyaibase/utils';
+import { listingAccess } from '@/lib/founder/listing-access';
+import { logFounderActivity } from '@/lib/founder/activity';
+import { founderAtStartupLimit, STARTUP_LIMIT_MESSAGE } from '@/lib/founder/limits';
 import { checkLocation } from '@/lib/locations';
 
 interface StartupSubmission {
@@ -54,6 +60,10 @@ interface StartupSubmission {
 export async function submitStartupAction(data: StartupSubmission) {
   try {
     const session = await requireFounderAuth();
+    if (await founderAtStartupLimit(session.userId)) return { success: false, error: STARTUP_LIMIT_MESSAGE };
+    const checked = validateInput(startupSubmissionSchema, data);
+    if (!checked.success) return { success: false, error: checked.error };
+    data = checked.data as unknown as StartupSubmission;
     // Headquarters only from the standard city list.
     if (data.headquartersCity) {
       const loc = await checkLocation({ city: data.headquartersCity });
@@ -235,6 +245,7 @@ export async function submitStartupAction(data: StartupSubmission) {
       sendAdminReviewAlert({ entityType: 'startup', entityName: data.name, founderEmail: founderInfo[0].email, reason: 'new' });
     }
 
+    await logFounderActivity(session.userId, 'startup_submitted', { metadata: { name: data.name } });
     revalidatePath('/founder/startups');
     revalidatePath('/founder/dashboard');
 
@@ -251,6 +262,9 @@ export async function submitStartupAction(data: StartupSubmission) {
 export async function updateStartupAction(id: string, data: StartupSubmission) {
   try {
     const session = await requireFounderAuth();
+    const checked = validateInput(startupSubmissionSchema, data);
+    if (!checked.success) return { success: false, error: checked.error };
+    data = checked.data as unknown as StartupSubmission;
     // Headquarters only from the standard city list.
     if (data.headquartersCity) {
       const loc = await checkLocation({ city: data.headquartersCity });
@@ -258,196 +272,68 @@ export async function updateStartupAction(id: string, data: StartupSubmission) {
       data = { ...data, headquartersCity: loc.city ?? undefined };
     }
 
-    // Verify ownership using raw query
-    const startups = await prisma.$queryRaw<any[]>`
-      SELECT id, name, slug, "ownerId", "claimStatus"
-      FROM "Startup"
-      WHERE id = ${id}
-      LIMIT 1
-    `;
-
-    const startup = startups[0];
-
-    if (!startup || startup.ownerId !== session.userId) {
-      return {
-        success: false,
-        error: 'Startup not found or you do not have permission to edit it',
-      };
+    // Owner, or a teammate who can edit. Viewers and strangers can't, whatever the screen shows.
+    const access = await listingAccess(session, 'startup', id);
+    if (!access?.canEdit) {
+      return { success: false, error: 'Startup not found or you do not have permission to edit it' };
     }
 
-    // Generate new slug if name changed
-    let slug = startup.slug;
-    if (data.name !== startup.name) {
-      slug = data.name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '');
-
-      // Check if new slug already exists using raw query
-      const existing = await prisma.$queryRaw<any[]>`
-        SELECT id
-        FROM "Startup"
-        WHERE slug = ${slug} AND id != ${id}
-        LIMIT 1
-      `;
-
-      if (existing.length > 0) {
-        return {
-          success: false,
-          error: 'A startup with this name already exists',
-        };
-      }
-    }
-
-    // Update startup
-    // If startup was live (CLAIMED/VERIFIED), set back to PENDING for re-approval
-    const newStatus = ['CLAIMED', 'VERIFIED'].includes(startup.claimStatus)
-      ? 'PENDING'
-      : startup.claimStatus;
-
-    // Resolve cityId from headquartersCity name
-    let updateCityId: string | null = null;
-    if (data.headquartersCity) {
-      const cityMatch = await prisma.$queryRaw<any[]>`
-        SELECT id FROM "City"
-        WHERE LOWER(name) = LOWER(${data.headquartersCity})
-          OR ${data.headquartersCity.toLowerCase()} = ANY(aliases)
-        LIMIT 1
-      `;
-      updateCityId = cityMatch.length > 0 ? cityMatch[0].id : null;
-    }
-
-    // Try to update with category and businessType, fallback if columns don't exist
-    const socialLinksJson = data.socialLinks && data.socialLinks.length > 0
-      ? JSON.stringify(data.socialLinks)
-      : null;
-
-    try {
-      await prisma.$executeRaw`
-        UPDATE "Startup"
-        SET 
-          name = ${data.name},
-          slug = ${slug},
-          tagline = ${data.tagline},
-          description = ${data.description},
-          "websiteUrl" = ${data.websiteUrl},
-          "linkedinUrl" = ${data.linkedinUrl || null},
-          "twitterUrl" = ${data.twitterUrl || null},
-          "foundedYear" = ${data.foundedYear},
-          "headquartersCity" = ${data.headquartersCity || null},
-          "cityId" = ${updateCityId},
-          stage = ${data.stage}::"StartupStage",
-          "employeeCount" = ${data.employeeCount || null},
-          founders = ${data.founders}::text[],
-          "logoUrl" = ${data.logoUrl || null},
-          "totalFundingInr" = ${data.totalFundingInr || 0},
-          category = ${data.category || null},
-          "businessType" = ${data.businessType || null},
-          status = ${data.status || 'ACTIVE'}::"CompanyStatus",
-          "socialLinks" = ${socialLinksJson}::jsonb,
-          "claimStatus" = ${newStatus}::"ClaimStatus",
-          "updatedAt" = NOW()
-        WHERE id = ${id}
-      `;
-    } catch (error: any) {
-      // If category or businessType column doesn't exist, update without them
-      if (error.message?.includes('category') || error.message?.includes('businessType') || error.message?.includes('column')) {
-        console.log('[updateStartup] Category or businessType column not found, updating without them');
-        await prisma.$executeRaw`
-          UPDATE "Startup"
-          SET 
-            name = ${data.name},
-            slug = ${slug},
-            tagline = ${data.tagline},
-            description = ${data.description},
-            "websiteUrl" = ${data.websiteUrl},
-            "linkedinUrl" = ${data.linkedinUrl || null},
-            "twitterUrl" = ${data.twitterUrl || null},
-            "foundedYear" = ${data.foundedYear},
-            "headquartersCity" = ${data.headquartersCity || null},
-            stage = ${data.stage}::"StartupStage",
-            "employeeCount" = ${data.employeeCount || null},
-            founders = ${data.founders}::text[],
-            "logoUrl" = ${data.logoUrl || null},
-            "totalFundingInr" = ${data.totalFundingInr || 0},
-            status = ${data.status || 'ACTIVE'}::"CompanyStatus",
-            "socialLinks" = ${socialLinksJson}::jsonb,
-            "claimStatus" = ${newStatus}::"ClaimStatus",
-            "updatedAt" = NOW()
-          WHERE id = ${id}
-        `;
-      } else {
-        throw error;
-      }
-    }
-
-    // Update FAQs if provided
-    if (data.faqs) {
-      // Delete existing FAQs
-      await prisma.$executeRaw`
-        DELETE FROM "StartupFAQ" WHERE "startupId" = ${id}
-      `;
-      
-      // Insert new FAQs
-      for (const faq of data.faqs) {
-        await prisma.$executeRaw`
-          INSERT INTO "StartupFAQ" (id, "startupId", question, answer, "order", "createdAt", "updatedAt")
-          VALUES (gen_random_uuid(), ${id}, ${faq.question}, ${faq.answer}, ${faq.order}, NOW(), NOW())
-        `;
-      }
-    }
-
-    // Update Funding Rounds — delete existing, re-insert updated list
-    if (data.fundingRounds !== undefined) {
-      await prisma.$executeRaw`DELETE FROM "FundingRound" WHERE "startupId" = ${id}`;
-      for (const round of data.fundingRounds) {
-        await prisma.$executeRaw`
-          INSERT INTO "FundingRound" (id, "startupId", "roundType", "amountUsd", "amountInr", "announcedAt", "leadInvestors", "allInvestors", "createdAt")
-          VALUES (gen_random_uuid(), ${id}, ${round.roundType}, ${round.amountUsd}, ${round.amountInr}, ${round.announcedAt}::timestamp, ${round.leadInvestors}::text[], ${round.allInvestors}::text[], NOW())
-        `;
-      }
-    }
-
-    // Update foundersData if provided
-    if (data.foundersData !== undefined) {
-      const foundersDataJson = data.foundersData.length > 0
-        ? JSON.stringify(data.foundersData)
-        : null;
-      const founderNames = data.foundersData.filter(f => f.name.trim()).map(f => f.name);
-      await prisma.$executeRaw`
-        UPDATE "Startup"
-        SET "foundersData" = ${foundersDataJson}::jsonb,
-            founders = ${founderNames}::text[],
-            "updatedAt" = NOW()
-        WHERE id = ${id}
-      `;
-    }
-
-    // Recalculate impact score
-    const totalFundingUsdCents = (data.fundingRounds || []).reduce((sum, r) => sum + (r.amountUsd || 0), 0);
-    const { calculateImpactScore } = await import('@/lib/impact-score');
-    const { total: impactScore } = calculateImpactScore({
-      totalFundingUsdCents,
-      employeeCount: data.employeeCount ?? null,
+    const result = await saveListingEdit('startup', id, {
+      name: data.name,
+      tagline: data.tagline,
+      description: data.description,
+      websiteUrl: data.websiteUrl,
+      linkedinUrl: data.linkedinUrl ?? null,
+      twitterUrl: data.twitterUrl ?? null,
+      foundedYear: data.foundedYear,
+      headquartersCity: data.headquartersCity ?? null,
       stage: data.stage,
-      foundedYear: data.foundedYear ?? null,
-    });
-    await prisma.$executeRaw`UPDATE "Startup" SET "impactScore" = ${impactScore} WHERE id = ${id}`;
+      employeeCount: data.employeeCount ?? null,
+      logoUrl: data.logoUrl ?? null,
+      totalFundingInr: data.totalFundingInr ?? 0,
+      category: data.category ?? null,
+      businessType: data.businessType ?? null,
+      status: data.status || 'ACTIVE',
+      socialLinks: data.socialLinks ?? [],
+      faqs: data.faqs ?? [],
+      fundingRounds: data.fundingRounds ?? [],
+      foundersData: data.foundersData ?? [],
+    }, { type: 'FOUNDER', id: session.userId, label: session.name });
+    if (!result) return { success: false, error: 'Startup not found or you do not have permission to edit it' };
 
-    // A live startup went back to review: tell the founder and the review team.
-    if (newStatus === 'PENDING' && startup.claimStatus !== 'PENDING') {
-      const founder = await prisma.founderUser.findUnique({ where: { id: session.userId }, select: { email: true, name: true } });
-      if (founder) {
-        sendChangesUnderReviewEmail(founder.email, founder.name, startup.name);
-        sendAdminReviewAlert({ entityType: 'startup', entityName: startup.name, founderEmail: founder.email, reason: 'edited' });
+    // The impact score follows what's live.
+    if (result.published.some((f) => ['fundingRounds', 'employeeCount', 'stage', 'foundedYear'].includes(f))) {
+      const live = await readListingFields('startup', id);
+      if (live) {
+        const { calculateImpactScore } = await import('@/lib/impact-score');
+        const { total: impactScore } = calculateImpactScore({
+          totalFundingUsdCents: ((live.fundingRounds as { amountUsd: number | null }[]) ?? []).reduce((sum, r) => sum + (r.amountUsd || 0), 0),
+          employeeCount: (live.employeeCount as number | null) ?? null,
+          stage: live.stage as string,
+          foundedYear: (live.foundedYear as number | null) ?? null,
+        });
+        await prisma.$executeRaw`UPDATE "Startup" SET "impactScore" = ${impactScore} WHERE id = ${id}`;
       }
     }
+
+    // On the owner's log whoever did it, and on the teammate's too.
+    const by: Record<string, string> = access.role === 'OWNER' ? {} : { by: session.name };
+    if (result.published.length) {
+      await logFounderActivity(access.ownerId, 'startup_updated', { metadata: { name: data.name, ...by } });
+      if (access.role !== 'OWNER') await logFounderActivity(session.userId, 'startup_updated', { metadata: { name: data.name } });
+    }
+    if (result.pending.length) {
+      const fields = result.pending.map(listingFieldLabel).join(', ');
+      await logFounderActivity(access.ownerId, 'edit_submitted', { metadata: { fields, ...by } });
+      if (access.role !== 'OWNER') await logFounderActivity(session.userId, 'edit_submitted', { metadata: { fields } });
+      sendAdminReviewAlert({ entityType: 'startup', entityName: access.name, founderEmail: session.email, reason: 'edited' });
+    }
+    if (result.resubmitted) sendAdminReviewAlert({ entityType: 'startup', entityName: data.name, founderEmail: session.email, reason: 'resubmitted' });
 
     revalidatePath('/founder/startups');
-    revalidatePath(`/founder/startups/${slug}`);
     revalidatePath('/founder/dashboard');
 
-    return { success: true };
+    return { success: true, published: result.published.map(listingFieldLabel), pending: result.pending.map(listingFieldLabel), resubmitted: result.resubmitted };
   } catch (error: any) {
     console.error('Startup update error:', error);
     return {

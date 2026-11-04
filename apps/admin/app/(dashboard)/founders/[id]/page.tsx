@@ -1,5 +1,7 @@
 'use client';
 
+import RejectToolDialog from '@/components/RejectToolDialog';
+import FounderActivityPanel from '@/components/FounderActivityPanel';
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
@@ -65,6 +67,7 @@ export default function FounderDetailPage(props: { params: Promise<{ id: string 
   const [viewingStartup, setViewingStartup] = useState<any | null>(null);
   const [isRejecting, setIsRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [rejectingTool, setRejectingTool] = useState<{ id: string; name: string } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{
     title: string;
@@ -96,7 +99,12 @@ export default function FounderDetailPage(props: { params: Promise<{ id: string 
   const handleDelete = () => {
     setConfirmAction({
       title: `Delete ${founder?.name}`,
-      message: `This will permanently delete:\n- The founder account\n- All their startups\n- All their tools\n\nThis action CANNOT be undone!`,
+      message: `This erases the founder's account:
+- Their sign-in and personal details
+- Listings they submitted, and their stories and updates
+- Their photos
+
+Directory listings they only claimed stay public, without an owner. Paid invoices are kept, without personal details. This cannot be undone.`,
       variant: 'danger',
       confirmLabel: 'Delete',
       requireTyping: true,
@@ -166,6 +174,18 @@ export default function FounderDetailPage(props: { params: Promise<{ id: string 
 
   return (
     <div className="space-y-6">
+      {rejectingTool && (
+        <RejectToolDialog
+          toolName={rejectingTool.name}
+          onCancel={() => setRejectingTool(null)}
+          onReject={async (reason) => {
+            const res = await fetch(`/api/admin/tools/${rejectingTool.id}/reject`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) }).catch(() => null);
+            if (!res?.ok) return 'Couldn’t reject this tool. Try again.';
+            setRejectingTool(null);
+            loadFounder();
+          }}
+        />
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <button
@@ -590,29 +610,7 @@ export default function FounderDetailPage(props: { params: Promise<{ id: string 
                               ✓ Approve
                             </button>
                             <button
-                              onClick={() => {
-                                setConfirmAction({
-                                  title: 'Reject Tool',
-                                  message: `Reject "${tool.name}"?`,
-                                  variant: 'warning',
-                                  confirmLabel: 'Reject',
-                                  requireTyping: false,
-                                  onConfirm: async () => {
-                                    try {
-                                      const res = await fetch(`/api/admin/tools/${tool.id}/reject`, { method: 'POST' });
-                                      if (res.ok) {
-                                        alert('Tool rejected');
-                                        loadFounder();
-                                      } else {
-                                        alert('Failed to reject');
-                                      }
-                                    } catch (err) {
-                                      alert('Error rejecting tool');
-                                    }
-                                    setConfirmAction(null);
-                                  },
-                                });
-                              }}
+                              onClick={() => setRejectingTool({ id: tool.id, name: tool.name })}
                               className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg transition-colors whitespace-nowrap"
                             >
                               ✗ Reject
@@ -997,6 +995,7 @@ export default function FounderDetailPage(props: { params: Promise<{ id: string 
           </div>
         </div>
       )}
+      {isSuperAdmin && founder && <FounderActivityPanel founderId={founder.id} />}
     </div>
   );
 }

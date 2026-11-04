@@ -26,6 +26,7 @@ import SimilarTools from '@/components/tools/SimilarTools';
 import SimilarToolsCarousel from '@/components/tools/SimilarToolsCarousel';
 import TrackView from '@/components/TrackView';
 import ShareMenu from '@/components/shared/ShareMenu';
+import ReportButton from '@/components/ReportButton';
 
 export const revalidate = 300;
 
@@ -294,6 +295,7 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
             entityType="TOOL"
             entityId={tool.id}
           />
+          <ReportButton entityType="TOOL" entityId={tool.id} entityName={tool.name} entitySlug={tool.slug} />
         </div>
         {(tool.twitterUrl || tool.linkedinUrl || (Array.isArray(tool.socialLinks) && tool.socialLinks.length > 0)) && (
           <div className="flex items-center gap-2 mt-3 flex-wrap">

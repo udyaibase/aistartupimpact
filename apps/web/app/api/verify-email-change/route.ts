@@ -35,10 +35,17 @@ export async function GET(request: NextRequest) {
           where: { email: user.email },
           data: { email: user.pendingEmail! },
         });
+        // One person, one address: their other sign-in records move too, or the accounts would split.
+        const oldEmail = user.email.toLowerCase();
+        await tx.accountTwoFactor.updateMany({ where: { email: oldEmail }, data: { email: user.pendingEmail!.toLowerCase() } });
+        await tx.webUser.updateMany({ where: { email: oldEmail }, data: { email: user.pendingEmail! } });
+        await tx.unifiedUser.updateMany({ where: { email: oldEmail }, data: { email: user.pendingEmail! } });
+        await tx.eventOrganizer.updateMany({ where: { email: oldEmail }, data: { email: user.pendingEmail! } });
         await tx.founderUser.update({
           where: { id: user.id },
           data: {
             email: user.pendingEmail!,
+            sessionsValidAfter: new Date(),
             pendingEmail: null,
             emailChangeToken: null,
             emailChangeTokenExpiry: null,

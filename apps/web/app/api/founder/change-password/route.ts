@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sql } from '@/lib/db';
-import { requireFounderAuth, verifyPassword, hashPassword } from '@/lib/founder-auth';
+import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
+import { cookies } from 'next/headers';
+import { jwtVerify } from 'jose';
+import { requireFounderAuth, setFounderSession, hashPassword } from '@/lib/founder-auth';
 import { changePasswordSchema, validateInput } from '@/lib/validation';
+import { logFounderActivity } from '@/lib/founder/activity';
+import { accountHasPassword, confirmAccountPassword } from '@/lib/founder/account';
+import { setAccountPassword } from '@/lib/auth/set-password';
 
 export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
+  const { success: withinLimit } = await checkRateLimit(strictRateLimit, getClientIdentifier(request));
+  if (!withinLimit) return NextResponse.json({ success: false, error: 'Too many requests. Please try again later.' }, { status: 429 });
+
   try {
     const session = await requireFounderAuth();
 
@@ -15,52 +23,42 @@ export async function POST(request: NextRequest) {
     }
     const { currentPassword, newPassword } = validation.data;
 
-    // Get user's current password hash using raw SQL (same as login)
-    const users = await sql`
-      SELECT id, email, "passwordHash", "authProvider"
-      FROM "FounderUser"
-      WHERE id = ${session.userId}
-      LIMIT 1
-    `;
-
-    if (users.length === 0) {
+    // Checked against the password they really sign in with, which may be on another of their account records.
+    const email = session.email.toLowerCase();
+    if (!(await accountHasPassword(email))) {
       return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      );
-    }
-
-    const user = users[0];
-
-    if (!user.passwordHash) {
-      return NextResponse.json(
-        { success: false, error: 'User is using OAuth login' },
+        { success: false, error: 'You sign in with Google, so there’s no password to change.' },
         { status: 400 }
       );
     }
-
-    const isValidPassword = await verifyPassword(currentPassword, user.passwordHash);
-
-    if (!isValidPassword) {
+    if (!(await confirmAccountPassword(email, currentPassword))) {
       return NextResponse.json(
         { success: false, error: 'Current password is incorrect' },
         { status: 400 }
       );
     }
 
-    // Hash new password using the same function as signup
-    const newPasswordHash = await hashPassword(newPassword);
+    // Keep this device's sign-in on the public site; every other device is signed out.
+    let keepWebSessionId: string | null = null;
+    const userToken = (await cookies()).get('user-token')?.value;
+    if (userToken) {
+      try {
+        const { payload } = await jwtVerify(userToken, new TextEncoder().encode(process.env.USER_JWT_SECRET!));
+        keepWebSessionId = typeof payload.sessionId === 'string' ? payload.sessionId : null;
+      } catch { /* expired: nothing to keep */ }
+    }
 
-    // Update password using raw SQL
-    await sql`
-      UPDATE "FounderUser"
-      SET "passwordHash" = ${newPasswordHash}, "updatedAt" = NOW()
-      WHERE id = ${session.userId}
-    `;
+    await setAccountPassword(email, await hashPassword(newPassword), { keepWebSessionId });
+
+    await setFounderSession(session.userId, session.email, session.name, session.onboardingCompleted);
+    await logFounderActivity(session.userId, 'password_changed', { request });
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('❌ Error changing password:', error);
+    if (error instanceof Error && error.message === 'Unauthorized - Please login') {
+      return NextResponse.json({ success: false, error: 'Please sign in again.' }, { status: 401 });
+    }
+    console.error('Error changing password:', error instanceof Error ? error.message : 'unknown error');
     return NextResponse.json(
       { success: false, error: 'Failed to change password' },
       { status: 500 }

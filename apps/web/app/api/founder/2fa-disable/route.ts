@@ -1,88 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sql } from '@/lib/db';
-import { requireFounderAuth } from '@/lib/founder-auth';
-import { verifyTOTPToken, decryptSecret } from '@/lib/two-factor';
+import { getFounderSession } from '@/lib/founder-auth';
+import { turnOffTwoFactor, twoFactorDisableCheck } from '@/lib/auth/account-two-factor';
+import { TWO_FACTOR_LOCKED_MESSAGE, clearTwoFactorFailures, isTwoFactorLocked, recordTwoFactorFailure } from '@/lib/auth/two-factor-attempts';
+import { checkRateLimit, getClientIdentifier, twoFactorRateLimit } from '@/lib/rate-limit';
+import { logFounderActivity } from '@/lib/founder/activity';
 
 export const dynamic = 'force-dynamic';
-/**
- * POST /api/founder/2fa-disable
- * Disable 2FA (requires current 2FA code for security)
- */
+
 export async function POST(request: NextRequest) {
   try {
-    const session = await requireFounderAuth();
-    const body = await request.json();
-    const { token } = body;
+    const { success: allowed } = await checkRateLimit(twoFactorRateLimit, getClientIdentifier(request));
+    if (!allowed) return NextResponse.json({ success: false, error: 'Too many attempts. Please try again later.' }, { status: 429 });
 
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Verification code is required' },
-        { status: 400 }
-      );
+    const session = await getFounderSession();
+    if (!session) return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
+    if (await isTwoFactorLocked('founder', session.userId)) {
+      return NextResponse.json({ success: false, error: TWO_FACTOR_LOCKED_MESSAGE }, { status: 429 });
     }
 
-    // Get user
-    const users = await sql`
-      SELECT id, email, "twoFactorEnabled", "twoFactorSecret"
-      FROM "FounderUser"
-      WHERE id = ${session.userId}
-      LIMIT 1
-    `;
-
-    if (users.length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      );
+    const check = await twoFactorDisableCheck(session.email, await request.json());
+    if (!check.ok) {
+      if (check.wrongCode && (await recordTwoFactorFailure('founder', session.userId))) {
+        return NextResponse.json({ success: false, error: TWO_FACTOR_LOCKED_MESSAGE }, { status: 429 });
+      }
+      return check.response;
     }
 
-    const user = users[0];
-
-    if (!user.twoFactorEnabled) {
-      return NextResponse.json(
-        { success: false, error: '2FA is not enabled' },
-        { status: 400 }
-      );
-    }
-
-    if (!user.twoFactorSecret) {
-      return NextResponse.json(
-        { success: false, error: '2FA secret not found' },
-        { status: 400 }
-      );
-    }
-
-    // Decrypt and verify token
-    const secret = decryptSecret(user.twoFactorSecret);
-    const isValid = verifyTOTPToken(token, secret);
-
-    if (!isValid) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid verification code' },
-        { status: 400 }
-      );
-    }
-
-    // Disable 2FA and clear secret/backup codes
-    await sql`
-      UPDATE "FounderUser"
-      SET 
-        "twoFactorEnabled" = false,
-        "twoFactorSecret" = NULL,
-        "twoFactorBackupCodes" = NULL,
-        "updatedAt" = NOW()
-      WHERE id = ${session.userId}
-    `;
-
-    return NextResponse.json({
-      success: true,
-      message: '2FA disabled successfully',
-    });
+    await clearTwoFactorFailures('founder', session.userId);
+    await turnOffTwoFactor(session.email);
+    await logFounderActivity(session.userId, '2fa_disabled', { request });
+    return NextResponse.json({ success: true, message: '2FA disabled successfully' });
   } catch (error) {
-    console.error('Error disabling 2FA:', error);
-    return NextResponse.json(
-      { success: false, error: 'Failed to disable 2FA' },
-      { status: 500 }
-    );
+    console.error('2FA disable error:', error instanceof Error ? error.message : 'unknown error');
+    return NextResponse.json({ success: false, error: 'Failed to disable 2FA' }, { status: 500 });
   }
 }
