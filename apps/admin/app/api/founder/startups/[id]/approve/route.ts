@@ -5,6 +5,7 @@ import { calculateImpactScore } from '@/lib/impact-score';
 import { startupApprovalHtml } from '@udyaibase/utils';
 import { sendEmailFireAndForget } from '@/lib/email-send';
 import { requireApiAuth } from '@/lib/api-auth';
+import { notifyFounder } from '@/lib/founder-notify';
 import { logAuditEvent } from '@/lib/audit-log';
 import { withPublicRefresh } from '@/lib/refresh-public';
 
@@ -61,6 +62,8 @@ async function postHandler(request: NextRequest, props: { params: Promise<{ id: 
         type: 'approval',
       });
     }
+
+    await notifyFounder(startup.ownerId, { type: 'listing_approved', title: `${startup.name} is live`, message: 'Your startup passed review and is public on Udyaibase.', link: '/founder/startups' });
 
     logAuditEvent({ action: 'APPROVE', resourceType: 'STARTUP', resourceId: params.id, resourceName: startup.name });
 

@@ -35,6 +35,7 @@ export default function CreatePage() {
   const [articles, setArticles] = useState<any[]>([]);
   const [milestones, setMilestones] = useState<any[]>([]);
   const [startups, setStartups] = useState<any[]>([]);
+  const [mentions, setMentions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [startupFilter, setStartupFilter] = useState("");
 
@@ -49,6 +50,7 @@ export default function CreatePage() {
       ]);
       setArticles(artRes.articles || []);
       setMilestones(msRes.milestones || []);
+      setMentions(artRes.mentions || []);
       setStartups(artRes.startups || msRes.startups || []);
     } catch {}
     setLoading(false);
@@ -107,13 +109,13 @@ export default function CreatePage() {
   ];
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="max-w-4xl mx-auto px-6 py-8">
+    <div>
+      <div>
 
         {/* Create Options — LinkedIn-style cards */}
         <div className="mb-8">
-          <h1 className="text-2xl font-sora font-bold text-gray-900 dark:text-white mb-1">Create</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 font-jakarta mb-5">Share your startup's story with the ecosystem</p>
+          <h1 className="portal-title">Create</h1>
+          <p className="portal-subtitle mb-5">Share your startup's story with the ecosystem</p>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {CREATE_OPTIONS.map(opt => (
@@ -166,10 +168,10 @@ export default function CreatePage() {
           {loading ? (
             <div className="flex justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
           ) : totalCount === 0 ? (
-            <div className="text-center py-12 border border-dashed border-gray-200 dark:border-gray-700 rounded-xl">
-              <Send className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
-              <p className="text-sm font-jakarta text-gray-500 dark:text-gray-400">No content yet</p>
-              <p className="text-xs font-jakarta text-gray-400 mt-0.5">Use the cards above to create your first post</p>
+            <div className="text-center py-12 px-4 border border-dashed border-gray-200 dark:border-gray-700 rounded-xl">
+              <Send className="w-8 h-8 text-gray-400 mx-auto mb-2" aria-hidden />
+              <p className="text-[15px] font-semibold font-jakarta text-gray-900 dark:text-white">You haven’t posted anything yet</p>
+              <p className="text-sm font-jakarta text-gray-600 dark:text-gray-400 mt-1 max-w-md mx-auto">Start with a short update, like a launch or a new customer. Updates publish straight away. Founder stories are reviewed by our editors first.</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -237,6 +239,23 @@ export default function CreatePage() {
                 </div>
               ))}
             </div>
+          )}
+
+          {mentions.length > 0 && (
+            <section aria-labelledby="mentions-title" className="mt-8">
+              <h2 id="mentions-title" className="text-lg font-sora font-bold text-gray-900 dark:text-white">Stories that mention you</h2>
+              <p className="text-sm font-jakarta text-gray-600 dark:text-gray-400 mt-0.5 mb-3">Written by the Udyaibase team. Share them with your network. Spotted a mistake? Contact Support.</p>
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800 border border-gray-200 dark:border-gray-800 rounded-xl bg-white dark:bg-gray-900">
+                {mentions.map((a) => (
+                  <li key={a.id}>
+                    <a href={`/${a.type === "STORY" ? "stories" : "news"}/${a.slug}`} target="_blank" rel="noopener" className="flex items-center justify-between gap-3 px-4 py-3 min-h-[44px] hover:bg-gray-50 dark:hover:bg-gray-800">
+                      <span className="text-sm font-medium font-jakarta text-gray-900 dark:text-white">{a.title}</span>
+                      {a.publishedAt && <span className="shrink-0 text-xs font-jakarta text-gray-500">{new Date(a.publishedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
         </div>
       </div>

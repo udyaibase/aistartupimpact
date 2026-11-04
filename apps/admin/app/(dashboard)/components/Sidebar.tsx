@@ -124,6 +124,7 @@ const sidebarItems = [
   { label: 'Tool Analytics', href: '/tool-analytics', icon: Sparkles, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER', 'AD_MANAGER'] },
 
   { type: 'divider' as const, label: 'Founder Content', roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
+  { label: 'Listing Edits', href: '/listing-edits', icon: FileText, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
   { label: 'Content Review', href: '/content-review', icon: FileText, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
   { label: 'Milestones', href: '/milestones', icon: Flag, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
 

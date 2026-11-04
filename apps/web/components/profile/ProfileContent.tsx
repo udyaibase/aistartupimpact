@@ -9,6 +9,8 @@ import { maskEmail } from '@/lib/mask';
 import SavedItems from '@/components/profile/SavedItems';
 import TwoFactorSetup from '@/components/TwoFactorSetup';
 import EmailChangeModal from '@/components/EmailChangeModal';
+import PreferencesClient from '@/app/settings/preferences/PreferencesClient';
+import { getPreferencesForm } from '@/app/settings/preferences/actions';
 
 interface UserProfile {
   id: string;
@@ -24,7 +26,7 @@ interface UserProfile {
   organizerId?: string | null;
 }
 
-type Tab = 'overview' | 'security' | 'workspaces';
+type Tab = 'overview' | 'security' | 'workspaces' | 'preferences';
 
 interface ProfileContentProps {
   /** Show back button */
@@ -42,6 +44,7 @@ export default function ProfileContent({ showBack = true }: ProfileContentProps)
     if (typeof window !== 'undefined') {
       if (window.location.hash === '#security') setTab('security');
       if (window.location.hash === '#workspaces') setTab('workspaces');
+      if (window.location.hash === '#preferences') setTab('preferences');
     }
   }, []);
 
@@ -64,10 +67,12 @@ export default function ProfileContent({ showBack = true }: ProfileContentProps)
     { key: 'overview', label: 'Overview' },
     { key: 'security', label: 'Security' },
     { key: 'workspaces', label: 'Workspaces' },
+    { key: 'preferences', label: 'Preferences' },
   ];
 
   return (
-    <div className="max-w-3xl mx-auto">
+    // showBack means it's inside a portal, which sets the page width; the public page has no sidebar, so stays narrow.
+    <div className={showBack ? undefined : 'max-w-3xl mx-auto'}>
       {showBack && (
         <button onClick={() => router.back()} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 mb-4 -ml-1 transition-colors">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
@@ -80,21 +85,41 @@ export default function ProfileContent({ showBack = true }: ProfileContentProps)
         <p className="text-sm text-gray-500 mt-0.5">Manage your account and preferences</p>
       </div>
 
-      <div className="flex gap-1 border-b border-gray-200 dark:border-gray-800 mb-6">
+      <div className="flex gap-1 border-b border-gray-200 dark:border-gray-800 mb-6 overflow-x-auto">
         {tabs.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)} className={`px-4 py-2.5 text-sm font-medium transition-colors relative ${tab === t.key ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
+          <button key={t.key} onClick={() => setTab(t.key)} className={`shrink-0 px-4 py-2.5 text-sm font-medium transition-colors relative ${tab === t.key ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
             {t.label}
             {tab === t.key && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand rounded-t" />}
           </button>
         ))}
-        <a href="/settings/preferences" className="px-4 py-2.5 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
-          Preferences
-        </a>
       </div>
 
       {tab === 'overview' && <OverviewTab profile={profile} setProfile={setProfile} />}
       {tab === 'security' && <SecurityTab />}
       {tab === 'workspaces' && <WorkspacesTab profile={profile} />}
+      {tab === 'preferences' && <PreferencesTab />}
+    </div>
+  );
+}
+
+// ─── Preferences Tab ──────────────────────────────
+
+function PreferencesTab() {
+  const [form, setForm] = useState<Awaited<ReturnType<typeof getPreferencesForm>>>(null);
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+
+  useEffect(() => {
+    getPreferencesForm()
+      .then((data) => { setForm(data); setState(data ? 'ready' : 'error'); })
+      .catch(() => setState('error'));
+  }, []);
+
+  if (state === 'loading') return <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-brand" /></div>;
+  if (!form) return <p role="alert" className="text-sm text-gray-600 dark:text-gray-400">Couldn’t load your preferences. Please refresh the page and try again.</p>;
+  return (
+    <div>
+      <p className="text-sm text-gray-500 mb-6">Customize your feed and recommendations</p>
+      <PreferencesClient categories={form.categories} initialPrefs={form.prefs} />
     </div>
   );
 }
@@ -180,6 +205,7 @@ function SecurityTab() {
   const [exporting, setExporting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
+  const [hasPassword, setHasPassword] = useState(true);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [twoFAEnabled, setTwoFAEnabled] = useState(false);
@@ -190,7 +216,7 @@ function SecurityTab() {
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/user/2fa-status').then(r => r.json()).then(d => { if (d.success) setTwoFAEnabled(d.enabled); }).catch(() => {});
+    fetch('/api/user/2fa-status').then(r => r.json()).then(d => { if (d.success && d.hasPassword === false) setHasPassword(false); if (d.success) setTwoFAEnabled(d.enabled); }).catch(() => {});
     fetch('/api/user/sessions').then(r => r.json()).then(d => { if (d.sessions) setSessions(d.sessions); }).catch(() => {}).finally(() => setSessionsLoading(false));
   }, []);
 
@@ -362,13 +388,14 @@ function SecurityTab() {
               <ul className="text-xs text-red-700 dark:text-red-400 space-y-0.5 list-disc list-inside">
                 <li>Your profile and account data</li>
                 <li>Your startup reviews and saved jobs</li>
+                <li>Your founder account, if you have one (see Founder Settings for what stays)</li>
                 <li>Newsletter subscription</li>
               </ul>
             </div>
             <form onSubmit={async (e) => {
               e.preventDefault(); setError('');
               if (deleteConfirmation !== 'DELETE') { setError('Please type DELETE to confirm'); return; }
-              if (!deletePassword) { setError('Password is required'); return; }
+              if (hasPassword && !deletePassword) { setError('Password is required'); return; }
               setDeleting(true);
               try {
                 const res = await fetch('/api/user/delete-account', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: deletePassword }) });
@@ -377,10 +404,10 @@ function SecurityTab() {
                 else { setError(data.error || 'Failed to delete account'); setDeleting(false); }
               } catch { setError('Failed to delete account'); setDeleting(false); }
             }} className="space-y-3">
-              <div>
+              {hasPassword && (<div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Enter your password</label>
                 <input type="password" autoComplete="current-password" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} required placeholder="Your account password" className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500" />
-              </div>
+              </div>)}
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Type <span className="font-bold text-red-600">DELETE</span> to confirm</label>
                 <input type="text" value={deleteConfirmation} onChange={(e) => setDeleteConfirmation(e.target.value)} required placeholder="DELETE" className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500" />

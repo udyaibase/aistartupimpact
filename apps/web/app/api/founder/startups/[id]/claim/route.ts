@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
 import { clientIp } from '@/lib/client-ip';
 import { requireFounderAuth } from '@/lib/founder-auth';
 import { prisma } from '@udyaibase/database';
-import crypto from 'crypto';
+import { claimToken } from '@/lib/startups/claim';
+import { founderAtStartupLimit, STARTUP_LIMIT_MESSAGE } from '@/lib/founder/limits';
 
 export const dynamic = 'force-dynamic';
 
-// Generate secure random token ("ub_" marks Udyaibase tokens in a DNS zone; older tokens keep working)
-function generateToken(): string {
-  return `ub_${crypto.randomBytes(16).toString('hex')}`;
-}
-
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const { success: withinLimit } = await checkRateLimit(strictRateLimit, getClientIdentifier(request));
+  if (!withinLimit) return NextResponse.json({ success: false, error: 'Too many requests. Please try again later.' }, { status: 429 });
+
   const params = await props.params;
   try {
     // Authenticate founder
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       SELECT 
         id, name, "websiteUrl", "isVerified", "claimedBy", "verificationToken", "ownerId"
       FROM "Startup"
-      WHERE id = ${id}
+      WHERE id = ${id} AND "deletedAt" IS NULL
       LIMIT 1
     `;
 
@@ -45,12 +45,16 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       );
     }
 
-    // Check if already claimed by someone else
-    if (startup.claimedBy && startup.claimedBy !== session.userId) {
+    // A verified startup already has a proven owner. Otherwise, whoever proves the domain becomes the owner.
+    if (startup.isVerified && startup.ownerId !== session.userId) {
       return NextResponse.json(
-        { error: 'Startup already claimed by another user' },
+        { error: `${startup.name} is already verified by another founder. Ask them to add you to their team.` },
         { status: 400 }
       );
+    }
+
+    if (startup.ownerId !== session.userId && (await founderAtStartupLimit(session.userId, id))) {
+      return NextResponse.json({ error: STARTUP_LIMIT_MESSAGE }, { status: 400 });
     }
 
     // Extract domain from website URL
@@ -73,20 +77,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       );
     }
 
-    // Generate or reuse verification token
-    const token = startup.verificationToken || generateToken();
+    // Starting a claim only hands out this founder's DNS token. Nothing on the startup changes until they prove it.
+    const token = claimToken(startup, session.userId);
     const dnsRecord = `udyaibase-verify=${token}`;
-
-    // Update startup with claim info using raw query
-    await prisma.$executeRaw`
-      UPDATE "Startup"
-      SET "claimedBy" = ${session.userId},
-          "claimedAt" = NOW(),
-          "verificationToken" = ${token},
-          "ownerId" = ${session.userId},
-          "updatedAt" = NOW()
-      WHERE id = ${id}
-    `;
 
     // Log the claim attempt using raw query
     await prisma.$executeRaw`

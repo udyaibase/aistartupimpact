@@ -109,7 +109,7 @@ export async function middleware(request: NextRequest) {
         pathname.startsWith('/api/admin/data-retention') ||
         pathname.startsWith('/api/webhook');
       // RFC 8058 one-click unsubscribe: mail providers POST server-to-server. The route verifies the signed token.
-      const isSignedUnsubscribe = (pathname === '/api/events/unsubscribe' || pathname === '/api/newsletter/unsubscribe') &&
+      const isSignedUnsubscribe = (pathname === '/api/founder/email-preferences' || pathname === '/api/events/unsubscribe' || pathname === '/api/newsletter/unsubscribe') &&
         request.nextUrl.searchParams.has('token');
       if (!isCronOrWebhook && !isSignedUnsubscribe) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

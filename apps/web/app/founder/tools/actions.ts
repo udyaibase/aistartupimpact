@@ -3,8 +3,14 @@
 import { checkLocation } from '@/lib/locations';
 import { requireFounderAuth } from '@/lib/founder-auth';
 import { sendAdminReviewAlert, sendSubmissionReceivedEmail } from '@/lib/founder-email';
-import { prisma } from '@udyaibase/database';
+import { prisma, saveListingEdit } from '@udyaibase/database';
 import { revalidatePath } from 'next/cache';
+import { validateInput } from '@/lib/validation';
+import { toolSubmissionSchema } from '@/lib/founder/listing-validation';
+import { listingFieldLabel } from '@udyaibase/utils';
+import { listingAccess } from '@/lib/founder/listing-access';
+import { logFounderActivity } from '@/lib/founder/activity';
+import { founderAtToolLimit, TOOL_LIMIT_MESSAGE } from '@/lib/founder/limits';
 
 interface ToolSubmission {
   name: string;
@@ -40,6 +46,10 @@ interface ToolSubmission {
 export async function submitToolAction(data: ToolSubmission) {
   try {
     const session = await requireFounderAuth();
+    if (await founderAtToolLimit(session.userId)) return { success: false, error: TOOL_LIMIT_MESSAGE };
+    const checked = validateInput(toolSubmissionSchema, data);
+    if (!checked.success) return { success: false, error: checked.error };
+    data = checked.data as unknown as ToolSubmission;
     // Headquarters city and country only from the standard lists.
     if (data.headquartersCity || data.headquartersCountry) {
       const loc = await checkLocation({ city: data.headquartersCity ?? '', country: data.headquartersCountry ?? '' });
@@ -218,6 +228,7 @@ export async function submitToolAction(data: ToolSubmission) {
       sendAdminReviewAlert({ entityType: 'tool', entityName: data.name, founderEmail: founderInfo[0].email, reason: 'new' });
     }
 
+    await logFounderActivity(session.userId, 'tool_submitted', { metadata: { name: data.name } });
     revalidatePath('/founder/tools');
     revalidatePath('/founder/dashboard');
 
@@ -234,6 +245,9 @@ export async function submitToolAction(data: ToolSubmission) {
 export async function updateToolAction(id: string, data: ToolSubmission) {
   try {
     const session = await requireFounderAuth();
+    const checked = validateInput(toolSubmissionSchema, data);
+    if (!checked.success) return { success: false, error: checked.error };
+    data = checked.data as unknown as ToolSubmission;
     // Headquarters city and country only from the standard lists.
     if (data.headquartersCity || data.headquartersCountry) {
       const loc = await checkLocation({ city: data.headquartersCity ?? '', country: data.headquartersCountry ?? '' });
@@ -241,208 +255,64 @@ export async function updateToolAction(id: string, data: ToolSubmission) {
       data = { ...data, headquartersCity: loc.city ?? undefined, headquartersCountry: loc.country ?? undefined };
     }
 
-    // Verify ownership using raw SQL
-    const tools = await prisma.$queryRaw<any[]>`
-      SELECT id, slug, name, "claimStatus", "ownerId"
-      FROM "AiTool"
-      WHERE id = ${id}
-      LIMIT 1
-    `;
-
-    if (tools.length === 0 || tools[0].ownerId !== session.userId) {
-      return {
-        success: false,
-        error: 'Tool not found or you do not have permission to edit it',
-      };
+    // Owner, or a teammate who can edit. Viewers and strangers can't, whatever the screen shows.
+    const access = await listingAccess(session, 'tool', id);
+    if (!access?.canEdit) {
+      return { success: false, error: 'Tool not found or you do not have permission to edit it' };
     }
 
-    const tool = tools[0];
+    const result = await saveListingEdit('tool', id, {
+      name: data.name,
+      tagline: data.tagline,
+      description: data.description,
+      websiteUrl: data.websiteUrl,
+      affiliateUrl: data.affiliateUrl ?? null,
+      categoryId: data.categoryId,
+      pricingModel: data.pricingModel,
+      pricingUrl: data.pricingUrl ?? null,
+      // Stored in paise.
+      startingPrice: data.startingPrice ? Math.round(data.startingPrice * 100) : null,
+      hasApi: data.hasApi,
+      hasMobileApp: data.hasMobileApp,
+      launchYear: data.launchYear,
+      founderNames: data.founderNames ?? [],
+      headquartersCountry: data.headquartersCountry ?? null,
+      headquartersCity: data.headquartersCity ?? null,
+      logoUrl: data.logoUrl ?? null,
+      screenshotUrls: data.screenshotUrls,
+      twitterUrl: data.twitterUrl ?? null,
+      linkedinUrl: data.linkedinUrl ?? null,
+      socialLinks: data.socialLinks ?? [],
+      demoVideoUrl: data.demoVideoUrl ?? null,
+      freeTrialDays: data.freeTrialDays ?? null,
+      features: data.features,
+      useCases: data.useCases,
+      faqs: data.faqs ?? [],
+      pros: data.pros,
+      cons: data.cons,
+      tagIds: data.tagIds,
+    }, { type: 'FOUNDER', id: session.userId, label: session.name });
+    if (!result) return { success: false, error: 'Tool not found or you do not have permission to edit it' };
 
-    // Generate new slug if name changed
-    let slug = tool.slug;
-    if (data.name !== tool.name) {
-      slug = data.name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '');
-
-      // Check if new slug already exists using raw SQL
-      const existingTools = await prisma.$queryRaw<any[]>`
-        SELECT id FROM "AiTool" 
-        WHERE slug = ${slug} AND id != ${id}
-        LIMIT 1
-      `;
-
-      if (existingTools.length > 0) {
-        return {
-          success: false,
-          error: 'A tool with this name already exists',
-        };
-      }
+    // On the owner's log whoever did it, and on the teammate's too.
+    const by: Record<string, string> = access.role === 'OWNER' ? {} : { by: session.name };
+    if (result.published.length) {
+      await logFounderActivity(access.ownerId, 'tool_updated', { metadata: { name: data.name, ...by } });
+      if (access.role !== 'OWNER') await logFounderActivity(session.userId, 'tool_updated', { metadata: { name: data.name } });
     }
-
-    // Convert starting price to paise (cents)
-    const startingPricePaise = data.startingPrice 
-      ? Math.round(data.startingPrice * 100) 
-      : null;
-
-    // Update tool
-    // Keep the current status - no need for re-approval after initial approval
-    // This allows founders to edit freely once their tool is approved
-
-    const socialLinksJson = data.socialLinks && data.socialLinks.length > 0
-      ? JSON.stringify(data.socialLinks)
-      : null;
-
-    // Use raw SQL to avoid date validation issues
-    await prisma.$queryRaw`
-      UPDATE "AiTool"
-      SET
-        name = ${data.name},
-        slug = ${slug},
-        tagline = ${data.tagline},
-        description = ${data.description},
-        "websiteUrl" = ${data.websiteUrl},
-        "affiliateUrl" = ${data.affiliateUrl || null},
-        "categoryId" = ${data.categoryId},
-        "pricingModel" = ${data.pricingModel}::"PricingModel",
-        "pricingUrl" = ${data.pricingUrl || null},
-        "startingPrice" = ${startingPricePaise},
-        "hasApi" = ${data.hasApi},
-        "hasMobileApp" = ${data.hasMobileApp},
-        "launchYear" = ${data.launchYear},
-        "founderNames" = ${data.founderNames || []}::text[],
-        "headquartersCountry" = ${data.headquartersCountry || null},
-        "headquartersCity" = ${data.headquartersCity || null},
-        "logoUrl" = ${data.logoUrl || null},
-        "screenshotUrls" = ${data.screenshotUrls}::text[],
-        "twitterUrl" = ${data.twitterUrl || null},
-        "linkedinUrl" = ${data.linkedinUrl || null},
-        "socialLinks" = ${socialLinksJson}::jsonb,
-        "demoVideoUrl" = ${data.demoVideoUrl || null},
-        "freeTrialDays" = ${data.freeTrialDays || null},
-        "updatedAt" = NOW()
-      WHERE id = ${id}
-    `;
-
-    // Delete existing use cases using raw SQL
-    await prisma.$queryRaw`
-      DELETE FROM "ToolUseCase"
-      WHERE "toolId" = ${id}
-    `;
-
-    // Create new features using raw SQL (zero-padded index for ORDER BY id)
-    if (data.features.length > 0) {
-      for (let i = 0; i < data.features.length; i++) {
-        const orderedId = `${String(i).padStart(4, '0')}_${crypto.randomUUID()}`;
-        await prisma.$queryRaw`
-          INSERT INTO "ToolUseCase" (id, "toolId", text, type)
-          VALUES (${orderedId}, ${id}, ${data.features[i]}, 'feature')
-        `;
-      }
+    if (result.pending.length) {
+      const fields = result.pending.map(listingFieldLabel).join(', ');
+      await logFounderActivity(access.ownerId, 'edit_submitted', { metadata: { fields, ...by } });
+      if (access.role !== 'OWNER') await logFounderActivity(session.userId, 'edit_submitted', { metadata: { fields } });
+      sendAdminReviewAlert({ entityType: 'tool', entityName: access.name, founderEmail: session.email, reason: 'edited' });
     }
-
-    // Create new use cases using raw SQL
-    if (data.useCases.length > 0) {
-      for (let i = 0; i < data.useCases.length; i++) {
-        const orderedId = `${String(i).padStart(4, '0')}_${crypto.randomUUID()}`;
-        await prisma.$queryRaw`
-          INSERT INTO "ToolUseCase" (id, "toolId", text, type)
-          VALUES (${orderedId}, ${id}, ${data.useCases[i]}, 'use_case')
-        `;
-      }
-    }
-
-    // Update FAQs if provided
-    if (data.faqs !== undefined) {
-      // Delete existing FAQs
-      await prisma.$queryRaw`DELETE FROM "ToolFAQ" WHERE "toolId" = ${id}`;
-      
-      // Insert new FAQs
-      if (data.faqs.length > 0) {
-        for (const faq of data.faqs) {
-          await prisma.$queryRaw`
-            INSERT INTO "ToolFAQ" (id, "toolId", question, answer, "order", "createdAt", "updatedAt")
-            VALUES (gen_random_uuid()::text, ${id}, ${faq.question}, ${faq.answer}, ${faq.order}, NOW(), NOW())
-          `;
-        }
-      }
-    }
-
-    // Update pros
-    if (data.pros !== undefined) {
-      await prisma.$queryRaw`DELETE FROM "ToolPro" WHERE "toolId" = ${id}`;
-      if (data.pros.length > 0) {
-        for (const text of data.pros) {
-          if (text.trim()) {
-            await prisma.$queryRaw`INSERT INTO "ToolPro" (id, "toolId", text) VALUES (gen_random_uuid(), ${id}, ${text.trim()})`;
-          }
-        }
-      }
-    }
-
-    // Update cons
-    if (data.cons !== undefined) {
-      await prisma.$queryRaw`DELETE FROM "ToolCon" WHERE "toolId" = ${id}`;
-      if (data.cons.length > 0) {
-        for (const text of data.cons) {
-          if (text.trim()) {
-            await prisma.$queryRaw`INSERT INTO "ToolCon" (id, "toolId", text) VALUES (gen_random_uuid(), ${id}, ${text.trim()})`;
-          }
-        }
-      }
-    }
-
-    // Update tags if provided
-    if (data.tagIds !== undefined) {
-      const cappedTagIds = data.tagIds.slice(0, 30);
-
-      // Get existing tag mappings
-      const existingMappings = await prisma.$queryRaw<any[]>`
-        SELECT "tagId" FROM "ToolSystemTagMapping" WHERE "toolId" = ${id}
-      `;
-      const existingIds = new Set(existingMappings.map((r: any) => r.tagId));
-      const newIds = new Set(cappedTagIds);
-
-      // Tags to remove
-      const toRemove = [...existingIds].filter(tid => !newIds.has(tid));
-      // Tags to add
-      const toAdd = cappedTagIds.filter(tid => !existingIds.has(tid));
-
-      if (toRemove.length > 0) {
-        await prisma.$queryRaw`
-          DELETE FROM "ToolSystemTagMapping"
-          WHERE "toolId" = ${id} AND "tagId" = ANY(${toRemove}::text[])
-        `;
-        await prisma.$queryRaw`
-          UPDATE "ToolSystemTag"
-          SET "tagCount" = GREATEST("tagCount" - 1, 0), "updatedAt" = NOW()
-          WHERE id = ANY(${toRemove}::text[])
-        `;
-      }
-
-      if (toAdd.length > 0) {
-        for (const tagId of toAdd) {
-          await prisma.$queryRaw`
-            INSERT INTO "ToolSystemTagMapping" (id, "toolId", "tagId", "addedBy", "createdAt")
-            VALUES (gen_random_uuid(), ${id}, ${tagId}, 'founder', NOW())
-            ON CONFLICT ("toolId", "tagId") DO NOTHING
-          `;
-        }
-        await prisma.$queryRaw`
-          UPDATE "ToolSystemTag"
-          SET "tagCount" = "tagCount" + 1, "updatedAt" = NOW()
-          WHERE id = ANY(${toAdd}::text[])
-        `;
-      }
-    }
-
+    if (result.resubmitted) sendAdminReviewAlert({ entityType: 'tool', entityName: data.name, founderEmail: session.email, reason: 'resubmitted' });
 
     revalidatePath('/founder/tools');
     revalidatePath(`/founder/tools/${id}`);
     revalidatePath('/founder/dashboard');
 
-    return { success: true };
+    return { success: true, published: result.published.map(listingFieldLabel), pending: result.pending.map(listingFieldLabel), resubmitted: result.resubmitted };
   } catch (error: any) {
     console.error('Tool update error:', error);
     return {

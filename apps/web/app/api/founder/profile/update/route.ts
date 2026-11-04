@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
+import { isPublicWebUrl } from '@/lib/founder/listing-validation';
 import { sql } from '@/lib/db';
 import { getFounderSession } from '@/lib/founder-auth';
 import { z } from 'zod';
@@ -11,12 +13,15 @@ const updateProfileSchema = z.object({
   phone: z.string().max(20).optional(),
   bio: z.string().max(1000).optional(),
   avatar: z.string().url().optional().or(z.literal('')),
-  linkedin: z.string().url().optional().or(z.literal('')),
-  twitter: z.string().url().optional().or(z.literal('')),
-  website: z.string().url().optional().or(z.literal('')),
+  linkedin: z.string().refine(isPublicWebUrl, 'Links must be full web addresses, like https://example.com').optional().or(z.literal('')),
+  twitter: z.string().refine(isPublicWebUrl, 'Links must be full web addresses, like https://example.com').optional().or(z.literal('')),
+  website: z.string().refine(isPublicWebUrl, 'Links must be full web addresses, like https://example.com').optional().or(z.literal('')),
 });
 
 export async function POST(request: NextRequest) {
+  const { success: withinLimit } = await checkRateLimit(apiRateLimit, getClientIdentifier(request));
+  if (!withinLimit) return NextResponse.json({ success: false, error: 'Too many requests. Please try again later.' }, { status: 429 });
+
   try {
     // Check authentication
     const session = await getFounderSession();

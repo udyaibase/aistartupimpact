@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import bcrypt from 'bcryptjs';
+import { confirmAccountPassword } from '@/lib/founder/account';
+import { eraseFounderAccount } from '@/lib/founder/erasure';
 import { getUserSession } from '@/lib/user-session';
 import { cookies } from 'next/headers';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
@@ -19,10 +20,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { password } = body as { password?: string };
-    if (!password) {
-      return NextResponse.json({ success: false, error: 'Password is required to delete your account' }, { status: 400 });
-    }
+    const { password } = body as { password?: unknown };
 
     const user = await prisma.webUser.findUnique({
       where: { id: session.id },
@@ -33,12 +31,13 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    if (user.passwordHash) {
-      const valid = await bcrypt.compare(password, user.passwordHash);
-      if (!valid) {
-        return NextResponse.json({ success: false, error: 'Incorrect password' }, { status: 401 });
-      }
+    if (!(await confirmAccountPassword(user.email.toLowerCase(), password))) {
+      return NextResponse.json({ success: false, error: 'Incorrect password' }, { status: 401 });
     }
+
+    // One person, one erasure: deleting from Profile also erases their founder account.
+    const founder = await prisma.founderUser.findUnique({ where: { email: user.email.toLowerCase() }, select: { id: true } });
+    if (founder) await eraseFounderAccount(founder.id);
 
     await prisma.$transaction(async (tx) => {
       await tx.newsletterSubscriber.updateMany({
@@ -46,12 +45,13 @@ export async function DELETE(request: NextRequest) {
         data: { isActive: false, unsubscribedAt: new Date() },
       });
 
-      await tx.webUser.delete({ where: { id: user.id } });
+      await tx.webUser.deleteMany({ where: { id: user.id } });
     });
 
     const cookieStore = await cookies();
     (await cookieStore).delete('user-token');
     (await cookieStore).delete('unified_session');
+    (await cookieStore).delete('founder-token');
 
     return NextResponse.json({ success: true, message: 'Account deleted successfully' });
   } catch (error) {

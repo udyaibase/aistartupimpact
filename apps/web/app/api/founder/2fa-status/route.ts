@@ -1,35 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@udyaibase/database';
-import { requireFounderAuth } from '@/lib/founder-auth';
+import { getFounderSession } from '@/lib/founder-auth';
+import { twoFactorStatusResponse } from '@/lib/auth/account-two-factor';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: NextRequest) {
+export async function GET(_request?: NextRequest) {
   try {
-    const session = await requireFounderAuth();
-
-    // Get user's 2FA status
-    const user = await prisma.founderUser.findUnique({
-      where: { id: session.userId },
-      select: { twoFactorEnabled: true },
-    });
-
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({ 
-      success: true, 
-      enabled: user.twoFactorEnabled 
-    });
+    const session = await getFounderSession();
+    if (!session) return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
+    return await twoFactorStatusResponse(session.email);
   } catch (error) {
-    console.error('Error fetching 2FA status:', error);
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch 2FA status' },
-      { status: 500 }
-    );
+    console.error('2FA status error:', error instanceof Error ? error.message : 'unknown error');
+    return NextResponse.json({ success: false, error: 'Failed to fetch 2FA status' }, { status: 500 });
   }
 }

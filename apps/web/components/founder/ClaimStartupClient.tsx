@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import Link from 'next/link';
 import { Shield, CheckCircle, Copy, ExternalLink, Loader2, AlertCircle } from 'lucide-react';
 import { EmailVerify } from './FounderHiringClient';
 
@@ -89,8 +90,8 @@ export default function ClaimStartupClient({ startup, startupId }: ClaimStartupC
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12">
-      <div className="max-w-3xl mx-auto px-4">
+    <div>
+      <div>
         
         {/* Step 1: Confirm Claim */}
         {step === 'confirm' && (
@@ -135,13 +136,17 @@ export default function ClaimStartupClient({ startup, startupId }: ClaimStartupC
               </div>
               <div className="flex items-center gap-3">
                 <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                <span className="text-gray-700 dark:text-gray-300">Access to analytics dashboard</span>
+                <span className="text-gray-700 dark:text-gray-300">Your profile, tools, stories, jobs and view history in one dashboard</span>
               </div>
               <div className="flex items-center gap-3">
                 <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
                 <span className="text-gray-700 dark:text-gray-300">Increased trust and credibility</span>
               </div>
             </div>
+
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+              Next, you’ll prove you control {domain || 'your startup’s domain'}, with a DNS record or a work email. You become the owner as soon as that’s done. Until then, nothing on the profile changes.
+            </p>
 
             {error && (
               <div className="flex items-start gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg mb-6">
@@ -316,6 +321,10 @@ export default function ClaimStartupClient({ startup, startupId }: ClaimStartupC
             </div>
 
             {/* Error Message */}
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+              Next, you’ll prove you control {domain || 'your startup’s domain'}, with a DNS record or a work email. You become the owner as soon as that’s done. Until then, nothing on the profile changes.
+            </p>
+
             {error && (
               <div className="flex items-start gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg mb-6">
                 <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
@@ -367,30 +376,30 @@ export default function ClaimStartupClient({ startup, startupId }: ClaimStartupC
               <CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" />
             </div>
             
-            <h1 className="text-3xl font-bold mb-3 text-navy dark:text-white">🎉 Verification Successful!</h1>
+            <h1 className="text-3xl font-bold mb-3 text-navy dark:text-white">{startup.name} is now yours</h1>
             <p className="text-xl text-gray-600 dark:text-gray-400 mb-8">
-              Your startup is now verified
+              You’re verified. Everything we already had for it is now in your dashboard.
             </p>
 
             <div className="bg-green-50 dark:bg-green-900/20 border-2 border-green-200 dark:border-green-800 rounded-xl p-6 mb-8">
-              <div className="space-y-3">
-                <div className="flex items-center gap-3 justify-center">
-                  <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
-                  <span className="font-medium text-navy dark:text-white">Verified badge added to your profile</span>
-                </div>
-                <div className="flex items-center gap-3 justify-center">
-                  <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
-                  <span className="font-medium text-navy dark:text-white">Edit access granted</span>
-                </div>
-                <div className="flex items-center gap-3 justify-center">
-                  <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
-                  <span className="font-medium text-navy dark:text-white">Analytics dashboard unlocked</span>
-                </div>
-                <div className="flex items-center gap-3 justify-center">
-                  <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
-                  <span className="font-medium text-navy dark:text-white">Hiring unlocked: post jobs from <a href="/founder/hiring" className="text-blue-600 underline">Hiring</a></span>
-                </div>
-              </div>
+              <ul className="space-y-3 text-left">
+                {[
+                  { href: `/founder/startups/${startup.slug}`, title: 'Your profile', body: 'Check your details, founders, funding and links, and keep them up to date.' },
+                  { href: '/founder/tools', title: 'Your AI tools', body: 'Any tools listed on your domain are now yours to edit.' },
+                  { href: '/founder/analytics', title: 'Your views', body: 'See how many people have already viewed your listing.' },
+                  { href: '/founder/content', title: 'Your stories', body: 'See the articles that mention you, and post your own updates.' },
+                  { href: '/founder/hiring', title: 'Your jobs', body: 'Manage jobs already listed for your startup, or post a new one.' },
+                  { href: '/founder/events', title: 'Your events', body: 'See events tagged with your startup, or host your own.' },
+                ].map((item) => (
+                  <li key={item.href} className="flex items-start gap-3">
+                    <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" aria-hidden />
+                    <span className="text-gray-700 dark:text-gray-300">
+                      <Link href={item.href} className="font-semibold text-navy dark:text-white hover:underline">{item.title}</Link>
+                      <span className="block text-sm">{item.body}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </div>
 
             <div className="flex gap-4">

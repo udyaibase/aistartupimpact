@@ -161,6 +161,13 @@ async function runCleanup(request: NextRequest) {
     });
     results.auditLogsDeleted = auditLogs.count;
 
+    // Founder security logs and domain-verification logs (they hold IP addresses): one year.
+    results.founderActivityLogsDeleted = (await prisma.founderActivityLog.deleteMany({ where: { createdAt: { lt: auditCutoff } } })).count;
+    // Past listing versions and closed review requests: one year, as the privacy policy says.
+    results.listingVersionsDeleted = (await prisma.listingVersion.deleteMany({ where: { createdAt: { lt: auditCutoff } } })).count;
+    results.closedEditsDeleted = (await prisma.listingPendingEdit.deleteMany({ where: { status: { not: 'PENDING' }, createdAt: { lt: auditCutoff } } })).count;
+    results.verificationLogsDeleted = (await prisma.startupVerificationLog.deleteMany({ where: { createdAt: { lt: auditCutoff } } })).count;
+
     return NextResponse.json({
       success: true,
       message: 'Data retention cleanup completed',

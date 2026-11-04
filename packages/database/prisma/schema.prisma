@@ -181,6 +181,7 @@ model AiTool {
   searchVector         Unsupported("tsvector")?
   AffiliateClick       AffiliateClick[]
   ToolCategory         ToolCategory             @relation(fields: [categoryId], references: [id])
+  ToolFAQ              ToolFAQ[]
   FounderUser          FounderUser?             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   Startup              Startup?                 @relation(fields: [startupId], references: [id])
   Article              Article[]
@@ -265,13 +266,13 @@ model Article {
   lastSavedAt      DateTime?
   autoSaved        Boolean          @default(false)
 
-  User                                          User                   @relation(fields: [authorId], references: [id])
-  Category                                      Category?              @relation(fields: [categoryId], references: [id])
-  Startup                                       Startup?               @relation(fields: [startupId], references: [id])
-  AiTool                                        AiTool?                @relation(fields: [toolId], references: [id])
-  PrimaryTag                                    Tag?                   @relation("ArticlePrimaryTag", fields: [primaryTagId], references: [id], onDelete: SetNull)
-  SubmittedByFounder                            FounderUser?           @relation("ArticleSubmittedBy", fields: [submittedById], references: [id], onDelete: SetNull)
-  FounderAuthor                                 FounderUser?           @relation("ArticleFounderAuthor", fields: [founderAuthorId], references: [id], onDelete: SetNull)
+  User                                          User                    @relation(fields: [authorId], references: [id])
+  Category                                      Category?               @relation(fields: [categoryId], references: [id])
+  Startup                                       Startup?                @relation(fields: [startupId], references: [id])
+  AiTool                                        AiTool?                 @relation(fields: [toolId], references: [id])
+  PrimaryTag                                    Tag?                    @relation("ArticlePrimaryTag", fields: [primaryTagId], references: [id], onDelete: SetNull)
+  SubmittedByFounder                            FounderUser?            @relation("ArticleSubmittedBy", fields: [submittedById], references: [id], onDelete: SetNull)
+  FounderAuthor                                 FounderUser?            @relation("ArticleFounderAuthor", fields: [founderAuthorId], references: [id], onDelete: SetNull)
   ArticleCoAuthor                               ArticleCoAuthor[]
   ArticleTag                                    ArticleTag[]
   StartupMentions                               ArticleStartupMention[]
@@ -281,8 +282,8 @@ model Article {
   ContentActivityLog                            ContentActivityLog[]
   ContentMedia                                  ContentMedia[]
   FounderContentReport                          FounderContentReport[]
-  RelatedArticle_RelatedArticle_fromIdToArticle RelatedArticle[]       @relation("RelatedArticle_fromIdToArticle")
-  RelatedArticle_RelatedArticle_toIdToArticle   RelatedArticle[]       @relation("RelatedArticle_toIdToArticle")
+  RelatedArticle_RelatedArticle_fromIdToArticle RelatedArticle[]        @relation("RelatedArticle_fromIdToArticle")
+  RelatedArticle_RelatedArticle_toIdToArticle   RelatedArticle[]        @relation("RelatedArticle_toIdToArticle")
 
   @@index([authorId])
   @@index([categoryId])
@@ -497,6 +498,67 @@ model FounderAnalytics {
   @@index([userId, date])
 }
 
+/// Security and privacy log of a founder account. No foreign key: it outlives the account, and is deleted after a year.
+model FounderActivityLog {
+  id        String   @id @default(uuid())
+  founderId String
+  action    String
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([founderId, createdAt])
+  @@index([createdAt])
+}
+
+/// Two-factor sign-in, one setting per person, keyed by email. Every portal and sign-in reads this.
+model AccountTwoFactor {
+  email       String   @id
+  secret      String?
+  enabled     Boolean  @default(false)
+  backupCodes String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// One field of a listing waiting for an admin. The live value stays public until it's approved.
+model ListingPendingEdit {
+  id              String    @id @default(uuid())
+  entityType      String
+  entityId        String
+  field           String
+  oldValue        Json?
+  newValue        Json?
+  /// PENDING, APPROVED, REJECTED, REPLACED or WITHDRAWN
+  status          String    @default("PENDING")
+  submittedById   String
+  submittedByName String?
+  reviewedById    String?
+  reviewNote      String?
+  reviewedAt      DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([status, createdAt])
+  @@index([entityType, entityId, status])
+}
+
+/// A listing's fields as they were just before a change, and who made it. Admins can restore any of these.
+model ListingVersion {
+  id            String   @id @default(uuid())
+  entityType    String
+  entityId      String
+  fields        Json
+  changedFields String[]
+  actorType     String
+  actorId       String
+  actorLabel    String
+  note          String?
+  createdAt     DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+}
+
 model FounderNotification {
   id          String      @id
   userId      String
@@ -566,6 +628,9 @@ model FounderUser {
   pendingEmail           String?
   emailChangeToken       String?   @unique
   emailChangeTokenExpiry DateTime?
+
+  // Sessions issued before this moment are no longer valid (set when a password changes)
+  sessionsValidAfter DateTime?
 
   // Account lifecycle
   deactivatedAt DateTime?
@@ -1380,6 +1445,19 @@ model ToolCon {
   @@index([toolId])
 }
 
+model ToolFAQ {
+  id        String   @id
+  toolId    String
+  question  String
+  answer    String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  AiTool    AiTool   @relation(fields: [toolId], references: [id], onDelete: Cascade)
+
+  @@index([toolId])
+}
+
 model ToolPro {
   id     String @id
   toolId String
@@ -1514,6 +1592,9 @@ model WebUser {
   pendingEmail           String?
   emailChangeToken       String?   @unique
   emailChangeTokenExpiry DateTime?
+
+  // Sessions issued before this moment are no longer valid (set when a password changes)
+  sessionsValidAfter DateTime?
 
   // Account lifecycle
   deactivatedAt DateTime?
@@ -2259,12 +2340,15 @@ model EventOrganizer {
   onboardingCompleted Boolean @default(false)
   onboardingStep      Int     @default(0)
 
+  // Sessions issued before this moment are no longer valid (set when a password changes)
+  sessionsValidAfter DateTime?
+
   // Account lifecycle
   deactivatedAt DateTime?
   deletedAt     DateTime?
 
   // Plan (Free / Pro). A Pro plan past planExpiresAt counts as Free.
-  plan                OrganizerPlan @default(FREE)
+  plan                OrganizerPlan        @default(FREE)
   planExpiresAt       DateTime?
   planReminderSentAt  DateTime?
   billingName         String?
@@ -2277,12 +2361,12 @@ model EventOrganizer {
   billingAddressLine2 String?
   billingCity         String?
   billingPostalCode   String?
-  billingCountry      String?       @default("IN")
+  billingCountry      String?              @default("IN")
   /// Customer's PO / reference number, printed on invoices.
   billingPoNumber     String?
   /// Where invoices, receipts and credit notes are emailed (plus up to 3 CC).
   billingEmail        String?
-  billingCcEmails     String[]      @default([])
+  billingCcEmails     String[]             @default([])
   /// The free Event Boost on the first published event.
   freeBoostUsedAt     DateTime?
   planGraceNoticeAt   DateTime?
@@ -3235,10 +3319,10 @@ enum JobBoardBillingCycle {
 }
 
 model JobBoardEmployer {
-  id                  String       @id @default(cuid())
+  id                  String               @id @default(cuid())
   companyName         String
-  slug                String       @unique
-  email               String       @unique
+  slug                String               @unique
+  email               String               @unique
   passwordHash        String
   logoUrl             String?
   websiteUrl          String?
@@ -3249,15 +3333,15 @@ model JobBoardEmployer {
   country             String?
   linkedinUrl         String?
   twitterUrl          String?
-  startupId           String?      @unique
-  plan                JobBoardPlan @default(FREE)
+  startupId           String?              @unique
+  plan                JobBoardPlan         @default(FREE)
   planExpiresAt       DateTime?
   /// Last "plan ends soon" reminder, so the daily cron sends it once per period.
   planReminderSentAt  DateTime?
   /// When on, jobs written by recruiters wait for an owner to publish them.
-  requireJobApproval  Boolean      @default(false)
+  requireJobApproval  Boolean              @default(false)
   /// The current plan is the free Featured trial (no grace period after it ends).
-  planIsTrial         Boolean      @default(false)
+  planIsTrial         Boolean              @default(false)
   /// One trial per workspace (and per verified startup / company domain).
   trialStartedAt      DateTime?
   /// "Your plan has ended, renew within 3 days" email, once per lapse.
@@ -3279,27 +3363,27 @@ model JobBoardEmployer {
   billingAddressLine2 String?
   billingCity         String?
   billingPostalCode   String?
-  billingCountry      String?      @default("IN")
+  billingCountry      String?              @default("IN")
   /// Customer's PO / reference number, printed on invoices.
   billingPoNumber     String?
   /// Where invoices, receipts and credit notes are emailed (plus up to 3 CC).
   billingEmail        String?
-  billingCcEmails     String[]     @default([])
+  billingCcEmails     String[]             @default([])
   /// Paid plans: screen new applicants with AI automatically while quota remains.
-  aiAutoScreen        Boolean      @default(true)
+  aiAutoScreen        Boolean              @default(true)
   /// Last "candidates are waiting" nudge email.
   reviewNudgeAt       DateTime?
-  maxActiveJobs       Int          @default(1)
-  isVerified          Boolean      @default(false)
-  isActive            Boolean      @default(true)
-  emailVerified       Boolean      @default(false)
+  maxActiveJobs       Int                  @default(1)
+  isVerified          Boolean              @default(false)
+  isActive            Boolean              @default(true)
+  emailVerified       Boolean              @default(false)
   resetToken          String?
   resetTokenExpiry    DateTime?
-  failedLoginAttempts Int          @default(0)
+  failedLoginAttempts Int                  @default(0)
   lockedUntil         DateTime?
   lastLoginAt         DateTime?
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
   // 2FA
   twoFactorEnabled     Boolean  @default(false)
@@ -3334,6 +3418,9 @@ model JobBoardEmployer {
   firstJobPublishedAt DateTime?
   /// Calendly / Cal.com / Google Calendar link offered in interview emails.
   interviewBookingUrl String?
+
+  // Sessions issued before this moment are no longer valid (set when a password changes)
+  sessionsValidAfter DateTime?
 
   // Account lifecycle
   deactivatedAt DateTime?
@@ -4040,9 +4127,9 @@ model OrganizerPayment {
   organizerId         String
   kind                String // "PRO" | "BOOST"
   /// Pro only: 30 days or a year.
-  cycle               JobBoardBillingCycle @default(MONTHLY)
+  cycle               JobBoardBillingCycle  @default(MONTHLY)
   /// Paid at the founding-host price (yearly Pro only).
-  foundingPrice       Boolean              @default(false)
+  foundingPrice       Boolean               @default(false)
   eventId             String?
   amountPaise         Int
   gstPaise            Int

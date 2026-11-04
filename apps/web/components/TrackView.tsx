@@ -31,7 +31,15 @@ export default function TrackView({
 
     // Track in AnalyticsDaily (no auth required, captures UTM data)
     const trackEntityType = entityType.toUpperCase();
-    if (['JOB', 'EVENT', 'TOOL', 'STARTUP', 'ARTICLE'].includes(trackEntityType)) {
+    // One view per visitor session, so refreshing doesn't inflate a founder's numbers.
+    const seenKey = `viewed:${trackEntityType}:${entityId}`;
+    let alreadySeen = false;
+    try {
+      alreadySeen = sessionStorage.getItem(seenKey) === '1';
+      sessionStorage.setItem(seenKey, '1');
+    } catch { /* storage blocked: count it */ }
+
+    if (!alreadySeen && ['JOB', 'EVENT', 'TOOL', 'STARTUP', 'ARTICLE'].includes(trackEntityType)) {
       fetch('/api/track', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

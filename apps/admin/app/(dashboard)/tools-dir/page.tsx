@@ -8,6 +8,7 @@ import {
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { Pagination } from '@/components/Pagination';
 import { TableEmptyState } from '@/components/EmptyState';
+import RejectToolDialog from '@/components/RejectToolDialog';
 import {
   getToolsAction,
   getCategoriesAction,
@@ -64,6 +65,7 @@ const PAGE_SIZE = 20;
 export default function ToolsDirPage() {
   const router = useRouter();
   const [tools, setTools] = useState<Tool[]>([]);
+  const [rejecting, setRejecting] = useState<{ id: string; name: string } | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -160,15 +162,12 @@ export default function ToolsDirPage() {
     }
   };
 
-  const handleReject = async (id: string) => {
-    try {
-      const result = await rejectToolAction(id);
-      if (result.success) {
-        await loadData();
-      }
-    } catch (error) {
-      console.error('Error rejecting tool:', error);
-    }
+  const handleReject = async (reason: string) => {
+    if (!rejecting) return;
+    const result = await rejectToolAction(rejecting.id, reason);
+    if (!result.success) return result.error || 'Couldn’t reject this tool. Try again.';
+    setRejecting(null);
+    await loadData();
   };
 
   const handleTierChange = async (id: string, tier: string) => {
@@ -245,6 +244,7 @@ export default function ToolsDirPage() {
 
   return (
     <div className="space-y-6">
+      {rejecting && <RejectToolDialog toolName={rejecting.name} onCancel={() => setRejecting(null)} onReject={handleReject} />}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">AI Tools Directory</h1>
@@ -391,7 +391,7 @@ export default function ToolsDirPage() {
                         <CheckCircle className="w-3.5 h-3.5 text-green-500" />
                       </button>
                       <button
-                        onClick={() => handleReject(tool.id)}
+                        onClick={() => setRejecting({ id: tool.id, name: tool.name })}
                         className="p-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
                         title="Reject"
                       >

@@ -1,8 +1,15 @@
 import { requireFounderAuth } from '@/lib/founder-auth';
 import { prisma } from '@udyaibase/database';
 import { notFound, redirect } from 'next/navigation';
-import ToolEditForm from '@/components/founder/ToolEditForm';
+import ToolForm from '@/components/founder/ToolForm';
 import SlugEditor from '@/components/shared/SlugEditor';
+import Link from 'next/link';
+import { StatusNote } from '@/components/founder/Guidance';
+import PendingEditsNote from '@/components/founder/PendingEditsNote';
+import { roleForOwner } from '@/lib/founder/access';
+import { pendingEditsFor } from '@/lib/founder/listing-access';
+import { canEditStartup } from '@/lib/founder-team-permissions';
+import ToolVerifyPanel from '@/components/founder/ToolVerifyPanel';
 
 interface PageProps {
   params: Promise<{
@@ -26,7 +33,7 @@ export default async function EditToolPage(props: PageProps) {
       "demoVideoUrl", "freeTrialDays",
       "slugChangedAt"::text AS "slugChangedAt"
     FROM "AiTool"
-    WHERE slug = ${params.slug}
+    WHERE slug = ${params.slug} AND "deletedAt" IS NULL
     LIMIT 1
   `;
 
@@ -37,10 +44,11 @@ export default async function EditToolPage(props: PageProps) {
     notFound();
   }
 
-  // Check if user owns this tool
-  if (tool.ownerId !== session.userId) {
-    redirect('/founder/tools');
-  }
+  // Viewers see the listing but can't edit it. Anyone else has no access.
+  const role = await roleForOwner(session, tool.ownerId);
+  if (!role || !canEditStartup(role)) redirect('/founder/tools');
+  const isOwner = role === 'OWNER';
+  const pendingEdits = await pendingEditsFor('tool', tool.id);
 
   // Fetch use cases separately
   const allUseCases = await prisma.$queryRaw<any[]>`
@@ -84,6 +92,7 @@ export default async function EditToolPage(props: PageProps) {
     categoryId: tool.categoryId,
     status: tool.status,
     claimStatus: tool.claimStatus,
+    isUrlVerified: !!tool.isUrlVerified,
     hasApi: tool.hasApi,
     hasMobileApp: tool.hasMobileApp,
     launchYear: tool.launchYear,
@@ -115,83 +124,56 @@ export default async function EditToolPage(props: PageProps) {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+        <h1 className="portal-title">
           Edit Tool
         </h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-2">
-          Update your tool information. Changes will be reviewed by our team before going live.
+        <p className="portal-subtitle">
+          Keep your tool’s details up to date.
         </p>
       </div>
 
       {/* Status Badge */}
+      <PendingEditsNote edits={pendingEdits} />
+
       {tool.claimStatus === 'PENDING' && (
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-          <p className="text-sm text-yellow-800 dark:text-yellow-400">
-            ⏳ This tool is currently under review. You can still make changes.
-          </p>
-        </div>
+        <StatusNote tone="waiting" title="Waiting for review">Your tool isn’t public yet. We’ll email you once it’s live. You can keep editing in the meantime.</StatusNote>
       )}
 
       {tool.claimStatus === 'REJECTED' && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-          <p className="text-sm text-red-800 dark:text-red-400">
-            ❌ This tool was rejected. Please review the feedback and resubmit.
-          </p>
-        </div>
+        <StatusNote tone="error" title="This tool wasn’t approved">
+          We emailed you the reason. Fix what’s needed below and save to send it for another review. Not sure what to change? <Link href="/founder/support" className="underline font-semibold">Contact Support</Link>.
+        </StatusNote>
       )}
 
       {tool.claimStatus === 'CLAIMED' && (
-        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
-          <p className="text-sm text-green-800 dark:text-green-400">
-            ✅ This tool is live. You can edit anytime without needing re-approval.
-          </p>
-        </div>
+        <StatusNote tone="success" title="Your tool is live">
+          {tool.isUrlVerified
+            ? 'Changes publish straight away. A new name, website or logo waits for our team first, and your listing keeps showing the current one.'
+            : 'Our team reviews your changes first, and your listing keeps showing the current version. Verified tools can publish most changes straight away.'}
+        </StatusNote>
       )}
 
-      {/* Domain Verification CTA */}
-      {(tool.claimStatus === 'CLAIMED' || tool.claimStatus === 'VERIFIED') && !tool.isUrlVerified && (
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">Verify your domain</p>
-              <p className="text-xs text-blue-700/70 dark:text-blue-400/70 mt-1">
-                Add a DNS TXT record to prove you own this tool. Verified tools get a badge and higher visibility.
-              </p>
-            </div>
-            <a
-              href={`/api/founder/tools/${tool.id}/verify`}
-              target="_blank"
-              className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Get Instructions
-            </a>
-          </div>
-        </div>
-      )}
+      {isOwner && (tool.claimStatus === 'CLAIMED' || tool.claimStatus === 'VERIFIED') && !tool.isUrlVerified && <ToolVerifyPanel toolId={tool.id} />}
 
       {tool.isUrlVerified && (
-        <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg p-4">
-          <p className="text-sm text-emerald-800 dark:text-emerald-400">
-            ✓ Domain verified. Your tool has the Verified badge.
-          </p>
-        </div>
+        <StatusNote tone="success" title="Domain verified">Your tool has the Verified badge.</StatusNote>
       )}
 
       {/* Form */}
-      <ToolEditForm tool={serializedTool} />
+      <ToolForm tool={serializedTool} />
 
       {/* Profile URL Editor */}
-      <SlugEditor
+      {isOwner && <SlugEditor
         currentSlug={tool.slug}
         slugChangedAt={tool.slugChangedAt || null}
         entityType="tool"
         entityId={tool.id}
         baseUrl="https://udyaibase.com/tools"
         isAdmin={false}
-      />
+      />}
     </div>
   );
 }

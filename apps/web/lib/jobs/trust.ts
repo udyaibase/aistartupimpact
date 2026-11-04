@@ -1,3 +1,4 @@
+import { registrableDomain, websiteDomain } from '@udyaibase/utils';
 /**
  * Employer trust rules: who may publish, and when a job may carry a startup's name.
  * A startup link counts only after the employer proves control of the startup's domain.
@@ -9,13 +10,6 @@ const FREE_MAIL_DOMAINS = new Set([
   'proton.me', 'protonmail.com', 'pm.me', 'aol.com', 'zoho.com', 'zohomail.in', 'zohomail.com',
   'rediffmail.com', 'rediff.com', 'gmx.com', 'gmx.net', 'mail.com', 'yandex.com', 'yandex.ru',
   'tutanota.com', 'tuta.io', 'hey.com', 'fastmail.com', 'duck.com', 'inbox.com', 'qq.com', '163.com',
-]);
-
-// Second-level public suffixes common for Indian and global startups.
-const TWO_LEVEL_SUFFIXES = new Set([
-  'co.in', 'net.in', 'org.in', 'firm.in', 'gen.in', 'ind.in', 'ac.in', 'edu.in', 'gov.in', 'res.in',
-  'co.uk', 'org.uk', 'ac.uk', 'com.au', 'net.au', 'org.au', 'co.nz', 'com.sg', 'com.my', 'co.jp',
-  'com.br', 'co.za', 'com.mx', 'co.id', 'com.ph', 'com.cn', 'com.hk', 'com.tw', 'co.kr',
 ]);
 
 export function emailDomain(email: string): string | null {
@@ -30,22 +24,7 @@ export function isFreeMailDomain(domain: string): boolean {
 }
 
 /** Registrable domain (eTLD+1) for common suffixes: careers.acme.co.in → acme.co.in. */
-export function registrableDomain(host: string): string {
-  const parts = host.toLowerCase().replace(/^www\./, '').replace(/\.$/, '').split('.');
-  if (parts.length <= 2) return parts.join('.');
-  const lastTwo = parts.slice(-2).join('.');
-  return TWO_LEVEL_SUFFIXES.has(lastTwo) ? parts.slice(-3).join('.') : lastTwo;
-}
-
-export function websiteDomain(websiteUrl: string | null | undefined): string | null {
-  if (!websiteUrl) return null;
-  try {
-    const u = new URL(/^https?:\/\//i.test(websiteUrl) ? websiteUrl : `https://${websiteUrl}`);
-    return registrableDomain(u.hostname);
-  } catch {
-    return null;
-  }
-}
+export { registrableDomain, websiteDomain };
 
 /** The work email must sit on the startup's own registrable domain (subdomains allowed). */
 export function emailMatchesDomain(email: string, companyDomain: string): boolean {

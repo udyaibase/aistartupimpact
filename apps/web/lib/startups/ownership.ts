@@ -1,5 +1,6 @@
 import { prisma } from '@udyaibase/database';
 import type { Prisma } from '@prisma/client';
+import { websiteDomain } from '@/lib/jobs/trust';
 
 type Tx = Prisma.TransactionClient | typeof prisma;
 
@@ -11,7 +12,8 @@ export const employerSubmitter = (employerId: string) => `employer:${employerId}
  * (founder DNS, founder work email, employer work email, admin) so the founder portal, the
  * employer portal and public pages all agree on who is verified.
  *
- * Pass `founderUserId` when the proof came from a founder account: it also records them as owner.
+ * Pass `founderUserId` when the proof came from a founder account: it also records them as owner and moves what
+ * we already hold for the startup to them (see adoptStartupContent).
  */
 export async function markStartupVerified(
   tx: Tx,
@@ -30,6 +32,35 @@ export async function markStartupVerified(
       claimStatus: 'VERIFIED',
       ...(founderUserId ? { ownerId: founderUserId, claimedBy: founderUserId, claimedAt: now } : {}),
     },
+  });
+  if (founderUserId) await adoptStartupContent(tx, startupId, domain, founderUserId);
+}
+
+/**
+ * Brings what we already hold for a startup into the dashboard of the founder who proved they own it. Only touches
+ * records with no owner, so nobody else's work moves. Articles, events, milestones, funding and view history hang
+ * off the startup itself and appear on their own.
+ */
+async function adoptStartupContent(tx: Tx, startupId: string, domain: string, founderUserId: string) {
+  // AI tools linked to this startup, or on the domain they've just proven.
+  const candidates = await tx.aiTool.findMany({
+    where: {
+      ownerId: null,
+      deletedAt: null,
+      OR: [{ startupId }, { websiteUrl: { contains: domain, mode: 'insensitive' } }],
+    },
+    select: { id: true, startupId: true, websiteUrl: true },
+  });
+  const ids = candidates.filter((t) => t.startupId === startupId || websiteDomain(t.websiteUrl) === domain).map((t) => t.id);
+  if (ids.length > 0) {
+    await tx.aiTool.updateMany({ where: { id: { in: ids } }, data: { ownerId: founderUserId, startupId } });
+    await tx.aiTool.updateMany({ where: { id: { in: ids }, claimStatus: 'UNCLAIMED' }, data: { claimStatus: 'CLAIMED' } });
+  }
+
+  // Jobs an admin added for this startup: the founder sees them under Hiring, and "Open hiring" hands them over.
+  await tx.jobBoardEmployer.updateMany({
+    where: { startupId, passwordHash: '', founderUserId: null },
+    data: { founderUserId },
   });
 }
 

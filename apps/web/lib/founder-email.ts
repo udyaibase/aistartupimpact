@@ -79,13 +79,13 @@ export function sendAdminReviewAlert(opts: {
   entityType: 'startup' | 'tool';
   entityName: string;
   founderEmail: string;
-  reason: 'new' | 'edited';
+  reason: 'new' | 'edited' | 'resubmitted';
 }) {
   const to = process.env.ADMIN_DIGEST_EMAIL || 'admin@udyaibase.com';
   const adminUrl = (process.env.NEXT_PUBLIC_ADMIN_URL || 'https://admin.udyaibase.com').replace(/\/$/, '');
   const queue = `${adminUrl}/${opts.entityType === 'startup' ? 'startups-dir' : 'tools-dir'}?status=PENDING`;
   const esc = (t: string) => t.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-  const what = opts.reason === 'new' ? `New ${opts.entityType} submitted` : `Live ${opts.entityType} edited, needs re-approval`;
+  const what = opts.reason === 'new' ? `New ${opts.entityType} submitted` : opts.reason === 'resubmitted' ? `Rejected ${opts.entityType} resubmitted for review` : `Live ${opts.entityType} edited, needs re-approval`;
   sendEmailFireAndForget({
     to,
     subject: `${what}: ${opts.entityName}`,

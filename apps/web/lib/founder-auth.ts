@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import { getUnifiedSession } from '@/lib/unified-auth';
 import { SignJWT, jwtVerify } from 'jose';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
@@ -40,6 +41,11 @@ export async function verifyFounderToken(token: string): Promise<FounderSession 
   }
 }
 
+/** True when a token was issued before the account's sessions were last invalidated (a password change). */
+function issuedBefore(iat: number | undefined, validAfter: Date | null): boolean {
+  return !!validAfter && (iat ?? 0) < Math.floor(validAfter.getTime() / 1000);
+}
+
 // Get current founder session
 export async function getFounderSession(): Promise<FounderSession | null> {
   const cookieStore = await cookies();
@@ -51,9 +57,10 @@ export async function getFounderSession(): Promise<FounderSession | null> {
     if (session) {
       const founder = await prisma.founderUser.findUnique({
         where: { id: session.userId },
-        select: { status: true, deactivatedAt: true },
+        select: { status: true, deactivatedAt: true, deletedAt: true, sessionsValidAfter: true },
       });
-      if (!founder || founder.status === 'SUSPENDED' || founder.deactivatedAt) return null;
+      if (!founder || founder.status === 'SUSPENDED' || founder.deactivatedAt || founder.deletedAt) return null;
+      if (issuedBefore((session as FounderSession & { iat?: number }).iat, founder.sessionsValidAfter)) return null;
       return session;
     }
   }
@@ -67,9 +74,9 @@ export async function getFounderSession(): Promise<FounderSession | null> {
       if (email) {
         const founder = await prisma.founderUser.findUnique({
           where: { email: email.toLowerCase() },
-          select: { id: true, email: true, name: true, onboardingCompleted: true, status: true, deactivatedAt: true },
+          select: { id: true, email: true, name: true, onboardingCompleted: true, status: true, deactivatedAt: true, deletedAt: true, sessionsValidAfter: true },
         });
-        if (founder && founder.status !== 'SUSPENDED' && !founder.deactivatedAt) {
+        if (founder && founder.status !== 'SUSPENDED' && !founder.deactivatedAt && !founder.deletedAt && !issuedBefore(payload.iat, founder.sessionsValidAfter)) {
           return {
             userId: founder.id,
             email: founder.email,
@@ -80,7 +87,19 @@ export async function getFounderSession(): Promise<FounderSession | null> {
       }
     } catch {}
   }
-  
+
+  // 3. Fallback: unified session linked to a founder profile
+  const unified = await getUnifiedSession().catch(() => null);
+  if (unified?.founderId) {
+    const founder = await prisma.founderUser.findUnique({
+      where: { id: unified.founderId },
+      select: { id: true, email: true, name: true, onboardingCompleted: true, status: true, deactivatedAt: true, deletedAt: true },
+    });
+    if (founder && founder.status !== 'SUSPENDED' && !founder.deactivatedAt && !founder.deletedAt) {
+      return { userId: founder.id, email: founder.email, name: founder.name, onboardingCompleted: founder.onboardingCompleted };
+    }
+  }
+
   return null;
 }
 

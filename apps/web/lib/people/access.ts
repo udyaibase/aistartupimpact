@@ -1,4 +1,5 @@
 import { prisma } from '@udyaibase/database';
+import { isTwoFactorOn } from '@/lib/auth/account-two-factor';
 import { ownerChangeProblem } from '@/lib/employer/owners';
 import { ROLE_LABEL } from '@/lib/employer/roles';
 
@@ -97,7 +98,7 @@ export function hiringMembershipsFor(email: string) {
  * Never when that founder account uses two-step sign-in.
  */
 export async function founderAccountForHiringSession(s: { id: string; email: string; memberId: string | null }) {
-  const select = { id: true, email: true, name: true, onboardingCompleted: true, twoFactorEnabled: true } as const;
+  const select = { id: true, email: true, name: true, onboardingCompleted: true } as const;
   let f;
   if (!s.memberId) {
     const w = await prisma.jobBoardEmployer.findUnique({ where: { id: s.id }, select: { founderUserId: true } });
@@ -107,6 +108,6 @@ export async function founderAccountForHiringSession(s: { id: string; email: str
     f = await prisma.founderUser.findFirst({ where: { email: { equals: norm(s.email), mode: 'insensitive' }, deletedAt: null }, select });
   }
   // A hiring sign-in (password or email code) must never skip the founder's own two-step sign-in.
-  if (!f || f.twoFactorEnabled) return null;
+  if (!f || (await isTwoFactorOn(f.email))) return null;
   return f;
 }

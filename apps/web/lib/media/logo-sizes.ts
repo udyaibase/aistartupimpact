@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { prisma } from '@udyaibase/database';
+import { LOGO_SIZES, sizedKey } from '@udyaibase/utils';
 
 /**
  * Ready-made logo sizes, so Cloudflare serves small WebP files instead of resizing logos on every view.
@@ -9,7 +10,7 @@ import { prisma } from '@udyaibase/database';
  * pointed at a file that doesn't exist. Runs daily (data-retention cron) and from scripts/size-logos.ts.
  */
 
-export const LOGO_SIZES = [64, 128, 256] as const;
+export { LOGO_SIZES, sizedKey };
 export const SIZED_MARKER = 'sz';
 const MEDIA = 'https://media.udyaibase.com/';
 const CACHE = 'public, max-age=31536000, immutable';
@@ -19,7 +20,6 @@ const LOGO_COLUMNS: { table: 'Startup' | 'AiTool' | 'JobBoardEmployer'; column: 
   { table: 'Startup', column: 'logoUrl' }, { table: 'AiTool', column: 'logoUrl' }, { table: 'JobBoardEmployer', column: 'logoUrl' },
 ];
 
-export const sizedKey = (key: string, width: number) => `sized/${width}/${key.replace(/\.[a-z0-9]+$/i, '')}.webp`;
 
 let client: S3Client | null = null;
 function r2() {

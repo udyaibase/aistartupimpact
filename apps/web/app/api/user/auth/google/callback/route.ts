@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logFounderSignIn } from '@/lib/founder/activity';
+import { secondFactorChallenge } from '@/lib/auth/second-factor';
 import { clientIp } from '@/lib/client-ip';
 import { sql } from '@/lib/db';
 import { SignJWT } from 'jose';
@@ -113,6 +115,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/?error=account_deactivated', request.url));
     }
 
+    // Google proves the first step only: anyone with 2FA on still enters their code. The token goes in the URL
+    // fragment, so it never reaches server logs or another site's Referer.
+    const challenge = await secondFactorChallenge(user.email);
+    if (challenge) {
+      const back = typeof state === 'string' && state.startsWith('/') && !state.startsWith('//') ? state : '/profile';
+      return NextResponse.redirect(new URL(`/auth/login?returnTo=${encodeURIComponent(back)}#twofa=${challenge.challengeToken}&type=${challenge.userType}`, request.url));
+    }
+
     const sessionId = generateId();
     const token = await new SignJWT({
       userId: user.id,
@@ -152,6 +162,7 @@ export async function GET(request: NextRequest) {
     if (typeof state === 'string' && state.startsWith('/') && !state.startsWith('//')) {
       redirectPath = state;
     }
+    await logFounderSignIn(googleUser.email, request, 'google');
     const response = NextResponse.redirect(new URL(redirectPath, request.url));
     response.cookies.set('user-token', token, {
       httpOnly: true,

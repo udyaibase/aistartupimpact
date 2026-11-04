@@ -39,6 +39,17 @@ export async function getPreferences() {
   };
 }
 
+/** Everything the preferences form needs, for showing it inside the Profile page. */
+export async function getPreferencesForm() {
+  const session = await getUserSession();
+  if (!session) return null;
+  const [categories, prefs] = await Promise.all([
+    sql`SELECT id, name, slug, icon FROM "ToolCategory" WHERE level = 0 AND "isActive" = true ORDER BY "sortOrder", name`,
+    getPreferences(),
+  ]);
+  return { categories: categories as { id: string; name: string; slug: string; icon: string | null }[], prefs };
+}
+
 export async function updatePreferences(data: {
   primaryIntent?: string | null;
   categoryIds?: string[];

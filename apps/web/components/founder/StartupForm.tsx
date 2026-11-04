@@ -1,15 +1,37 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { StatusNote } from './Guidance';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Upload, X, Loader2 } from 'lucide-react';
-import { submitStartupAction } from '@/app/founder/startups/actions';
+import { submitStartupAction, updateStartupAction, getStartupCategoriesAction, getStartupTypesAction } from '@/app/founder/startups/actions';
 import { FAQManager, type FAQ } from '@/components/shared/FAQManager';
-import FundingRoundsManager, { FundingRound, convertToSaveFormat } from '@/components/shared/FundingRoundsManager';
+import FundingRoundsManager, { FundingRound, convertToSaveFormat, convertFromDbFormat } from '@/components/shared/FundingRoundsManager';
 import FoundersDetailsManager, { FounderDetail } from '@/components/shared/FoundersDetailsManager';
 import SocialLinksManager, { SocialLink } from '@/components/shared/SocialLinksManager';
 import CityCombobox from '@/components/shared/CityCombobox';
+
+interface Startup {
+  id: string;
+  name: string;
+  slug: string;
+  tagline: string;
+  description: string;
+  websiteUrl?: string | null;
+  logoUrl?: string | null;
+  stage?: string | null;
+  fundingAmount?: number | null;
+  teamSize?: number | null;
+  foundedYear?: number | null;
+  location?: string | null;
+  linkedinUrl?: string | null;
+  twitterUrl?: string | null;
+  socialLinks?: any;
+  isVerified?: boolean;
+  status?: string;
+  [key: string]: any;
+}
 
 const STARTUP_STAGES = [
   'BOOTSTRAPPED',
@@ -33,106 +55,154 @@ const STARTUP_STAGES = [
   'PUBLIC',
 ];
 
-const STARTUP_CATEGORIES = [
-  'FinTech', 'HealthTech', 'BioTech & Life Sciences', 'EdTech', 'E-Commerce & Retail',
-  'SaaS', 'AI/ML', 'Enterprise & B2B Software', 'Developer Tools', 'Cybersecurity',
-  'Consumer Apps & Social', 'DeepTech & Hardware', 'CleanTech & Energy', 'AgriTech',
-  'Logistics & Supply Chain', 'HRTech', 'MarTech & AdTech', 'PropTech',
-  'FoodTech & Restaurant', 'Mobility & Transportation', 'Gaming & eSports',
-  'Media & Entertainment', 'Creator Economy', 'Web3 & Blockchain', 'InsurTech',
-  'LegalTech', 'Robotics & Drones', 'SpaceTech & Aerospace', 'Defense & GovTech',
-  'Travel & Hospitality', 'Construction & InfraTech', 'Telecom & Connectivity',
-  'Fashion & Beauty', 'Sports & Fitness', 'Other',
-];
-
-const BUSINESS_TYPES = ['B2B', 'B2C', 'B2B2C', 'B2G', 'D2C', 'Marketplace', 'Platform'];
-
 interface StartupFormProps {
-  initialFounder?: {
-    name: string;
-    role: string;
-    prev?: string;
-    bio: string;
-    avatar: string;
-    linkedin: string;
-    twitter?: string;
-  };
+  /** The listing being edited. Without one, this is the form for a new startup. */
+  startup?: Startup;
+  existingFaqs?: any[];
+  existingFundingRounds?: any[];
+  /** A new startup starts with its founder filled in. */
+  initialFounder?: { name: string; role: string; prev?: string; bio: string; avatar: string; linkedin: string; twitter?: string };
 }
 
-export default function StartupForm({ initialFounder }: StartupFormProps) {
+const NEW_STARTUP: Startup = { id: '', name: '', slug: '', tagline: '', description: '', stage: 'SEED', status: 'ACTIVE' };
+const NEW_DRAFT_KEY = 'draft_founder_new_startup';
+
+/** The site's host, to warn when an edit moves a verified listing to another domain. The server makes the final call. */
+function hostOf(url: string | null | undefined): string {
+  try {
+    return new URL(url ?? '').hostname.replace(/^www\./, '').toLowerCase();
+  } catch {
+    return (url ?? '').trim().toLowerCase();
+  }
+}
+
+export default function StartupForm({ startup: existing, existingFaqs = [], existingFundingRounds = [], initialFounder }: StartupFormProps) {
+  const isNew = !existing;
+  const startup = existing ?? NEW_STARTUP;
+  const [success, setSuccess] = useState(false);
+  const [draftLoaded, setDraftLoaded] = useState(!isNew);
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [logoPreview, setLogoPreview] = useState('');
-  const [success, setSuccess] = useState(false);
+  const [saved, setSaved] = useState<{ published: string[]; pending: string[] } | null>(null);
+  const [logoPreview, setLogoPreview] = useState(startup.logoUrl || '');
+  const [startupCategories, setStartupCategories] = useState<string[]>([]);
+  const [businessTypesOptions, setBusinessTypesOptions] = useState<string[]>([]);
 
-  const [draftLoaded, setDraftLoaded] = useState(false);
-
-  // Load draft from localStorage on mount
   useEffect(() => {
-    const draft = localStorage.getItem('draft_founder_new_startup');
-    if (draft) {
-      try {
-        const { formData: dForm, faqs: dFaqs, fundingRounds: dRounds, foundersDetails: dFounders, socialLinks: dSocialLinks } = JSON.parse(draft);
-        if (dForm) setFormData(dForm);
-        if (dFaqs) setFaqs(dFaqs);
-        if (dRounds) setFundingRounds(dRounds);
-        if (dFounders) setFoundersDetails(dFounders);
-        if (dSocialLinks) setSocialLinks(dSocialLinks);
-      } catch (e) {
-        console.error('Failed to restore startup draft:', e);
-      }
-    }
-    setDraftLoaded(true);
+    Promise.all([
+      getStartupCategoriesAction(),
+      getStartupTypesAction(),
+    ]).then(([cats, types]) => {
+      setStartupCategories(cats as string[]);
+      setBusinessTypesOptions(types as string[]);
+    });
   }, []);
 
-  const [formData, setFormData] = useState({
-    name: '',
-    tagline: '',
-    description: '',
-    websiteUrl: '',
-    linkedinUrl: '',
-    twitterUrl: '',
-    foundedYear: new Date().getFullYear(),
-    headquartersCity: '',
-    stage: 'SEED',
-    status: 'ACTIVE',
-    employeeCount: '',
-    logoUrl: '',
-    category: '',
-    businessType: '',
-  });
-
-  const [faqs, setFaqs] = useState<FAQ[]>([]);
-  const [fundingRounds, setFundingRounds] = useState<FundingRound[]>([]);
+  const [faqs, setFaqs] = useState<FAQ[]>(
+    existingFaqs.map((faq, index) => ({
+      id: faq.id,
+      question: faq.question,
+      answer: faq.answer,
+      order: faq.order ?? index,
+    }))
+  );
+  // Seed existing funding rounds into the manager
+  const [fundingRounds, setFundingRounds] = useState<FundingRound[]>(
+    convertFromDbFormat(existingFundingRounds)
+  );
+  // Seed existing foundersData from startup
   const [foundersDetails, setFoundersDetails] = useState<FounderDetail[]>(
-    initialFounder && initialFounder.name
-      ? [
-          {
-            name: initialFounder.name,
-            role: initialFounder.role,
-            prev: initialFounder.prev || '',
-            bio: initialFounder.bio,
-            avatar: initialFounder.avatar,
-            linkedin: initialFounder.linkedin,
-            twitter: initialFounder.twitter || '',
-          },
-        ]
+    isNew && initialFounder?.name
+      ? [{ ...initialFounder, prev: initialFounder.prev || '', twitter: initialFounder.twitter || '' }]
+      : Array.isArray(startup.foundersData)
+      ? startup.foundersData.map((f: any) => ({
+          name: f.name || '',
+          role: f.role || '',
+          prev: f.prev || '',
+          bio: f.bio || '',
+          avatar: f.avatar || '',
+          linkedin: f.linkedin || '',
+          twitter: f.twitter || '',
+        }))
       : []
   );
 
-  const [socialLinks, setSocialLinks] = useState<SocialLink[]>([]);
+  const [socialLinks, setSocialLinks] = useState<SocialLink[]>(
+    Array.isArray(startup.socialLinks)
+      ? startup.socialLinks.map((s: any) => ({
+          platform: s.platform || '',
+          url: s.url || '',
+        }))
+      : []
+  );
 
-  // Save draft to localStorage on changes
+
+  const [formData, setFormData] = useState({
+    name: startup.name,
+    tagline: startup.tagline,
+    description: startup.description,
+    websiteUrl: startup.websiteUrl || '',
+    linkedinUrl: startup.linkedinUrl || '',
+    twitterUrl: startup.twitterUrl || '',
+    foundedYear: startup.foundedYear || new Date().getFullYear(),
+    headquartersCity: startup.headquartersCity || '',
+    stage: startup.stage,
+    status: startup.status || 'ACTIVE',
+    employeeCount: startup.employeeCount?.toString() || '',
+    logoUrl: startup.logoUrl || '',
+    category: startup.category || '',
+    businessType: startup.businessType || '',
+    totalFundingInr: startup.totalFundingInr ? (Number(startup.totalFundingInr) / 100).toString() : '',
+    fundingCurrency: 'INR',
+  });
+
+
+  const taglineCharLimit = 60;
+  const descriptionCharLimit = 500;
+  const taglineCharsRemaining = taglineCharLimit - (formData.tagline?.length || 0);
+  const descriptionCharsRemaining = descriptionCharLimit - (formData.description?.length || 0);
+
+  // A new startup's form survives a refresh. Saved listings don't need this.
   useEffect(() => {
-    if (!draftLoaded) return;
-    localStorage.setItem('draft_founder_new_startup', JSON.stringify({ formData, faqs, fundingRounds, foundersDetails, socialLinks }));
-  }, [formData, faqs, fundingRounds, foundersDetails, socialLinks, draftLoaded]);
+    if (!isNew) return;
+    const draft = localStorage.getItem(NEW_DRAFT_KEY);
+    if (draft) {
+      try {
+        const d = JSON.parse(draft);
+        if (d.formData) setFormData(d.formData);
+        if (d.faqs) setFaqs(d.faqs);
+        if (d.fundingRounds) setFundingRounds(d.fundingRounds);
+        if (d.foundersDetails) setFoundersDetails(d.foundersDetails);
+        if (d.socialLinks) setSocialLinks(d.socialLinks);
+      } catch {
+        localStorage.removeItem(NEW_DRAFT_KEY);
+      }
+    }
+    setDraftLoaded(true);
+    // Only on arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!isNew || !draftLoaded) return;
+    localStorage.setItem(NEW_DRAFT_KEY, JSON.stringify({ formData, faqs, fundingRounds, foundersDetails, socialLinks }));
+  }, [isNew, formData, faqs, fundingRounds, foundersDetails, socialLinks, draftLoaded]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    
+    // Enforce character limits
+    if (name === 'tagline' && value.length > taglineCharLimit) {
+      return;
+    }
+    if (name === 'description' && value.length > descriptionCharLimit) {
+      return;
+    }
+    
     setFormData(prev => ({
       ...prev,
-      [e.target.name]: e.target.value,
+      [name]: value,
     }));
   };
 
@@ -140,7 +210,6 @@ export default function StartupForm({ initialFounder }: StartupFormProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file
     if (!file.type.startsWith('image/')) {
       setError('Please upload an image file');
       return;
@@ -151,14 +220,12 @@ export default function StartupForm({ initialFounder }: StartupFormProps) {
       return;
     }
 
-    // Create preview
     const reader = new FileReader();
     reader.onloadend = () => {
       setLogoPreview(reader.result as string);
     };
     reader.readAsDataURL(file);
 
-    // Upload to media library
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -194,12 +261,11 @@ export default function StartupForm({ initialFounder }: StartupFormProps) {
         throw new Error('Please add at least one founder under Founders Details');
       }
 
-      // Parse founders from details
       const foundersArray = foundersDetails
         .map(f => f.name.trim())
         .filter(Boolean);
 
-      const result = await submitStartupAction({
+      const payload = {
         name: formData.name,
         tagline: formData.tagline,
         description: formData.description,
@@ -215,21 +281,29 @@ export default function StartupForm({ initialFounder }: StartupFormProps) {
         logoUrl: formData.logoUrl || undefined,
         category: formData.category || undefined,
         businessType: formData.businessType || undefined,
+        totalFundingInr: formData.totalFundingInr ? Math.round(parseFloat(formData.totalFundingInr) * 100) : undefined,
         faqs: faqs.length > 0 ? faqs : undefined,
         fundingRounds: fundingRounds.length > 0 ? convertToSaveFormat(fundingRounds) : undefined,
         foundersData: foundersDetails.filter(f => f.name.trim()).length > 0
           ? foundersDetails.filter(f => f.name.trim())
           : undefined,
         socialLinks: socialLinks.length > 0 ? socialLinks : undefined,
-      });
+      };
 
-      if (!result.success) {
-        throw new Error(result.error || 'Submission failed');
+      if (isNew) {
+        const created = await submitStartupAction(payload);
+        if (!created.success) throw new Error(created.error || 'Submission failed');
+        localStorage.removeItem(NEW_DRAFT_KEY);
+        setSuccess(true);
+        return;
       }
 
-      // Show success card
-      localStorage.removeItem('draft_founder_new_startup');
-      setSuccess(true);
+      const result = await updateStartupAction(startup.id, payload);
+      if (!result.success) throw new Error(result.error || 'Update failed');
+
+      setSaved({ published: result.published ?? [], pending: result.pending ?? [] });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      router.refresh();
     } catch (err: any) {
       setError(err.message || 'Something went wrong');
     } finally {
@@ -240,35 +314,24 @@ export default function StartupForm({ initialFounder }: StartupFormProps) {
   if (success) {
     return (
       <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-8 text-center">
-        <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
-        </div>
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white font-sora mb-2">Startup Submitted Successfully</h2>
-        <p className="text-gray-600 dark:text-gray-400 font-jakarta text-sm mb-6">
-          Our editorial team will review your submission within 2-3 business days. You'll receive an email once it's approved and live.
-        </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <button
-            onClick={() => router.push('/founder/startups')}
-            className="px-6 py-2.5 bg-brand text-white font-bold text-sm rounded-lg hover:bg-brand/90 transition-colors"
-          >
-            View in Dashboard
-          </button>
-          <button
-            onClick={() => router.push('/founder/dashboard')}
-            className="px-6 py-2.5 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-medium text-sm rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-          >
-            Go to Dashboard
-          </button>
-        </div>
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white font-sora mb-2">Startup submitted</h2>
+        <p className="text-gray-600 dark:text-gray-400 font-jakarta text-sm mb-6">Our team will review it, and we’ll email you once it’s live.</p>
+        <button onClick={() => router.push('/founder/startups')} className="px-6 py-2.5 bg-brand text-white font-bold text-sm rounded-lg hover:bg-brand/90 transition-colors">
+          View in Dashboard
+        </button>
       </div>
     );
   }
 
   return (
     <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 space-y-6">
+      {saved && (
+        <StatusNote tone={saved.pending.length ? 'waiting' : 'success'} title={saved.pending.length ? 'Saved. Some changes are waiting for our team.' : 'Saved'}>
+          {saved.published.length > 0 && `Live now: ${saved.published.join(', ')}. `}
+          {saved.pending.length > 0 && `Waiting for review: ${saved.pending.join(', ')}. Your listing shows the current version until then.`}
+          {saved.published.length === 0 && saved.pending.length === 0 && 'Nothing had changed.'}
+        </StatusNote>
+      )}
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
@@ -334,6 +397,9 @@ export default function StartupForm({ initialFounder }: StartupFormProps) {
       <div>
         <label htmlFor="tagline" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Tagline <span className="text-red-500">*</span>
+          <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
+            ({taglineCharsRemaining} characters remaining)
+          </span>
         </label>
         <input
           type="text"
@@ -342,19 +408,29 @@ export default function StartupForm({ initialFounder }: StartupFormProps) {
           value={formData.tagline}
           onChange={handleChange}
           required
-          maxLength={100}
+          maxLength={taglineCharLimit}
           className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
-          placeholder="A short, catchy description (max 100 characters)"
+          placeholder="A short, catchy description"
         />
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          {formData.tagline.length}/100 characters
-        </p>
+        <div className="flex justify-between items-center mt-1">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Keep it concise and compelling
+          </p>
+          <p className={`text-xs font-medium ${
+            taglineCharsRemaining < 10 ? 'text-orange-600 dark:text-orange-400' : 'text-gray-500 dark:text-gray-400'
+          }`}>
+            {formData.tagline.length} / {taglineCharLimit}
+          </p>
+        </div>
       </div>
 
       {/* Description */}
       <div>
         <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Description <span className="text-red-500">*</span>
+          <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
+            ({descriptionCharsRemaining} characters remaining)
+          </span>
         </label>
         <textarea
           id="description"
@@ -362,13 +438,70 @@ export default function StartupForm({ initialFounder }: StartupFormProps) {
           value={formData.description}
           onChange={handleChange}
           required
-          maxLength={1000}
           rows={6}
+          maxLength={descriptionCharLimit}
           className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent resize-none"
           placeholder="Describe your startup, what problem it solves, and what makes it unique..."
         />
+        <div className="flex justify-between items-center mt-1">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Provide a clear and compelling description of your startup
+          </p>
+          <p className={`text-xs font-medium ${
+            descriptionCharsRemaining < 50 ? 'text-orange-600 dark:text-orange-400' : 'text-gray-500 dark:text-gray-400'
+          }`}>
+            {formData.description.length} / {descriptionCharLimit}
+          </p>
+        </div>
+      </div>
+
+      {/* Category/Sector */}
+      <div>
+        <label htmlFor="category" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Category / Sector <span className="text-red-500">*</span>
+        </label>
+        <select
+          id="category"
+          name="category"
+          value={formData.category}
+          onChange={handleChange}
+          required
+          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
+        >
+          <option value="">Select a category</option>
+          {startupCategories.map(category => (
+            <option key={category} value={category}>
+              {category}
+            </option>
+          ))}
+        </select>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          {formData.description.length}/1000 characters
+          Choose the primary sector your startup operates in
+        </p>
+      </div>
+
+      {/* Business Type */}
+      <div>
+        <label htmlFor="businessType" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Business Model <span className="text-red-500">*</span>
+        </label>
+        <select
+          id="businessType"
+          name="businessType"
+          value={formData.businessType}
+          onChange={handleChange}
+          required
+          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
+        >
+          <option value="">Select business model</option>
+          {businessTypesOptions.map(type => (
+            <option key={type} value={type}>
+              {type}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          Select your primary business model (B2B, B2C, B2G, etc.)
         </p>
       </div>
 
@@ -387,6 +520,11 @@ export default function StartupForm({ initialFounder }: StartupFormProps) {
           className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
           placeholder="https://yourcompany.com"
         />
+        {startup.isVerified && hostOf(formData.websiteUrl) !== hostOf(startup.websiteUrl) && (
+          <p role="status" className="text-sm text-amber-700 dark:text-amber-400 mt-1.5">
+            A new website domain goes to our team first. Once approved, your Verified badge is removed until you verify the new domain.
+          </p>
+        )}
       </div>
 
       {/* Social Links */}
@@ -452,7 +590,7 @@ export default function StartupForm({ initialFounder }: StartupFormProps) {
           <select
             id="stage"
             name="stage"
-            value={formData.stage}
+            value={formData.stage ?? ''}
             onChange={handleChange}
             required
             className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
@@ -502,6 +640,75 @@ export default function StartupForm({ initialFounder }: StartupFormProps) {
         </div>
       </div>
 
+      {/* Funding Information */}
+      <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">
+          Funding Information (Optional)
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="totalFundingInr" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Total Funding Raised
+            </label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400">
+                ₹
+              </span>
+              <input
+                type="number"
+                id="totalFundingInr"
+                name="totalFundingInr"
+                value={formData.totalFundingInr}
+                onChange={handleChange}
+                min="0"
+                step="100000"
+                className="w-full pl-8 pr-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
+                placeholder="e.g. 10000000"
+              />
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Enter amount in INR (e.g., 1 Crore = 10000000)
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Quick Amount
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setFormData(prev => ({ ...prev, totalFundingInr: '5000000' }))}
+                className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                ₹50 Lakhs
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData(prev => ({ ...prev, totalFundingInr: '10000000' }))}
+                className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                ₹1 Crore
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData(prev => ({ ...prev, totalFundingInr: '50000000' }))}
+                className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                ₹5 Crores
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData(prev => ({ ...prev, totalFundingInr: '100000000' }))}
+                className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                ₹10 Crores
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div>
         <label htmlFor="headquartersCity" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Headquarters
@@ -515,61 +722,21 @@ export default function StartupForm({ initialFounder }: StartupFormProps) {
         />
       </div>
 
-      {/* Category & Business Type */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label htmlFor="category" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Category <span className="text-red-500">*</span>
-          </label>
-          <select
-            id="category"
-            name="category"
-            value={formData.category}
-            onChange={handleChange}
-            required
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
-          >
-            <option value="">Select category</option>
-            {STARTUP_CATEGORIES.map(c => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-        </div>
 
-        <div>
-          <label htmlFor="businessType" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Business Type <span className="text-red-500">*</span>
-          </label>
-          <select
-            id="businessType"
-            name="businessType"
-            value={formData.businessType}
-            onChange={handleChange}
-            required
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
-          >
-            <option value="">Select business type</option>
-            {BUSINESS_TYPES.map(bt => (
-              <option key={bt} value={bt}>{bt}</option>
-            ))}
-          </select>
-        </div>
+      {/* FAQs Section */}
+      <div className="border-t border-gray-200 dark:border-gray-800 pt-6">
+        <FAQManager faqs={faqs} onChange={setFaqs} maxFaqs={10} />
       </div>
-
 
       {/* Founders Details Section */}
       <div className="border-t border-gray-200 dark:border-gray-800 pt-6">
+        <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">Only add details and photos of people who’ve agreed to appear on your profile.</p>
         <FoundersDetailsManager founders={foundersDetails} onChange={setFoundersDetails} maxFounders={5} />
       </div>
 
       {/* Funding Rounds Section */}
       <div className="border-t border-gray-200 dark:border-gray-800 pt-6">
         <FundingRoundsManager rounds={fundingRounds} onChange={setFundingRounds} maxRounds={10} />
-      </div>
-
-      {/* FAQs Section */}
-      <div className="border-t border-gray-200 dark:border-gray-800 pt-6">
-        <FAQManager faqs={faqs} onChange={setFaqs} maxFaqs={10} />
       </div>
 
       {/* Submit Button */}
@@ -600,7 +767,7 @@ export default function StartupForm({ initialFounder }: StartupFormProps) {
           className="px-6 py-2 bg-brand hover:bg-brand/90 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
           {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-          {loading ? 'Submitting...' : 'Submit for Review'}
+          {loading ? (isNew ? 'Submitting...' : 'Saving...') : isNew ? 'Submit Startup' : 'Save changes'}
         </button>
       </div>
     </form>

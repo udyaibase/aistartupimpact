@@ -81,13 +81,6 @@ describe('auth enforcement — routes return 401 without session', () => {
       expect(res.status).toBe(401);
     });
 
-    it('POST /api/founder/startups/[id]/funding-rounds returns 401', async () => {
-      const { POST } = await import('@/app/api/founder/startups/[id]/funding-rounds/route');
-      const req = makeRequest('/api/founder/startups/startup-001/funding-rounds', 'POST', { rounds: [] });
-      const res = await POST(req, { params: { id: 'startup-001' } } as any);
-      expect(res.status).toBe(401);
-    });
-
     // Routes using requireFounderAuth() throw on no session, caught by generic catch → 500
     // This is a known pattern issue: requireAuth routes return 500 instead of 401
     it('GET /api/founder/settings rejects unauthenticated (via requireFounderAuth)', async () => {

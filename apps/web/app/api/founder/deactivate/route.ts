@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import bcrypt from 'bcryptjs';
+import { confirmAccountPassword } from '@/lib/founder/account';
+import { logFounderActivity } from '@/lib/founder/activity';
 import { requireFounderAuth, clearFounderSession } from '@/lib/founder-auth';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
 
@@ -15,14 +16,11 @@ export async function POST(request: NextRequest) {
     const session = await requireFounderAuth();
 
     const body = await request.json().catch(() => ({}));
-    const { password } = body as { password?: string };
-    if (!password) {
-      return NextResponse.json({ error: 'Password is required' }, { status: 400 });
-    }
+    const { password } = (await request.json().catch(() => ({}))) as { password?: unknown };
 
     const user = await prisma.founderUser.findUnique({
       where: { id: session.userId },
-      select: { passwordHash: true, deactivatedAt: true },
+      select: { deactivatedAt: true },
     });
 
     if (!user) {
@@ -33,11 +31,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Account is already deactivated' }, { status: 400 });
     }
 
-    if (user.passwordHash) {
-      const valid = await bcrypt.compare(password, user.passwordHash);
-      if (!valid) {
-        return NextResponse.json({ error: 'Incorrect password' }, { status: 401 });
-      }
+    if (!(await confirmAccountPassword(session.email.toLowerCase(), password))) {
+      return NextResponse.json({ error: 'Incorrect password' }, { status: 401 });
     }
 
     await prisma.$transaction(async (tx) => {
@@ -51,11 +46,19 @@ export async function POST(request: NextRequest) {
         data: { isApproved: false },
       });
 
+      // Hide tools too. Reactivating brings back the ones that were live (rejected tools stay rejected).
+      await tx.aiTool.updateMany({
+        where: { ownerId: session.userId, status: { in: ['APPROVED', 'FEATURED'] } },
+        data: { status: 'ARCHIVED' },
+      });
+
       await tx.founderSession.deleteMany({
         where: { userId: session.userId },
       });
     });
 
+    await logFounderActivity(session.userId, 'account_deactivated', { request });
+    // The session cookies stay: the portal shows this person the reactivate page next time they come back.
     await clearFounderSession();
 
     return NextResponse.json({ success: true, message: 'Account deactivated' });

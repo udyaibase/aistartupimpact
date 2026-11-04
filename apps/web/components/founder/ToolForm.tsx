@@ -4,15 +4,39 @@ import { CityPicker, CountryPicker } from '@udyaibase/utils/src/LocationPickers'
 import { useExtraCities } from '@/components/shared/useExtraCities';
 import { CITY_REQUEST } from '@/lib/city-request';
 import { useState, useEffect } from 'react';
+import { StatusNote } from './Guidance';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Upload, X, Loader2, Plus } from 'lucide-react';
-import { submitToolAction, getTagGroupsForFounderAction } from '@/app/founder/tools/actions';
+import { submitToolAction, updateToolAction, getTagGroupsForFounderAction, getToolTagIdsAction } from '@/app/founder/tools/actions';
 import { FAQManager, type FAQ } from '@/components/shared/FAQManager';
 import CategoryCascadeSelect from '@/components/shared/CategoryCascadeSelect';
 import ToolTagSelector from '@/components/shared/ToolTagSelector';
 import ProsConsManager from '@/components/shared/ProsConsManager';
 import ScreenshotManager from '@/components/shared/ScreenshotManager';
+
+interface AiTool {
+  id: string;
+  name: string;
+  slug: string;
+  tagline: string;
+  description: string;
+  websiteUrl: string;
+  logoUrl?: string | null;
+  screenshotUrls?: string[];
+  pricingModel: string;
+  pricingUrl?: string | null;
+  affiliateUrl?: string | null;
+  categoryId?: string | null;
+  hasApi?: boolean;
+  hasMobileApp?: boolean;
+  launchYear?: number;
+  founderNames?: string[];
+  headquartersCountry?: string | null;
+  headquartersCity?: string | null;
+  status: string;
+  [key: string]: any;
+}
 
 const PRICING_MODELS = [
   'FREE',
@@ -22,33 +46,66 @@ const PRICING_MODELS = [
   'OPEN_SOURCE',
 ];
 
-export default function ToolForm() {
+type ToolFormTool = AiTool & {
+  useCases: Array<{ id: string; text: string }>;
+  faqs?: Array<{ id: string; question: string; answer: string; order: number }>;
+  pros?: string[];
+  cons?: string[];
+  demoVideoUrl?: string | null;
+  freeTrialDays?: number | null;
+};
+
+const NEW_TOOL: ToolFormTool = { id: '', name: '', slug: '', tagline: '', description: '', websiteUrl: '', pricingModel: 'FREEMIUM', status: 'PENDING', useCases: [], launchYear: new Date().getFullYear() };
+const NEW_DRAFT_KEY = 'draft_founder_new_tool';
+
+/** The site's host, to warn when an edit moves a verified listing to another domain. The server makes the final call. */
+function hostOf(url: string | null | undefined): string {
+  try {
+    return new URL(url ?? '').hostname.replace(/^www\./, '').toLowerCase();
+  } catch {
+    return (url ?? '').trim().toLowerCase();
+  }
+}
+
+/** The form for a tool. Pass the listing to edit it; without one, it's the form for a new tool. */
+export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
+  const isNew = !existing;
+  const tool = existing ?? NEW_TOOL;
+  const [success, setSuccess] = useState(false);
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [logoPreview, setLogoPreview] = useState('');
-  const [screenshots, setScreenshots] = useState<string[]>([]);
-  const [faqs, setFaqs] = useState<FAQ[]>([]);
-  const [success, setSuccess] = useState(false);
+  const [saved, setSaved] = useState<{ published: string[]; pending: string[] } | null>(null);
+  const [logoPreview, setLogoPreview] = useState(tool.logoUrl || '');
+  const [screenshots, setScreenshots] = useState<string[]>(tool.screenshotUrls || []);
   const [tagGroups, setTagGroups] = useState<any[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const [pros, setPros] = useState<string[]>([]);
-  const [cons, setCons] = useState<string[]>([]);
+  const [pros, setPros] = useState<string[]>(tool.pros || []);
+  const [cons, setCons] = useState<string[]>(tool.cons || []);
+  const existingFeatures = (tool.keyFeatures || []).map((f: any) => f.text).join('\n');
+  const existingUseCases = tool.useCases.map(uc => uc.text).join('\n');
 
   const [draftLoaded, setDraftLoaded] = useState(false);
 
-  // Load tag groups on mount
+  // Load tag groups and tool's existing tags on mount
   useEffect(() => {
-    getTagGroupsForFounderAction().then(setTagGroups).catch(() => {});
-  }, []);
+    Promise.all([
+      getTagGroupsForFounderAction(),
+      isNew ? Promise.resolve([] as string[]) : getToolTagIdsAction(tool.id),
+    ]).then(([groups, tagIds]) => {
+      setTagGroups(groups);
+      setSelectedTagIds(tagIds);
+    }).catch(() => {});
+  }, [tool.id]);
 
-  // Load draft on mount
+  // Load draft from localStorage on mount
   useEffect(() => {
-    const draft = localStorage.getItem('draft_founder_new_tool');
+    const draftKey = isNew ? NEW_DRAFT_KEY : `draft_founder_edit_tool_${tool.id}`;
+    const draft = localStorage.getItem(draftKey);
     if (draft) {
       try {
         const { formData: dForm, faqs: dFaqs, screenshots: dScreenshots, socialLinks: dSocial } = JSON.parse(draft);
-        if (dForm) setFormData(prev => ({ ...prev, ...dForm }));
+        if (dForm) setFormData(dForm);
         if (dFaqs) setFaqs(dFaqs);
         if (dScreenshots) setScreenshots(dScreenshots);
         if (dSocial) setSocialLinks(dSocial);
@@ -57,41 +114,53 @@ export default function ToolForm() {
       }
     }
     setDraftLoaded(true);
-  }, []);
+  }, [tool.id]);
 
   const extraCities = useExtraCities();
   const [formData, setFormData] = useState({
-    name: '',
-    tagline: '',
-    description: '',
-    websiteUrl: '',
-    affiliateUrl: '',
-    demoVideoUrl: '',
-    categoryId: '',
-    pricingModel: 'FREEMIUM',
-    pricingUrl: '',
-    startingPrice: '',
-    freeTrialDays: '',
-    hasApi: false,
-    hasMobileApp: false,
-    launchYear: new Date().getFullYear(),
-    founderNames: '',
-    headquartersCountry: '',
-    headquartersCity: '',
-    features: '',
-    useCases: '',
-    logoUrl: '',
-    twitterUrl: '',
-    linkedinUrl: '',
+    name: tool.name,
+    tagline: tool.tagline,
+    description: tool.description,
+    websiteUrl: tool.websiteUrl,
+    affiliateUrl: tool.affiliateUrl || '',
+    demoVideoUrl: tool.demoVideoUrl || '',
+    categoryId: tool.categoryId || '',
+    pricingModel: tool.pricingModel,
+    pricingUrl: tool.pricingUrl || '',
+    startingPrice: tool.startingPrice ? (tool.startingPrice / 100).toString() : '',
+    freeTrialDays: tool.freeTrialDays ? tool.freeTrialDays.toString() : '',
+    hasApi: tool.hasApi || false,
+    hasMobileApp: tool.hasMobileApp || false,
+    launchYear: tool.launchYear || new Date().getFullYear(),
+    founderNames: tool.founderNames?.join(', ') || '',
+    headquartersCountry: tool.headquartersCountry || '',
+    headquartersCity: tool.headquartersCity || '',
+    features: existingFeatures,
+    useCases: existingUseCases,
+    logoUrl: tool.logoUrl || '',
+    twitterUrl: tool.twitterUrl || '',
+    linkedinUrl: tool.linkedinUrl || '',
   });
 
-  const [socialLinks, setSocialLinks] = useState<Array<{ platform: string; url: string }>>([]);
+  const [socialLinks, setSocialLinks] = useState<Array<{ platform: string; url: string }>>(
+    Array.isArray(tool.socialLinks) ? tool.socialLinks : []
+  );
+
+  const [faqs, setFaqs] = useState<FAQ[]>(
+    (tool.faqs || []).map((faq, index) => ({
+      id: faq.id,
+      question: faq.question,
+      answer: faq.answer,
+      order: faq.order ?? index,
+    }))
+  );
 
   // Save draft on changes
   useEffect(() => {
     if (!draftLoaded) return;
-    localStorage.setItem('draft_founder_new_tool', JSON.stringify({ formData, faqs, screenshots, socialLinks }));
-  }, [formData, faqs, screenshots, socialLinks, draftLoaded]);
+    const draftKey = isNew ? NEW_DRAFT_KEY : `draft_founder_edit_tool_${tool.id}`;
+    localStorage.setItem(draftKey, JSON.stringify({ formData, faqs, screenshots, socialLinks }));
+  }, [formData, faqs, screenshots, socialLinks, draftLoaded, tool.id]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const value = e.target.type === 'checkbox' ? (e.target as HTMLInputElement).checked : e.target.value;
@@ -122,9 +191,12 @@ export default function ToolForm() {
     
     const formattedText = bulletPoints.join('\n');
     
+    // Apply character limit
+    const limitedText = formattedText.substring(0, 500);
+    
     setFormData(prev => ({
       ...prev,
-      [fieldName]: formattedText,
+      [fieldName]: limitedText,
     }));
   };
 
@@ -178,32 +250,37 @@ export default function ToolForm() {
         throw new Error('Please fill in all required fields');
       }
 
-      // Parse features and use cases
-      const featuresArray = (formData.features || '')
+      const featuresArray = formData.features
         .split('\n')
-        .map(f => f.trim())
+        .map((f: string) => f.trim())
         .filter(Boolean);
 
-      const useCasesArray = (formData.useCases || '')
+      const useCasesArray = formData.useCases
         .split('\n')
-        .map(u => u.trim())
+        .map((u: string) => u.trim())
         .filter(Boolean);
 
-      const result = await submitToolAction({
+      const founderNamesArray = formData.founderNames
+        .split(',')
+        .map((f: string) => f.trim())
+        .filter(Boolean);
+
+      const payload = {
         name: formData.name,
         tagline: formData.tagline,
         description: formData.description,
         websiteUrl: formData.websiteUrl,
         affiliateUrl: formData.affiliateUrl || undefined,
-        categoryId: formData.categoryId,
+        demoVideoUrl: formData.demoVideoUrl || undefined,
+        categoryId: (formData.categoryId || tool.categoryId) as string,
         pricingModel: formData.pricingModel as any,
         pricingUrl: formData.pricingUrl || undefined,
         startingPrice: formData.startingPrice ? parseFloat(formData.startingPrice) : undefined,
         freeTrialDays: formData.freeTrialDays ? parseInt(formData.freeTrialDays) : undefined,
-        demoVideoUrl: formData.demoVideoUrl || undefined,
         hasApi: formData.hasApi,
         hasMobileApp: formData.hasMobileApp,
         launchYear: formData.launchYear,
+        founderNames: founderNamesArray.length > 0 ? founderNamesArray : undefined,
         headquartersCountry: formData.headquartersCountry || undefined,
         headquartersCity: formData.headquartersCity || undefined,
         features: featuresArray,
@@ -211,20 +288,29 @@ export default function ToolForm() {
         logoUrl: formData.logoUrl || undefined,
         screenshotUrls: screenshots,
         faqs: faqs.length > 0 ? faqs : undefined,
-        tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
+        tagIds: selectedTagIds,
         pros: pros.length > 0 ? pros : undefined,
         cons: cons.length > 0 ? cons : undefined,
         twitterUrl: formData.twitterUrl || undefined,
         linkedinUrl: formData.linkedinUrl || undefined,
         socialLinks: socialLinks.filter(l => l.url.trim()).length > 0 ? socialLinks.filter(l => l.url.trim()) : undefined,
-      });
+      };
 
-      if (!result.success) {
-        throw new Error(result.error || 'Submission failed');
+      if (isNew) {
+        const created = await submitToolAction(payload);
+        if (!created.success) throw new Error(created.error || 'Submission failed');
+        localStorage.removeItem(NEW_DRAFT_KEY);
+        setSuccess(true);
+        return;
       }
 
-      localStorage.removeItem('draft_founder_new_tool');
-      setSuccess(true);
+      const result = await updateToolAction(tool.id, payload);
+      if (!result.success) throw new Error(result.error || 'Update failed');
+
+      localStorage.removeItem(`draft_founder_edit_tool_${tool.id}`);
+      setSaved({ published: result.published ?? [], pending: result.pending ?? [] });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      router.refresh();
     } catch (err: any) {
       setError(err.message || 'Something went wrong');
     } finally {
@@ -235,35 +321,24 @@ export default function ToolForm() {
   if (success) {
     return (
       <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-8 text-center">
-        <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
-        </div>
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white font-sora mb-2">Tool Submitted Successfully</h2>
-        <p className="text-gray-600 dark:text-gray-400 font-jakarta text-sm mb-6">
-          Our editorial team will review your tool within 2-3 business days. You'll receive an email once it's approved and live.
-        </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <button
-            onClick={() => router.push('/founder/tools')}
-            className="px-6 py-2.5 bg-brand text-white font-bold text-sm rounded-lg hover:bg-brand/90 transition-colors"
-          >
-            View in Dashboard
-          </button>
-          <button
-            onClick={() => router.push('/founder/dashboard')}
-            className="px-6 py-2.5 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-medium text-sm rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-          >
-            Go to Dashboard
-          </button>
-        </div>
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white font-sora mb-2">Tool submitted</h2>
+        <p className="text-gray-600 dark:text-gray-400 font-jakarta text-sm mb-6">Our team will review it, and we’ll email you once it’s live.</p>
+        <button onClick={() => router.push('/founder/tools')} className="px-6 py-2.5 bg-brand text-white font-bold text-sm rounded-lg hover:bg-brand/90 transition-colors">
+          View in Dashboard
+        </button>
       </div>
     );
   }
 
   return (
     <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 space-y-6">
+      {saved && (
+        <StatusNote tone={saved.pending.length ? 'waiting' : 'success'} title={saved.pending.length ? 'Saved. Some changes are waiting for our team.' : 'Saved'}>
+          {saved.published.length > 0 && `Live now: ${saved.published.join(', ')}. `}
+          {saved.pending.length > 0 && `Waiting for review: ${saved.pending.join(', ')}. Your listing shows the current version until then.`}
+          {saved.published.length === 0 && saved.pending.length === 0 && 'Nothing had changed.'}
+        </StatusNote>
+      )}
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
@@ -393,6 +468,11 @@ export default function ToolForm() {
             className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
             placeholder="https://yourtool.com"
           />
+        {tool.isUrlVerified && hostOf(formData.websiteUrl) !== hostOf(tool.websiteUrl) && (
+          <p role="status" className="text-sm text-amber-700 dark:text-amber-400 mt-1.5">
+            A new website domain goes to our team first. Once approved, your Verified badge is removed until you verify the new domain.
+          </p>
+        )}
         </div>
 
         <div>
@@ -669,12 +749,13 @@ export default function ToolForm() {
           value={formData.features}
           onChange={handleChange}
           onPaste={(e) => handleBulletPointPaste(e, 'features')}
+          maxLength={500}
           rows={6}
           className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent resize-none font-mono text-sm"
           placeholder="Paste your features here - they'll be automatically formatted with bullet points"
         />
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          Paste content and it will be automatically converted to bullet points (•)
+          {formData.features.length}/500 characters • Paste content and it will be automatically converted to bullet points (•)
         </p>
       </div>
 
@@ -689,12 +770,13 @@ export default function ToolForm() {
           value={formData.useCases}
           onChange={handleChange}
           onPaste={(e) => handleBulletPointPaste(e, 'useCases')}
+          maxLength={500}
           rows={6}
           className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent resize-none font-mono text-sm"
           placeholder="Paste your use cases here - they'll be automatically formatted with bullet points"
         />
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          Paste content and it will be automatically converted to bullet points (•)
+          {formData.useCases.length}/500 characters • Paste content and it will be automatically converted to bullet points (•)
         </p>
       </div>
 
@@ -705,7 +787,6 @@ export default function ToolForm() {
         onError={setError}
       />
 
-      {/* Tags */}
       {/* Tags */}
       <div className="border-t border-gray-200 dark:border-gray-800 pt-6">
         {tagGroups.length > 0 ? (
@@ -750,7 +831,7 @@ export default function ToolForm() {
           className="px-6 py-2 bg-brand hover:bg-brand/90 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
           {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-          {loading ? 'Submitting...' : 'Submit for Review'}
+          {loading ? (isNew ? 'Submitting...' : 'Saving...') : isNew ? 'Submit Tool' : 'Save changes'}
         </button>
       </div>
     </form>

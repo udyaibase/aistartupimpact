@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Bell, Eye, Mail } from 'lucide-react';
+import { Eye, Mail } from 'lucide-react';
 import Toggle from '@/components/Toggle';
 import Toast from '@/components/Toast';
 import CompanyEmailSection from '@/components/CompanyEmailSection';
@@ -12,21 +12,12 @@ type ToastType = {
 } | null;
 
 interface SettingsData {
-  emailNotifications: boolean;
-  submissionUpdates: boolean;
-  analyticsReports: boolean;
   publicProfile: boolean;
-  showEmail: boolean;
+  emailNotifications: boolean;
 }
 
 export default function SettingsClient() {
-  const [settings, setSettings] = useState<SettingsData>({
-    emailNotifications: true,
-    submissionUpdates: true,
-    analyticsReports: false,
-    publicProfile: true,
-    showEmail: false,
-  });
+  const [settings, setSettings] = useState<SettingsData>({ publicProfile: true, emailNotifications: true });
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<ToastType>(null);
 
@@ -38,7 +29,7 @@ export default function SettingsClient() {
         const data = await res.json();
         
         if (data.success) {
-          setSettings(data.settings);
+          setSettings({ publicProfile: data.settings.publicProfile !== false, emailNotifications: data.settings.emailNotifications !== false });
         }
       } catch (error) {
         console.error('Failed to load settings:', error);
@@ -103,99 +94,36 @@ export default function SettingsClient() {
       {/* Company Email Verification */}
       <CompanyEmailSection apiBasePath="/api/founder" />
 
-      {/* Notifications */}
-      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800">
-          <div className="flex items-center gap-2">
-            <Bell className="w-4 h-4 text-gray-400" />
-            <div>
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
-                Notifications
-              </h2>
-            </div>
-          </div>
+      {/* Privacy */}
+      <div className="bg-white dark:bg-gray-900 rounded-[14px] border border-gray-200 dark:border-gray-800">
+        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center gap-2">
+          <Eye className="w-4 h-4 text-gray-400" aria-hidden />
+          <h2 className="portal-section-title">Privacy</h2>
         </div>
-        <div className="p-4">
-
-          <div className="space-y-3">
-            <div className="flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-800 last:border-0">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900 dark:text-white">Email Notifications</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Receive updates via email</p>
-              </div>
-              <Toggle
-                enabled={settings.emailNotifications}
-                onChange={(value) => handleToggle('emailNotifications', value)}
-                disabled={loading}
-              />
-            </div>
-
-            <div className="flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-800 last:border-0">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900 dark:text-white">Submission Updates</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Get notified when your submissions are reviewed</p>
-              </div>
-              <Toggle
-                enabled={settings.submissionUpdates}
-                onChange={(value) => handleToggle('submissionUpdates', value)}
-                disabled={loading}
-              />
-            </div>
-
-            <div className="flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-800 last:border-0">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900 dark:text-white">Analytics Reports</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Weekly performance summaries</p>
-              </div>
-              <Toggle
-                enabled={settings.analyticsReports}
-                onChange={(value) => handleToggle('analyticsReports', value)}
-                disabled={loading}
-              />
-            </div>
+        <div className="p-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-gray-900 dark:text-white">Show me on my startup’s profile</p>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">Your name, role, bio, photo and links appear on your startup’s public profile. Turn this off to hide them.</p>
           </div>
+          <Toggle enabled={settings.publicProfile} onChange={(value) => handleToggle('publicProfile', value)} disabled={loading} />
         </div>
       </div>
 
-      {/* Privacy */}
-      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+      {/* Emails */}
+      <div className="bg-white dark:bg-gray-900 rounded-[14px] border border-gray-200 dark:border-gray-800">
         <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800">
-          <div className="flex items-center gap-2">
-            <Eye className="w-4 h-4 text-gray-400" />
-            <div>
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
-                Privacy
-              </h2>
-            </div>
-          </div>
+          <h2 className="portal-section-title">Emails from us</h2>
         </div>
-        <div className="p-4">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-800 last:border-0">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900 dark:text-white">Public Profile</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Make your profile visible to others</p>
-              </div>
-              <Toggle
-                enabled={settings.publicProfile}
-                onChange={(value) => handleToggle('publicProfile', value)}
-                disabled={loading}
-              />
-            </div>
-
-            <div className="flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-800 last:border-0">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900 dark:text-white">Show Email</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Display email on public listings</p>
-              </div>
-              <Toggle
-                enabled={settings.showEmail}
-                onChange={(value) => handleToggle('showEmail', value)}
-                disabled={loading}
-              />
-            </div>
+        <div className="p-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-gray-900 dark:text-white">Tips and reports</p>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">Your profile views and ideas for your listing, at most once a week.</p>
           </div>
+          <Toggle enabled={settings.emailNotifications} onChange={(value) => handleToggle('emailNotifications', value)} disabled={loading} />
         </div>
+        <p className="px-4 pb-4 text-xs text-gray-600 dark:text-gray-400">
+          We always email you about your account, security and listing reviews, because the service needs them. Our newsletter is separate: use the unsubscribe link in any issue to stop it.
+        </p>
       </div>
 
       {/* Info */}

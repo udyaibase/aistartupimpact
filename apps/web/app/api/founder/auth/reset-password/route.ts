@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logFounderActivity } from '@/lib/founder/activity';
+import { setAccountPassword } from '@/lib/auth/set-password';
 import { verifyTurnstileToken } from '@/lib/turnstile';
 import { prisma } from '@udyaibase/database';
 import { sql } from '@/lib/db';
@@ -59,21 +61,13 @@ export async function POST(request: NextRequest) {
     // Hash new password
     const passwordHash = await bcrypt.hash(password, 12);
 
-    // Update password and clear reset token
+    // Clear the reset link so it can't be used twice, then change the password everywhere and sign out every device.
     await prisma.founderUser.update({
       where: { id: user.id },
-      data: {
-        passwordHash,
-        resetToken: null,
-        resetExpiry: null,
-        updatedAt: new Date(),
-      },
+      data: { resetToken: null, resetExpiry: null, updatedAt: new Date() },
     });
-
-    // Invalidate related sessions across auth systems
-    await sql`DELETE FROM "WebUserSession" WHERE "webUserId" IN (SELECT id FROM "WebUser" WHERE email = ${user.email.toLowerCase()})`;
-    await sql`DELETE FROM "UnifiedSession" WHERE "userId" IN (SELECT id FROM "UnifiedUser" WHERE email = ${user.email.toLowerCase()})`;
-    await sql`DELETE FROM "EventOrganizerSession" WHERE "organizerId" IN (SELECT id FROM "EventOrganizer" WHERE email = ${user.email.toLowerCase()})`;
+    await setAccountPassword(user.email, passwordHash);
+    await logFounderActivity(user.id, 'password_reset', { request });
 
     const response = NextResponse.json({
       success: true,

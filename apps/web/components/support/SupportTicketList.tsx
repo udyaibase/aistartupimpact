@@ -133,8 +133,9 @@ export default function SupportTicketList({ apiBasePath, portalPath }: SupportTi
       ) : tickets.length === 0 ? (
         <div className="text-center py-12">
           <HelpCircle className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-          <p className="text-sm text-gray-500">No tickets found</p>
-          <button onClick={() => setShowNew(true)} className="text-sm text-brand font-medium mt-2 hover:underline">Create your first ticket</button>
+          <p className="text-[15px] font-semibold text-gray-900 dark:text-white">No tickets here</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Stuck on something? Tell us what’s going on and we’ll get back to you.</p>
+          <button onClick={() => setShowNew(true)} className="text-sm text-brand font-medium mt-2 hover:underline">Raise a ticket</button>
         </div>
       ) : (
         <div className="space-y-2">

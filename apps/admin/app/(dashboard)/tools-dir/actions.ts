@@ -9,6 +9,8 @@ import { toolApprovalHtml } from '@udyaibase/utils';
 import { sendEmailFireAndForget } from '@/lib/email-send';
 import { requireActionAuth } from '@/lib/api-auth';
 import { refreshPublic } from '@/lib/refresh-public';
+import { rejectTool } from '@/lib/tool-rejection';
+import { notifyFounder } from '@/lib/founder-notify';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -84,6 +86,8 @@ export async function approveToolAction(id: string) {
       });
     }
 
+    await notifyFounder(tool.ownerId, { type: 'listing_approved', title: `${tool.name} is live`, message: 'Your AI tool passed review and is public on Udyaibase.', link: '/founder/tools' });
+
     revalidatePath('/tools-dir');
     invalidateToolCache();
 
@@ -102,18 +106,12 @@ export async function approveToolAction(id: string) {
   }
 }
 
-export async function rejectToolAction(id: string, reason?: string) {
+export async function rejectToolAction(id: string, reason: string) {
   const { error } = await requireActionAuth();
   if (error) return { success: false, error };
+  if (!reason?.trim()) return { success: false, error: 'Add a reason for the founder.' };
   try {
-    await sql`
-      UPDATE "AiTool"
-      SET
-        status = 'ARCHIVED'::"ToolApprovalStatus",
-        "claimStatus" = 'REJECTED',
-        "updatedAt" = NOW()
-      WHERE id = ${id}
-    `;
+    await rejectTool(id, reason.trim());
     revalidatePath('/tools-dir');
     invalidateToolCache();
     await refreshPublic(['tools', 'home']); return { success: true };

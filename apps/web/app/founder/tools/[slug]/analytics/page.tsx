@@ -1,4 +1,5 @@
 import { requireFounderAuth } from '@/lib/founder-auth';
+import { roleForOwner } from '@/lib/founder/access';
 import { prisma } from '@udyaibase/database';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
@@ -18,7 +19,7 @@ export default async function ToolAnalyticsPage(props: { params: Promise<{ slug:
   `;
 
   const tool = tools[0];
-  if (!tool || tool.ownerId !== session.userId) notFound();
+  if (!tool || !(await roleForOwner(session, tool.ownerId))) notFound();
 
   // Fetch analytics data in parallel
   const now = new Date();
@@ -107,7 +108,7 @@ export default async function ToolAnalyticsPage(props: { params: Promise<{ slug:
     : currentClicks > 0 ? 100 : 0;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link
@@ -121,8 +122,8 @@ export default async function ToolAnalyticsPage(props: { params: Promise<{ slug:
             <Image src={tool.logoUrl} alt="" width={40} height={40} sizes="40px" className="w-10 h-10 rounded-xl object-contain border border-gray-200 dark:border-gray-700 bg-white p-1" />
           )}
           <div>
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white">{tool.name} Analytics</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Performance overview</p>
+            <h1 className="portal-title">{tool.name} Analytics</h1>
+            <p className="portal-subtitle">Performance overview</p>
           </div>
         </div>
       </div>
@@ -164,7 +165,7 @@ export default async function ToolAnalyticsPage(props: { params: Promise<{ slug:
 
       {/* Daily Clicks Chart (simple bar representation) */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
-        <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Clicks (Last 30 Days)</h2>
+        <h2 className="portal-section-title mb-4">Clicks to your website (last 30 days)</h2>
         {dailyClicks.length > 0 ? (
           <div className="flex items-end gap-1 h-32">
             {(() => {
@@ -194,14 +195,14 @@ export default async function ToolAnalyticsPage(props: { params: Promise<{ slug:
             <div>
               <h3 className="font-semibold text-gray-900 dark:text-white">Boost your visibility</h3>
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Your tool was clicked {totalClicks} times. Featured tools get up to 5x more visibility.
+                Your tool was clicked {totalClicks} times. Want more people to see it? Promote it on the homepage, in the newsletter or in featured spots.
               </p>
             </div>
             <Link
-              href="/founder/tools"
+              href="/advertise"
               className="shrink-0 px-4 py-2 bg-brand text-white text-sm font-semibold rounded-lg hover:bg-brand/90 transition-colors flex items-center gap-1"
             >
-              Upgrade <ArrowUpRight className="w-3.5 h-3.5" />
+              See options <ArrowUpRight className="w-3.5 h-3.5" />
             </Link>
           </div>
         </div>

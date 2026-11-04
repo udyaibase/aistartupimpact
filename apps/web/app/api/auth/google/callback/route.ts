@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logFounderSignIn } from '@/lib/founder/activity';
+import { secondFactorChallenge } from '@/lib/auth/second-factor';
 import { prisma } from "@udyaibase/database";
 import { createUnifiedSession } from "@/lib/unified-auth";
 
@@ -80,7 +82,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Create unified session
+    // Anyone with 2FA on signs in through the main form, which asks for their code.
+    if (user.twoFactorEnabled || (await secondFactorChallenge(user.email))) {
+      return NextResponse.redirect(new URL("/auth/login", request.url));
+    }
     await createUnifiedSession(user.id, "google");
+    await logFounderSignIn(user.email, request, "google");
 
     return NextResponse.redirect(new URL(state, request.url));
   } catch (error) {

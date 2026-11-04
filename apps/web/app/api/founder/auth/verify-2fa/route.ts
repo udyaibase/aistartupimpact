@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isTwoFactorOn, verifyAccountCode } from '@/lib/auth/account-two-factor';
+import { TWO_FACTOR_LOCKED_MESSAGE, clearTwoFactorFailures, isTwoFactorLocked, recordTwoFactorFailure } from '@/lib/auth/two-factor-attempts';
+import { twoFactorRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
+import { logFounderSignIn, logFounderSignInFailed } from '@/lib/founder/activity';
 import { jwtVerify } from 'jose';
 import { sql } from '@/lib/db';
 import { setFounderSession } from '@/lib/founder-auth';
-import { verifyTOTPToken, decryptSecret, verifyBackupCode } from '@/lib/two-factor';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,10 +17,13 @@ const CHALLENGE_SECRET = new TextEncoder().encode(process.env.FOUNDER_JWT_SECRET
  */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { challengeToken, userId: legacyUserId, token, isBackupCode } = body;
+    const { success: allowed } = await checkRateLimit(twoFactorRateLimit, getClientIdentifier(request));
+    if (!allowed) return NextResponse.json({ error: 'Too many attempts. Please try again later.' }, { status: 429 });
 
-    if ((!challengeToken && !legacyUserId) || !token) {
+    const body = await request.json();
+    const { challengeToken, token, isBackupCode } = body;
+
+    if (!challengeToken || !token) {
       return NextResponse.json(
         { error: 'Challenge token and verification code are required' },
         { status: 400 }
@@ -26,18 +32,14 @@ export async function POST(request: NextRequest) {
 
     let userId: string;
 
-    if (challengeToken) {
-      try {
-        const { payload } = await jwtVerify(challengeToken, CHALLENGE_SECRET);
-        if (payload.purpose !== '2fa-challenge') {
-          return NextResponse.json({ error: 'Invalid challenge token' }, { status: 400 });
-        }
-        userId = payload.userId as string;
-      } catch {
-        return NextResponse.json({ error: 'Challenge expired. Please log in again.' }, { status: 401 });
+    try {
+      const { payload } = await jwtVerify(challengeToken, CHALLENGE_SECRET);
+      if (payload.purpose !== '2fa-challenge') {
+        return NextResponse.json({ error: 'Invalid challenge token' }, { status: 400 });
       }
-    } else {
-      userId = legacyUserId;
+      userId = payload.userId as string;
+    } catch {
+      return NextResponse.json({ error: 'Challenge expired. Please log in again.' }, { status: 401 });
     }
 
     const users = await sql`
@@ -56,50 +58,21 @@ export async function POST(request: NextRequest) {
 
     const user = users[0];
 
-    if (!user.twoFactorEnabled) {
-      return NextResponse.json(
-        { error: '2FA is not enabled for this account' },
-        { status: 400 }
-      );
+    if (!(await isTwoFactorOn(user.email))) {
+      return NextResponse.json({ error: 'Two-factor sign-in is not on for this account' }, { status: 400 });
     }
 
-    let isValid = false;
-
-    if (isBackupCode) {
-      if (!user.twoFactorBackupCodes || user.twoFactorBackupCodes.length === 0) {
-        return NextResponse.json(
-          { error: 'No backup codes available' },
-          { status: 400 }
-        );
-      }
-
-      const codeIndex = await verifyBackupCode(token, user.twoFactorBackupCodes);
-
-      if (codeIndex >= 0) {
-        isValid = true;
-
-        const updatedCodes = [...user.twoFactorBackupCodes];
-        updatedCodes.splice(codeIndex, 1);
-
-        await sql`
-          UPDATE "FounderUser"
-          SET "twoFactorBackupCodes" = ${updatedCodes}, "updatedAt" = NOW()
-          WHERE id = ${userId}
-        `;
-      }
-    } else {
-      if (!user.twoFactorSecret) {
-        return NextResponse.json(
-          { error: '2FA secret not found' },
-          { status: 400 }
-        );
-      }
-
-      const secret = decryptSecret(user.twoFactorSecret);
-      isValid = verifyTOTPToken(token, secret);
+    if (await isTwoFactorLocked('founder', user.id)) {
+      return NextResponse.json({ error: TWO_FACTOR_LOCKED_MESSAGE }, { status: 429 });
     }
+
+    const isValid = await verifyAccountCode(user.email, token, !!isBackupCode);
 
     if (!isValid) {
+      await logFounderSignInFailed(user.email, request, 'wrong_2fa_code');
+      if (await recordTwoFactorFailure('founder', user.id)) {
+        return NextResponse.json({ error: TWO_FACTOR_LOCKED_MESSAGE }, { status: 429 });
+      }
       return NextResponse.json(
         { error: 'Invalid verification code' },
         { status: 400 }
@@ -112,7 +85,9 @@ export async function POST(request: NextRequest) {
       WHERE id = ${userId}
     `;
 
+    await clearTwoFactorFailures('founder', user.id);
     await setFounderSession(user.id, user.email, user.name, !!user.onboardingCompleted);
+    await logFounderSignIn(user.email, request, 'password_2fa');
 
     return NextResponse.json({
       success: true,

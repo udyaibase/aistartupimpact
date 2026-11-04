@@ -1,5 +1,9 @@
 import { requireFounderAuth } from '@/lib/founder-auth';
+import { workspaceOwnerIds } from '@/lib/founder/access';
 import { sql } from '@/lib/db';
+import Link from 'next/link';
+import { BarChart3, Plus } from 'lucide-react';
+import { EmptyGuide } from '@/components/founder/Guidance';
 import { 
   TrendingUp, 
   Eye, 
@@ -10,6 +14,14 @@ import {
 } from 'lucide-react';
 export default async function AnalyticsPage() {
   const session = await requireFounderAuth();
+  const ownerIds = await workspaceOwnerIds(session);
+
+  const [listings] = await sql`
+    SELECT
+      (SELECT COUNT(*)::int FROM "Startup" WHERE "ownerId" = ANY(${ownerIds}) AND "deletedAt" IS NULL)
+      + (SELECT COUNT(*)::int FROM "AiTool" WHERE "ownerId" = ANY(${ownerIds}) AND "deletedAt" IS NULL) AS count
+  `;
+  const hasListings = Number(listings?.count ?? 0) > 0;
 
   // Fetch analytics data
   const [currentMonth, lastMonth, allTime, topItems] = await Promise.all([
@@ -18,8 +30,11 @@ export default async function AnalyticsPage() {
       SELECT 
         COALESCE(SUM(views), 0) AS views,
         COALESCE(SUM(clicks), 0) AS clicks
-      FROM "FounderAnalytics"
-      WHERE "userId" = ${session.userId}
+      FROM "AnalyticsDaily"
+      WHERE (
+        ("entityType" = 'STARTUP' AND "entityId" IN (SELECT id FROM "Startup" WHERE "ownerId" = ANY(${ownerIds}) AND "deletedAt" IS NULL))
+        OR ("entityType" = 'TOOL' AND "entityId" IN (SELECT id FROM "AiTool" WHERE "ownerId" = ANY(${ownerIds}) AND "deletedAt" IS NULL))
+      )
         AND date >= DATE_TRUNC('month', CURRENT_DATE)
     `,
     
@@ -28,8 +43,11 @@ export default async function AnalyticsPage() {
       SELECT 
         COALESCE(SUM(views), 0) AS views,
         COALESCE(SUM(clicks), 0) AS clicks
-      FROM "FounderAnalytics"
-      WHERE "userId" = ${session.userId}
+      FROM "AnalyticsDaily"
+      WHERE (
+        ("entityType" = 'STARTUP' AND "entityId" IN (SELECT id FROM "Startup" WHERE "ownerId" = ANY(${ownerIds}) AND "deletedAt" IS NULL))
+        OR ("entityType" = 'TOOL' AND "entityId" IN (SELECT id FROM "AiTool" WHERE "ownerId" = ANY(${ownerIds}) AND "deletedAt" IS NULL))
+      )
         AND date >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
         AND date < DATE_TRUNC('month', CURRENT_DATE)
     `,
@@ -39,8 +57,11 @@ export default async function AnalyticsPage() {
       SELECT 
         COALESCE(SUM(views), 0) AS views,
         COALESCE(SUM(clicks), 0) AS clicks
-      FROM "FounderAnalytics"
-      WHERE "userId" = ${session.userId}
+      FROM "AnalyticsDaily"
+      WHERE (
+        ("entityType" = 'STARTUP' AND "entityId" IN (SELECT id FROM "Startup" WHERE "ownerId" = ANY(${ownerIds}) AND "deletedAt" IS NULL))
+        OR ("entityType" = 'TOOL' AND "entityId" IN (SELECT id FROM "AiTool" WHERE "ownerId" = ANY(${ownerIds}) AND "deletedAt" IS NULL))
+      )
     `,
     
     // Top performing items
@@ -52,10 +73,10 @@ export default async function AnalyticsPage() {
         COALESCE(s.slug, t.slug) AS slug,
         SUM(fa.views) AS "totalViews",
         SUM(fa.clicks) AS "totalClicks"
-      FROM "FounderAnalytics" fa
+      FROM "AnalyticsDaily" fa
       LEFT JOIN "Startup" s ON fa."entityId" = s.id AND fa."entityType" = 'STARTUP'
       LEFT JOIN "AiTool" t ON fa."entityId" = t.id AND fa."entityType" = 'TOOL'
-      WHERE fa."userId" = ${session.userId}
+      WHERE (s."ownerId" = ANY(${ownerIds}) AND s."deletedAt" IS NULL) OR (t."ownerId" = ANY(${ownerIds}) AND t."deletedAt" IS NULL)
       GROUP BY fa."entityType", fa."entityId", s.name, t.name, s.slug, t.slug
       ORDER BY SUM(fa.views) DESC
       LIMIT 5
@@ -93,11 +114,11 @@ export default async function AnalyticsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="border-b border-gray-200 dark:border-gray-800 pb-4">
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
+      <div>
+        <h1 className="portal-title">
           Analytics
         </h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+        <p className="portal-subtitle">
           Performance metrics for your listings
         </p>
       </div>
@@ -105,7 +126,7 @@ export default async function AnalyticsPage() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {/* Views */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Views</span>
             <Eye className="w-4 h-4 text-gray-400" />
@@ -123,7 +144,7 @@ export default async function AnalyticsPage() {
         </div>
 
         {/* Clicks */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Clicks</span>
             <MousePointerClick className="w-4 h-4 text-gray-400" />
@@ -141,7 +162,7 @@ export default async function AnalyticsPage() {
         </div>
 
         {/* CTR */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">CTR</span>
             <TrendingUp className="w-4 h-4 text-gray-400" />
@@ -159,7 +180,7 @@ export default async function AnalyticsPage() {
         </div>
 
         {/* All Time */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">All Time</span>
           </div>
@@ -181,9 +202,9 @@ export default async function AnalyticsPage() {
       </div>
 
       {/* Top Performing Items */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800">
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
+          <h2 className="portal-section-title">
             Top Performing Listings
           </h2>
         </div>
@@ -242,11 +263,25 @@ export default async function AnalyticsPage() {
             </table>
           </div>
         ) : (
-          <div className="p-8 text-center">
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              No analytics data yet
-            </p>
-          </div>
+          hasListings ? (
+          <EmptyGuide
+            bare
+            icon={BarChart3}
+            title="No views or clicks yet"
+            action={<Link href="/founder/startups" className="btn-brand">View my listings</Link>}
+          >
+            Share your listing’s link on LinkedIn or with your network. Your best-performing listings will show here as people visit.
+          </EmptyGuide>
+        ) : (
+          <EmptyGuide
+            bare
+            icon={BarChart3}
+            title="Nothing to measure yet"
+            action={<Link href="/founder/startups/new" className="btn-brand gap-2"><Plus className="w-4 h-4" aria-hidden /> List your startup</Link>}
+          >
+            Analytics show how people find and use your listings, so you’ll need one first.
+          </EmptyGuide>
+        )
         )}
       </div>
     </div>

@@ -3,6 +3,7 @@ import { neon } from '@neondatabase/serverless';
 import { toolApprovalHtml } from '@udyaibase/utils';
 import { sendEmailFireAndForget } from '@/lib/email-send';
 import { requireApiAuth } from '@/lib/api-auth';
+import { notifyFounder } from '@/lib/founder-notify';
 import { logAuditEvent } from '@/lib/audit-log';
 import { withPublicRefresh } from '@/lib/refresh-public';
 
@@ -43,6 +44,8 @@ async function postHandler(request: NextRequest, props: { params: Promise<{ id: 
         type: 'approval',
       });
     }
+
+    await notifyFounder(tool?.ownerId, { type: 'listing_approved', title: `${tool?.name} is live`, message: 'Your AI tool passed review and is public on Udyaibase.', link: '/founder/tools' });
 
     logAuditEvent({ action: 'APPROVE', resourceType: 'AI_TOOL', resourceId: id, resourceName: tool?.name });
 

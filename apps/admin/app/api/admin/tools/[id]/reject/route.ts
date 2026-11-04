@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { neon } from '@neondatabase/serverless';
+import { rejectTool } from '@/lib/tool-rejection';
 import { requireApiAuth } from '@/lib/api-auth';
-import { logAuditEvent } from '@/lib/audit-log';
 import { withPublicRefresh } from '@/lib/refresh-public';
 
-const sql = neon(process.env.DATABASE_URL!);
 
 async function postHandler(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -13,17 +11,12 @@ async function postHandler(request: NextRequest, props: { params: Promise<{ id: 
   try {
     const { id } = params;
 
-    // Update tool status to ARCHIVED and claimStatus to REJECTED
-    await sql`
-      UPDATE "AiTool"
-      SET
-        status = 'ARCHIVED'::"ToolApprovalStatus",
-        "claimStatus" = 'REJECTED',
-        "updatedAt" = NOW()
-      WHERE id = ${id}
-    `;
+    const body = await request.json().catch(() => ({}));
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+    if (!reason) return NextResponse.json({ success: false, error: 'Add a reason for the founder.' }, { status: 400 });
 
-    logAuditEvent({ action: 'REJECT', resourceType: 'AI_TOOL', resourceId: id });
+    const { found } = await rejectTool(id, reason);
+    if (!found) return NextResponse.json({ success: false, error: 'Tool not found' }, { status: 404 });
 
     return NextResponse.json({ success: true, message: 'Tool rejected successfully' });
   } catch (error: any) {

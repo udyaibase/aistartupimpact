@@ -45,6 +45,7 @@ export default function SecuritySection() {
 
   // Delete account state
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [hasPassword, setHasPassword] = useState(true);
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
 
@@ -56,6 +57,7 @@ export default function SecuritySection() {
         const data = await res.json();
         if (data.success) {
           setTwoFAEnabled(data.enabled);
+          setHasPassword(data.hasPassword !== false);
         }
       } catch (error) {
         console.error('Error fetching 2FA status:', error);
@@ -120,7 +122,7 @@ export default function SecuritySection() {
 
   const handleDeactivate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!deactivatePassword) {
+    if (hasPassword && !deactivatePassword) {
       setToast({ type: 'error', message: 'Password is required' });
       return;
     }
@@ -153,7 +155,7 @@ export default function SecuritySection() {
       return;
     }
 
-    if (!deletePassword) {
+    if (hasPassword && !deletePassword) {
       setToast({ type: 'error', message: 'Please enter your password to confirm' });
       return;
     }
@@ -201,12 +203,12 @@ export default function SecuritySection() {
         />
       )}
 
-      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+      <div className="bg-white dark:bg-gray-900 rounded-[14px] border border-gray-200 dark:border-gray-800 overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800">
           <div className="flex items-center gap-2">
             <Lock className="w-4 h-4 text-gray-400" />
             <div>
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
+              <h2 className="portal-section-title">
                 Security
               </h2>
             </div>
@@ -239,7 +241,7 @@ export default function SecuritySection() {
                 <div>
                   <p className="text-sm font-medium text-gray-900 dark:text-white">Two-Factor Authentication</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    {twoFAFetching ? 'Loading...' : 'Add an extra layer of security'}
+                    {twoFAFetching ? 'Loading...' : twoFAEnabled ? 'A code from your authenticator app is needed each time you sign in.' : 'Off. Turn this on so a stolen password alone can’t open your account.'}
                   </p>
                 </div>
                 {!twoFAFetching && twoFAEnabled && (
@@ -411,7 +413,7 @@ export default function SecuritySection() {
                 <Shield className="w-6 h-6 text-amber-600 dark:text-amber-400" />
               </div>
               <h3 className="font-semibold text-xl text-amber-600 dark:text-amber-400 mb-1">Deactivate Account</h3>
-              <p className="text-gray-600 dark:text-gray-400 text-sm">You can reactivate anytime by logging in again.</p>
+              <p className="text-gray-600 dark:text-gray-400 text-sm">You can reactivate anytime by signing in again again.</p>
             </div>
             <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-4">
               <p className="text-sm text-amber-800 dark:text-amber-300 font-semibold mb-2">This will temporarily:</p>
@@ -422,11 +424,11 @@ export default function SecuritySection() {
               </ul>
             </div>
             <form onSubmit={handleDeactivate} className="space-y-4">
-              <div>
+              {hasPassword && (<div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Enter your password to confirm</label>
                 <input type="password" autoComplete="current-password" value={deactivatePassword} onChange={(e) => setDeactivatePassword(e.target.value)} required placeholder="Your account password" className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-navy dark:text-white focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 font-jakarta text-sm transition-all" />
-              </div>
-              <button type="submit" disabled={deactivateLoading || !deactivatePassword} className="w-full px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              </div>)}
+              <button type="submit" disabled={deactivateLoading || (hasPassword && !deactivatePassword)} className="w-full px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                 {deactivateLoading ? 'Deactivating...' : 'Deactivate My Account'}
               </button>
             </form>
@@ -465,13 +467,17 @@ export default function SecuritySection() {
                 </p>
                 <ul className="text-sm text-red-700 dark:text-red-400 space-y-1 list-disc list-inside">
                   <li>Your profile and account data</li>
-                  <li>All your startups and tools</li>
-                  <li>Analytics and performance data</li>
-                  <li>All associated content</li>
+                  <li>Listings you submitted, your stories and updates, and your photos</li>
+                  <li>Your sign-in, unless you also host events with this email</li>
+                </ul>
+                <p className="text-sm text-red-800 dark:text-red-300 mt-3 mb-1 font-semibold">What stays:</p>
+                <ul className="text-sm text-red-700 dark:text-red-400 space-y-1 list-disc list-inside">
+                  <li>A listing that was already in our directory stays public, without you as its owner</li>
+                  <li>Invoices we must keep by law, and a security log for one year</li>
                 </ul>
               </div>
 
-              <div>
+              {hasPassword && (<div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Enter your password
                 </label>
@@ -484,7 +490,7 @@ export default function SecuritySection() {
                   className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-navy dark:text-white focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/20 font-jakarta text-sm transition-all"
                   placeholder="Your account password"
                 />
-              </div>
+              </div>)}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -502,7 +508,7 @@ export default function SecuritySection() {
 
               <button
                 type="submit"
-                disabled={deleteLoading || deleteConfirmation !== 'DELETE' || !deletePassword}
+                disabled={deleteLoading || deleteConfirmation !== 'DELETE' || (hasPassword && !deletePassword)}
                 className="w-full px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {deleteLoading ? 'Deleting Account...' : 'Delete My Account'}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { X, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import TurnstileWidget from '@/components/shared/TurnstileWidget';
@@ -45,6 +45,20 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
   const [twoFACode, setTwoFACode] = useState('');
   const [useBackupCode, setUseBackupCode] = useState(false);
   const [twoFAUserType, setTwoFAUserType] = useState<string>('founder');
+
+  // Arriving from Google with 2FA on: the callback passes the challenge in the URL fragment. Clear it straight away.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.location.hash.startsWith('#twofa=')) return;
+    const params = new URLSearchParams(window.location.hash.slice(1));
+    const challenge = params.get('twofa');
+    const type = params.get('type');
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    if (challenge && (type === 'webuser' || type === 'founder' || type === 'organizer')) {
+      setChallengeToken(challenge);
+      setTwoFAUserType(type);
+      setRequires2FA(true);
+    }
+  }, []);
 
   // OTP verification state (for signup)
   const [otpStep, setOtpStep] = useState(false);
@@ -105,10 +119,6 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
         setError('Please agree to the terms and conditions');
         return;
       }
-      if (!formData.subscribeNewsletter) {
-        setError('Please subscribe to the newsletter to create an account');
-        return;
-      }
       if (formData.password !== formData.confirmPassword) {
         setError('Passwords do not match');
         return;
@@ -154,7 +164,7 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
         const signupRes = await fetch('/api/user/auth/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: formData.name, email: formData.email, password: formData.password, turnstileToken: turnstileToken.current }),
+          body: JSON.stringify({ name: formData.name, email: formData.email, password: formData.password, agreeToTerms: formData.agreeToTerms, subscribeNewsletter: formData.subscribeNewsletter, turnstileToken: turnstileToken.current }),
         });
         const signupData = await signupRes.json();
         if (!signupRes.ok) throw new Error(signupData.error || 'Signup failed');
@@ -417,7 +427,7 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
               </button>
               {mode === 'signup' && (
                 <p className="text-xs text-gray-400 dark:text-gray-500 text-center mb-4">
-                  By signing up with Google, you agree to receive our weekly AI newsletter. Unsubscribe anytime.
+                  By signing up with Google, you agree to our Terms and Privacy Policy.
                 </p>
               )}
               {mode === 'signin' && <div className="mb-4" />}
@@ -586,7 +596,7 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
                       className="mt-0.5 w-3.5 h-3.5 text-brand border-gray-300 rounded focus:ring-brand shrink-0 cursor-pointer"
                     />
                     <label htmlFor="modal-newsletter" className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed cursor-pointer select-none">
-                      Subscribe to our weekly AI newsletter (funding rounds, tool launches, founder stories). Unsubscribe anytime.
+                      Optional: send me the weekly AI newsletter (funding rounds, tool launches, founder stories). Unsubscribe anytime.
                     </label>
                   </div>
                 )}
@@ -640,7 +650,7 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
                 {/* Submit */}
                 <button
                   type="submit"
-                  disabled={loading || (mode === 'signup' && (!formData.agreeToTerms || !formData.subscribeNewsletter)) || (mode === 'signup' && otpStep && otpCode.length !== 6)}
+                  disabled={loading || (mode === 'signup' && !formData.agreeToTerms) || (mode === 'signup' && otpStep && otpCode.length !== 6)}
                   className="w-full bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900 font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
                 >
                   {loading ? (

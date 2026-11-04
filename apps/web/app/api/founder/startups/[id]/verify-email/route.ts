@@ -1,3 +1,5 @@
+import { founderAtStartupLimit, STARTUP_LIMIT_MESSAGE } from '@/lib/founder/limits';
+import { logFounderActivity } from '@/lib/founder/activity';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { getFounderSession } from '@/lib/founder-auth';
@@ -31,6 +33,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     return NextResponse.json({ error: `${startup.name} is already verified by another founder. Ask them to add you to their team.` }, { status: 409 });
   }
 
+  if (startup.ownerId !== session.userId && (await founderAtStartupLimit(session.userId, id))) {
+    return NextResponse.json({ error: STARTUP_LIMIT_MESSAGE }, { status: 400 });
+  }
+
   const companyDomain = websiteDomain(startup.websiteUrl);
   if (!companyDomain) {
     return NextResponse.json({ error: `${startup.name} has no website on file, so it can't be verified by email. Use the DNS method or contact support.` }, { status: 422 });
@@ -60,5 +66,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
 
   await markStartupVerified(prisma, startup.id, companyDomain, session.userId);
+  await logFounderActivity(session.userId, 'startup_claim_verified', { request, metadata: { startupId: startup.id, method: 'email' } });
   return NextResponse.json({ success: true, startup: { id: startup.id, name: startup.name } });
 }

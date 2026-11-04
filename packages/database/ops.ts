@@ -8,6 +8,7 @@ import { prisma } from './index';
 /** Scheduled jobs (apps/web/vercel.json) and how long after the last successful run they count as missed. */
 export const CRON_JOBS: Record<string, { label: string; maxGapHours: number }> = {
   'data-retention': { label: 'Data retention and plan maintenance (daily)', maxGapHours: 26 },
+  'founder-engagement': { label: 'Founder tips and reports (daily)', maxGapHours: 26 },
   'daily-digest': { label: 'Admin daily digest (daily)', maxGapHours: 26 },
   'india-ai-stats': { label: 'India AI stats refresh (every 6 hours)', maxGapHours: 8 },
   'publish-scheduled': { label: 'Publish scheduled articles (every 10 minutes)', maxGapHours: 1 },

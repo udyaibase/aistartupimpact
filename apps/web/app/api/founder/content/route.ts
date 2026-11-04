@@ -62,7 +62,25 @@ export async function GET(request: NextRequest) {
       take: 100,
     });
 
-    return NextResponse.json({ success: true, articles, startups });
+    // Published coverage of their startups or tools, which they can read but don't manage.
+    const tools = await prisma.aiTool.findMany({ where: { ownerId: session.userId, deletedAt: null }, select: { id: true } });
+    const mentions = await prisma.article.findMany({
+      where: {
+        status: "PUBLISHED",
+        deletedAt: null,
+        type: { notIn: ["FOUNDER_STORY", "STARTUP_UPDATE"] },
+        OR: [
+          { startupId: { in: startupIds } },
+          { StartupMentions: { some: { startupId: { in: startupIds } } } },
+          { ToolMentions: { some: { toolId: { in: tools.map((t) => t.id) } } } },
+        ],
+      },
+      select: { id: true, title: true, slug: true, type: true, publishedAt: true },
+      orderBy: { publishedAt: "desc" },
+      take: 20,
+    });
+
+    return NextResponse.json({ success: true, articles, startups, mentions });
   } catch (err) {
     console.error("[founder/content GET]", err);
     return NextResponse.json({ success: false, error: "Something went wrong" }, { status: 500 });

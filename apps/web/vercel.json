@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/admin/founder-engagement",
+      "schedule": "30 4 * * *"
+    },
+    {
       "path": "/api/admin/data-retention",
       "schedule": "30 20 * * *"
     },

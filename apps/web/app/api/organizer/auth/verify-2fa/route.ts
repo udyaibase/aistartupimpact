@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 import { prisma } from '@udyaibase/database';
 import { createOrganizerSession } from '@/lib/organizer-auth';
-import { verifyTOTPToken, decryptSecret, verifyBackupCode } from '@/lib/two-factor';
+import { isTwoFactorOn, verifyAccountCode } from '@/lib/auth/account-two-factor';
 import { checkRateLimit, getClientIdentifier, authRateLimit, twoFactorRateLimit } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
@@ -45,38 +45,14 @@ export async function POST(request: NextRequest) {
       where: { id: userId },
       select: {
         id: true, email: true, name: true,
-        twoFactorEnabled: true, twoFactorSecret: true, twoFactorBackupCodes: true,
       },
     });
 
-    if (!organizer || !organizer.twoFactorEnabled) {
+    if (!organizer || !(await isTwoFactorOn(organizer.email))) {
       return NextResponse.json({ success: false, error: 'Invalid challenge' }, { status: 400 });
     }
 
-    let isValid = false;
-
-    if (isBackupCode) {
-      const codes = organizer.twoFactorBackupCodes || [];
-      if (codes.length === 0) {
-        return NextResponse.json({ success: false, error: 'No backup codes available' }, { status: 400 });
-      }
-      const idx = await verifyBackupCode(token, codes);
-      if (idx >= 0) {
-        isValid = true;
-        const updated = [...codes];
-        updated.splice(idx, 1);
-        await prisma.eventOrganizer.update({
-          where: { id: userId },
-          data: { twoFactorBackupCodes: updated },
-        });
-      }
-    } else {
-      if (!organizer.twoFactorSecret) {
-        return NextResponse.json({ success: false, error: '2FA secret not found' }, { status: 400 });
-      }
-      const secret = decryptSecret(organizer.twoFactorSecret);
-      isValid = verifyTOTPToken(token, secret);
-    }
+    const isValid = await verifyAccountCode(organizer.email, token, !!isBackupCode);
 
     if (!isValid) {
       return NextResponse.json({ success: false, error: 'Invalid verification code' }, { status: 401 });

@@ -1,28 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@udyaibase/database';
 import { getUserSession } from '@/lib/user-session';
+import { twoFactorStatusResponse } from '@/lib/auth/account-two-factor';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: NextRequest) {
+export async function GET(_request?: NextRequest) {
   try {
     const session = await getUserSession();
-    if (!session) {
-      return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
-    }
-
-    const user = await prisma.webUser.findUnique({
-      where: { id: session.id },
-      select: { twoFactorEnabled: true },
-    });
-
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
-    }
-
-    return NextResponse.json({ success: true, enabled: user.twoFactorEnabled });
+    if (!session) return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
+    return await twoFactorStatusResponse(session.email);
   } catch (error) {
-    console.error('2FA status error:', error);
+    console.error('2FA status error:', error instanceof Error ? error.message : 'unknown error');
     return NextResponse.json({ success: false, error: 'Failed to fetch 2FA status' }, { status: 500 });
   }
 }

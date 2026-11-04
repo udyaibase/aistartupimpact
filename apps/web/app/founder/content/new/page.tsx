@@ -28,8 +28,9 @@ function NewContentInner() {
   if (startups.length === 0) {
     return (
       <div className="max-w-2xl mx-auto px-6 py-16 text-center">
-        <p className="text-sm font-jakarta text-gray-500 dark:text-gray-400">You need at least one startup to create content.</p>
-        <button onClick={() => router.push("/founder/startups")} className="mt-3 px-4 py-2 bg-brand text-white text-sm font-jakarta font-bold rounded-lg">Add Startup</button>
+        <p className="text-[15px] font-semibold font-jakarta text-gray-900 dark:text-white">List your startup first</p>
+        <p className="text-sm font-jakarta text-gray-600 dark:text-gray-400 mt-1">Every post is published under a startup, so list yours first. It only takes a few minutes.</p>
+        <button onClick={() => router.push("/founder/startups/new")} className="mt-4 px-4 py-2 bg-brand text-white text-sm font-jakarta font-bold rounded-lg">List your startup</button>
       </div>
     );
   }
@@ -37,17 +38,17 @@ function NewContentInner() {
   const isStory = contentType === "FOUNDER_STORY";
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="max-w-3xl mx-auto px-6 py-8">
+    <div>
+      <div>
         <button onClick={() => router.push("/founder/content")} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-jakarta mb-4">
           <ArrowLeft className="w-4 h-4" /> Back to Content
         </button>
 
         <div className="mb-6">
-          <h1 className="text-2xl font-sora font-bold text-gray-900 dark:text-white">
+          <h1 className="portal-title">
             {isStory ? "New Founder Story" : "New Startup Update"}
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 font-jakarta mt-0.5">
+          <p className="portal-subtitle">
             {isStory ? "Share your journey — stories are reviewed by our editorial team before publishing." : "Share what's happening — updates publish instantly."}
           </p>
         </div>

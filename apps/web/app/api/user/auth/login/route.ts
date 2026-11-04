@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logFounderSignIn, logFounderSignInFailed } from '@/lib/founder/activity';
+import { secondFactorChallenge } from '@/lib/auth/second-factor';
+import { isTwoFactorOn } from '@/lib/auth/account-two-factor';
 import { clientIp } from '@/lib/client-ip';
 import { verifyTurnstileToken } from '@/lib/turnstile';
 import { sql } from '@/lib/db';
@@ -7,7 +10,7 @@ import { SignJWT } from 'jose';
 import { randomBytes } from 'crypto';
 import { authRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 import { loginSchema, validateInput } from '@/lib/validation';
-import { securityAlertHtml } from '@udyaibase/utils';
+import { accountLockoutHtml } from '@udyaibase/utils';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 
 const CHALLENGE_SECRET = new TextEncoder().encode(process.env.USER_JWT_SECRET!);
@@ -49,11 +52,11 @@ function checkLockout(user: any): NextResponse | null {
 
 function buildLockoutResponse(user: any, newAttempts: number): NextResponse {
   if (newAttempts >= MAX_FAILED_ATTEMPTS) {
-    const resetUrl = `${process.env.NEXT_PUBLIC_WEB_URL || 'https://udyaibase.com'}/forgot-password`;
+    const resetUrl = `${process.env.NEXT_PUBLIC_WEB_URL || 'https://udyaibase.com'}/auth/forgot-password`;
     sendEmailFireAndForget({
       to: user.email,
       subject: 'Security Alert — Failed Login Attempts',
-      html: securityAlertHtml(user.name || 'User', newAttempts, LOCKOUT_MINUTES, resetUrl),
+      html: accountLockoutHtml({ name: user.name || '', reason: 'password', minutes: LOCKOUT_MINUTES, resetUrl }),
       type: 'security_alert',
     });
 
@@ -130,6 +133,7 @@ export async function POST(request: NextRequest) {
 
       const isValid = await bcrypt.compare(password, user.passwordHash);
       if (!isValid) {
+        await logFounderSignInFailed(emailLower, request, 'wrong_password');
         const newAttempts = (user.failedLoginAttempts || 0) + 1;
         if (newAttempts >= MAX_FAILED_ATTEMPTS) {
           const lockUntil = new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000);
@@ -140,16 +144,15 @@ export async function POST(request: NextRequest) {
         return buildLockoutResponse(user, newAttempts);
       }
 
-      await sql`UPDATE "WebUser" SET "failedLoginAttempts" = 0, "lockedUntil" = NULL WHERE id = ${user.id}`;
 
-      if (user.twoFactorEnabled) {
-        const challengeToken = await new SignJWT({ userId: user.id, userType: 'webuser', purpose: '2fa-challenge' })
-          .setProtectedHeader({ alg: 'HS256' })
-          .setIssuedAt()
-          .setExpirationTime('5m')
-          .sign(CHALLENGE_SECRET);
-        return NextResponse.json({ success: false, requires2FA: true, challengeToken, userType: 'webuser' });
+      // 2FA on any of this person's accounts applies here too.
+      const challenge = await secondFactorChallenge(emailLower);
+      if (challenge) {
+        return NextResponse.json({ success: false, requires2FA: true, challengeToken: challenge.challengeToken, userType: challenge.userType });
       }
+
+      // Only now: a right password alone mustn't reset wrong-code attempts.
+      await sql`UPDATE "WebUser" SET "failedLoginAttempts" = 0, "lockedUntil" = NULL WHERE id = ${user.id}`;
 
       // Success — create session for WebUser
       return await createWebUserSession(user, request);
@@ -188,6 +191,7 @@ export async function POST(request: NextRequest) {
 
       const isValid = await bcrypt.compare(password, founder.passwordHash);
       if (!isValid) {
+        await logFounderSignInFailed(emailLower, request, 'wrong_password');
         const newAttempts = (founder.failedLoginAttempts || 0) + 1;
         if (newAttempts >= MAX_FAILED_ATTEMPTS) {
           const lockUntil = new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000);
@@ -198,10 +202,9 @@ export async function POST(request: NextRequest) {
         return buildLockoutResponse(founder, newAttempts);
       }
 
-      await sql`UPDATE "FounderUser" SET "failedLoginAttempts" = 0, "lockedUntil" = NULL WHERE id = ${founder.id}`;
 
       // 2FA check
-      if (founder.twoFactorEnabled) {
+      if (await isTwoFactorOn(emailLower)) {
         const challengeToken = await new SignJWT({ userId: founder.id, purpose: '2fa-challenge' })
           .setProtectedHeader({ alg: 'HS256' })
           .setIssuedAt()
@@ -209,6 +212,8 @@ export async function POST(request: NextRequest) {
           .sign(new TextEncoder().encode(process.env.FOUNDER_JWT_SECRET!));
         return NextResponse.json({ success: false, requires2FA: true, challengeToken });
       }
+
+      await sql`UPDATE "FounderUser" SET "failedLoginAttempts" = 0, "lockedUntil" = NULL WHERE id = ${founder.id}`;
 
       // Founder doesn't have a WebUser — create one on the fly for unified session
       const webUser = await ensureWebUser(founder as any);
@@ -245,6 +250,7 @@ export async function POST(request: NextRequest) {
 
       const isValid = await bcrypt.compare(password, organizer.passwordHash);
       if (!isValid) {
+        await logFounderSignInFailed(emailLower, request, 'wrong_password');
         const newAttempts = (organizer.failedLoginAttempts || 0) + 1;
         if (newAttempts >= MAX_FAILED_ATTEMPTS) {
           const lockUntil = new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000);
@@ -255,9 +261,8 @@ export async function POST(request: NextRequest) {
         return buildLockoutResponse(organizer, newAttempts);
       }
 
-      await sql`UPDATE "EventOrganizer" SET "failedLoginAttempts" = 0, "lockedUntil" = NULL WHERE id = ${organizer.id}`;
 
-      if (organizer.twoFactorEnabled) {
+      if (await isTwoFactorOn(emailLower)) {
         const challengeToken = await new SignJWT({ userId: organizer.id, userType: 'organizer', purpose: '2fa-challenge' })
           .setProtectedHeader({ alg: 'HS256' })
           .setIssuedAt()
@@ -265,6 +270,8 @@ export async function POST(request: NextRequest) {
           .sign(CHALLENGE_SECRET);
         return NextResponse.json({ success: false, requires2FA: true, challengeToken, userType: 'organizer' });
       }
+
+      await sql`UPDATE "EventOrganizer" SET "failedLoginAttempts" = 0, "lockedUntil" = NULL WHERE id = ${organizer.id}`;
 
       // Organizer doesn't have a WebUser — create one for unified session
       const webUser = await ensureWebUser(organizer as any);
@@ -336,6 +343,7 @@ async function createWebUserSession(user: any, request: NextRequest) {
   `;
 
   await sql`UPDATE "WebUser" SET "lastLoginAt" = NOW() WHERE id = ${user.id}`;
+  await logFounderSignIn(user.email, request, 'password');
 
   const response = NextResponse.json({
     success: true,

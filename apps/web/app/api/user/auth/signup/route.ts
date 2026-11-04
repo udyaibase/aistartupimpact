@@ -7,6 +7,7 @@ import { randomBytes } from 'crypto';
 import { authRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 import { signupSchema, validateInput } from '@/lib/validation';
 import { isDisposableEmail } from '@udyaibase/utils';
+import { CURRENT_TERMS_VERSION } from '@/lib/terms-version';
 
 export const dynamic = 'force-dynamic';
 function generateId(): string {
@@ -122,6 +123,19 @@ export async function POST(request: NextRequest) {
         NOW()
       )
     `;
+
+    // Record the consent given on the form. The newsletter is a separate, optional choice.
+    const signupEmail = email.toLowerCase();
+    if (body.agreeToTerms === true) {
+      await sql`UPDATE "WebUser" SET "termsAcceptedAt" = NOW(), "termsVersion" = ${CURRENT_TERMS_VERSION} WHERE id = ${userId}`;
+    }
+    if (body.subscribeNewsletter === true) {
+      await sql`
+        INSERT INTO "NewsletterSubscriber" (id, email, name, source, "isActive", "emailVerified", "subscribedAt")
+        VALUES (gen_random_uuid(), ${signupEmail}, ${name}, 'signup', true, true, NOW())
+        ON CONFLICT (email) DO UPDATE SET "isActive" = true, "unsubscribedAt" = NULL
+      `.catch((err: unknown) => console.error('[signup] newsletter', err instanceof Error ? err.message : 'failed'));
+    }
 
     return NextResponse.json({
       success: true,

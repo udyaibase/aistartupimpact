@@ -3,6 +3,9 @@ import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 import { sql } from '@/lib/db';
 import bcrypt from 'bcryptjs';
+import { setFounderSession } from '@/lib/founder-auth';
+import { setAccountPassword } from '@/lib/auth/set-password';
+import { logFounderActivity } from '@/lib/founder/activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +22,7 @@ export async function PUT(request: NextRequest) {
     const verified = await jwtVerify(token, JWT_SECRET);
     const userId = (verified.payload as any).userId;
     const email = (verified.payload as any).email;
+    if (!email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { currentPassword, newPassword } = await request.json();
     if (!newPassword || newPassword.length < 8) {
@@ -45,20 +49,11 @@ export async function PUT(request: NextRequest) {
 
     const currentSessionId = (verified.payload as any).sessionId;
 
-    await sql`UPDATE "WebUser" SET "passwordHash" = ${newHash} WHERE id = ${userId}`;
-
-    // Invalidate all other sessions for this user
-    if (currentSessionId) {
-      await sql`DELETE FROM "WebUserSession" WHERE "webUserId" = ${userId} AND id != ${currentSessionId}`;
-    }
-
-    // Sync to UnifiedUser and FounderUser if they exist
-    if (email) {
-      await sql`UPDATE "UnifiedUser" SET "passwordHash" = ${newHash} WHERE email = ${email.toLowerCase()}`;
-      await sql`UPDATE "FounderUser" SET "passwordHash" = ${newHash} WHERE email = ${email.toLowerCase()}`;
-      // Invalidate unified and organizer sessions
-      await sql`DELETE FROM "UnifiedSession" WHERE "userId" IN (SELECT id FROM "UnifiedUser" WHERE email = ${email.toLowerCase()})`;
-      await sql`DELETE FROM "EventOrganizerSession" WHERE "organizerId" IN (SELECT id FROM "EventOrganizer" WHERE email = ${email.toLowerCase()})`;
+    // Everywhere it's stored; this device stays signed in, every other one is signed out.
+    const founder = await setAccountPassword(email, newHash, { keepWebSessionId: currentSessionId });
+    if (founder) {
+      await setFounderSession(founder.id, founder.email, founder.name, founder.onboardingCompleted);
+      await logFounderActivity(founder.id, 'password_changed', { request });
     }
 
     return NextResponse.json({ success: true, message: 'Password updated. Other sessions have been signed out.' });

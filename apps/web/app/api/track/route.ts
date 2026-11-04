@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
+import { apiRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
+
+const BOT = /bot|crawl|spider|slurp|headless|lighthouse|preview|facebookexternalhit|whatsapp|pingdom|monitor/i;
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +28,11 @@ function classifySource(utmMedium?: string, utmSource?: string, referrer?: strin
 
 export async function POST(request: NextRequest) {
   try {
+    // Bots and scripts don't count as visitors. Answer normally so nothing retries.
+    if (BOT.test(request.headers.get('user-agent') ?? '')) return NextResponse.json({ success: true });
+    const { success: withinLimit } = await checkRateLimit(apiRateLimit, getClientIdentifier(request));
+    if (!withinLimit) return NextResponse.json({ success: true });
+
     const body = await request.json();
     const { entityType, entityId, eventType, utmSource, utmMedium, utmCampaign, referrer } = body;
 
@@ -51,19 +59,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Find owner for FounderAnalytics
-    let ownerId: string | null = null;
-
-    if (entityType === 'TOOL') {
-      const result = await sql`SELECT "ownerId" FROM "AiTool" WHERE id = ${entityId} LIMIT 1`;
-      ownerId = result[0]?.ownerId ?? null;
-    } else if (entityType === 'STARTUP') {
-      const result = await sql`SELECT "ownerId" FROM "Startup" WHERE id = ${entityId} LIMIT 1`;
-      ownerId = result[0]?.ownerId ?? null;
-    }
-
-    // For jobs and events, we track in a different table (no FounderUser owner)
-    // Log UTM data to the analytics log table
     const source = classifySource(utmMedium, utmSource, referrer);
     const today = new Date().toISOString().split('T')[0];
 
@@ -115,57 +110,6 @@ export async function POST(request: NextRequest) {
             NOW(), NOW()
           )
         `.catch(() => {});
-      }
-    }
-
-    // Update FounderAnalytics for tools and startups
-    if (ownerId) {
-      const existing = await sql`
-        SELECT id FROM "FounderAnalytics"
-        WHERE "userId" = ${ownerId} AND "entityType" = ${entityType}
-          AND "entityId" = ${entityId} AND date = ${today}
-      `;
-
-      if (existing.length > 0) {
-        const col = eventType === 'VIEW' ? 'views' : eventType === 'CLICK' ? 'clicks' : eventType === 'SHARE' ? 'shares' : 'favorites';
-        await sql`
-          UPDATE "FounderAnalytics"
-          SET ${sql.unsafe(col)} = ${sql.unsafe(col)} + 1, "updatedAt" = NOW()
-          WHERE id = ${existing[0].id}
-        `;
-
-        if (eventType === 'VIEW') {
-          const srcCol = source === 'DIRECT' ? 'directViews'
-            : source === 'SEARCH' ? 'searchViews'
-            : source === 'SOCIAL' ? 'socialViews'
-            : 'referralViews';
-          await sql`
-            UPDATE "FounderAnalytics"
-            SET ${sql.unsafe(`"${srcCol}"`)} = ${sql.unsafe(`"${srcCol}"`)} + 1
-            WHERE id = ${existing[0].id}
-          `.catch(() => {});
-        }
-      } else {
-        await sql`
-          INSERT INTO "FounderAnalytics" (
-            "userId", "entityType", "entityId", date,
-            views, clicks, inquiries, favorites, shares,
-            "directViews", "searchViews", "socialViews", "referralViews",
-            "createdAt", "updatedAt"
-          ) VALUES (
-            ${ownerId}, ${entityType}, ${entityId}, ${today},
-            ${eventType === 'VIEW' ? 1 : 0},
-            ${eventType === 'CLICK' ? 1 : 0},
-            0,
-            ${eventType === 'SAVE' ? 1 : 0},
-            ${eventType === 'SHARE' ? 1 : 0},
-            ${source === 'DIRECT' && eventType === 'VIEW' ? 1 : 0},
-            ${source === 'SEARCH' && eventType === 'VIEW' ? 1 : 0},
-            ${source === 'SOCIAL' && eventType === 'VIEW' ? 1 : 0},
-            ${(source === 'REFERRAL' || source === 'EMAIL') && eventType === 'VIEW' ? 1 : 0},
-            NOW(), NOW()
-          )
-        `;
       }
     }
 
