@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Check, Loader2, Plus, Trash2, Info, Eye, AlertTriangle, BadgeCheck } from 'lucide-react';
 import {
-  CURRENCIES, EMPLOYMENT_TYPES, EXPERIENCE_BANDS, JOB_CATEGORIES, MAX_OPEN_DAYS, MAX_SCREENING_QUESTIONS, MAX_SKILLS,
+  CURRENCIES, EMPLOYMENT_TYPES, EXPERIENCE_BANDS, JOB_CATEGORIES, MAX_OPEN_DAYS, MAX_SCREENING_QUESTIONS, MAX_QUESTION_OPTIONS, MAX_SKILLS,
   WORK_TYPES, publishProblems, salaryUnit, type JobDraft, type ScreeningQuestion,
 } from '@/lib/jobs/composer';
 import { Card, Field, Segmented, TagInput, Toggle, inputCls } from './fields';
@@ -465,10 +465,11 @@ export default function JobComposer({
                     <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
                       <label className="inline-flex items-center gap-2 text-[13px] text-gray-700 dark:text-gray-300">
                         Answer
-                        <select value={q.type} onChange={(e) => setQuestions(draft.screeningQuestions.map((x) => x.id === q.id ? { ...x, type: e.target.value as 'text' | 'yesno' } : x))}
+                        <select value={q.type} onChange={(e) => setQuestions(draft.screeningQuestions.map((x) => x.id === q.id ? { ...x, type: e.target.value as 'text' | 'yesno' | 'choice', ...(e.target.value === 'choice' && !x.options ? { options: [] } : {}) } : x))}
                           className="min-h-[36px] px-2 rounded-[8px] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-[13px]">
                           <option value="text">Short answer</option>
                           <option value="yesno">Yes / No</option>
+                          <option value="choice">Multiple choice</option>
                         </select>
                       </label>
                       <label className="inline-flex items-center gap-2 text-[13px] text-gray-700 dark:text-gray-300">
@@ -489,6 +490,15 @@ export default function JobComposer({
                         </label>
                       )}
                     </div>
+                    {q.type === 'choice' && (
+                      <label className="block text-[13px] text-gray-700 dark:text-gray-300">
+                        Options, one per line (2 to {MAX_QUESTION_OPTIONS})
+                        <textarea rows={3} value={(q.options ?? []).join('\n')}
+                          onChange={(e) => setQuestions(draft.screeningQuestions.map((x) => x.id === q.id ? { ...x, options: e.target.value.split('\n').slice(0, MAX_QUESTION_OPTIONS) } : x))}
+                          placeholder={'Bengaluru\nMumbai\nRemote'}
+                          className="mt-1 w-full px-3 py-2 rounded-[8px] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-base sm:text-sm" />
+                      </label>
+                    )}
                     {q.type === 'yesno' && q.knockoutAnswer && (
                       <p className="text-xs text-gray-500">Candidates who answer {q.knockoutAnswer === 'yes' ? 'No' : 'Yes'} are flagged on your board, never rejected automatically.</p>
                     )}

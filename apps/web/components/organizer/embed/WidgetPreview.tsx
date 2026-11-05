@@ -2,7 +2,7 @@
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import Link from "next/link";
-import { ExternalLink, Monitor, Smartphone, Sun, Moon, Play } from "lucide-react";
+import { ExternalLink, Monitor, Smartphone, Sun, Moon, Play, Tablet } from "lucide-react";
 import { card, btnPrimary, btnGhost, displayHost } from "./ui";
 import type { PortalWidget } from "@/lib/embed/portal-data";
 import InfoTip from "./InfoTip";
@@ -35,7 +35,7 @@ const LOOK_KEYS = [
   "showPrice", "showSpotsLeft", "showAttendeeCount", "showCategory",
   "buttonSize", "buttonStyle", "cardStyle", "spacing", "showPast", "registrationMode", "maxEvents",
   "heading", "subheading", "headingAlign", "headingSize", "fontFamily", "textScale",
-  "maxJobs", "showLogo", "showDepartment", "showSalary", "showSkills",
+  "maxJobs", "showLogo", "showDepartment", "showSalary", "showSkills", "design", "applyForm", "previewScreen",
 ] as const;
 
 function Segmented<T extends string>({
@@ -73,7 +73,7 @@ const WidgetPreview = forwardRef<PreviewHandle, Props>(function WidgetPreview({
   widget, hasEvents, canManage, onResume, src, pagePath = "/events", itemsLabel = "with your real events", emptyNotice,
 }, ref) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
+  const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [theme, setTheme] = useState<"light" | "dark">(widget.darkMode === "dark" ? "dark" : "light");
   const [height, setHeight] = useState(360);
   const [nonce, setNonce] = useState(0);
@@ -133,6 +133,7 @@ const WidgetPreview = forwardRef<PreviewHandle, Props>(function WidgetPreview({
         <div className="flex flex-wrap items-center gap-2">
           <Segmented label="Device" value={device} onChange={setDevice} options={[
             { value: "desktop", label: "Desktop", icon: Monitor },
+            { value: "tablet", label: "Tablet", icon: Tablet },
             { value: "mobile", label: "Mobile", icon: Smartphone },
           ]} />
           <Segmented label="Theme" value={theme} onChange={setTheme} options={[
@@ -147,11 +148,11 @@ const WidgetPreview = forwardRef<PreviewHandle, Props>(function WidgetPreview({
 
       <div className="bg-[#F7F7F9] dark:bg-gray-950 px-3 sm:px-6 py-5">
         <div
-          className={`mx-auto transition-[max-width] duration-300 ${device === "mobile" ? "max-w-[390px]" : "max-w-full"}`}
+          className={`mx-auto transition-[max-width] duration-300 ${device === "mobile" ? "max-w-[390px]" : device === "tablet" ? "max-w-[768px]" : "max-w-full"}`}
         >
           <div className={`overflow-hidden border border-gray-200 dark:border-gray-800 shadow-sm ${device === "mobile" ? "rounded-[28px]" : "rounded-[12px]"} ${theme === "dark" ? "bg-[#0b0b0d]" : "bg-white"}`}>
             <div className={`flex items-center gap-2 px-3 h-9 border-b ${theme === "dark" ? "border-zinc-800 bg-zinc-900" : "border-gray-100 bg-gray-50"}`}>
-              {device === "desktop" && (
+              {device !== "mobile" && (
                 <span aria-hidden className="flex gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-gray-300" />
                   <span className="w-2.5 h-2.5 rounded-full bg-gray-300" />

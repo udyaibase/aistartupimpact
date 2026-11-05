@@ -7,7 +7,7 @@ import { EXPERIENCE_BANDS } from '@/lib/jobs/composer';
 import { openaiChat } from '@/lib/ops/ai';
 
 /**
- * AI screening (paid plans). Reads a candidate's resume and answers against the job and writes a
+ * AI screening (every plan has a monthly quota, including Free). Reads a candidate's resume and answers against the job and writes a
  * short, evidence-backed summary for the hiring team. Safeguards:
  * - Name, email, phone and links are removed before the model sees the resume.
  * - The model is told to ignore age, gender, religion, caste, marital status, photos and college prestige.

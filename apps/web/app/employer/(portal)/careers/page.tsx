@@ -34,7 +34,7 @@ export default async function EmployerCareersPage() {
 
   return (
     <JobsWidgetSetup
-      widget={toJobsPortalWidget(widget)}
+      widget={toJobsPortalWidget(widget, company.applyForm)}
       stats={stats}
       referrers={referrers}
       origin={siteOrigin()}

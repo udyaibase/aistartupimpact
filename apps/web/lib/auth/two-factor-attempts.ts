@@ -2,7 +2,7 @@ import { accountLockoutHtml } from '@udyaibase/utils';
 import { sql } from '@/lib/db';
 import { sendEmail } from '@/lib/email/send';
 
-export type TwoFactorAccount = 'webuser' | 'founder' | 'organizer';
+export type TwoFactorAccount = 'webuser' | 'founder' | 'organizer' | 'employer';
 
 export const MAX_2FA_ATTEMPTS = 5;
 export const TWO_FACTOR_LOCK_MINUTES = 15;
@@ -18,7 +18,9 @@ export async function isTwoFactorLocked(account: TwoFactorAccount, id: string): 
     ? await sql`SELECT "lockedUntil" > NOW() AS locked FROM "WebUser" WHERE id = ${id}`
     : account === 'founder'
       ? await sql`SELECT "lockedUntil" > NOW() AS locked FROM "FounderUser" WHERE id = ${id}`
-      : await sql`SELECT "lockedUntil" > NOW() AS locked FROM "EventOrganizer" WHERE id = ${id}`;
+      : account === 'employer'
+        ? await sql`SELECT "lockedUntil" > NOW() AS locked FROM "JobBoardEmployer" WHERE id = ${id}`
+        : await sql`SELECT "lockedUntil" > NOW() AS locked FROM "EventOrganizer" WHERE id = ${id}`;
   return rows[0]?.locked === true;
 }
 
@@ -38,7 +40,14 @@ export async function recordTwoFactorFailure(account: TwoFactorAccount, id: stri
               "lockedUntil" = CASE WHEN COALESCE("failedLoginAttempts", 0) + 1 >= ${MAX_2FA_ATTEMPTS}
                 THEN NOW() + make_interval(mins => ${TWO_FACTOR_LOCK_MINUTES}) ELSE "lockedUntil" END
           WHERE id = ${id} RETURNING "failedLoginAttempts" AS attempts, email, name`
-      : await sql`
+      : account === 'employer'
+        ? await sql`
+          UPDATE "JobBoardEmployer"
+          SET "failedLoginAttempts" = COALESCE("failedLoginAttempts", 0) + 1,
+              "lockedUntil" = CASE WHEN COALESCE("failedLoginAttempts", 0) + 1 >= ${MAX_2FA_ATTEMPTS}
+                THEN NOW() + make_interval(mins => ${TWO_FACTOR_LOCK_MINUTES}) ELSE "lockedUntil" END
+          WHERE id = ${id} RETURNING "failedLoginAttempts" AS attempts, email, "companyName" AS name`
+        : await sql`
           UPDATE "EventOrganizer"
           SET "failedLoginAttempts" = COALESCE("failedLoginAttempts", 0) + 1,
               "lockedUntil" = CASE WHEN COALESCE("failedLoginAttempts", 0) + 1 >= ${MAX_2FA_ATTEMPTS}
@@ -46,17 +55,17 @@ export async function recordTwoFactorFailure(account: TwoFactorAccount, id: stri
           WHERE id = ${id} RETURNING "failedLoginAttempts" AS attempts, email, name`;
 
   const locked = Number(rows[0]?.attempts ?? 0) >= MAX_2FA_ATTEMPTS;
-  if (locked) await sendLockoutEmail(rows[0].email as string, rows[0].name as string);
+  if (locked) await sendLockoutEmail(rows[0].email as string, rows[0].name as string, account === 'employer' ? '/employer/login' : '/auth/forgot-password');
   return locked;
 }
 
 /** Waited for, because a serverless function can stop once it responds, but a failed email never changes the result. */
-async function sendLockoutEmail(to: string, name: string): Promise<void> {
+async function sendLockoutEmail(to: string, name: string, recoverPath: string): Promise<void> {
   const site = process.env.NEXT_PUBLIC_WEB_URL || 'https://udyaibase.com';
   await sendEmail({
     to,
     subject: 'Security alert: someone tried to sign in to your account',
-    html: accountLockoutHtml({ name, reason: 'two_factor', minutes: TWO_FACTOR_LOCK_MINUTES, resetUrl: `${site}/auth/forgot-password` }),
+    html: accountLockoutHtml({ name, reason: 'two_factor', minutes: TWO_FACTOR_LOCK_MINUTES, resetUrl: `${site}${recoverPath}` }),
     type: 'security_alert',
   }).catch((err: unknown) => console.error('[2fa] lockout email failed', err instanceof Error ? err.message : 'unknown error'));
 }
@@ -64,5 +73,6 @@ async function sendLockoutEmail(to: string, name: string): Promise<void> {
 export async function clearTwoFactorFailures(account: TwoFactorAccount, id: string): Promise<void> {
   if (account === 'webuser') await sql`UPDATE "WebUser" SET "failedLoginAttempts" = 0, "lockedUntil" = NULL WHERE id = ${id}`;
   else if (account === 'founder') await sql`UPDATE "FounderUser" SET "failedLoginAttempts" = 0, "lockedUntil" = NULL WHERE id = ${id}`;
+  else if (account === 'employer') await sql`UPDATE "JobBoardEmployer" SET "failedLoginAttempts" = 0, "lockedUntil" = NULL WHERE id = ${id}`;
   else await sql`UPDATE "EventOrganizer" SET "failedLoginAttempts" = 0, "lockedUntil" = NULL WHERE id = ${id}`;
 }

@@ -57,8 +57,10 @@ export const MAX_OPEN_DAYS = 90;
 export interface ScreeningQuestion {
   id: string;
   question: string;
-  type: 'text' | 'yesno';
+  type: 'text' | 'yesno' | 'choice';
   required: boolean;
+  /** Multiple choice only. */
+  options?: string[];
   /** Yes/No only: the answer the role needs. A different answer flags the candidate (never auto-rejects). */
   knockoutAnswer?: 'yes' | 'no';
 }
@@ -196,8 +198,9 @@ export function draftToData(input: Partial<JobDraft>) {
     .map((q) => ({
       id: clip(q?.id, 40) || Math.random().toString(36).slice(2, 10),
       question: clip(q?.question, 200),
-      type: q?.type === 'yesno' ? 'yesno' : 'text',
+      type: q?.type === 'yesno' || q?.type === 'choice' ? q.type : 'text',
       required: !!q?.required,
+      ...(q?.type === 'choice' ? { options: cleanOptions(q?.options) } : {}),
       ...(q?.type === 'yesno' && (q?.knockoutAnswer === 'yes' || q?.knockoutAnswer === 'no') ? { knockoutAnswer: q.knockoutAnswer } : {}),
     }))
     .filter((q) => q.question)
@@ -264,6 +267,7 @@ export function publishProblems(d: JobDraft): { field: keyof JobDraft; message: 
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) p.push({ field: 'applicationEmail', message: 'Enter a valid email.' });
   }
   if (d.screeningQuestions.some((q) => !q.question.trim())) p.push({ field: 'screeningQuestions', message: 'Fill in or remove empty screening questions.' });
+  if (d.screeningQuestions.some((q) => q.type === 'choice' && cleanOptions(q.options).length < 2)) p.push({ field: 'screeningQuestions', message: 'Multiple-choice questions need at least two options.' });
   if (!d.showOnJobsPage && !d.showOnProfile && !d.showOnCareers) p.push({ field: 'showOnJobsPage', message: 'Choose at least one place for this job to appear.' });
   return p;
 }
@@ -390,9 +394,19 @@ export const JOB_TEMPLATES: JobTemplate[] = [
   },
 ];
 
+export const MAX_QUESTION_OPTIONS = 8;
+export function cleanOptions(raw: unknown): string[] {
+  const list = Array.isArray(raw) ? raw : [];
+  return Array.from(new Set(list.map((o) => (typeof o === 'string' ? o.trim().slice(0, 80) : '')).filter(Boolean))).slice(0, MAX_QUESTION_OPTIONS);
+}
+
 /** Questions as candidates may see them: never includes the required (knockout) answer. */
-export function publicQuestions(raw: unknown): { id: string; question: string; type: 'text' | 'yesno'; required: boolean }[] {
+export function publicQuestions(raw: unknown): { id: string; question: string; type: 'text' | 'yesno' | 'choice'; required: boolean; options?: string[] }[] {
   return (Array.isArray(raw) ? raw : [])
     .filter((q) => q && typeof q.id === 'string' && typeof q.question === 'string')
-    .map((q) => ({ id: q.id, question: q.question, type: q.type === 'yesno' ? 'yesno' : 'text', required: !!q.required }));
+    .map((q) => ({
+      id: q.id, question: q.question, required: !!q.required,
+      type: q.type === 'yesno' || q.type === 'choice' ? q.type : 'text',
+      ...(q.type === 'choice' ? { options: cleanOptions(q.options) } : {}),
+    }));
 }

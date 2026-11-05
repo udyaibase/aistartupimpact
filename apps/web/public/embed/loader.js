@@ -85,6 +85,63 @@
     return "";
   }
 
+  function toHex(color) {
+    var m = String(color).match(/[\d.]+/g);
+    if (!m || m.length < 3 || (m.length > 3 && parseFloat(m[3]) < 0.5)) return "";
+    var hex = "#";
+    for (var i = 0; i < 3; i++) hex += ("0" + Math.round(parseFloat(m[i])).toString(16)).slice(-2);
+    return hex;
+  }
+
+  function isVivid(hex) {
+    if (!hex) return false;
+    var r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+    return Math.max(r, g, b) - Math.min(r, g, b) >= 48;
+  }
+
+  function firstFont(list) {
+    return String(list || "").split(",")[0].trim().replace(/^['"]|['"]$/g, "");
+  }
+
+  // What the browser actually shows on this page, for widgets set to match the website.
+  // Only colours, font names and a radius are read; the widget ignores them unless that setting is on.
+  function hostStyle(el) {
+    var out = {};
+    var body = document.body;
+    if (!body) return out;
+    var bodyStyle = getComputedStyle(body);
+    out.font = firstFont(bodyStyle.fontFamily);
+    var heading = document.querySelector("h1,h2");
+    if (heading) out.headingFont = firstFont(getComputedStyle(heading).fontFamily);
+    for (var node = el; node && node.nodeType === 1; node = node.parentElement) {
+      var style = getComputedStyle(node);
+      var background = toHex(style.backgroundColor);
+      if (background) {
+        out.background = background;
+        out.text = toHex(style.color) || toHex(bodyStyle.color);
+        break;
+      }
+    }
+    if (!out.text) out.text = toHex(getComputedStyle(el).color);
+    var controls = document.querySelectorAll('button,[role="button"],input[type="submit"],a[class*="btn"],a[class*="button"],a[class*="cta"]');
+    for (var i = 0; i < controls.length && i < 60; i++) {
+      if (el.contains(controls[i]) || !controls[i].offsetParent) continue;
+      var cs = getComputedStyle(controls[i]);
+      var fill = toHex(cs.backgroundColor);
+      if (isVivid(fill)) {
+        out.accent = fill;
+        out.radius = parseFloat(cs.borderTopLeftRadius) || 0;
+        break;
+      }
+    }
+    if (!out.accent) {
+      var link = document.querySelector("main a[href],article a[href],a[href]");
+      var linkColor = link ? toHex(getComputedStyle(link).color) : "";
+      if (isVivid(linkColor)) out.accent = linkColor;
+    }
+    return out;
+  }
+
   function widgetIdOf(el) {
     return el.getAttribute("data-udyaibase-jobs") || el.getAttribute("data-udyaibase-widget") || el.getAttribute("widget-id") || "";
   }
@@ -147,6 +204,11 @@
     });
     var theme = hostTheme(record.el);
     if (theme) hash += "&theme=" + theme;
+    if (record.kind === "jobs") {
+      try {
+        hash += "&site=" + encodeURIComponent(JSON.stringify(hostStyle(record.el)));
+      } catch (e) {}
+    }
 
     var iframe = document.createElement("iframe");
     iframe.src = ORIGIN + "/embed" + basePath(record.kind) + encodeURIComponent(record.widgetId) + "#" + hash;

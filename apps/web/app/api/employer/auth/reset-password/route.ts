@@ -3,6 +3,9 @@ import { verifyTurnstileToken } from '@/lib/turnstile';
 import { sql } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import { strictRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
+import { hashResetToken } from '@/lib/employer/reset-token';
+import { sessionCutoff } from '@/lib/employer-auth';
+import { passwordSignInOpen } from '@/lib/employer/sign-in-policy';
 
 export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
@@ -23,6 +26,10 @@ export async function POST(request: NextRequest) {
     }
     const { token, password } = body;
 
+    if (!passwordSignInOpen()) {
+      return NextResponse.json({ error: 'Password sign-in has ended. Sign in with an email code instead.' }, { status: 400 });
+    }
+
     if (!token || !password) return NextResponse.json({ error: 'Token and password required' }, { status: 400 });
     if (password.length < 8) return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 });
 
@@ -34,7 +41,7 @@ export async function POST(request: NextRequest) {
     // Find employer by valid reset token
     const employers = await sql`
       SELECT id FROM "JobBoardEmployer"
-      WHERE "resetToken" = ${token} AND "resetTokenExpiry" > NOW() AND "isActive" = true
+      WHERE "resetToken" = ${hashResetToken(String(token))} AND "resetTokenExpiry" > NOW() AND "isActive" = true
       LIMIT 1
     `;
 
@@ -53,6 +60,7 @@ export async function POST(request: NextRequest) {
           "resetTokenExpiry" = NULL,
           "failedLoginAttempts" = 0,
           "lockedUntil" = NULL,
+          "sessionsValidAfter" = ${sessionCutoff().toISOString()}::timestamp,
           "updatedAt" = NOW()
       WHERE id = ${employer.id}
     `;

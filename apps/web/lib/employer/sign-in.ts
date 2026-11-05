@@ -24,15 +24,20 @@ export function twoFactorChallenge(employerId: string) {
  * Hiring teams this email can enter: active memberships, plus invites not yet accepted that haven't expired
  * (entering the emailed code proves the address, so it accepts the invite).
  */
-export function signInMemberships(email: string) {
+export function signInMemberships(email: string, opts: { includeDeactivatedOwners?: boolean } = {}) {
   const now = new Date();
   return prisma.jobBoardTeamMember.findMany({
     where: {
       email: email.trim().toLowerCase(),
-      Employer: { isActive: true, deactivatedAt: null, deletedAt: null },
-      OR: [{ status: 'ACTIVE' }, { status: 'PENDING', inviteExpiresAt: { gt: now } }],
+      Employer: { isActive: true, deletedAt: null },
+      OR: [
+        { status: 'ACTIVE', Employer: { deactivatedAt: null } },
+        { status: 'PENDING', inviteExpiresAt: { gt: now }, Employer: { deactivatedAt: null } },
+        // Owners can bring back a workspace they deactivated by signing in (member-code route only).
+        ...(opts.includeDeactivatedOwners ? [{ status: 'ACTIVE' as const, role: 'OWNER' as const, Employer: { deactivatedAt: { not: null } } }] : []),
+      ],
     },
-    include: { Employer: { select: { id: true, email: true, companyName: true, slug: true, plan: true, logoUrl: true, twoFactorEnabled: true } } },
+    include: { Employer: { select: { id: true, email: true, companyName: true, slug: true, plan: true, logoUrl: true, twoFactorEnabled: true, deactivatedAt: true } } },
     orderBy: { lastActiveAt: { sort: 'desc', nulls: 'last' } },
   });
 }

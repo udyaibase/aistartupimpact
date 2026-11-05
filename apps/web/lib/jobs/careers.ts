@@ -7,6 +7,8 @@ import { EMBED_FONTS } from '@/lib/embed/fonts';
 import { isClaimVerified } from '@/lib/jobs/trust';
 import { jobPostingSalary, publicListingWhere } from '@/lib/jobs/public';
 import { publicQuestions } from '@/lib/jobs/composer';
+import { parseApplyFormConfig, type ApplyFormConfig } from '@/lib/jobs/apply-form';
+import { parseWidgetDesign, type WidgetDesign } from '@/lib/jobs/widget-design';
 
 /** What both the hosted careers page and the website widget show about a company. */
 export interface CareersCompany {
@@ -21,6 +23,7 @@ export interface CareersCompany {
   brandColor: string;
   verified: boolean;
   perks: string[];
+  applyForm: ApplyFormConfig;
 }
 
 export interface CareersJob {
@@ -46,14 +49,14 @@ export interface CareersJob {
   expiresAt: string | null;
   applicationType: 'INTERNAL' | 'EXTERNAL';
   applicationUrl: string | null;
-  screeningQuestions: { id: string; question: string; type: 'text' | 'yesno'; required: boolean }[];
+  screeningQuestions: { id: string; question: string; type: 'text' | 'yesno' | 'choice'; required: boolean; options?: string[] }[];
 }
 
 export const DEFAULT_BRAND = '#111827';
 
 const employerSelect = {
   id: true, slug: true, companyName: true, logoUrl: true, websiteUrl: true, description: true,
-  tagline: true, careersHeadline: true, brandColor: true, perks: true, isActive: true, deactivatedAt: true, deletedAt: true,
+  tagline: true, careersHeadline: true, brandColor: true, perks: true, applyFormConfig: true, isActive: true, deactivatedAt: true, deletedAt: true,
   startupId: true, startupClaimMethod: true,
   Startup: { select: { name: true, logoUrl: true, websiteUrl: true, description: true } },
 } as const;
@@ -77,6 +80,7 @@ function toCompany(e: EmployerRow): CareersCompany {
     brandColor: e.brandColor && /^#[0-9a-f]{6}$/i.test(e.brandColor) ? e.brandColor : DEFAULT_BRAND,
     verified,
     perks: e.perks,
+    applyForm: parseApplyFormConfig(e.applyFormConfig),
   };
 }
 
@@ -178,8 +182,11 @@ export async function ensureCareersWidget(employerId: string): Promise<JobBoardC
 
 export type JobsPortalWidget = Omit<
   JobBoardCareersWidget,
-  'createdAt' | 'updatedAt' | 'setupStartedAt' | 'codeCopiedAt' | 'markedInstalledAt' | 'firstSeenAt' | 'lastSeenAt'
+  'createdAt' | 'updatedAt' | 'setupStartedAt' | 'codeCopiedAt' | 'markedInstalledAt' | 'firstSeenAt' | 'lastSeenAt' | 'design'
 > & {
+  design: WidgetDesign;
+  /** Saved on the workspace (it applies wherever candidates apply), edited in the same panel. */
+  applyForm: ApplyFormConfig;
   createdAt: string;
   updatedAt: string;
   setupStartedAt: string | null;
@@ -190,10 +197,12 @@ export type JobsPortalWidget = Omit<
   status: WidgetStatus;
 };
 
-export function toJobsPortalWidget(w: JobBoardCareersWidget): JobsPortalWidget {
+export function toJobsPortalWidget(w: JobBoardCareersWidget, applyForm: ApplyFormConfig = parseApplyFormConfig(null)): JobsPortalWidget {
   const iso = (d: Date | null) => (d ? d.toISOString() : null);
   return {
     ...w,
+    design: parseWidgetDesign(w.design),
+    applyForm,
     createdAt: w.createdAt.toISOString(),
     updatedAt: w.updatedAt.toISOString(),
     setupStartedAt: iso(w.setupStartedAt),
@@ -269,6 +278,7 @@ export function parseJobsWidgetInput(b: Record<string, unknown>) {
     if (!EMBED_FONTS.some((f) => f.id === b.fontFamily)) throw new JobsWidgetInputError('Unknown font.');
     data.fontFamily = b.fontFamily;
   }
+  if ('design' in b) data.design = parseWidgetDesign(b.design);
   if ('maxJobs' in b) data.maxJobs = Math.max(1, Math.min(50, Math.floor(Number(b.maxJobs)) || 20));
   if ('departments' in b && Array.isArray(b.departments)) {
     data.departments = Array.from(new Set(b.departments.map((d) => String(d).trim().slice(0, 80)).filter(Boolean))).slice(0, 30);

@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
   const email = String(b.email ?? '').trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 });
 
-  const memberships = await signInMemberships(email);
+  const memberships = await signInMemberships(email, { includeDeactivatedOwners: true });
 
   if (b.step !== 'verify') {
     // Checked for every address (member or not), so the answer never reveals who is on a team.
@@ -74,6 +74,11 @@ export async function POST(request: NextRequest) {
 
   const r = await checkDomainCode({ email, purpose: PURPOSE, code });
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
+
+  // An owner signing in brings back the workspace they deactivated. Its jobs stay paused until they choose.
+  if (chosen.Employer.deactivatedAt) {
+    await prisma.jobBoardEmployer.update({ where: { id: chosen.employerId }, data: { deactivatedAt: null } });
+  }
 
   if (needsTwoFactor(chosen)) {
     return NextResponse.json({ requires2FA: true, challengeToken: await twoFactorChallenge(chosen.employerId) });

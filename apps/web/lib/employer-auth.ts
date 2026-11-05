@@ -62,6 +62,15 @@ export async function setEmployerSession(employer: {
   });
 }
 
+/** JWT `iat` has whole seconds, so the cut-off is stored rounded down (see sessionCutoff). */
+export function issuedBefore(iat: number | undefined, cutoff: Date | null | undefined): boolean {
+  if (!cutoff) return false;
+  return (iat ?? 0) * 1000 < cutoff.getTime();
+}
+
+/** Now, rounded down to the second, so a session issued straight after this moment still counts as newer. */
+export const sessionCutoff = (now = Date.now()) => new Date(Math.floor(now / 1000) * 1000);
+
 /**
  * Get current employer session from cookie.
  * Returns null if not authenticated.
@@ -76,9 +85,12 @@ export async function getEmployerSession(): Promise<EmployerSession | null> {
 
     const employer = await prisma.jobBoardEmployer.findUnique({
       where: { id: payload.employerId as string },
-      select: { isActive: true, deactivatedAt: true },
+      select: { isActive: true, deactivatedAt: true, sessionsValidAfter: true },
     });
     if (!employer || !employer.isActive || employer.deactivatedAt) return null;
+    // Password sign-ins made before a password change or deactivation no longer count. Teammates sign in with
+    // their own email code, so the workspace password changing doesn't sign them out.
+    if (typeof payload.memberId !== 'string' && issuedBefore(payload.iat, employer.sessionsValidAfter)) return null;
 
     // Teammates: role and access come from the database on every request, so removals apply at once.
     let memberId: string | null = null;

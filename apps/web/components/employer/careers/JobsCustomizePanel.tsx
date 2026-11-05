@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import type { JobsPortalWidget } from "@/lib/jobs/careers";
 import { getEmbedFont } from "@/lib/embed/fonts";
 import { btnGhost } from "@/components/organizer/embed/ui";
+import { ApplyFormSection, FiltersSection, MatchWebsiteSection, OwnLookSection } from "./WidgetDesignSections";
 import {
   AppearanceSection, ButtonSection, CardStyleIcon, Choice, DomainsSection, Field, Group, HeaderSection, LayoutIcon, OPT,
   SaveIndicator, Switch, type SaveState,
@@ -28,7 +29,7 @@ const BUTTON_LABELS = ["View role", "Apply now", "See details", "View job", "Lea
 /** Customize drawer for the careers widget; same sections and controls as the events widget. */
 export default function JobsCustomizePanel({ widget, departments, canHideBranding, saveState, saveError, onChange, onRetry, onClose }: Props) {
   const closeRef = useRef<HTMLButtonElement>(null);
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>("match");
 
   // Parent re-renders on every keystroke (autosave), so keep these effects mount-only.
   const onCloseRef = useRef(onClose);
@@ -58,6 +59,10 @@ export default function JobsCustomizePanel({ widget, departments, canHideBrandin
         </header>
 
         <div className="flex-1 overflow-y-auto">
+          <Group id="match" title="Match my website" summary={widget.design.matchSite ? "Automatic match on" : "Automatic match, or start from a style"} open={open} setOpen={setOpen}>
+            <MatchWebsiteSection widget={widget} onChange={onChange} />
+          </Group>
+
           <Group id="header" title="Header" summary={widget.heading ? `“${widget.heading}”` : "No title"} open={open} setOpen={setOpen}>
             <HeaderSection widget={widget} disabled={false} onChange={onChange} noun="jobs"
               suggestions={TITLE_SUGGESTIONS} titlePlaceholder="Open roles"
@@ -94,6 +99,7 @@ export default function JobsCustomizePanel({ widget, departments, canHideBrandin
               <input id="max-jobs" type="range" min={1} max={50} value={widget.maxJobs}
                 onChange={(e) => onChange({ maxJobs: Number(e.target.value) })} className="w-full accent-[#A50F15] h-11" />
             </Field>
+            <FiltersSection widget={widget} onChange={onChange} />
             <p className="mt-2 text-xs text-gray-500">Only open jobs with “Your website (careers widget)” ticked appear here.</p>
           </Group>
 
@@ -150,6 +156,7 @@ export default function JobsCustomizePanel({ widget, departments, canHideBrandin
             summary={`${OPT.theme[widget.darkMode as keyof typeof OPT.theme] ?? "Auto"} theme · ${widget.accentColor.toUpperCase()} · ${getEmbedFont(widget.fontFamily).label}`}
             open={open} setOpen={setOpen}>
             <AppearanceSection widget={widget} disabled={false} onChange={onChange} />
+            <OwnLookSection widget={widget} onChange={onChange} />
           </Group>
 
           <Group id="button" title="Button"
@@ -163,17 +170,8 @@ export default function JobsCustomizePanel({ widget, departments, canHideBrandin
             <DomainsSection domains={widget.allowedDomains} disabled={false} noun="jobs" onChange={(d) => onChange({ allowedDomains: d })} />
           </Group>
 
-          <Group id="branding" title="Branding" summary="Powered by Udyaibase" open={open} setOpen={setOpen}>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">Show “Powered by Udyaibase”</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">Always shown on the free plan.</p>
-              </div>
-              <Switch checked disabled label="Show Powered by Udyaibase" onChange={() => {}} />
-            </div>
-            <Link href="/employer/support?topic=branding" className="inline-block mt-3 text-sm font-semibold text-[#A50F15] hover:underline">
-              Contact us about removing branding
-            </Link>
+          <Group id="apply-form" title="Application form" summary="Choose what candidates are asked" open={open} setOpen={setOpen}>
+            <ApplyFormSection form={widget.applyForm} onChange={(applyForm) => onChange({ applyForm })} />
           </Group>
 
           <p className="px-5 pt-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] text-xs text-gray-500">

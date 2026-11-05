@@ -3369,7 +3369,7 @@ model JobBoardEmployer {
   /// Where invoices, receipts and credit notes are emailed (plus up to 3 CC).
   billingEmail        String?
   billingCcEmails     String[]             @default([])
-  /// Paid plans: screen new applicants with AI automatically while quota remains.
+  /// Screen new applicants with AI automatically while the plan's quota remains.
   aiAutoScreen        Boolean              @default(true)
   /// Last "candidates are waiting" nudge email.
   reviewNudgeAt       DateTime?
@@ -3418,6 +3418,8 @@ model JobBoardEmployer {
   firstJobPublishedAt DateTime?
   /// Calendly / Cal.com / Google Calendar link offered in interview emails.
   interviewBookingUrl String?
+  /// Which application fields are shown and required, plus the form's wording (lib/jobs/apply-form.ts). Null = defaults.
+  applyFormConfig     Json?
 
   // Sessions issued before this moment are no longer valid (set when a password changes)
   sessionsValidAfter DateTime?
@@ -3685,6 +3687,8 @@ model JobBoardCareersWidget {
   showDepartment    Boolean   @default(true)
   showSalary        Boolean   @default(true)
   showSkills        Boolean   @default(true)
+  /// Matching a website: own colours, any Google font, exact corners, filters (lib/jobs/widget-design.ts). Null = theme defaults.
+  design            Json?
   platform          String?
   setupStartedAt    DateTime?
   codeCopiedAt      DateTime?
@@ -4075,7 +4079,7 @@ enum JobBoardAiScreeningStatus {
   FAILED
 }
 
-/// AI read of one application against its job (paid plans). A suggestion for the hiring team only;
+/// AI read of one application against its job (within the plan's monthly quota). A suggestion for the hiring team only;
 /// never shown to the candidate and never used to move anyone automatically.
 model JobBoardAiScreening {
   id             String                    @id @default(cuid())

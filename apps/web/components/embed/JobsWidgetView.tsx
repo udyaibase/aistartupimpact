@@ -10,6 +10,8 @@ import JobDescription from "@/components/jobs/JobDescription";
 import JobApplyForm, { type ApplyAttribution } from "@/components/jobs/apply/JobApplyForm";
 import { applyConsentText } from "@/lib/jobs/consent";
 import { accentText, BUTTON_SIZES, onAccent, radii, SPACING } from "./embed-utils";
+import { googleFontHref, luminance, parseSiteHint, type SiteHint, type WidgetDesign } from "@/lib/jobs/widget-design";
+import { parseApplyFormConfig, type ApplyFormConfig } from "@/lib/jobs/apply-form";
 
 export interface JobsWidgetConfig {
   id: string;
@@ -34,14 +36,19 @@ export interface JobsWidgetConfig {
   showSalary: boolean;
   showSkills: boolean;
   showPoweredBy: boolean;
+  design: WidgetDesign;
+  applyForm: ApplyFormConfig;
   company: { name: string; logoUrl: string | null; slug: string };
 }
 
 const PREVIEW_KEYS: (keyof JobsWidgetConfig)[] = [
   "layout", "accentColor", "darkMode", "cornerStyle", "buttonText", "heading", "subheading", "headingAlign", "headingSize",
   "fontFamily", "textScale", "buttonSize", "buttonStyle", "cardStyle", "spacing", "maxJobs",
-  "showLogo", "showDepartment", "showSalary", "showSkills",
+  "showLogo", "showDepartment", "showSalary", "showSkills", "design", "applyForm",
 ];
+
+/** Stands in on the Application form preview when no job is open yet. Never shown to candidates. */
+const PREVIEW_JOB = { slug: "preview", title: "Your job title", skills: ["Python", "Machine learning", "SQL"], screeningQuestions: [] };
 
 const THEMES = {
   light: { surface: "#ffffff", subtle: "#f4f4f5", text: "#18181b", muted: "#52525b", border: "#e4e4e7" },
@@ -67,6 +74,10 @@ export default function JobsWidgetView({ config: initial, jobs }: { config: Jobs
   const [openId, setOpenId] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [origin, setOrigin] = useState("");
+  const [search, setSearch] = useState("");
+  const [place, setPlace] = useState("ALL");
+  const [site, setSite] = useState<SiteHint>({});
+  const [previewScreen, setPreviewScreen] = useState<"list" | "form-upload" | "form-details">("list");
 
   useEffect(() => setConfig(initial), [initial]);
 
@@ -84,6 +95,7 @@ export default function JobsWidgetView({ config: initial, jobs }: { config: Jobs
   useEffect(() => {
     setOrigin(window.location.origin);
     const p = new URLSearchParams(window.location.hash.slice(1));
+    setSite(parseSiteHint(p.get("site")));
     const q = new URLSearchParams({ source: "widget", w: initial.id });
     const ref = p.get("ref") || framedReferrer();
     if (ref) q.set("ref", ref);
@@ -111,6 +123,8 @@ export default function JobsWidgetView({ config: initial, jobs }: { config: Jobs
       const patch: Partial<JobsWidgetConfig> = {};
       for (const k of PREVIEW_KEYS) if (k in e.data.config) (patch as any)[k] = e.data.config[k];
       setConfig((c) => ({ ...c, ...patch }));
+      const screen = e.data.config.previewScreen;
+      if (screen === "list" || screen === "form-upload" || screen === "form-details") setPreviewScreen(screen);
     }
     window.addEventListener("message", onMessage);
     if (window.parent !== window) window.parent.postMessage({ type: "udyaibase:preview-ready" }, window.location.origin);
@@ -128,17 +142,44 @@ export default function JobsWidgetView({ config: initial, jobs }: { config: Jobs
     return () => ro.disconnect();
   }, []);
 
-  const font = getEmbedFont(config.fontFamily);
+  // Set by hand beats read from the page, so an employer can correct anything the automatic match gets wrong.
+  const own = config.design ?? {};
+  const live = own.matchSite ? site : {};
+  const design: WidgetDesign = {
+    ...own,
+    font: own.font ?? live.font,
+    headingFont: own.headingFont ?? live.headingFont,
+    radius: own.radius ?? live.radius,
+    colors: { ...(live.card ? { card: live.card } : {}), ...(live.text ? { text: live.text } : {}), ...own.colors },
+  };
+  const accent = live.accent ?? config.accentColor;
+  const picked = getEmbedFont(config.fontFamily);
+  const fontStack = design.font ? `"${design.font}", ${picked.stack}` : picked.stack;
   useEffect(() => {
-    if (!font.google) return;
-    const id = `embed-font-${font.id}`;
+    if (!picked.google || design.font) return;
+    const id = `embed-font-${picked.id}`;
     if (document.getElementById(id)) return;
     const link = document.createElement("link");
     link.id = id;
     link.rel = "stylesheet";
-    link.href = `https://fonts.googleapis.com/css2?family=${font.google}&display=swap`;
+    link.href = `https://fonts.googleapis.com/css2?family=${picked.google}&display=swap`;
     document.head.appendChild(link);
-  }, [font]);
+  }, [picked, design.font]);
+
+  // Any Google Font by name. Some have fewer weights, and Google refuses those requests, so retry without them.
+  useEffect(() => {
+    for (const name of [design.font, design.headingFont]) {
+      if (!name) continue;
+      const id = `embed-font-${name.replace(/\s+/g, "-")}`;
+      if (document.getElementById(id)) continue;
+      const link = document.createElement("link");
+      link.id = id;
+      link.rel = "stylesheet";
+      link.href = googleFontHref(name);
+      link.onerror = () => { link.onerror = null; link.href = googleFontHref(name, false); };
+      document.head.appendChild(link);
+    }
+  }, [design.font, design.headingFont]);
 
   useEffect(() => {
     document.documentElement.style.fontSize = `${16 * (TEXT_SCALES[config.textScale] ?? 1)}px`;
@@ -146,21 +187,42 @@ export default function JobsWidgetView({ config: initial, jobs }: { config: Jobs
 
   const teams = useMemo(() => {
     const set = Array.from(new Set(jobs.map((j) => j.department).filter(Boolean))) as string[];
-    return set.length > 1 ? set : [];
-  }, [jobs]);
+    return set.length > 1 && design.showTeamFilter !== false ? set : [];
+  }, [jobs, design.showTeamFilter]);
 
-  const filtered = team === "ALL" ? jobs : jobs.filter((j) => j.department === team);
+  const places = useMemo(() => {
+    const set = Array.from(new Set(jobs.map((j) => placeText(j)).filter(Boolean)));
+    return set.length > 1 && design.showLocationFilter ? set.sort() : [];
+  }, [jobs, design.showLocationFilter]);
+
+  const q = search.trim().toLowerCase();
+  const filtered = jobs.filter((j) =>
+    (team === "ALL" || j.department === team)
+    && (place === "ALL" || places.length === 0 || placeText(j) === place)
+    && (!q || !design.showSearch || [j.title, j.department, ...j.skills].some((v) => v?.toLowerCase().includes(q))));
   const visible = showAll ? filtered : filtered.slice(0, config.maxJobs);
   const hiddenCount = filtered.length - visible.length;
 
   const layout = config.layout === "auto" ? (width >= 640 ? "grid" : "list") : config.layout;
-  const r = radii(config.cornerStyle);
-  const t = isDark ? THEMES.dark : THEMES.light;
+  const r = design.radius !== undefined
+    ? { card: `${design.radius}px`, control: `${Math.min(design.radius, 12)}px`, button: `${design.radius}px` }
+    : radii(config.cornerStyle);
+  // A company's own colours sit on top of the theme, and any left unset still come from it.
+  const c = design.colors ?? {};
+  const base = isDark ? THEMES.dark : THEMES.light;
+  const t = {
+    surface: c.card ?? base.surface,
+    subtle: c.card ? `color-mix(in srgb, ${c.text ?? base.text} 7%, ${c.card})` : base.subtle,
+    text: c.text ?? base.text,
+    muted: c.muted ?? (c.text ? `color-mix(in srgb, ${c.text} 68%, ${c.card ?? base.surface})` : base.muted),
+    border: c.border ?? (c.text ? `color-mix(in srgb, ${c.text} 16%, ${c.card ?? base.surface})` : base.border),
+  };
+  const darkSurface = c.card ? luminance(c.card) < 0.2 : isDark;
   const size = BUTTON_SIZES[config.buttonSize] ?? BUTTON_SIZES.md;
 
   const style = {
-    "--embed-accent": config.accentColor,
-    "--embed-on-accent": onAccent(config.accentColor),
+    "--embed-accent": accent,
+    "--embed-on-accent": onAccent(accent),
     "--w-surface": t.surface,
     "--w-subtle": t.subtle,
     "--w-text": t.text,
@@ -169,18 +231,21 @@ export default function JobsWidgetView({ config: initial, jobs }: { config: Jobs
     "--r-card": r.card,
     "--r-control": r.control,
     "--r-button": r.button,
-    "--embed-accent-text": accentText(config.accentColor, t.surface, t.text),
+    "--w-heading-font": design.headingFont ? `"${design.headingFont}", ${fontStack}` : "inherit",
+    "--embed-accent-text": accentText(accent, c.card ?? base.surface, c.text ?? base.text),
     "--btn-h": size.h,
     "--btn-px": size.px,
     "--btn-fs": size.fs,
     "--card-bg": config.cardStyle === "flat" ? t.subtle : t.surface,
-    "--card-border": config.cardStyle === "bordered" || (config.cardStyle === "elevated" && isDark) ? t.border : "transparent",
+    "--card-border": config.cardStyle === "bordered" || (config.cardStyle === "elevated" && darkSurface) ? t.border : "transparent",
     "--card-shadow": config.cardStyle === "elevated"
-      ? isDark ? "0 1px 2px rgb(0 0 0 / .5), 0 6px 16px rgb(0 0 0 / .35)" : "0 1px 2px rgb(16 24 40 / .06), 0 6px 16px rgb(16 24 40 / .08)"
+      ? darkSurface ? "0 1px 2px rgb(0 0 0 / .5), 0 6px 16px rgb(0 0 0 / .35)" : "0 1px 2px rgb(16 24 40 / .06), 0 6px 16px rgb(16 24 40 / .08)"
       : "none",
-    colorScheme: isDark ? "dark" : "light",
+    colorScheme: darkSurface ? "dark" : "light",
     color: t.text,
-    fontFamily: font.stack,
+    fontFamily: fontStack,
+    ...(c.background ? { background: c.background, padding: "1rem", borderRadius: r.card } : {}),
+    ...(design.maxWidth ? { maxWidth: design.maxWidth, marginInline: "auto" } : {}),
   } as React.CSSProperties;
 
   const href = (j: CareersJob) => `${origin}/jobs/${j.slug}${query}`;
@@ -189,13 +254,33 @@ export default function JobsWidgetView({ config: initial, jobs }: { config: Jobs
   const open = (j: CareersJob) => { setOpenId(j.id); setApplying(false); scrollParentToTop(); };
   const close = () => { setOpenId(null); setApplying(false); scrollParentToTop(); };
   const cardBox = { borderRadius: "var(--r-card)", borderColor: "var(--card-border)", background: "var(--card-bg)", boxShadow: "var(--card-shadow)" };
+  const formVars = {
+    ["--af-text" as string]: "var(--w-text)", ["--af-muted" as string]: "var(--w-muted)", ["--af-border" as string]: "var(--w-border)",
+    ["--af-surface" as string]: "var(--w-surface)", ["--af-subtle" as string]: "var(--w-subtle)", ["--af-accent" as string]: "var(--embed-accent)",
+    ["--af-on-accent" as string]: "var(--embed-on-accent)", ["--af-radius" as string]: "var(--r-control)", ["--af-btn-radius" as string]: "var(--r-button)",
+  };
+  const previewingForm = previewScreen !== "list";
+  const previewJob = jobs.find((j) => j.applicationType === "INTERNAL") ?? jobs[0];
 
   return (
     <div ref={rootRef} style={style} className="embed-root" data-btn={config.buttonStyle}>
       <style>{EMBED_CSS}</style>
-      <style>{`.embed-description :is(h1,h2,h3,h4,p,li,strong,em,span){color:inherit}.embed-description{color:var(--w-text)}`}</style>
+      <style>{`.embed-description :is(h1,h2,h3,h4,p,li,strong,em,span){color:inherit}.embed-description{color:var(--w-text)}.embed-root h1,.embed-root h2,.embed-root h3{font-family:var(--w-heading-font)}`}</style>
       <div className="p-1">
-        {openJob ? (
+        {previewingForm ? (
+          <div className="border p-4 sm:p-6" style={cardBox}>
+            <JobApplyForm
+              variant="embed"
+              preview={previewScreen === "form-upload" ? "upload" : "details"}
+              job={{
+                ...PREVIEW_JOB, ...(previewJob ? { slug: previewJob.slug, title: previewJob.title, skills: previewJob.skills, screeningQuestions: previewJob.screeningQuestions } : {}),
+                company: config.company.name, consentText: applyConsentText(config.company.name), form: config.applyForm ?? parseApplyFormConfig(null),
+              }}
+              attribution={attribution}
+              style={formVars}
+            />
+          </div>
+        ) : openJob ? (
           applying && openJob.applicationType === "INTERNAL" ? (
             <div className="border p-4 sm:p-6" style={cardBox}>
               <JobApplyForm
@@ -203,14 +288,11 @@ export default function JobsWidgetView({ config: initial, jobs }: { config: Jobs
                 job={{
                   slug: openJob.slug, title: openJob.title, company: config.company.name, skills: openJob.skills,
                   screeningQuestions: openJob.screeningQuestions, consentText: applyConsentText(config.company.name),
+                  form: config.applyForm,
                 }}
                 attribution={attribution}
                 onBack={close}
-                style={{
-                  ["--af-text" as string]: "var(--w-text)", ["--af-muted" as string]: "var(--w-muted)", ["--af-border" as string]: "var(--w-border)",
-                  ["--af-surface" as string]: "var(--w-surface)", ["--af-subtle" as string]: "var(--w-subtle)", ["--af-accent" as string]: "var(--embed-accent)",
-                  ["--af-on-accent" as string]: "var(--embed-on-accent)", ["--af-radius" as string]: "var(--r-control)", ["--af-btn-radius" as string]: "var(--r-button)",
-                }}
+                style={formVars}
               />
             </div>
           ) : (
@@ -231,6 +313,21 @@ export default function JobsWidgetView({ config: initial, jobs }: { config: Jobs
               </p>
             )}
           </header>
+        )}
+
+        {(design.showSearch || places.length > 0) && (
+          <div className="flex flex-col sm:flex-row gap-2 mb-3">
+            {design.showSearch && (
+              <input type="search" value={search} onChange={(e) => { setSearch(e.target.value); setShowAll(false); }}
+                placeholder="Search roles" aria-label="Search roles" className="embed-input embed-focus flex-1 min-w-0" />
+            )}
+            {places.length > 0 && (
+              <select value={place} onChange={(e) => { setPlace(e.target.value); setShowAll(false); }} aria-label="Filter by location" className="embed-input embed-focus sm:w-56">
+                <option value="ALL">All locations</option>
+                {places.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            )}
+          </div>
         )}
 
         {teams.length > 0 && (
@@ -255,8 +352,10 @@ export default function JobsWidgetView({ config: initial, jobs }: { config: Jobs
 
         {visible.length === 0 ? (
           <div className="text-center px-6 py-10 border" style={cardBox}>
-            <p className="text-base font-semibold">No open roles right now</p>
-            <p className="text-sm mt-1" style={{ color: "var(--w-muted)" }}>New jobs from {config.company.name} will appear here automatically.</p>
+            <p className="text-base font-semibold">{jobs.length > 0 ? "No roles match your search" : "No open roles right now"}</p>
+            <p className="text-sm mt-1" style={{ color: "var(--w-muted)" }}>
+              {jobs.length > 0 ? "Try a different search or location." : design.emptyText || `New jobs from ${config.company.name} will appear here automatically.`}
+            </p>
           </div>
         ) : (
           <ul

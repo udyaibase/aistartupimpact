@@ -97,6 +97,19 @@ export async function sendMemberLoginCode(to: string, code: string) {
   });
 }
 
+export async function sendAccountActionCode(to: string, code: string) {
+  return sendEmail({
+    to,
+    subject: `${code} is your Udyaibase confirmation code`,
+    type: 'employer_account_action',
+    html: shell(`
+<h1 style="font-size:20px;margin:0 0 8px">Confirm this change to your workspace</h1>
+<p style="margin:0 0 20px;font-size:15px;line-height:1.6">Someone signed in to your hiring workspace asked to delete or deactivate it. Enter this code to continue:</p>
+<p style="margin:0 0 20px;font-size:32px;font-weight:700;letter-spacing:8px">${code}</p>
+<p style="margin:0;font-size:13px;color:#6b7280">It expires in 10 minutes. If this wasn't you, don't share the code, and change how you sign in.</p>`),
+  });
+}
+
 /** Emails teammates who were @mentioned in a note. */
 export async function sendMentionEmails(opts: {
   employerId: string; to: string[]; authorName: string; candidateName: string; jobId: string; applicationId: string; note: string;

@@ -9,8 +9,9 @@ import { matchSkills } from '@/lib/jobs/skills';
 import { applyConsentText } from '@/lib/jobs/consent';
 import { sendApplicationReceived, sendNewApplicationAlert } from '@/lib/jobs/apply-emails';
 import { isClaimVerified } from '@/lib/jobs/trust';
-import type { ScreeningQuestion } from '@/lib/jobs/composer';
+import { cleanOptions, type ScreeningQuestion } from '@/lib/jobs/composer';
 import { screenApplication } from '@/lib/jobs/ai-screen';
+import { parseApplyFormConfig, requiredFieldErrors, withoutHiddenFields } from '@/lib/jobs/apply-form';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
   const { success } = await checkRateLimit(jobApplyRateLimit, getClientIdentifier(request));
   if (!success) return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
 
-  const b = await request.json().catch(() => ({}));
+  const raw = await request.json().catch(() => ({}));
 
   const listing = await prisma.jobBoardListing.findFirst({
     where: { ...publicListingWhere(), slug },
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
       id: true, title: true, skills: true, applicationType: true, screeningQuestions: true, employerId: true,
       Employer: {
         select: {
-          id: true, email: true, companyName: true, passwordHash: true, startupId: true, startupClaimMethod: true,
+          id: true, email: true, companyName: true, passwordHash: true, startupId: true, startupClaimMethod: true, applyFormConfig: true,
           Startup: { select: { name: true } }, CareersWidgets: { select: { id: true } },
         },
       },
@@ -60,16 +61,18 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
   if (!listing) return NextResponse.json({ error: 'This job is no longer accepting applications.' }, { status: 404 });
   if (listing.applicationType === 'EXTERNAL') return NextResponse.json({ error: 'This job accepts applications on the company’s own site.' }, { status: 400 });
 
-  const session = verifyApplySession(b.token, listing.id);
+  const session = verifyApplySession(raw.token, listing.id);
   if (!session) return NextResponse.json({ error: 'Your session expired. Upload your resume again.', code: 'session' }, { status: 401 });
   const upload = await prisma.jobBoardResumeUpload.findUnique({ where: { id: session.uploadId } });
   if (!upload || upload.listingId !== listing.id) return NextResponse.json({ error: 'Upload your resume again.', code: 'session' }, { status: 401 });
   if (upload.applicationId) return NextResponse.json({ error: 'This application was already submitted.' }, { status: 409 });
 
-  // ── Candidate details
+  // ── Candidate details: what this employer's form asks for, and nothing it doesn't
+  const form = parseApplyFormConfig(listing.Employer.applyFormConfig);
+  const b = withoutHiddenFields(form, raw);
   const fullName = clip(b.fullName, 100);
   const email = clip(b.email, 200).toLowerCase();
-  const errors: Record<string, string> = {};
+  const errors: Record<string, string> = requiredFieldErrors(form, b);
   if (fullName.length < 2) errors.fullName = 'Enter your full name.';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) errors.email = 'Enter a valid email address.';
   if (b.consent !== true) errors.consent = 'Please agree to share your application.';
@@ -81,6 +84,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
   const screeningAnswers = questions.map((q) => {
     let answer = given.get(q.id) ?? '';
     if (q.type === 'yesno' && answer && answer !== 'yes' && answer !== 'no') answer = '';
+    if (q.type === 'choice' && answer && !cleanOptions(q.options).includes(answer)) answer = '';
     if (q.required && !answer) errors[`q_${q.id}`] = 'Please answer this question.';
     return { id: q.id, question: q.question, type: q.type, answer };
   });
@@ -164,7 +168,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
     });
   }
 
-  // Paid plans with auto-screening on: review runs after the response, so the candidate never waits.
+  // Auto-screening on, with quota left on any plan: review runs after the response, so the candidate never waits.
   const employerId = listing.employerId;
   after(() => screenApplication(applicationId, employerId, { auto: true }).then(() => undefined));
 
