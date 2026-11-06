@@ -7,6 +7,7 @@ import { standardJobLocation } from '@/lib/jobs/location';
 import { uniqueJobSlug } from '@/lib/jobs/slug';
 import { can, forbidden, canSeeJob } from '@/lib/employer/permissions';
 import { refreshPaths, refreshSections } from '@/lib/revalidate';
+import { writeLimited } from '@/lib/employer/write-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,6 +39,8 @@ export async function GET(_request: NextRequest, props: { params: Promise<{ id: 
  * publishable, so edits that would break it are rejected with the field to fix.
  */
 export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const limited = await writeLimited(request, 'jobs/[id]');
+  if (limited) return limited;
   const { id } = await props.params;
   try {
     const session = await getEmployerSession();
@@ -90,6 +93,8 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
 
 // DELETE: Soft-delete a job
 export async function DELETE(_request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const limited = await writeLimited(_request, 'jobs/[id]');
+  if (limited) return limited;
   const { id } = await props.params;
   const session = await getEmployerSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

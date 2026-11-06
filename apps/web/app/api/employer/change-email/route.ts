@@ -6,10 +6,13 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { changeEmailSchema, validateInput } from '@/lib/validation';
 import { can, forbidden } from '@/lib/employer/permissions';
+import { writeLimited } from '@/lib/employer/write-limit';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
+  const limited = await writeLimited(request, 'change-email', 'sensitive');
+  if (limited) return limited;
   try {
     const session = await requireEmployerAuth();
     if (!can(session.role, 'account.manage')) return forbidden();

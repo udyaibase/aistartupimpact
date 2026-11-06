@@ -5,6 +5,7 @@ import { draftFromRow, draftToData, defaultClosesOn, type JobDraft } from '@/lib
 import { standardJobLocation } from '@/lib/jobs/location';
 import { uniqueJobSlug } from '@/lib/jobs/slug';
 import { can, forbidden, listingScope } from '@/lib/employer/permissions';
+import { writeLimited } from '@/lib/employer/write-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +34,8 @@ export async function GET() {
  * Publishing is a separate step: POST /api/employer/jobs/[id]/status { action: 'publish' }.
  */
 export async function POST(request: NextRequest) {
+  const limited = await writeLimited(request, 'jobs');
+  if (limited) return limited;
   try {
     const session = await getEmployerSession();
     if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });

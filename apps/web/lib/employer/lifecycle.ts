@@ -1,6 +1,7 @@
 import { prisma } from '@udyaibase/database';
 import { isRealInbox } from '@/lib/employer/owners';
 import { sendEmailFireAndForget } from '@/lib/email/send';
+import { screenApplication } from '@/lib/jobs/ai-screen';
 import { button, esc, shell } from '@/lib/jobs/apply-emails';
 import { eraseApplication } from '@/lib/jobs/candidate-status';
 
@@ -104,7 +105,27 @@ export async function runHiringMaintenance(now = new Date(), opts: { onlyEmploye
     try { await eraseApplication(a.id); erased++; } catch (err) { console.error('[retention] erase', a.id, err instanceof Error ? err.message : err); }
   }
 
-  return { reviewNudgesSent: byEmployer.size, closingNudgesSent: closingBy.size, adminClosingJobs: adminClosing.length, applicationsErased: erased };
+  // 4. AI reviews that failed, or stopped when a request ended early, get another go for three days after applying.
+  const stuck = await prisma.jobBoardAiScreening.findMany({
+    where: {
+      ...(opts.onlyEmployerId ? { employerId: opts.onlyEmployerId } : {}),
+      OR: [{ status: 'FAILED' }, { status: 'PENDING', createdAt: { lt: new Date(t - 10 * 60_000) } }],
+      Application: { appliedAt: { gt: new Date(t - 3 * DAY) }, withdrawnAt: null, NOT: { email: { endsWith: '@deleted.invalid' } } },
+    },
+    select: { applicationId: true, employerId: true },
+    take: 25,
+  });
+  let aiRetried = 0;
+  for (const r of stuck) {
+    try {
+      const outcome = await screenApplication(r.applicationId, r.employerId, { auto: true });
+      if (outcome.ok) aiRetried++;
+    } catch (err) {
+      console.error('[hiring] ai retry', err instanceof Error ? err.message : 'unknown error');
+    }
+  }
+
+  return { aiRetried, reviewNudgesSent: byEmployer.size, closingNudgesSent: closingBy.size, adminClosingJobs: adminClosing.length, applicationsErased: erased };
 }
 
 /** Workspace email plus active owners and recruiters (the people who can act on candidates and jobs). */

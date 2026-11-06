@@ -36,7 +36,7 @@ vi.mock('@/lib/employer-auth', () => ({
   clearEmployerSession: db.clear,
   sessionCutoff: () => new Date(0),
 }));
-vi.mock('@/lib/rate-limit', () => ({ checkRateLimit: async () => ({ success: true }), getClientIdentifier: () => 'ip', strictRateLimit: {} }));
+vi.mock('@/lib/employer/write-limit', () => ({ writeLimited: async () => null }));
 vi.mock('@/lib/employer/account-action', () => ({ checkActionCode: db.check }));
 vi.mock('@/lib/jobs/resume-storage', () => ({ deleteResume: db.deleteResume }));
 vi.mock('@/lib/revalidate', () => ({ refreshSections: vi.fn() }));

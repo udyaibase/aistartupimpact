@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getEmployerSession } from '@/lib/employer-auth';
 import { addUserMessage } from '@/lib/support-tickets';
 import { supportMessageSchema, validateInput, sanitizeText } from '@/lib/validation';
+import { writeLimited } from '@/lib/employer/write-limit';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const limited = await writeLimited(request, 'support/[id]/messages');
+  if (limited) return limited;
   const params = await props.params;
   try {
     const session = await getEmployerSession();

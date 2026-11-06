@@ -1,12 +1,15 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getEmployerSession } from '@/lib/employer-auth';
 import { setFounderSession } from '@/lib/founder-auth';
 import { founderAccountForHiringSession } from '@/lib/people/access';
+import { writeLimited } from '@/lib/employer/write-limit';
 
 export const dynamic = 'force-dynamic';
 
 /** From the hiring portal to the founder portal for the same person (never for accounts with two-step sign-in). */
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const limited = await writeLimited(request, 'switch-founder', 'sensitive');
+  if (limited) return limited;
   const session = await getEmployerSession();
   if (!session) return NextResponse.json({ success: false, error: 'Please sign in again.' }, { status: 401 });
   const f = await founderAccountForHiringSession(session);

@@ -11,7 +11,7 @@ vi.mock('@/lib/turnstile', () => ({ verifyTurnstileToken: m.verifyTurnstileToken
 vi.mock('@udyaibase/utils', () => ({ isDisposableEmail: (e: string) => e.endsWith('@mailinator.com') }));
 vi.mock('@udyaibase/database', () => ({ prisma: { startup: { findFirst: m.startupFind } } }));
 vi.mock('@/lib/rate-limit', () => ({
-  authRateLimit: null, companyCreateRateLimit: null, getClientIdentifier: () => '1.2.3.4',
+  authRateLimit: null, apiRateLimit: null, companyCreateRateLimit: null, getClientIdentifier: () => '1.2.3.4',
   checkRateLimit: async () => ({ success: true }), emailCodeAllowed: m.emailCodeAllowed,
 }));
 

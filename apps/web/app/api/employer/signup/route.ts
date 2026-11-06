@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyTurnstileToken } from '@/lib/turnstile';
-import { authRateLimit, checkRateLimit, companyCreateRateLimit, emailCodeAllowed, getClientIdentifier } from '@/lib/rate-limit';
+import { apiRateLimit, authRateLimit, checkRateLimit, companyCreateRateLimit, emailCodeAllowed, getClientIdentifier } from '@/lib/rate-limit';
 import { checkDomainCode } from '@/lib/startups/domain-otp';
 import { isDisposableEmail } from '@udyaibase/utils';
 import {
@@ -25,9 +25,21 @@ const err = (error: string, status = 400, extra: Record<string, unknown> = {}) =
  * - continue { employerId }              → enter a team this person is already on
  */
 export async function POST(request: NextRequest) {
-  const { success } = await checkRateLimit(authRateLimit, `signup:${getClientIdentifier(request)}`);
-  if (!success) return err('Too many attempts. Try again in a few minutes.', 429);
+  try {
+    return await handle(request);
+  } catch (error) {
+    // Creating a workspace is all-or-nothing, so a failure here leaves nothing behind to clean up.
+    console.error('[POST /api/employer/signup]', error instanceof Error ? error.message : 'unknown error');
+    return err('We couldn’t finish that. Nothing was saved, so please try again. If it keeps happening, contact us.', 500);
+  }
+}
+
+async function handle(request: NextRequest) {
   const b = await request.json().catch(() => ({}));
+  // Each step has its own count: searching runs as people type, and mustn't use up the attempts for the steps that matter.
+  const browsing = b.action === 'search' || b.action === 'options';
+  const { success } = await checkRateLimit(browsing ? apiRateLimit : authRateLimit, `signup:${String(b.action).slice(0, 20)}:${getClientIdentifier(request)}`);
+  if (!success) return err('Too many attempts. Try again in a few minutes.', 429);
 
   if (b.action === 'code') {
     const email = String(b.email ?? '').trim().toLowerCase();
@@ -75,6 +87,9 @@ export async function POST(request: NextRequest) {
     const { success: canCreate } = await checkRateLimit(companyCreateRateLimit, `ws:${email}`);
     if (!canCreate) return err('You created a workspace recently. Try again tomorrow, or contact us.', 429);
     const created = await createWorkspace(email, startup, { name: startup.name, websiteUrl: startup.websiteUrl });
+    if ('taken' in created) {
+      return err(`${startup.name} already has a hiring workspace, so we can’t start another. Its founder can take it over by verifying the startup in the founder portal, or contact us for help.`, 409);
+    }
     return NextResponse.json({ success: true, created: true, employerId: created.employerId, redirect: '/employer/jobs/new?welcome=1' });
   }
 

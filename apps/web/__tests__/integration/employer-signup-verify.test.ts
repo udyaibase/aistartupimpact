@@ -1,9 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const db = vi.hoisted(() => ({
-  jobBoardEmployer: { findUnique: vi.fn(), create: vi.fn(), findUniqueOrThrow: vi.fn() },
-  $transaction: vi.fn(),
-}));
+const db = vi.hoisted(() => {
+  const t = {
+    jobBoardEmployer: { findUnique: vi.fn(), findFirst: vi.fn(), create: vi.fn(), findUniqueOrThrow: vi.fn() },
+    jobBoardTeamMember: { create: vi.fn() },
+    // No startup table here: anything that tried to mark the startup verified would fail these tests.
+    $transaction: vi.fn(),
+  };
+  return t;
+});
 vi.mock('@udyaibase/database', () => ({ prisma: db }));
 vi.mock('@/lib/db', () => ({ sql: vi.fn() }));
 vi.mock('next/headers', () => ({ cookies: async () => ({ set: vi.fn(), get: vi.fn(), delete: vi.fn() }) }));
@@ -21,7 +26,10 @@ describe('createWorkspace: signup never verifies a startup (only its founder can
   beforeEach(() => {
     vi.clearAllMocks();
     db.jobBoardEmployer.findUnique.mockResolvedValue(null);
+    db.jobBoardEmployer.findFirst.mockResolvedValue(null);
     db.jobBoardEmployer.create.mockResolvedValue({ id: 'e1' });
+    db.jobBoardTeamMember.create.mockResolvedValue({ id: 'm1' });
+    db.$transaction.mockImplementation((fn: (tx: typeof db) => unknown) => fn(db));
     db.jobBoardEmployer.findUniqueOrThrow.mockResolvedValue({ id: 'e1', email: 'x', companyName: 'NeuralPay', slug: 'neuralpay', plan: 'FREE' });
   });
 
@@ -30,7 +38,7 @@ describe('createWorkspace: signup never verifies a startup (only its founder can
     const data = db.jobBoardEmployer.create.mock.calls[0][0].data;
     expect(data).toMatchObject({ startupId: 's1', passwordHash: '!code-only', emailVerified: true });
     expect(data.startupClaimMethod).toBeUndefined();
-    expect(db.$transaction).not.toHaveBeenCalled();
+    expect(data.startupClaimVerifiedAt).toBeUndefined();
   });
 
   it('someone who already owns a workspace gets an internal account address for the new one', async () => {
