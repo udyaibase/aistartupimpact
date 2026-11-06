@@ -9,12 +9,17 @@ const sql = neon(process.env.DATABASE_URL!);
 
 async function putHandler(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
-  const { error } = await requireApiAuth();
+  const { session, error } = await requireApiAuth();
   if (error) return error;
 
   try {
     const body = await request.json();
     const { id } = params;
+
+    // A plan is money: giving one away free is for the account's top role, not every editor.
+    if (body.plan && session?.user?.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'Only a super admin can change a plan.' }, { status: 403 });
+    }
 
     if (body.isVerified !== undefined) {
       await sql`UPDATE "JobBoardEmployer" SET "isVerified" = ${body.isVerified}, "updatedAt" = NOW() WHERE id = ${id}`;

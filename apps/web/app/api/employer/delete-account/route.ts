@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { requireEmployerAuth, clearEmployerSession } from '@/lib/employer-auth';
-import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
+import { writeLimited } from '@/lib/employer/write-limit';
 import { can, forbidden } from '@/lib/employer/permissions';
 import { refreshSections } from '@/lib/revalidate';
 import { checkActionCode } from '@/lib/employer/account-action';
@@ -11,9 +11,9 @@ export const dynamic = 'force-dynamic';
 
 export async function DELETE(request: NextRequest) {
   try {
-    const identifier = getClientIdentifier(request);
-    const { success } = await checkRateLimit(strictRateLimit, identifier);
-    if (!success) return NextResponse.json({ error: 'Too many requests. Try again later.' }, { status: 429 });
+    // Wrong codes are limited by the code check, and the send step counts separately.
+    const limited = await writeLimited(request, 'delete-account', 'sensitive');
+    if (limited) return limited;
 
     const session = await requireEmployerAuth();
     if (!can(session.role, 'account.manage')) return forbidden();

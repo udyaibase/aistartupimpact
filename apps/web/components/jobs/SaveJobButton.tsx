@@ -32,7 +32,7 @@ export default function SaveJobButton({ slug, initialSaved = false }: SaveJobBut
       onClick={handleToggle}
       disabled={loading}
       className={clsx(
-        'p-2 rounded-lg border transition-colors disabled:opacity-50',
+        'p-2 rounded-md border transition-colors disabled:opacity-50',
         saved
           ? 'bg-brand/10 border-brand/30 text-brand'
           : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400 hover:text-brand hover:border-brand/30'

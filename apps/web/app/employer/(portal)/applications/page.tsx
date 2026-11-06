@@ -1,7 +1,7 @@
 import { listingScope } from '@/lib/employer/permissions';
 import { prisma } from '@udyaibase/database';
 import { requirePagePermission } from '@/lib/employer/page-guard';
-import { employerContext, loadBoard } from '@/lib/employer/applications';
+import { BOARD_LIMIT, employerContext, loadBoard } from '@/lib/employer/applications';
 import { STAGE_TEMPLATES } from '@/lib/employer/pipeline';
 import { can } from '@/lib/employer/roles';
 import { listTeam } from '@/lib/employer/team';
@@ -28,6 +28,12 @@ export default async function CandidatesPage(props: { searchParams: Promise<{ jo
   );
 
   return (
+    <>
+    {cards.length >= BOARD_LIMIT && (
+      <p role="status" className="mb-4 rounded-[10px] border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-900/40 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+        Showing your {BOARD_LIMIT.toLocaleString('en-IN')} most recent candidates. Choose a job to see everyone who applied to it, or export to CSV.
+      </p>
+    )}
     <PipelineBoard
       key={jobId ?? 'all'}
       jobs={jobs.map((j) => ({ id: j.id, title: j.title, status: j.status, count: j._count.Applications }))}
@@ -42,5 +48,6 @@ export default async function CandidatesPage(props: { searchParams: Promise<{ jo
       ai={{ enabled: !!plan && plan.ai.limit > 0, used: plan?.ai.used ?? 0, limit: plan?.ai.limit ?? 0, canBuy: can(session.role, 'account.manage') }}
       teammates={team.filter((t) => t.status !== 'PENDING' && t.email.toLowerCase() !== session.email.toLowerCase()).map((t) => ({ email: t.email, name: t.name || t.email.split('@')[0] }))}
     />
+    </>
   );
 }

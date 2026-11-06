@@ -4,6 +4,7 @@ import { getEmployerSession } from '@/lib/employer-auth';
 import { employerContext, saveBookingUrl } from '@/lib/employer/applications';
 import { MOVABLE, moveApplications } from '@/lib/employer/pipeline';
 import { can, forbidden } from '@/lib/employer/permissions';
+import { writeLimited } from '@/lib/employer/write-limit';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -13,6 +14,8 @@ export const maxDuration = 60;
  * retrying with the same key never re-moves or re-emails anyone.
  */
 export async function POST(request: NextRequest) {
+  const limited = await writeLimited(request, 'applications/bulk');
+  if (limited) return limited;
   const session = await getEmployerSession();
   if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
   if (!can(session.role, 'candidates.move')) return forbidden();

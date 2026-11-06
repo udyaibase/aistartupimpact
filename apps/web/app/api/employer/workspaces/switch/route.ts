@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { getEmployerSession, setEmployerSession } from '@/lib/employer-auth';
 import { needsTwoFactor } from '@/lib/employer/sign-in';
+import { writeLimited } from '@/lib/employer/write-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,6 +11,8 @@ export const dynamic = 'force-dynamic';
  * The new session carries that workspace and membership; nothing about the current one is reused.
  */
 export async function POST(request: NextRequest) {
+  const limited = await writeLimited(request, 'workspaces/switch');
+  if (limited) return limited;
   const session = await getEmployerSession();
   if (!session) return NextResponse.json({ error: 'Please sign in again.' }, { status: 401 });
   const { employerId } = await request.json().catch(() => ({}));

@@ -4,6 +4,7 @@ import { getEmployerSession } from '@/lib/employer-auth';
 import { getPlatform } from '@/lib/embed/platforms';
 import { ensureCareersWidget, toJobsPortalWidget } from '@/lib/jobs/careers';
 import { can, forbidden } from '@/lib/employer/permissions';
+import { writeLimited } from '@/lib/employer/write-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,8 @@ type Step = (typeof STEPS)[number];
 
 /** Setup-funnel milestones for the careers widget; first occurrence wins. */
 export async function POST(request: NextRequest) {
+  const limited = await writeLimited(request, 'careers/widget/funnel');
+  if (limited) return limited;
   const session = await getEmployerSession();
   if (!session) return NextResponse.json({ success: false, error: 'Please log in again.' }, { status: 401 });
   if (!can(session.role, 'widget.manage')) return forbidden();

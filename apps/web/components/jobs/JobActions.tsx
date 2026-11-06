@@ -47,12 +47,14 @@ export default function JobActions({ applyUrl, isExternal, jobTitle, jobUrl, com
           href={href}
           target={isExternal ? '_blank' : undefined}
           rel={isExternal ? 'noopener noreferrer' : undefined}
-          className="btn-brand inline-flex items-center gap-2 px-6 py-3 text-sm flex-1 sm:flex-none justify-center"
+          className="btn-brand !rounded-md inline-flex items-center gap-1.5 sm:gap-2 h-10 sm:h-auto px-5 sm:px-6 sm:py-3 text-sm justify-center"
         >
+          {/* The arrow icon says it opens another site, so the words can stay short. */}
+          Apply now
           {isExternal ? (
-            <>Apply on Company Site <ExternalLink className="w-4 h-4" /></>
+            <><ExternalLink className="w-4 h-4" aria-hidden /><span className="sr-only"> (opens the company site in a new tab)</span></>
           ) : (
-            <>Apply Now <Briefcase className="w-4 h-4" /></>
+            <Briefcase className="w-4 h-4" aria-hidden />
           )}
         </a>
 

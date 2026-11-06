@@ -51,14 +51,14 @@ export default function JobSearchBar({ initialQuery, initialLocation }: { initia
   return (
     <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 sm:rounded-lg sm:border sm:border-gray-200 dark:sm:border-gray-700 sm:bg-white dark:sm:bg-gray-900 sm:p-2">
       {/* Job title input */}
-      <div className="relative flex-1 rounded-md bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 sm:border-0 overflow-hidden">
+      <div className="relative flex-1 rounded-xl sm:rounded-md bg-white sm:bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 sm:border-0 overflow-hidden">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         <input
           type="text"
           value={query}
           onChange={(e) => handleQueryChange(e.target.value)}
           placeholder="Job title, skill or company (e.g. LLM, Sarvam)"
-          className="w-full pl-10 pr-8 py-3 text-sm font-jakarta bg-transparent text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none"
+          className="w-full h-10 sm:h-auto pl-10 pr-8 sm:py-3 text-base sm:text-sm placeholder:text-[14px] sm:placeholder:text-sm font-jakarta bg-transparent text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none"
         />
         {query && (
           <button type="button" onClick={() => handleQueryChange('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
@@ -85,7 +85,7 @@ export default function JobSearchBar({ initialQuery, initialLocation }: { initia
       {/* Search button */}
       <button
         type="submit"
-        className="px-6 py-3 rounded-md bg-brand text-white font-sora font-bold text-sm hover:bg-brand/90 transition-colors shrink-0"
+        className="hidden sm:block px-6 py-3 rounded-md bg-brand text-white font-sora font-bold text-sm hover:bg-brand/90 transition-colors shrink-0"
       >
         Search jobs
       </button>

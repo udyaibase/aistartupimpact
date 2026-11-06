@@ -5,6 +5,7 @@ const session = vi.hoisted(() => ({ current: null as null | { email: string; id:
 const setEmployerSession = vi.hoisted(() => vi.fn());
 vi.mock('@udyaibase/database', () => ({ prisma: db }));
 vi.mock('@/lib/employer-auth', () => ({ getEmployerSession: async () => session.current, setEmployerSession }));
+vi.mock('@/lib/employer/write-limit', () => ({ writeLimited: async () => null }));
 
 const call = async (employerId: string) => {
   const { POST } = await import('@/app/api/employer/workspaces/switch/route');

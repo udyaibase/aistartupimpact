@@ -40,7 +40,8 @@ export function useHeadroomBar(anchorRef: RefObject<HTMLDivElement | null>, keep
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
-        const y = window.scrollY;
+        // Clamped: the rubber-band bounce at either end of the page would otherwise flick the bar in and out.
+        const y = Math.max(0, Math.min(window.scrollY, document.documentElement.scrollHeight - window.innerHeight));
         const delta = y - lastY;
         const anchor = anchorRef.current;
         const isStuck = !!anchor && anchor.getBoundingClientRect().top < offsetRef.current - 1;

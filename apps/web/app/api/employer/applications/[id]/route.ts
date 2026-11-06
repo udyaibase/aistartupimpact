@@ -6,6 +6,7 @@ import { getEmployerSession } from '@/lib/employer-auth';
 import { employerContext, loadDetail, saveBookingUrl } from '@/lib/employer/applications';
 import { MOVABLE, moveApplications } from '@/lib/employer/pipeline';
 import { can, forbidden } from '@/lib/employer/permissions';
+import { writeLimited } from '@/lib/employer/write-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +30,8 @@ export async function GET(_request: NextRequest, props: { params: Promise<{ id: 
 
 /** Move one candidate to a stage, optionally with an (edited) email. */
 export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const limited = await writeLimited(request, 'applications/[id]');
+  if (limited) return limited;
   const { id } = await props.params;
   const session = await getEmployerSession();
   if (!session) return unauthorized();

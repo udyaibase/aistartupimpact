@@ -3,10 +3,13 @@ import { prisma } from '@udyaibase/database';
 import { getEmployerSession } from '@/lib/employer-auth';
 import { can, forbidden } from '@/lib/employer/permissions';
 import { parseBillingProfile } from '@/lib/billing/details';
+import { writeLimited } from '@/lib/employer/write-limit';
 
 export const dynamic = 'force-dynamic';
 
 export async function PATCH(request: NextRequest) {
+  const limited = await writeLimited(request, 'billing/settings');
+  if (limited) return limited;
   const session = await getEmployerSession();
   if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
   if (!can(session.role, 'account.manage')) return forbidden();

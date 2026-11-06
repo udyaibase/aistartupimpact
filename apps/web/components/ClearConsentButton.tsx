@@ -31,7 +31,7 @@ export default function ClearConsentButton() {
       {/* Floating button */}
       <button
         onClick={() => setShow(!show)}
-        className="fixed bottom-4 right-4 z-toast w-12 h-12 bg-orange-500 hover:bg-orange-600 text-white rounded-full shadow-lg flex items-center justify-center transition-all"
+        className="fixed bottom-20 lg:bottom-4 right-4 z-toast w-12 h-12 bg-orange-500 hover:bg-orange-600 text-white rounded-full shadow-lg flex items-center justify-center transition-all"
         title="Cookie Consent Tools"
       >
         🍪
@@ -39,7 +39,7 @@ export default function ClearConsentButton() {
 
       {/* Popup menu */}
       {show && (
-        <div className="fixed bottom-20 right-4 z-toast bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 w-64 border border-gray-200 dark:border-gray-700">
+        <div className="fixed bottom-36 lg:bottom-20 right-4 z-toast bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 w-64 border border-gray-200 dark:border-gray-700">
           <h3 className="font-semibold text-gray-900 dark:text-white mb-3">
             Cookie Tools (Dev Only)
           </h3>

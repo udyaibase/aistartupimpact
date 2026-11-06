@@ -7,7 +7,7 @@ import { sql } from '@/lib/db';
 import { sendEmail, sendEmailFireAndForget } from '@/lib/email/send';
 import { button, esc, shell } from '@/lib/jobs/apply-emails';
 import { emailDomain, isFreeMailDomain, registrableDomain, websiteDomain, VERIFIED_CLAIM_METHODS } from '@/lib/jobs/trust';
-import { CODE_ONLY_MARKER, ensureOwnerMember, internalAccountEmail } from '@/lib/employer/owners';
+import { CODE_ONLY_MARKER, internalAccountEmail } from '@/lib/employer/owners';
 import { ownerInboxes } from '@/lib/employer/team';
 import { uniqueEmployerSlug } from '@/lib/employer/founder-workspace';
 import { employerSubmitter } from '@/lib/startups/ownership';
@@ -130,36 +130,65 @@ async function enter(employerId: string, memberId: string, memberEmail: string) 
   await clearSignupPass();
 }
 
+type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+type WorkspaceInput = { email: string; startup: StartupRow | null; company: { name: string; websiteUrl: string | null }; slug: string; accountEmail: string };
+
 /**
- * Create a workspace owned by this email, linked to the chosen startup. It starts as drafts only: only the
- * startup's founder can verify the startup (founder portal), and their "Start hiring" takes this workspace over,
- * which unlocks publishing.
+ * The workspace and its owner row, written together. The signup code has already proved the address, so no inbox
+ * check applies here: that check is for placeholder accounts that were never verified.
  */
-export async function createWorkspace(email: string, startup: StartupRow | null, company: { name: string; websiteUrl: string | null }) {
-  const slug = await uniqueEmployerSlug(company.name);
-  // One account email per workspace: someone who already owns a workspace gets an internal account address here.
-  const emailTaken = !!(await prisma.jobBoardEmployer.findUnique({ where: { email }, select: { id: true } }));
-  const employer = await prisma.jobBoardEmployer.create({
+async function writeWorkspace(tx: Tx, w: WorkspaceInput) {
+  const employer = await tx.jobBoardEmployer.create({
     data: {
-      email: emailTaken ? internalAccountEmail(slug) : email,
+      email: w.accountEmail,
       passwordHash: CODE_ONLY_MARKER,
-      companyName: company.name,
-      slug,
-      logoUrl: startup?.logoUrl ?? null,
-      websiteUrl: company.websiteUrl,
+      companyName: w.company.name,
+      slug: w.slug,
+      logoUrl: w.startup?.logoUrl ?? null,
+      websiteUrl: w.company.websiteUrl,
       emailVerified: true,
       onboardingCompleted: true,
       // Linked but not trusted (no claim method): drafts only, and public pages keep the workspace's own name.
-      startupId: startup?.id ?? null,
+      startupId: w.startup?.id ?? null,
     },
   });
-  const member = await ensureOwnerMember(employer.id, { email });
-  if (!member) throw new Error('owner_row');
-  await enter(employer.id, member.id, member.email);
-  return { employerId: employer.id };
+  const member = await tx.jobBoardTeamMember.create({
+    data: { employerId: employer.id, email: w.email, role: 'OWNER', status: 'ACTIVE', invitedByEmail: w.email, acceptedAt: new Date() },
+  });
+  return { employerId: employer.id, memberId: member.id };
 }
 
-/** Add a company that isn't on Udyaibase yet (waits for directory approval), then its workspace. */
+/** One account email per workspace: someone who already owns a workspace gets an internal account address here. */
+async function workspaceInput(email: string, startup: StartupRow | null, company: { name: string; websiteUrl: string | null }): Promise<WorkspaceInput> {
+  const slug = await uniqueEmployerSlug(company.name);
+  const emailTaken = !!(await prisma.jobBoardEmployer.findUnique({ where: { email }, select: { id: true } }));
+  return { email, startup, company, slug, accountEmail: emailTaken ? internalAccountEmail(slug) : email };
+}
+
+const isUniqueClash = (err: unknown) => (err as { code?: string } | null)?.code === 'P2002';
+
+/**
+ * Create a workspace owned by this email, linked to the chosen startup. It starts as drafts only: only the
+ * startup's founder can verify the startup (founder portal), and their "Start hiring" takes this workspace over,
+ * which unlocks publishing. A startup has one workspace, so one that already has any (an admin placeholder, or
+ * someone's unverified drafts) can't get a second.
+ */
+export async function createWorkspace(email: string, startup: StartupRow | null, company: { name: string; websiteUrl: string | null }): Promise<{ employerId: string } | { taken: true }> {
+  if (startup && await prisma.jobBoardEmployer.findFirst({ where: { startupId: startup.id }, select: { id: true } })) return { taken: true };
+  const input = await workspaceInput(email, startup, company);
+  let made: { employerId: string; memberId: string };
+  try {
+    made = await prisma.$transaction((tx) => writeWorkspace(tx, input));
+  } catch (err) {
+    // Two people at once: the database's one-workspace-per-startup rule decides.
+    if (startup && isUniqueClash(err)) return { taken: true };
+    throw err;
+  }
+  await enter(made.employerId, made.memberId, email);
+  return { employerId: made.employerId };
+}
+
+/** Add a company that isn't on Udyaibase yet (waits for directory approval), then its workspace. All or nothing. */
 export async function addCompany(email: string, name: string, website: string) {
   const domain = websiteDomain(website);
   if (!domain) return { error: 'Enter your company website, like acme.ai.', field: 'websiteUrl' as const };
@@ -168,18 +197,23 @@ export async function addCompany(email: string, name: string, website: string) {
 
   const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'startup';
   const taken = await prisma.startup.findUnique({ where: { slug: base }, select: { id: true } });
-  const startup = await prisma.startup.create({
-    data: {
-      id: randomUUID(), name, slug: taken ? `${base}-${randomUUID().slice(0, 6)}` : base,
-      tagline: `${name} is hiring on Udyaibase`, description: `${name} is hiring on Udyaibase.`,
-      websiteUrl: `https://${domain}`, claimStatus: 'PENDING', updatedAt: new Date(),
-    },
-    select: STARTUP_SELECT,
+  const input = await workspaceInput(email, null, { name, websiteUrl: `https://${domain}` });
+  const made = await prisma.$transaction(async (tx) => {
+    const startup = await tx.startup.create({
+      data: {
+        id: randomUUID(), name, slug: taken ? `${base}-${randomUUID().slice(0, 6)}` : base,
+        tagline: `${name} is hiring on Udyaibase`, description: `${name} is hiring on Udyaibase.`,
+        websiteUrl: `https://${domain}`, claimStatus: 'PENDING', updatedAt: new Date(),
+      },
+      select: STARTUP_SELECT,
+    });
+    const w = await writeWorkspace(tx, { ...input, startup });
+    // Shows up for directory review like other employer-added startups.
+    await tx.startup.update({ where: { id: startup.id }, data: { submittedBy: employerSubmitter(w.employerId) } });
+    return w;
   });
-  const created = await createWorkspace(email, startup, { name, websiteUrl: `https://${domain}` });
-  // Shows up for directory review like other employer-added startups.
-  await prisma.startup.update({ where: { id: startup.id }, data: { submittedBy: employerSubmitter(created.employerId) } });
-  return { created };
+  await enter(made.employerId, made.memberId, email);
+  return { created: { employerId: made.employerId } };
 }
 
 /**

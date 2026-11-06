@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { requireEmployerAuth } from '@/lib/employer-auth';
 import { can, forbidden } from '@/lib/employer/permissions';
+import { passwordSignInOpen } from '@/lib/employer/sign-in-policy';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,14 +12,16 @@ export async function GET(request: NextRequest) {
     if (!can(session.role, 'account.manage')) return forbidden();
     const employer = await prisma.jobBoardEmployer.findUnique({
       where: { id: session.id },
-      select: { twoFactorEnabled: true },
+      select: { twoFactorEnabled: true, passwordHash: true },
     });
 
     if (!employer) {
       return NextResponse.json({ success: false, error: 'Account not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, enabled: employer.twoFactorEnabled });
+    // A real password is a bcrypt hash; accounts that sign in by email code hold a marker instead.
+    const hasPassword = employer.passwordHash.startsWith('$2') && passwordSignInOpen();
+    return NextResponse.json({ success: true, enabled: employer.twoFactorEnabled, hasPassword });
   } catch (error) {
     console.error('Employer 2FA status error:', error);
     return NextResponse.json({ success: false, error: 'Failed to fetch 2FA status' }, { status: 500 });

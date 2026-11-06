@@ -3,11 +3,14 @@ import { prisma } from '@udyaibase/database';
 import { getEmployerSession } from '@/lib/employer-auth';
 import { can, forbidden, listingScope } from '@/lib/employer/permissions';
 import { listTeam, sendMentionEmails } from '@/lib/employer/team';
+import { writeLimited } from '@/lib/employer/write-limit';
 
 export const dynamic = 'force-dynamic';
 
 /** Private team note on a candidate (never shown to the candidate). */
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const limited = await writeLimited(request, 'applications/[id]/notes');
+  if (limited) return limited;
   const { id } = await props.params;
   const session = await getEmployerSession();
   if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });

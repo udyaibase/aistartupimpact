@@ -4,6 +4,7 @@ import { getEmployerSession } from '@/lib/employer-auth';
 import { can, forbidden } from '@/lib/employer/permissions';
 import { refreshPaths, refreshSections } from '@/lib/revalidate';
 import { checkLocation } from '@/lib/locations';
+import { writeLimited } from '@/lib/employer/write-limit';
 
 export const dynamic = 'force-dynamic';
 export async function GET() {
@@ -30,6 +31,8 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
+  const limited = await writeLimited(request, 'company');
+  if (limited) return limited;
   try {
     const session = await getEmployerSession();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

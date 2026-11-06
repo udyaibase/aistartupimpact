@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { resendSignatureValid, suppressionReason } from '@/lib/email/resend-webhook';
+import { candidateEmailUpdate, resendSignatureValid, suppressionReason } from '@/lib/email/resend-webhook';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,8 +18,18 @@ export async function POST(request: NextRequest) {
   });
   if (!valid) return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
 
-  let event: { type?: string; data?: { to?: string[]; bounce?: { type?: string } } };
+  let event: { type?: string; data?: { email_id?: string; to?: string[]; bounce?: { type?: string } } };
   try { event = JSON.parse(raw); } catch { return NextResponse.json({ error: 'Bad payload' }, { status: 400 }); }
+
+  // Candidate emails: the hiring team sees whether an interview or rejection email really arrived.
+  const candidateStatus = candidateEmailUpdate(event);
+  if (candidateStatus && event.data?.email_id) {
+    await prisma.jobBoardApplicationEvent.updateMany({
+      // Never turn a bounce back into "sent": delivery events can arrive out of order.
+      where: { resendId: event.data.email_id, ...(candidateStatus === 'SENT' ? { emailStatus: 'SCHEDULED' as const } : {}) },
+      data: { emailStatus: candidateStatus },
+    });
+  }
 
   const reason = suppressionReason(event);
   const emails = (event.data?.to ?? []).map((e) => String(e).trim().toLowerCase()).filter(Boolean);

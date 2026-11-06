@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import crypto from 'crypto';
+import { writeLimited } from '@/lib/employer/write-limit';
 
 export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
+  const limited = await writeLimited(request, 'auth/verify-otp', 'sensitive');
+  if (limited) return limited;
   try {
     const body = await request.json();
     const { email, code } = body;

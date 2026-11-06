@@ -5,6 +5,7 @@ import { can, forbidden } from '@/lib/employer/permissions';
 import { INVITE_TTL_DAYS, cleanJobIds, hashToken, listTeam, newInviteToken, sendInviteEmail, sendJoinApprovedEmail } from '@/lib/employer/team';
 import { effectivePlan } from '@/lib/employer/plans';
 import { ownerChangeProblem } from '@/lib/employer/owners';
+import { writeLimited } from '@/lib/employer/write-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,8 @@ async function own(memberId: string, employerId: string) {
 
 /** Change a teammate's role or an interviewer's jobs ({ jobIds }), or resend their invite ({ action: 'resend' }). Owners only. */
 export async function PATCH(request: NextRequest, props: { params: Promise<{ memberId: string }> }) {
+  const limited = await writeLimited(request, 'team/[memberId]');
+  if (limited) return limited;
   const { memberId } = await props.params;
   const session = await getEmployerSession();
   if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
@@ -72,6 +75,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ mem
 
 /** Remove a teammate or cancel an invite. They lose access immediately. Owners only. */
 export async function DELETE(_request: NextRequest, props: { params: Promise<{ memberId: string }> }) {
+  const limited = await writeLimited(_request, 'team/[memberId]');
+  if (limited) return limited;
   const { memberId } = await props.params;
   const session = await getEmployerSession();
   if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });

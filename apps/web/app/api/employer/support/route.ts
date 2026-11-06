@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getEmployerSession } from '@/lib/employer-auth';
 import { createTicket, getTicketsForUser } from '@/lib/support-tickets';
 import { supportTicketSchema, validateInput, sanitizeText } from '@/lib/validation';
+import { writeLimited } from '@/lib/employer/write-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +25,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const limited = await writeLimited(request, 'support');
+  if (limited) return limited;
   try {
     const session = await getEmployerSession();
     if (!session) return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });

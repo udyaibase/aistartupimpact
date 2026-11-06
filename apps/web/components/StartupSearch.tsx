@@ -10,6 +10,8 @@ import { VerifiedBadge } from './VerifiedBadge';
 import { useHeadroomBar } from '@/hooks/useHeadroomBar';
 import SmartSearchBox, { type SearchSuggestion } from './search/SmartSearchBox';
 import { removeChipFromQuery } from '@/lib/search/understand';
+import BottomSheet from './ui/BottomSheet';
+import FilterList from './ui/FilterList';
 import type { SearchUnderstanding } from '@/lib/startups/directory';
 
 interface Startup {
@@ -200,6 +202,7 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
   const [loadingMore, setLoadingMore] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchOpen, setSearchOpen] = useState(false);
   const [understood, setUnderstood] = useState<SearchUnderstanding | null>(initialUnderstood ?? null);
@@ -394,7 +397,7 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
   };
 
   const barAnchorRef = useRef<HTMLDivElement>(null);
-  const bar = useHeadroomBar(barAnchorRef, showAdvanced || searchOpen);
+  const bar = useHeadroomBar(barAnchorRef, showAdvanced || searchOpen || sheetOpen);
   const scrollToResults = bar.scrollToResults;
 
   // A new search while the bar is stuck: bring the top of the fresh results under the bar instead of leaving the user mid-page.
@@ -405,27 +408,157 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
     scrollToResults();
   }, [filterParams, scrollToResults]);
 
+  // Funding toggle: same 36px height as the view buttons; counts reflect the other active filters.
+  // On phones it sits in the sticky bar, so it hides and returns together with the search box.
+  const fundingToggle = (
+            <div role="radiogroup" aria-label="Funding" className="flex flex-1 sm:flex-none h-9 p-0.5 rounded-[10px] sm:rounded-lg bg-gray-200/60 sm:bg-gray-100 dark:bg-gray-800/80 sm:border border-gray-200 dark:border-gray-700">
+              {FUNDING_OPTIONS.map(opt => {
+                const active = shownFunding === opt.value;
+                return (
+                  <button
+                    key={opt.value || 'all'}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => handleFundingChange(opt.value)}
+                    className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap px-1 sm:px-3 h-full rounded-lg sm:rounded-md text-[13px] sm:text-xs font-semibold sm:font-bold font-jakarta transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+                      active
+                        ? 'bg-white dark:bg-gray-900 text-navy dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                    }`}
+                  >
+                    {opt.value === 'funded' && <TrendingUp className={`hidden sm:block w-3.5 h-3.5 ${active ? 'text-brand' : ''}`} />}
+                    <span>{opt.label}</span>
+                    <span className={`tabular-nums text-[11px] font-medium sm:font-semibold sm:px-1.5 rounded ${
+                      active ? 'sm:bg-brand/10 text-brand' : 'sm:bg-gray-200/70 sm:dark:bg-gray-700/70 text-gray-500 dark:text-gray-400'
+                    }`}>
+                      {counts[opt.key]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+  );
+
+  const resultsRow = (
+        <div className="flex flex-col gap-2 min-w-0">
+          {/* Active Filter Tags */}
+          {activeFiltersCount > 0 && (
+            <div className="flex sm:flex-wrap items-center gap-1.5 sm:gap-2 pt-1 -mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto sm:overflow-visible scrollbar-hide [&>*]:shrink-0">
+              <span className="hidden sm:inline text-xs font-bold text-gray-400 uppercase tracking-wide mr-1 font-jakarta select-none">Active Filters:</span>
+              {stage && (
+                <button onClick={() => removeFilter('stage')} className="flex items-center gap-1.5 px-3 min-h-[32px] sm:min-h-0 py-1 rounded-full text-[13px] sm:text-xs font-medium sm:font-semibold bg-brand/5 border border-brand/20 text-brand hover:bg-brand/10 transition-colors font-jakarta">
+                  <span>{getFilterLabel('stage', stage)}</span>
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+              {category && (
+                <button onClick={() => removeFilter('category')} className="flex items-center gap-1.5 px-3 min-h-[32px] sm:min-h-0 py-1 rounded-full text-[13px] sm:text-xs font-medium sm:font-semibold bg-brand/5 border border-brand/20 text-brand hover:bg-brand/10 transition-colors font-jakarta">
+                  <span>{getFilterLabel('category', category)}</span>
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+              {businessType && (
+                <button onClick={() => removeFilter('businessType')} className="flex items-center gap-1.5 px-3 min-h-[32px] sm:min-h-0 py-1 rounded-full text-[13px] sm:text-xs font-medium sm:font-semibold bg-brand/5 border border-brand/20 text-brand hover:bg-brand/10 transition-colors font-jakarta">
+                  <span>{getFilterLabel('businessType', businessType)}</span>
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+              {status && (
+                <button onClick={() => removeFilter('status')} className="flex items-center gap-1.5 px-3 min-h-[32px] sm:min-h-0 py-1 rounded-full text-[13px] sm:text-xs font-medium sm:font-semibold bg-brand/5 border border-brand/20 text-brand hover:bg-brand/10 transition-colors font-jakarta">
+                  <span>{getFilterLabel('status', status)}</span>
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+              {employeeRange && (
+                <button onClick={() => removeFilter('employeeRange')} className="flex items-center gap-1.5 px-3 min-h-[32px] sm:min-h-0 py-1 rounded-full text-[13px] sm:text-xs font-medium sm:font-semibold bg-brand/5 border border-brand/20 text-brand hover:bg-brand/10 transition-colors font-jakarta">
+                  <span>{getFilterLabel('employeeRange', employeeRange)}</span>
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+              {country && (
+                <button onClick={() => removeFilter('country')} className="flex items-center gap-1.5 px-3 min-h-[32px] sm:min-h-0 py-1 rounded-full text-[13px] sm:text-xs font-medium sm:font-semibold bg-brand/5 border border-brand/20 text-brand hover:bg-brand/10 transition-colors font-jakarta">
+                  <span>{getFilterLabel('country', country)}</span>
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+              {city && (
+                <button onClick={() => removeFilter('city')} className="flex items-center gap-1.5 px-3 min-h-[32px] sm:min-h-0 py-1 rounded-full text-[13px] sm:text-xs font-medium sm:font-semibold bg-brand/5 border border-brand/20 text-brand hover:bg-brand/10 transition-colors font-jakarta">
+                  <span>{getFilterLabel('city', city)}</span>
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+              <button onClick={clearSearch} className="text-xs text-brand hover:underline font-jakarta font-bold px-2 py-1">
+                Clear all
+              </button>
+            </div>
+          )}
+
+          {/* Results Count & View Toggle */}
+          <div className="flex items-center justify-between gap-x-3 text-[13px] sm:text-sm text-gray-500 dark:text-gray-400 font-jakarta">
+            <p aria-live="polite" className="min-w-0">
+              {loading ? (
+                <span className="flex items-center gap-1.5"><Loader2 className="w-4 h-4 animate-spin" /> Finding startups...</span>
+              ) : (
+                <>Found <span className="font-semibold sm:font-bold text-navy dark:text-white">{total}</span> {total === 1 ? 'startup' : 'startups'}</>
+              )}
+            </p>
+            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="hidden sm:block">{fundingToggle}</div>
+            <div role="group" aria-label="View" className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+              <button
+                onClick={() => setViewMode('grid')}
+                aria-pressed={viewMode === 'grid'}
+                className={`btn-icon w-8 h-8 sm:w-9 sm:h-9 ${viewMode === 'grid' ? 'btn-icon-active' : ''}`}
+                aria-label="Grid view"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                aria-pressed={viewMode === 'list'}
+                className={`btn-icon w-8 h-8 sm:w-9 sm:h-9 ${viewMode === 'list' ? 'btn-icon-active' : ''}`}
+                aria-label="List view"
+              >
+                <List className="w-4 h-4" />
+              </button>
+            </div>
+            </div>
+          </div>
+        </div>
+  );
+
+  const setFilter = (setter: (v: string) => void) => (value: string) => {
+    hasUserInteracted.current = true;
+    setter(value);
+    setCurrentPage(1);
+  };
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-3 sm:space-y-5 touch-manipulation">
       {/* ── Search & filter bar: sticks under the site header, hides while scrolling down, returns on scroll up ── */}
       <div ref={barAnchorRef} aria-hidden className="h-0 !mt-0" />
       <div
-        style={{ top: bar.headerOffset, transform: bar.hidden ? `translateY(calc(-100% - ${bar.headerOffset}px))` : undefined }}
-        className="sticky z-30 !mt-0 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 pb-3 space-y-3 transition-transform duration-300 ease-out"
+        style={{
+          top: bar.headerOffset,
+          transform: bar.hidden ? `translate3d(0, calc(-100% - ${bar.headerOffset}px), 0)` : 'translate3d(0, 0, 0)',
+          transition: 'transform 360ms cubic-bezier(0.32, 0.72, 0, 1)',
+        }}
+        className="sticky z-30 !mt-0 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 py-2 sm:py-3 flex flex-col gap-2 sm:gap-3 will-change-transform motion-reduce:!transition-none"
       >
       {/* Full-bleed backdrop: runs edge to edge of the window while the controls stay aligned with the content */}
       <div
         aria-hidden
-        className={`absolute inset-y-0 -left-[100vw] -right-[100vw] -z-10 bg-gray-50/95 dark:bg-gray-950/95 backdrop-blur-md transition-shadow duration-300 ${
+        className={`absolute inset-y-0 -left-[100vw] -right-[100vw] -z-10 bg-gray-50 dark:bg-gray-950 sm:bg-gray-50/95 sm:dark:bg-gray-950/95 sm:backdrop-blur-md transition-shadow duration-300 ${
           bar.stuck ? 'shadow-[0_8px_16px_-12px_rgba(0,0,0,0.25)] border-b border-gray-200/70 dark:border-gray-800' : ''
         }`}
       />
       {/* ── Category Pills ── */}
-      <div className="!mt-0 pt-2.5 sm:pt-3">
+      <div className="order-2 sm:order-1 min-w-0">
         <div className="relative">
           <div
             ref={categoryScrollerRef}
-            className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide pb-1 cursor-grab active:cursor-grabbing select-none"
+            className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 py-1 -my-1 sm:m-0 sm:px-0 sm:pt-0 sm:pb-1 cursor-grab active:cursor-grabbing select-none"
             onScroll={updateSectorOverflow}
             onMouseDown={(e) => {
               isDragging.current = true;
@@ -448,10 +581,10 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
           >
             <button
               onClick={() => handleCategoryChange('')}
-              className={`shrink-0 px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-xs sm:text-xs font-bold font-jakarta transition-all ${
+              className={`relative shrink-0 h-8 sm:h-auto px-3 sm:px-4 sm:py-1.5 rounded-full text-[13px] sm:text-xs font-medium sm:font-bold font-jakarta before:absolute before:inset-x-0 before:-inset-y-1 sm:before:hidden transition-colors duration-200 ${
                 category === ''
-                  ? 'bg-brand text-white shadow-sm'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  ? 'bg-brand text-white sm:shadow-sm'
+                  : 'bg-gray-200/60 sm:bg-gray-100 dark:bg-gray-800 text-gray-700 sm:text-gray-600 dark:text-gray-300 sm:dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
               }`}
             >
               All Sectors
@@ -460,10 +593,10 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
               <button
                 key={cat.value}
                 onClick={() => handleCategoryChange(cat.value)}
-                className={`shrink-0 px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-xs sm:text-xs font-bold font-jakarta transition-all ${
+                className={`relative shrink-0 h-8 sm:h-auto px-3 sm:px-4 sm:py-1.5 rounded-full text-[13px] sm:text-xs font-medium sm:font-bold font-jakarta before:absolute before:inset-x-0 before:-inset-y-1 sm:before:hidden transition-colors duration-200 ${
                   category === cat.value
-                    ? 'bg-brand text-white shadow-sm'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    ? 'bg-brand text-white sm:shadow-sm'
+                    : 'bg-gray-200/60 sm:bg-gray-100 dark:bg-gray-800 text-gray-700 sm:text-gray-600 dark:text-gray-300 sm:dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
                 }`}
               >
                 {cat.label}
@@ -471,14 +604,14 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
             ))}
           </div>
           {sectorOverflow.left && (
-            <div className="absolute left-0 top-0 bottom-1 flex items-center pr-8 bg-gradient-to-r from-gray-50 via-gray-50/90 dark:from-gray-950 dark:via-gray-950/90 to-transparent pointer-events-none">
+            <div className="absolute -left-4 sm:left-0 top-0 bottom-0 sm:bottom-1 w-10 sm:w-auto flex items-center sm:pr-8 bg-gradient-to-r from-gray-50 via-gray-50/90 dark:from-gray-950 dark:via-gray-950/90 to-transparent pointer-events-none">
               <button type="button" onClick={() => scrollSectors(-1)} className="btn-icon w-7 h-7 pointer-events-auto hidden sm:inline-flex" aria-label="Scroll sectors left">
                 <ChevronLeft className="w-4 h-4" />
               </button>
             </div>
           )}
           {sectorOverflow.right && (
-            <div className="absolute right-0 top-0 bottom-1 flex items-center justify-end pl-8 w-12 sm:w-auto bg-gradient-to-l from-gray-50 via-gray-50/90 dark:from-gray-950 dark:via-gray-950/90 to-transparent pointer-events-none">
+            <div className="absolute -right-4 sm:right-0 top-0 bottom-0 sm:bottom-1 w-10 sm:w-auto flex items-center justify-end sm:pl-8 bg-gradient-to-l from-gray-50 via-gray-50/90 dark:from-gray-950 dark:via-gray-950/90 to-transparent pointer-events-none">
               <button type="button" onClick={() => scrollSectors(1)} className="btn-icon w-7 h-7 pointer-events-auto hidden sm:inline-flex" aria-label="Scroll sectors right">
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -487,10 +620,13 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
         </div>
       </div>
 
+      {/* Phones: funding stays with the search box, in the bar rather than the scrolling pills */}
+      <div className="sm:hidden order-3">{fundingToggle}</div>
+
       {/* ── Search + Toggle Row ── */}
-      <div className="space-y-3">
+      <div className="order-1 sm:order-2 space-y-3">
         {/* Main Search Row */}
-        <div className="flex flex-col sm:flex-row sm:items-start gap-2.5 sm:gap-3">
+        <div className="flex items-start gap-2 sm:gap-3">
           <div className="flex-1 min-w-0">
             <SmartSearchBox
               value={query}
@@ -513,25 +649,30 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
 
           <div className="flex gap-2 sm:gap-3 shrink-0">
           <button
-            onClick={() => setShowAdvanced(!showAdvanced)}
-            className={`flex items-center justify-center gap-2 px-4 py-2 sm:py-2.5 rounded-xl border font-jakarta text-sm font-semibold transition-all select-none min-h-[44px] sm:min-h-0 sm:h-12 ${
-              showAdvanced || activeFiltersCount > 0
+            onClick={() => {
+              if (window.matchMedia('(min-width: 640px)').matches) setShowAdvanced(!showAdvanced);
+              else setSheetOpen(true);
+            }}
+            aria-label={activeFiltersCount > 0 ? `Filters, ${activeFiltersCount} on` : 'Filters'}
+            aria-haspopup="dialog"
+            className={`relative flex items-center justify-center gap-2 w-10 h-10 sm:w-auto sm:px-4 sm:py-2.5 rounded-xl border font-jakarta text-sm font-semibold transition-colors duration-200 select-none sm:h-12 active:scale-95 motion-reduce:active:scale-100 ${
+              showAdvanced || activeFiltersCount > 0 || !!sort
                 ? 'border-brand bg-brand/5 text-brand shadow-sm'
                 : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
             }`}
           >
             <SlidersHorizontal className="w-4 h-4" />
-            <span>Filters</span>
+            <span className="hidden sm:inline">Filters</span>
             {activeFiltersCount > 0 && (
-              <span className="w-5 h-5 flex items-center justify-center bg-brand text-white text-xs font-bold rounded-full animate-scale-in">
+              <span className="absolute -top-1.5 -right-1.5 sm:static w-5 h-5 flex items-center justify-center bg-brand text-white text-xs font-bold rounded-full animate-scale-in">
                 {activeFiltersCount}
               </span>
             )}
-            {showAdvanced ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline">{showAdvanced ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}</span>
           </button>
 
-          {/* Sort Dropdown */}
-          <div className="relative">
+          {/* Sort Dropdown (on phones, sort lives in the filters sheet) */}
+          <div className="relative hidden sm:block">
             <select
               value={sort}
               onChange={e => { hasUserInteracted.current = true; setSort(e.target.value); setCurrentPage(1); }}
@@ -638,121 +779,38 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
           </div>
         )}
 
-        {/* Results Info & Active Tags Row */}
-        <div className="flex flex-col gap-2">
-          {/* Active Filter Tags */}
-          {activeFiltersCount > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 pt-1">
-              <span className="text-xs font-bold text-gray-400 uppercase tracking-wide mr-1 font-jakarta select-none">Active Filters:</span>
-              {stage && (
-                <button onClick={() => removeFilter('stage')} className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-brand/5 border border-brand/20 text-brand hover:bg-brand/10 transition-colors font-jakarta">
-                  <span>{getFilterLabel('stage', stage)}</span>
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-              {category && (
-                <button onClick={() => removeFilter('category')} className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-brand/5 border border-brand/20 text-brand hover:bg-brand/10 transition-colors font-jakarta">
-                  <span>{getFilterLabel('category', category)}</span>
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-              {businessType && (
-                <button onClick={() => removeFilter('businessType')} className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-brand/5 border border-brand/20 text-brand hover:bg-brand/10 transition-colors font-jakarta">
-                  <span>{getFilterLabel('businessType', businessType)}</span>
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-              {status && (
-                <button onClick={() => removeFilter('status')} className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-brand/5 border border-brand/20 text-brand hover:bg-brand/10 transition-colors font-jakarta">
-                  <span>{getFilterLabel('status', status)}</span>
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-              {employeeRange && (
-                <button onClick={() => removeFilter('employeeRange')} className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-brand/5 border border-brand/20 text-brand hover:bg-brand/10 transition-colors font-jakarta">
-                  <span>{getFilterLabel('employeeRange', employeeRange)}</span>
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-              {country && (
-                <button onClick={() => removeFilter('country')} className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-brand/5 border border-brand/20 text-brand hover:bg-brand/10 transition-colors font-jakarta">
-                  <span>{getFilterLabel('country', country)}</span>
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-              {city && (
-                <button onClick={() => removeFilter('city')} className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-brand/5 border border-brand/20 text-brand hover:bg-brand/10 transition-colors font-jakarta">
-                  <span>{getFilterLabel('city', city)}</span>
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-              <button onClick={clearSearch} className="text-xs text-brand hover:underline font-jakarta font-bold px-2 py-1">
-                Clear all
-              </button>
-            </div>
-          )}
+        {/* On phones this row scrolls away with the page, so the sticky bar stays small. */}
+        <div className="hidden sm:block">{resultsRow}</div>
+      </div>
+      </div>
 
-          {/* Results Count & View Toggle */}
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 text-sm text-gray-500 dark:text-gray-400 font-jakarta">
-            <p aria-live="polite" className="w-full sm:w-auto">
-              {loading ? (
-                <span className="flex items-center gap-1.5"><Loader2 className="w-4 h-4 animate-spin" /> Finding startups...</span>
-              ) : (
-                <>Found <span className="font-bold text-navy dark:text-white">{total}</span> {total === 1 ? 'startup' : 'startups'}</>
-              )}
-            </p>
-            <div className="flex items-center gap-1.5 w-full sm:w-auto">
-            {/* Funding toggle — same 36px height as the view buttons; counts reflect the other active filters */}
-            <div role="radiogroup" aria-label="Funding" className="flex flex-1 sm:flex-none h-9 p-0.5 rounded-lg bg-gray-100 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700">
-              {FUNDING_OPTIONS.map(opt => {
-                const active = shownFunding === opt.value;
-                return (
-                  <button
-                    key={opt.value || 'all'}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    onClick={() => handleFundingChange(opt.value)}
-                    className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap px-1.5 sm:px-3 h-full rounded-md text-xs font-bold font-jakarta transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
-                      active
-                        ? 'bg-white dark:bg-gray-900 text-navy dark:text-white shadow-sm'
-                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
-                    }`}
-                  >
-                    {opt.value === 'funded' && <TrendingUp className={`hidden sm:block w-3.5 h-3.5 ${active ? 'text-brand' : ''}`} />}
-                    <span>{opt.label}</span>
-                    <span className={`tabular-nums text-[10px] sm:text-[11px] font-semibold px-1 sm:px-1.5 rounded ${
-                      active ? 'bg-brand/10 text-brand' : 'bg-gray-200/70 dark:bg-gray-700/70 text-gray-500 dark:text-gray-400'
-                    }`}>
-                      {counts[opt.key]}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            <div role="group" aria-label="View" className="flex items-center gap-1.5 shrink-0">
-              <button
-                onClick={() => setViewMode('grid')}
-                aria-pressed={viewMode === 'grid'}
-                className={`btn-icon ${viewMode === 'grid' ? 'btn-icon-active' : ''}`}
-                aria-label="Grid view"
-              >
-                <LayoutGrid className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                aria-pressed={viewMode === 'list'}
-                className={`btn-icon ${viewMode === 'list' ? 'btn-icon-active' : ''}`}
-                aria-label="List view"
-              >
-                <List className="w-4 h-4" />
-              </button>
-            </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      </div>
+      <div className="sm:hidden !mt-2.5 !mb-[-0.5rem]">{resultsRow}</div>
+
+      <BottomSheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        title="Filters"
+        flush
+        headerAction={(activeFiltersCount > 0 || sort) ? (
+          <button type="button" onClick={clearSearch} className="min-h-[44px] px-2 text-sm font-semibold text-brand font-jakarta">Clear all</button>
+        ) : null}
+        footer={(
+          <button type="button" onClick={() => setSheetOpen(false)} className="w-full min-h-[48px] rounded-xl bg-brand text-white font-jakarta font-bold text-[15px] inline-flex items-center justify-center gap-2 active:scale-[0.98] transition-transform duration-150 motion-reduce:transition-none">
+            {loading ? <><Loader2 className="w-4 h-4 animate-spin" aria-hidden /> Finding startups</> : `Show ${total} ${total === 1 ? 'startup' : 'startups'}`}
+          </button>
+        )}
+      >
+        <FilterList sheetOpen={sheetOpen} rows={[
+          { key: 'sort', label: 'Sort by', options: SORT_OPTIONS, value: sort, onChange: setFilter(setSort), emptyLabel: 'Default' },
+          { key: 'category', label: 'Sector', options: CATEGORIES, value: category, onChange: setFilter(setCategory) },
+          { key: 'stage', label: 'Funding stage', options: STAGES, value: stage, onChange: setFilter(setStage) },
+          { key: 'businessType', label: 'Business model', options: BUSINESS_TYPES, value: businessType, onChange: setFilter(setBusinessType) },
+          { key: 'employeeRange', label: 'Team size', options: EMPLOYEE_RANGES.map(e => ({ ...e, label: e.label.replace(' employees', '') })), value: employeeRange, onChange: setFilter(setEmployeeRange) },
+          { key: 'status', label: 'Company status', options: STATUSES, value: status, onChange: setFilter(setStatus) },
+          { key: 'country', label: 'Country', options: COUNTRIES, value: country, onChange: setFilter(setCountry) },
+          { key: 'city', label: 'City', options: [{ value: '', label: 'All Cities' }, ...cities.map(c => ({ value: c, label: c }))], value: city, onChange: setFilter(setCity) },
+        ]} />
+      </BottomSheet>
 
       <h2 className="sr-only">Startup results</h2>
       {/* ── Grid ── */}
@@ -822,7 +880,7 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
           {startups.map(s => viewMode === 'list' ? (
             /* ── List View Card ── */
             <Link key={s.slug} href={`/startups/${s.slug}`} prefetch={false} className="group">
-              <div className="relative bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3 hover:shadow-md hover:border-brand/30 dark:hover:border-brand/30 transition-all duration-200 flex items-center gap-3">
+              <div className="relative bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl sm:rounded-lg px-3.5 sm:px-4 py-3 active:bg-gray-50 dark:active:bg-gray-800/60 sm:active:bg-white sm:dark:active:bg-gray-900 hover:shadow-md hover:border-brand/30 dark:hover:border-brand/30 transition-all duration-200 flex items-center gap-3">
                 {/* Logo */}
                 <div className="relative shrink-0">
                   <div className="w-10 h-10 rounded-lg bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 overflow-hidden">
@@ -838,7 +896,7 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
                 {/* Name & Tagline — takes remaining space */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <h3 className="font-sora font-bold text-sm text-navy dark:text-white group-hover:text-brand transition-colors truncate">{s.name}</h3>
+                    <h3 className="font-sora font-semibold sm:font-bold text-[15px] sm:text-sm text-navy dark:text-white group-hover:text-brand transition-colors truncate">{s.name}</h3>
                     {isNewStartup(s.foundedYear) && (
                       <span className="shrink-0 text-[9px] font-bold font-jakarta bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded uppercase tracking-wide leading-none">New</span>
                     )}
@@ -846,7 +904,7 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
                       <span className="shrink-0 text-[8px] font-bold font-jakarta bg-gradient-to-r from-red-500 to-rose-600 text-white px-1.5 py-px rounded uppercase tracking-wide leading-none">Featured</span>
                     )}
                   </div>
-                  <p className="text-gray-500 dark:text-gray-400 text-xs font-jakarta line-clamp-1 mt-0.5">{s.tagline}</p>
+                  <p className="text-gray-500 dark:text-gray-400 text-[13px] sm:text-xs font-jakarta line-clamp-1 mt-0.5">{s.tagline}</p>
                 </div>
 
                 {/* Right-side columns — pushed to the end */}
@@ -889,7 +947,7 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
           ) : (
             /* ── Grid View Card ── */
             <Link key={s.slug} href={`/startups/${s.slug}`} prefetch={false} className="group">
-              <div className="relative bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-5 hover:shadow-xl hover:border-brand/30 dark:hover:border-brand/30 transition-all duration-300 h-full flex flex-col">
+              <div className="relative bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3.5 sm:p-5 active:bg-gray-50 dark:active:bg-gray-800/60 sm:active:bg-white sm:dark:active:bg-gray-900 hover:shadow-xl hover:border-brand/30 dark:hover:border-brand/30 transition-all duration-300 h-full flex flex-col">
                 {/* Featured ribbon */}
                 {s.isFeatured && (
                   <div className="absolute -top-px -right-px bg-gradient-to-r from-red-500 to-rose-600 text-white text-[9px] font-bold font-jakarta uppercase tracking-wider px-2 py-px rounded-bl-md rounded-tr-xl">
@@ -898,9 +956,9 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
                 )}
 
                 {/* Header Section */}
-                <div className="flex items-start gap-2.5 sm:gap-3 mb-2.5 sm:mb-3">
+                <div className="flex items-center sm:items-start gap-2.5 sm:gap-3 mb-2 sm:mb-3">
                   <div className="relative shrink-0">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-white dark:bg-gray-800 border sm:border-2 border-gray-100 dark:border-gray-700 sm:shadow-sm overflow-hidden">
                       {s.logoUrl ? (
                         <Image src={s.logoUrl} alt={s.name} className="w-full h-full object-cover" width={48} height={48} sizes="48px" />
                       ) : (
@@ -912,12 +970,12 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 mb-0.5">
-                      <h3 className="font-sora font-extrabold text-sm sm:text-base text-navy dark:text-white group-hover:text-brand transition-colors truncate">{s.name}</h3>
+                      <h3 className="font-sora font-semibold sm:font-extrabold text-[15px] sm:text-base text-navy dark:text-white group-hover:text-brand transition-colors truncate">{s.name}</h3>
                       {isNewStartup(s.foundedYear) && (
                         <span className="shrink-0 text-[9px] font-bold font-jakarta bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded uppercase tracking-wide leading-none">New</span>
                       )}
                     </div>
-                    <div className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400 font-jakarta">
+                    <div className="flex items-center gap-1.5 text-xs sm:text-[11px] text-gray-500 dark:text-gray-400 font-jakarta">
                       {s.headquartersCity && (
                         <span className="flex items-center gap-0.5"><MapPin className="w-2.5 h-2.5" />{s.headquartersCity}</span>
                       )}
@@ -927,13 +985,13 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
                   </div>
                 </div>
 
-                <p className="text-gray-600 dark:text-gray-300 text-xs font-jakarta leading-relaxed mb-3 line-clamp-2 flex-1">{s.tagline}</p>
+                <p className="text-gray-600 dark:text-gray-300 text-[13px] sm:text-xs font-jakarta leading-snug sm:leading-relaxed mb-2.5 sm:mb-3 line-clamp-2 flex-1">{s.tagline}</p>
 
-                <div className="flex items-center gap-1.5 mb-3">
+                <div className="flex items-center gap-1.5 mb-2.5 sm:mb-3">
                   {s.category && (
-                    <span className="text-[11px] font-semibold bg-brand/10 dark:bg-brand/20 text-brand px-2 py-0.5 rounded-full truncate max-w-[120px]">{categoryShortLabel(s.category)}</span>
+                    <span className="text-xs sm:text-[11px] font-medium sm:font-semibold bg-brand/10 dark:bg-brand/20 text-brand px-2 py-0.5 rounded-full truncate max-w-[120px]">{categoryShortLabel(s.category)}</span>
                   )}
-                  <span className="text-[11px] font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2 py-0.5 rounded-full">{stageLabel(s.stage)}</span>
+                  <span className="text-xs sm:text-[11px] font-medium sm:font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2 py-0.5 rounded-full">{stageLabel(s.stage)}</span>
                   {s.status && s.status !== 'ACTIVE' && (
                     <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${s.status === 'ACQUIRED' ? 'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'}`}>
                       {s.status === 'PUBLIC' ? 'IPO' : s.status}

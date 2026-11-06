@@ -3,11 +3,14 @@ import { prisma } from '@udyaibase/database';
 import { getEmployerSession } from '@/lib/employer-auth';
 import { can, forbidden } from '@/lib/employer/permissions';
 import { activatePayment, checkoutSignatureValid } from '@/lib/employer/billing';
+import { writeLimited } from '@/lib/employer/write-limit';
 
 export const dynamic = 'force-dynamic';
 
 /** Checkout success callback. The webhook activates too; whichever lands first wins. */
 export async function POST(request: NextRequest) {
+  const limited = await writeLimited(request, 'billing/verify');
+  if (limited) return limited;
   const session = await getEmployerSession();
   if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
   if (!can(session.role, 'account.manage')) return forbidden();

@@ -327,7 +327,7 @@ export default function CandidatePanel({
                         <span className="text-gray-500"> · {fmtTime(e.createdAt)}</span>
                         {e.emailStatus && (
                           <span className={`block text-xs ${e.emailStatus === 'FAILED' ? 'text-red-700' : 'text-gray-500'}`}>
-                            {e.emailStatus === 'SCHEDULED' && e.scheduledFor ? `Email scheduled for ${fmtTime(e.scheduledFor)}` : e.emailStatus === 'SENT' ? `Emailed: “${e.emailSubject}”` : e.emailStatus === 'FAILED' ? 'Email failed to send' : 'Email queued'}
+                            {e.emailStatus === 'SCHEDULED' && e.scheduledFor ? `Email scheduled for ${fmtTime(e.scheduledFor)}` : e.emailStatus === 'SENT' ? `Emailed: “${e.emailSubject}”` : e.emailStatus === 'FAILED' ? `“${e.emailSubject ?? 'This email'}” didn’t reach them. Check the address, or contact them another way.` : 'Email queued'}
                           </span>
                         )}
                       </li>

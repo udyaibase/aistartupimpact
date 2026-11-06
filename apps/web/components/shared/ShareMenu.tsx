@@ -78,7 +78,7 @@ export default function ShareMenu({
       {variant === 'icon' ? (
         <button
           onClick={handleClick}
-          className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-400 hover:text-brand hover:border-brand/30 transition-colors"
+          className="p-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-400 hover:text-brand hover:border-brand/30 transition-colors"
           title="Share"
         >
           <Share2 className="w-4 h-4" />

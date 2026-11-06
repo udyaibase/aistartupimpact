@@ -6,10 +6,13 @@ import {
   generateTOTPSecret, generateQRCode, generateBackupCodes,
   hashBackupCodes, encryptSecret, verifyTOTPToken, decryptSecret,
 } from '@/lib/two-factor';
+import { writeLimited } from '@/lib/employer/write-limit';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
+  const limited = await writeLimited(request, '2fa-setup', 'sensitive');
+  if (limited) return limited;
   try {
     const session = await requireEmployerAuth();
     if (!can(session.role, 'account.manage')) return forbidden();

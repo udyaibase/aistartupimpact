@@ -5,14 +5,14 @@ import { requireEmployerAuth, sessionCutoff, setEmployerSession } from '@/lib/em
 import { changePasswordSchema, validateInput } from '@/lib/validation';
 import { can, forbidden } from '@/lib/employer/permissions';
 import { passwordSignInOpen } from '@/lib/employer/sign-in-policy';
-import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
+import { writeLimited } from '@/lib/employer/write-limit';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    const { success: allowed } = await checkRateLimit(strictRateLimit, getClientIdentifier(request));
-    if (!allowed) return NextResponse.json({ success: false, error: 'Too many requests. Try again later.' }, { status: 429 });
+    const limited = await writeLimited(request, 'change-password', 'sensitive');
+    if (limited) return limited;
 
     const session = await requireEmployerAuth();
     if (!can(session.role, 'account.manage')) return forbidden();

@@ -6,6 +6,7 @@ import { ensureCareersWidget, JobsWidgetInputError, parseJobsWidgetInput, syncCa
 import { can, forbidden } from '@/lib/employer/permissions';
 import { parseApplyFormConfig, type ApplyFormConfig } from '@/lib/jobs/apply-form';
 import type { Prisma } from '@prisma/client';
+import { writeLimited } from '@/lib/employer/write-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +23,8 @@ export async function GET() {
 
 /** Autosaved changes from the customize panel. */
 export async function PUT(request: NextRequest) {
+  const limited = await writeLimited(request, 'careers/widget');
+  if (limited) return limited;
   const session = await getEmployerSession();
   if (!session) return unauthorized();
   if (!can(session.role, 'widget.manage')) return forbidden();

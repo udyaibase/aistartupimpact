@@ -11,6 +11,7 @@ import { standardJobLocation } from '@/lib/jobs/location';
 import { can, forbidden } from '@/lib/employer/permissions';
 import { refreshPaths, refreshSections } from '@/lib/revalidate';
 import { maybeStartTrial } from '@/lib/employer/trial';
+import { writeLimited } from '@/lib/employer/write-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +27,8 @@ type Action = (typeof ACTIONS)[number];
  * owners publish it, or `decline` sends it back with a note.
  */
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const limited = await writeLimited(request, 'jobs/[id]/status');
+  if (limited) return limited;
   const { id } = await props.params;
   const session = await getEmployerSession();
   if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });

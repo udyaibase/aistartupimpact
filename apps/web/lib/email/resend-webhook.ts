@@ -33,3 +33,13 @@ export function suppressionReason(event: { type?: string; data?: { bounce?: { ty
   if (event.type === 'email.bounced') return event.data?.bounce?.type?.toLowerCase() === 'transient' ? null : 'bounced';
   return null;
 }
+
+/**
+ * What a delivery event means for a candidate email we recorded. Hard bounces only: a soft bounce is still being
+ * retried. A scheduled email becomes "sent" once Resend sends it. Null means nothing to record.
+ */
+export function candidateEmailUpdate(event: { type?: string; data?: { bounce?: { type?: string } } }): 'FAILED' | 'SENT' | null {
+  if (event.type === 'email.bounced') return event.data?.bounce?.type?.toLowerCase() === 'transient' ? null : 'FAILED';
+  if (event.type === 'email.sent' || event.type === 'email.delivered') return 'SENT';
+  return null;
+}

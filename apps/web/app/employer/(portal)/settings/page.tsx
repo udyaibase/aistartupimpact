@@ -25,6 +25,7 @@ export default function EmployerSettingsPage() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwords, setPasswords] = useState({ current: '', newPass: '', confirm: '' });
   const [changingPassword, setChangingPassword] = useState(false);
+  const [hasPassword, setHasPassword] = useState(false);
 
   // 2FA state
   const [twoFAEnabled, setTwoFAEnabled] = useState(false);
@@ -34,7 +35,7 @@ export default function EmployerSettingsPage() {
   const [showEmailChange, setShowEmailChange] = useState(false);
 
   useEffect(() => {
-    fetch('/api/employer/2fa-status').then(r => r.json()).then(d => { if (d.success) setTwoFAEnabled(d.enabled); }).catch(() => {});
+    fetch('/api/employer/2fa-status').then(r => r.json()).then(d => { if (d.success) { setTwoFAEnabled(d.enabled); setHasPassword(!!d.hasPassword); } }).catch(() => {});
   }, []);
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -152,6 +153,7 @@ export default function EmployerSettingsPage() {
         {/* Security */}
         <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
           <h3 className="font-sora font-bold text-sm text-navy dark:text-white mb-3">Security</h3>
+          {hasPassword ? (
           <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800">
             <div>
               <p className="text-sm font-medium text-navy dark:text-white font-jakarta">Change password</p>
@@ -164,6 +166,9 @@ export default function EmployerSettingsPage() {
               Change
             </button>
           </div>
+          ) : (
+            <p className="py-3 text-xs text-gray-500 font-jakarta border-b border-gray-100 dark:border-gray-800">You sign in with a code sent to your email, so there’s no password to manage.</p>
+          )}
           <div className="flex items-center justify-between py-3">
             <div>
               <p className="text-sm font-medium text-navy dark:text-white font-jakarta">Two-factor authentication</p>

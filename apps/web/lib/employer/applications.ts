@@ -46,12 +46,15 @@ export async function employerContext(employerId: string) {
 }
 
 /** `jobIds` limits an interviewer to the jobs they're assigned to (null = all). */
+/** The most candidates one board loads. The page says so when it's reached, so nobody is silently missing. */
+export const BOARD_LIMIT = 2000;
+
 export async function loadBoard(employerId: string, listingId?: string, jobIds: string[] | null = null): Promise<BoardCard[]> {
   if (listingId && jobIds && !jobIds.includes(listingId)) return [];
   const apps = await prisma.jobBoardApplication.findMany({
     where: { Listing: { employerId, deletedAt: null, ...(jobIds ? { id: { in: jobIds } } : {}) }, ...(listingId ? { listingId } : {}), NOT: { email: { endsWith: '@deleted.invalid' } } },
     orderBy: { appliedAt: 'desc' },
-    take: 2000,
+    take: BOARD_LIMIT,
     select: {
       id: true, listingId: true, fullName: true, currentTitle: true, currentCompany: true, city: true, experienceYears: true,
       noticePeriodDays: true, expectedCtcLakh: true, status: true, source: true, matchedSkills: true, confirmedSkills: true,
