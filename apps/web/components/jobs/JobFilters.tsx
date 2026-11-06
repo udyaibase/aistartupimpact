@@ -1,10 +1,11 @@
 'use client';
 
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import { useState, useCallback } from 'react';
-import { createPortal } from 'react-dom';
+import { useState, useCallback, useTransition } from 'react';
+import BottomSheet from '@/components/ui/BottomSheet';
+import FilterList, { type FilterRow } from '@/components/ui/FilterList';
 import { clsx } from 'clsx';
-import { SlidersHorizontal, X, ChevronDown } from 'lucide-react';
+import { SlidersHorizontal, X, ChevronDown, Loader2 } from 'lucide-react';
 
 const CATEGORIES = [
   { value: 'all', label: 'All roles' },
@@ -42,7 +43,12 @@ const DATE_POSTED = [
 ];
 
 const DESKTOP_ROLES_SHOWN = 7;
-const MOBILE_ROLES_SHOWN = 4;
+
+const SORT_LABELS = [
+  { value: '', label: 'Most recent' },
+  { value: 'salary', label: 'Highest salary' },
+  { value: 'views', label: 'Most viewed' },
+];
 
 interface WorkTypeCount {
   workType: string;
@@ -73,6 +79,7 @@ export default function JobFilters({
   const searchParams = useSearchParams();
   const [showAllRoles, setShowAllRoles] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [updating, startUpdate] = useTransition();
 
   const setFilter = useCallback((key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -81,11 +88,11 @@ export default function JobFilters({
     } else {
       params.set(key, value);
     }
-    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    startUpdate(() => router.push(`${pathname}?${params.toString()}`, { scroll: false }));
   }, [router, pathname, searchParams]);
 
   const clearAll = useCallback(() => {
-    router.push(pathname, { scroll: false });
+    startUpdate(() => router.push(pathname, { scroll: false }));
   }, [router, pathname]);
 
   const activeFilterCount = [
@@ -116,8 +123,17 @@ export default function JobFilters({
   const desktopCategories = showAllRoles ? CATEGORIES : CATEGORIES.slice(0, DESKTOP_ROLES_SHOWN);
   const desktopHiddenCount = CATEGORIES.length - DESKTOP_ROLES_SHOWN;
 
-  const mobileCategories = showAllRoles ? CATEGORIES.filter(c => c.value !== 'all') : CATEGORIES.filter(c => c.value !== 'all').slice(0, MOBILE_ROLES_SHOWN);
-  const mobileHiddenCount = CATEGORIES.filter(c => c.value !== 'all').length - MOBILE_ROLES_SHOWN;
+  // The phone sheet: 'all' in the lists means no filter, which the shared list writes as ''.
+  const noAll = (list: { value: string; label: string }[]) => list.map(o => (o.value === 'all' ? { ...o, value: '' } : o));
+  const sheetRows: FilterRow[] = [
+    { key: 'sort', label: 'Sort by', options: SORT_LABELS, value: currentSort && currentSort !== 'recent' ? currentSort : '', onChange: v => setFilter('sort', v), emptyLabel: 'Most recent' },
+    { key: 'workType', label: 'Work mode', options: noAll(WORK_TYPES.map(w => (w.value === 'all' ? w : { ...w, label: `${w.label} (${getWorkTypeCount(w.value)})` }))), value: currentWorkType && currentWorkType !== 'all' ? currentWorkType : '', onChange: v => setFilter('workType', v) },
+    { key: 'category', label: 'Role', options: noAll(CATEGORIES), value: currentCategory && currentCategory !== 'all' ? currentCategory : '', onChange: v => setFilter('category', v) },
+    { key: 'experience', label: 'Experience', options: [{ value: '', label: 'Any' }, ...EXPERIENCE_LEVELS], value: currentExperience ?? '', onChange: v => setFilter('experience', v) },
+    { key: 'datePosted', label: 'Date posted', options: noAll(DATE_POSTED), value: currentDatePosted && currentDatePosted !== 'all' ? currentDatePosted : '', onChange: v => setFilter('datePosted', v) },
+    { kind: 'toggle', key: 'visa', label: 'Visa sponsorship', checked: currentVisa === 'true', onChange: v => setFilter('visa', v ? 'true' : '') },
+    { kind: 'toggle', key: 'salaryDisclosed', label: 'Salary disclosed', checked: currentSalaryDisclosed === 'true', onChange: v => setFilter('salaryDisclosed', v ? 'true' : '') },
+  ];
 
   const SECTION = "text-[11px] font-bold font-jakarta text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3";
   const RADIO = "w-4 h-4 accent-gray-900 dark:accent-white border-gray-300 dark:border-gray-600 cursor-pointer";
@@ -226,167 +242,49 @@ export default function JobFilters({
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
             <button
-              onClick={() => setMobileOpen(o => !o)}
+              onClick={() => setMobileOpen(true)}
+              aria-haspopup="dialog"
               className={clsx(
-                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-jakarta font-semibold shrink-0 transition-colors',
+                'inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[13px] font-jakarta font-medium shrink-0 transition-colors duration-200',
                 activeFilterCount > 0
                   ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
                   : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
               )}
             >
-              <SlidersHorizontal className="w-3 h-3" />
+              <SlidersHorizontal className="w-3.5 h-3.5" />
               Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
             </button>
             {activeFilters.map(f => (
               <button
                 key={f.key}
                 onClick={() => setFilter(f.key, '')}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-jakarta font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 shrink-0"
+                className="inline-flex items-center gap-1 h-8 px-2.5 rounded-full text-[13px] font-jakarta font-medium shrink-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 shrink-0"
               >
                 {f.label} <X className="w-3 h-3 text-gray-400" />
               </button>
             ))}
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta shrink-0">
-            <span className="font-bold text-navy dark:text-white">{total > 0 ? `${total}+` : '0'}</span> jobs
+          <p className="text-[13px] text-gray-500 dark:text-gray-400 font-jakarta shrink-0">
+            <span className="font-semibold text-navy dark:text-white">{total > 0 ? `${total}+` : '0'}</span> jobs
           </p>
         </div>
 
-        {/* Compact bottom sheet — ~30% height, jobs visible behind. Portaled: the row sits in a sticky bar that can
-            be transformed, which would otherwise trap this fixed overlay inside it. */}
-        {mobileOpen && createPortal(
-          <div className="fixed inset-0 z-50">
-            <div className="absolute inset-0 bg-black/30" onClick={() => setMobileOpen(false)} />
-            <div className="absolute bottom-16 left-0 right-0 bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl animate-slide-up" style={{ maxHeight: '45vh' }}>
-              {/* Handle — tap to close */}
-              <button onClick={() => setMobileOpen(false)} className="w-full flex justify-center pt-2.5 pb-1">
-                <div className="w-9 h-1 rounded-full bg-gray-300 dark:bg-gray-600" />
-              </button>
-              {/* Header */}
-              <div className="flex items-center justify-between px-4 pb-2">
-                <h3 className="font-sora font-bold text-sm text-navy dark:text-white">Filters</h3>
-                {activeFilterCount > 0 && (
-                  <button onClick={clearAll} className="text-xs font-semibold font-jakarta text-brand">
-                    Clear all
-                  </button>
-                )}
-              </div>
-              {/* Scrollable compact content */}
-              <div className="overflow-y-auto px-4 pb-3" style={{ maxHeight: 'calc(45vh - 5rem)' }}>
-                {/* WORK MODE */}
-                <div>
-                  <h4 className="text-[10px] font-bold font-jakarta text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Work Mode</h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {WORK_TYPES.map(wt => (
-                      <button
-                        key={wt.value}
-                        onClick={() => setFilter('workType', wt.value)}
-                        className={clsx(
-                          'px-3 py-1.5 rounded-full text-xs font-jakarta font-medium transition-colors',
-                          (currentWorkType || 'all') === wt.value
-                            ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
-                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-                        )}
-                      >
-                        {wt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* ROLE */}
-                <div className="mt-3">
-                  <h4 className="text-[10px] font-bold font-jakarta text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Role</h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {mobileCategories.map(cat => (
-                      <button
-                        key={cat.value}
-                        onClick={() => setFilter('category', cat.value)}
-                        className={clsx(
-                          'px-3 py-1.5 rounded-full text-xs font-jakarta font-medium transition-colors',
-                          currentCategory === cat.value
-                            ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
-                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-                        )}
-                      >
-                        {cat.label}
-                      </button>
-                    ))}
-                    {!showAllRoles && mobileHiddenCount > 0 && (
-                      <button onClick={() => setShowAllRoles(true)} className="px-3 py-1.5 rounded-full text-xs font-jakarta font-medium bg-gray-100 dark:bg-gray-800 text-gray-500">
-                        +{mobileHiddenCount} more
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* EXPERIENCE */}
-                <div className="mt-3">
-                  <h4 className="text-[10px] font-bold font-jakarta text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Experience</h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {EXPERIENCE_LEVELS.map(exp => (
-                      <button
-                        key={exp.value}
-                        onClick={() => setFilter('experience', currentExperience === exp.value ? '' : exp.value)}
-                        className={clsx(
-                          'px-3 py-1.5 rounded-full text-xs font-jakarta font-medium transition-colors',
-                          currentExperience === exp.value
-                            ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
-                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-                        )}
-                      >
-                        {exp.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* DATE POSTED */}
-                <div className="mt-3">
-                  <h4 className="text-[10px] font-bold font-jakarta text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Date posted</h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {DATE_POSTED.map(dp => (
-                      <button
-                        key={dp.value}
-                        onClick={() => setFilter('datePosted', dp.value)}
-                        className={clsx(
-                          'px-3 py-1.5 rounded-full text-xs font-jakarta font-medium transition-colors',
-                          (currentDatePosted || 'all') === dp.value
-                            ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
-                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-                        )}
-                      >
-                        {dp.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* MORE — checkboxes */}
-                <div className="mt-3 space-y-2">
-                  <label className="flex items-center justify-between cursor-pointer">
-                    <span className="text-xs font-jakarta text-gray-700 dark:text-gray-300">Visa sponsorship</span>
-                    <input type="checkbox" checked={currentVisa === 'true'} onChange={(e) => setFilter('visa', e.target.checked ? 'true' : '')} className={CHECK} />
-                  </label>
-                  <label className="flex items-center justify-between cursor-pointer">
-                    <span className="text-xs font-jakarta text-gray-700 dark:text-gray-300">Salary disclosed</span>
-                    <input type="checkbox" checked={currentSalaryDisclosed === 'true'} onChange={(e) => setFilter('salaryDisclosed', e.target.checked ? 'true' : '')} className={CHECK} />
-                  </label>
-                </div>
-              </div>
-              {/* Apply button */}
-              <div className="px-4 pb-5 pt-2 border-t border-gray-100 dark:border-gray-800">
-                <button
-                  onClick={() => setMobileOpen(false)}
-                  className="w-full py-2.5 rounded-lg bg-brand text-white font-sora font-bold text-xs"
-                >
-                  Show {total} jobs
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
+        <BottomSheet
+          open={mobileOpen}
+          onClose={() => setMobileOpen(false)}
+          title="Filters"
+          flush
+          headerAction={(activeFilterCount > 0 || (currentSort && currentSort !== 'recent')) ? (
+            <button type="button" onClick={clearAll} className="min-h-[44px] px-2 text-sm font-semibold text-brand font-jakarta">Clear all</button>
+          ) : null}
+          footer={(
+            <button type="button" onClick={() => setMobileOpen(false)} className="w-full min-h-[48px] rounded-xl bg-brand text-white font-jakarta font-bold text-[15px] inline-flex items-center justify-center gap-2 active:scale-[0.98] transition-transform duration-150 motion-reduce:transition-none">
+              {updating ? <><Loader2 className="w-4 h-4 animate-spin" aria-hidden /> Finding jobs</> : `Show ${total > 0 ? `${total}+` : 0} ${total === 1 ? 'job' : 'jobs'}`}
+            </button>
+          )}
+        >
+          <FilterList sheetOpen={mobileOpen} rows={sheetRows} />
+        </BottomSheet>
       </div>
       )}
     </>

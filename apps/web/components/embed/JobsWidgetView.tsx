@@ -424,7 +424,7 @@ function JobDetail({ job, config, pageHref, onBack, onApply }: {
     <button type="button" onClick={onApply} className="embed-focus embed-btn embed-btn-size inline-flex items-center justify-center font-semibold whitespace-nowrap transition">Apply now</button>
   ) : (
     <a href={job.applicationUrl || pageHref} target="_blank" rel="noopener" className="embed-focus embed-btn embed-btn-size inline-flex items-center justify-center font-semibold whitespace-nowrap transition">
-      Apply on company site<span className="sr-only"> (opens in a new tab)</span>
+      Apply now<span className="sr-only"> (opens the company site in a new tab)</span>
     </a>
   );
   return (

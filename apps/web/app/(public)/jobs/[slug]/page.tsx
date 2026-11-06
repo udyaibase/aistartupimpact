@@ -210,7 +210,7 @@ export default async function JobDetailPage(props: PageProps) {
           {/* Header */}
           <div className="card p-5 sm:p-6">
             <div className="flex items-start gap-4">
-              <div className="w-14 h-14 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden shrink-0">
+              <div className="w-14 h-14 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden shrink-0">
                 {job.logoUrl ? (
                   <Image src={job.logoUrl} alt={job.companyName} width={56} height={56} sizes="56px" className="w-full h-full object-cover" />
                 ) : (
@@ -270,20 +270,20 @@ export default async function JobDetailPage(props: PageProps) {
 
             {/* Meta badges */}
             <div className="flex flex-wrap gap-2 mt-3">
-              <span className="inline-flex items-center gap-1 text-xs font-jakarta bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 px-2.5 py-1 rounded-full">
+              <span className="inline-flex items-center gap-1 text-xs font-jakarta bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 px-2.5 py-1 rounded-md">
                 <MapPin className="w-3 h-3" />
                 {job.workType === 'REMOTE' ? 'Remote' : `${job.city || ''} ${job.country || ''}`.trim() || job.workType}
               </span>
-              <span className="text-xs font-jakarta bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2.5 py-1 rounded-full">
+              <span className="text-xs font-jakarta bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2.5 py-1 rounded-md">
                 {job.category?.replace(/_/g, ' ')}
               </span>
               {job.visaSponsorship && (
-                <span className="text-xs font-jakarta bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 px-2.5 py-1 rounded-full">
+                <span className="text-xs font-jakarta bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 px-2.5 py-1 rounded-md">
                   Visa Sponsorship
                 </span>
               )}
               {job.isFeatured && (
-                <span className="text-xs font-bold font-jakarta bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full">
+                <span className="text-xs font-bold font-jakarta bg-amber-100 text-amber-700 px-2.5 py-1 rounded-md">
                   Featured
                 </span>
               )}
@@ -306,7 +306,7 @@ export default async function JobDetailPage(props: PageProps) {
               <h2 className="font-sora font-bold text-base text-navy dark:text-white mb-3">Required Skills</h2>
               <div className="flex flex-wrap gap-2">
                 {job.skills.map((skill: string) => (
-                  <span key={skill} className="text-xs font-jakarta bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-full">
+                  <span key={skill} className="text-xs font-jakarta bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-md">
                     {skill}
                   </span>
                 ))}
@@ -341,7 +341,7 @@ export default async function JobDetailPage(props: PageProps) {
           {/* Company Card */}
           <div className="card p-5">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-14 h-14 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden shrink-0">
+              <div className="w-14 h-14 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden shrink-0">
                 {job.logoUrl ? (
                   <Image src={job.logoUrl} alt={job.companyName} width={56} height={56} sizes="56px" className="w-full h-full object-cover" />
                 ) : (
@@ -367,13 +367,13 @@ export default async function JobDetailPage(props: PageProps) {
             {(job.industry || job.companySize) && (
               <div className="grid grid-cols-2 gap-3 mb-4">
                 {job.industry && (
-                  <div className="bg-gray-50 dark:bg-gray-800/60 rounded-xl px-3 py-2.5">
+                  <div className="bg-gray-50 dark:bg-gray-800/60 rounded-md px-3 py-2.5">
                     <p className="text-[10px] text-gray-400 font-jakarta uppercase tracking-wider mb-0.5">Industry</p>
                     <p className="text-xs font-semibold font-jakarta text-navy dark:text-white">{job.industry}</p>
                   </div>
                 )}
                 {job.companySize && (
-                  <div className="bg-gray-50 dark:bg-gray-800/60 rounded-xl px-3 py-2.5">
+                  <div className="bg-gray-50 dark:bg-gray-800/60 rounded-md px-3 py-2.5">
                     <p className="text-[10px] text-gray-400 font-jakarta uppercase tracking-wider mb-0.5">Team Size</p>
                     <p className="text-xs font-semibold font-jakarta text-navy dark:text-white">{job.companySize}</p>
                   </div>
@@ -386,7 +386,7 @@ export default async function JobDetailPage(props: PageProps) {
             {job.startupId ? (
               <Link
                 href={`/startups/${job.companySlug}`}
-                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-xs font-bold font-jakarta text-white bg-brand hover:bg-brand/90 transition-colors"
+                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-md text-xs font-bold font-jakarta text-white dark:text-gray-900 bg-gray-900 dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
               >
                 View Company Profile <ChevronRight className="w-3.5 h-3.5" />
               </Link>
@@ -395,7 +395,7 @@ export default async function JobDetailPage(props: PageProps) {
                 href={job.websiteUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-xs font-bold font-jakarta text-white bg-brand hover:bg-brand/90 transition-colors"
+                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-md text-xs font-bold font-jakarta text-white dark:text-gray-900 bg-gray-900 dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
               >
                 Visit Company Website <ExternalLink className="w-3.5 h-3.5" />
               </a>
@@ -412,7 +412,7 @@ export default async function JobDetailPage(props: PageProps) {
                 <h3 className="font-sora font-bold text-sm text-navy dark:text-white">
                   More at {job.companyName}
                 </h3>
-                <span className="ml-auto text-[10px] font-bold font-jakarta bg-brand/10 text-brand px-2 py-0.5 rounded-full">
+                <span className="ml-auto text-[10px] font-bold font-jakarta bg-brand/10 text-brand px-2 py-0.5 rounded-md">
                   {otherJobs.length} open
                 </span>
               </div>
@@ -421,7 +421,7 @@ export default async function JobDetailPage(props: PageProps) {
                   <Link
                     key={other.id}
                     href={`/jobs/${other.slug}`}
-                    className="flex items-center gap-3 p-2.5 rounded-xl bg-white dark:bg-gray-800/60 border border-gray-100 dark:border-gray-700/50 hover:border-brand/40 hover:shadow-sm transition-all group"
+                    className="flex items-center gap-3 p-2.5 rounded-md bg-white dark:bg-gray-800/60 border border-gray-100 dark:border-gray-700/50 hover:border-brand/40 hover:shadow-sm transition-all group"
                   >
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold font-jakarta text-navy dark:text-white group-hover:text-brand transition-colors truncate">

@@ -9,6 +9,8 @@ import { Star, Zap, ArrowRight, CheckSquare, Square, X, BarChart, Search, Grid3X
 import BookmarkButton from './BookmarkButton';
 import UpvoteButton from './tools/UpvoteButton';
 import { useHeadroomBar } from '@/hooks/useHeadroomBar';
+import BottomSheet from './ui/BottomSheet';
+import FilterList, { type FilterRow } from './ui/FilterList';
 import SmartSearchBox, { type SearchSuggestion } from './search/SmartSearchBox';
 import { indexTools, searchTools } from '@/lib/search/tool-search';
 import { removeChipFromQuery } from '@/lib/search/understand';
@@ -111,6 +113,7 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
   const [showAllInGroup, setShowAllInGroup] = useState<Set<string>>(new Set());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const parentPillsRef = useRef<HTMLDivElement>(null);
   const subPillsRef = useRef<HTMLDivElement>(null);
 
@@ -423,8 +426,69 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
   useEffect(() => { onSubcategoryChangeRef.current?.(selectedSubcategory); }, [selectedSubcategory]);
 
   // Sticky search & filter bar (same behaviour as the startups directory).
+  const resultsRow = (
+        <div className="flex items-center justify-between gap-3 text-[13px] sm:text-sm text-gray-500 dark:text-gray-400 font-jakarta">
+          <p aria-live="polite">
+            Found <span className="font-semibold sm:font-bold text-navy dark:text-white">{filteredTools.length}</span> {filteredTools.length === 1 ? 'tool' : 'tools'}
+            {hasMore && <span className="ml-1 text-gray-400">· showing {Math.min(visibleCount, filteredTools.length)}</span>}
+          </p>
+          <div role="group" aria-label="View" className="flex items-center gap-1.5">
+            <button
+              onClick={() => setViewMode('grid')}
+              aria-pressed={viewMode === 'grid'}
+              className={`btn-icon w-8 h-8 sm:w-9 sm:h-9 ${viewMode === 'grid' ? 'btn-icon-active' : ''}`}
+              aria-label="Grid view"
+            >
+              <Grid3X3 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              aria-pressed={viewMode === 'list'}
+              className={`btn-icon w-8 h-8 sm:w-9 sm:h-9 ${viewMode === 'list' ? 'btn-icon-active' : ''}`}
+              aria-label="List view"
+            >
+              <List className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+  );
+
   const barAnchorRef = useRef<HTMLDivElement>(null);
-  const bar = useHeadroomBar(barAnchorRef, showMoreFilters || searchOpen);
+  const bar = useHeadroomBar(barAnchorRef, showMoreFilters || searchOpen || sheetOpen);
+
+  // A link with a tag opens the inline panel on desktop; phones use the sheet instead, so the bar can still hide.
+  useEffect(() => {
+    if (!window.matchMedia('(min-width: 640px)').matches) setShowMoreFilters(false);
+  }, []);
+
+  const clearAllFilters = () => { setSearchQuery(''); setSelectedCategory(defaultCategory); setSelectedSubcategory('all'); setSelectedPricing('all'); setSelectedTagIds([]); setFreeTrialOnly(false); setVisibleCount(ITEMS_PER_PAGE); };
+  const filterCount = selectedTagIds.length + (selectedPricing !== 'all' ? 1 : 0) + (freeTrialOnly ? 1 : 0);
+  const toggleTag = (id: string) => {
+    setSelectedTagIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+    setVisibleCount(ITEMS_PER_PAGE);
+  };
+  const sheetRows: FilterRow[] = [
+    {
+      key: 'sort', label: 'Sort by', value: effectiveSort, defaultValue: searchQuery.trim() ? 'relevance' : 'rating', onChange: v => setSortBy(v as SortOption),
+      options: [
+        ...(searchQuery.trim() ? [{ value: 'relevance', label: 'Best match' }] : []),
+        { value: 'rating', label: 'Top Rated' }, { value: 'upvotes', label: 'Most Upvoted' }, { value: 'newest', label: 'Newest First' }, { value: 'name', label: 'A → Z' },
+      ],
+    },
+    {
+      key: 'pricing', label: 'Pricing', value: selectedPricing === 'all' ? '' : selectedPricing, onChange: v => { setSelectedPricing(v || 'all'); setVisibleCount(ITEMS_PER_PAGE); },
+      options: [{ value: '', label: 'All Pricing' }, ...pricingModels.map(p => ({ value: p, label: p.charAt(0) + p.slice(1).toLowerCase().replace(/_/g, ' ') }))],
+    },
+    { kind: 'toggle', key: 'trial', label: 'Free trial only', checked: freeTrialOnly, onChange: v => { setFreeTrialOnly(v); setVisibleCount(ITEMS_PER_PAGE); } },
+    ...tagGroups.flatMap((group): FilterRow[] => {
+      const tags = group.tags.filter((t: TagItem) => (tagCounts.get(t.id) || 0) > 0 || selectedTagIds.includes(t.id));
+      if (tags.length === 0) return [];
+      return [{
+        kind: 'multi', key: `tag-${group.id}`, label: group.name, values: selectedTagIds.filter(id => tags.some((t: TagItem) => t.id === id)), onToggle: toggleTag,
+        options: tags.map((t: TagItem) => ({ value: t.id, label: (tagCounts.get(t.id) || 0) > 0 ? `${t.name} (${tagCounts.get(t.id)})` : t.name })),
+      }];
+    }),
+  ];
   const scrollToResults = bar.scrollToResults;
   const filterKey = [searchQuery, selectedCategory, selectedSubcategory, selectedPricing, sortBy, freeTrialOnly, selectedTagIds.join(',')].join('|');
   const prevFilterKey = useRef(filterKey);
@@ -446,30 +510,34 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
       {/* ── Search & filter bar: sticks under the site header (hides on scroll down on small screens) ── */}
       <div ref={barAnchorRef} aria-hidden className="h-0" />
       <div
-        style={{ top: bar.headerOffset, transform: bar.hidden ? `translateY(calc(-100% - ${bar.headerOffset}px))` : undefined }}
-        className="sticky z-40 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 pb-3 mb-3 sm:mb-5 transition-transform duration-300 ease-out"
+        style={{
+          top: bar.headerOffset,
+          transform: bar.hidden ? `translate3d(0, calc(-100% - ${bar.headerOffset}px), 0)` : 'translate3d(0, 0, 0)',
+          transition: 'transform 360ms cubic-bezier(0.32, 0.72, 0, 1)',
+        }}
+        className="sticky z-40 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 py-2 sm:pt-0 sm:pb-3 mb-0 sm:mb-5 flex flex-col gap-2 sm:block will-change-transform motion-reduce:!transition-none"
       >
       {/* Full-bleed backdrop: runs edge to edge of the window while the controls stay aligned with the content */}
       <div
         aria-hidden
-        className={`absolute inset-y-0 -left-[100vw] -right-[100vw] -z-10 bg-gray-50/95 dark:bg-gray-950/95 backdrop-blur-md transition-shadow duration-300 ${
+        className={`absolute inset-y-0 -left-[100vw] -right-[100vw] -z-10 bg-gray-50 dark:bg-gray-950 sm:bg-gray-50/95 sm:dark:bg-gray-950/95 sm:backdrop-blur-md transition-shadow duration-300 ${
           bar.stuck ? 'shadow-[0_8px_16px_-12px_rgba(0,0,0,0.25)] border-b border-gray-200/70 dark:border-gray-800' : ''
         }`}
       />
 
       {/* ── Category Pills ── */}
       {(!scopeCategory || subcategories.length > 1) && (
-      <div className="pt-2 sm:pt-3">
+      <div className="order-2 sm:order-none min-w-0 sm:pt-3">
         {/* Parent category pills */}
         {!scopeCategory && (
         <div className="relative">
-        <div ref={parentPillsRef} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 pr-8 -webkit-overflow-scrolling-touch" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div ref={parentPillsRef} className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 py-1 -my-1 sm:m-0 sm:px-0 sm:pt-0 sm:pb-1 sm:pr-8" style={{ WebkitOverflowScrolling: 'touch' }}>
           <button
             onClick={() => handleCategoryChange('all')}
-            className={`shrink-0 px-3.5 py-2 sm:px-4 sm:py-1.5 rounded-full text-xs font-bold font-jakarta transition-all active:scale-95 ${
+            className={`relative shrink-0 h-8 sm:h-auto px-3 sm:px-4 sm:py-1.5 rounded-full text-[13px] sm:text-xs font-medium sm:font-bold font-jakarta before:absolute before:inset-x-0 before:-inset-y-1 sm:before:hidden transition-colors duration-200 ${
               selectedCategory === 'all'
-                ? 'bg-brand text-white shadow-sm'
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                ? 'bg-brand text-white sm:shadow-sm'
+                : 'bg-gray-200/60 sm:bg-gray-100 dark:bg-gray-800 text-gray-700 sm:text-gray-600 dark:text-gray-300 sm:dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
             }`}
           >
             All ({picks.length})
@@ -478,10 +546,10 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
             <button
               key={cat.slug}
               onClick={() => handleCategoryChange(cat.slug)}
-              className={`shrink-0 px-3.5 py-2 sm:px-4 sm:py-1.5 rounded-full text-xs font-bold font-jakarta transition-all active:scale-95 ${
+              className={`relative shrink-0 h-8 sm:h-auto px-3 sm:px-4 sm:py-1.5 rounded-full text-[13px] sm:text-xs font-medium sm:font-bold font-jakarta before:absolute before:inset-x-0 before:-inset-y-1 sm:before:hidden transition-colors duration-200 ${
                 selectedCategory === cat.slug
-                  ? 'bg-brand text-white shadow-sm'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  ? 'bg-brand text-white sm:shadow-sm'
+                  : 'bg-gray-200/60 sm:bg-gray-100 dark:bg-gray-800 text-gray-700 sm:text-gray-600 dark:text-gray-300 sm:dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
               }`}
             >
               {cat.name} ({cat.count})
@@ -494,10 +562,10 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
 
         {/* Subcategory pills (shown when a parent is selected) */}
         {selectedCategory !== 'all' && subcategories.length > 1 && (
-          <div ref={subPillsRef} className={`flex items-center gap-2 ${scopeCategory ? '' : 'mt-2'} overflow-x-auto scrollbar-hide pb-1`} style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div ref={subPillsRef} className={`flex items-center gap-1.5 sm:gap-2 ${scopeCategory ? '' : 'mt-2'} overflow-x-auto scrollbar-hide -mx-4 px-4 py-1 -mb-1 sm:mx-0 sm:px-0 sm:pt-0 sm:pb-1 sm:mb-0`} style={{ WebkitOverflowScrolling: 'touch' }}>
             <button
               onClick={() => handleSubcategoryChange('all')}
-              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold font-jakarta transition-all active:scale-95 ${
+              className={`relative shrink-0 h-8 sm:h-auto px-3 sm:py-1.5 rounded-full text-[13px] sm:text-xs font-medium sm:font-semibold font-jakarta before:absolute before:inset-x-0 before:-inset-y-1 sm:before:hidden transition-colors duration-200 ${
                 selectedSubcategory === 'all'
                   ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
                   : 'bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
@@ -509,7 +577,7 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
               <button
                 key={sub.slug}
                 onClick={() => handleSubcategoryChange(sub.slug)}
-                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold font-jakarta transition-all active:scale-95 ${
+                className={`relative shrink-0 h-8 sm:h-auto px-3 sm:py-1.5 rounded-full text-[13px] sm:text-xs font-medium sm:font-semibold font-jakarta before:absolute before:inset-x-0 before:-inset-y-1 sm:before:hidden transition-colors duration-200 ${
                   selectedSubcategory === sub.slug
                     ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
                     : 'bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
@@ -524,8 +592,10 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
       )}
 
       {/* ── Search + Filters + Sort + View Toggle ── */}
-      <div className="pt-3 space-y-2.5 sm:space-y-3">
-        {/* Search Bar */}
+      <div className="order-1 sm:order-none sm:pt-3 sm:space-y-3">
+        {/* Search Bar, with the phone filter button beside it */}
+        <div className="flex items-start gap-2 sm:block">
+        <div className="flex-1 min-w-0">
         <SmartSearchBox
           value={searchQuery}
           onChange={handleSearchChange}
@@ -538,9 +608,25 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
           onRemoveChip={(chip) => handleSearchChange(removeChipFromQuery(searchQuery, chip))}
           onOpenChange={setSearchOpen}
         />
+        </div>
+        <button
+          type="button"
+          onClick={() => setSheetOpen(true)}
+          aria-haspopup="dialog"
+          aria-label={filterCount > 0 ? `Filters, ${filterCount} on` : 'Filters'}
+          className={`sm:hidden relative shrink-0 w-10 h-10 flex items-center justify-center rounded-xl border transition-colors duration-200 active:scale-95 motion-reduce:active:scale-100 ${
+            filterCount > 0 || (sortBy !== 'rating' && sortBy !== 'relevance')
+              ? 'border-brand bg-brand/5 text-brand'
+              : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+          }`}
+        >
+          <SlidersHorizontal className="w-4 h-4" aria-hidden />
+          {filterCount > 0 && <span className="absolute -top-1.5 -right-1.5 w-5 h-5 flex items-center justify-center bg-brand text-white text-xs font-bold rounded-full">{filterCount}</span>}
+        </button>
+        </div>
 
-        {/* Filters + Sort Row */}
-        <div className="flex items-center gap-2">
+        {/* Filters + Sort Row (phones use the sheet) */}
+        <div className="hidden sm:flex items-center gap-2">
           {/* Filters Button */}
           <button
             onClick={() => setShowMoreFilters(!showMoreFilters)}
@@ -592,36 +678,12 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
           )}
         </div>
 
-        {/* Results Count + View Toggle — same sizes as the startups directory */}
-        <div className="flex items-center justify-between gap-3 text-sm text-gray-500 dark:text-gray-400 font-jakarta">
-          <p aria-live="polite">
-            Found <span className="font-bold text-navy dark:text-white">{filteredTools.length}</span> {filteredTools.length === 1 ? 'tool' : 'tools'}
-            {hasMore && <span className="ml-1 text-gray-400">· showing {Math.min(visibleCount, filteredTools.length)}</span>}
-          </p>
-          <div role="group" aria-label="View" className="flex items-center gap-1.5">
-            <button
-              onClick={() => setViewMode('grid')}
-              aria-pressed={viewMode === 'grid'}
-              className={`btn-icon ${viewMode === 'grid' ? 'btn-icon-active' : ''}`}
-              aria-label="Grid view"
-            >
-              <Grid3X3 className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              aria-pressed={viewMode === 'list'}
-              className={`btn-icon ${viewMode === 'list' ? 'btn-icon-active' : ''}`}
-              aria-label="List view"
-            >
-              <List className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
+        <div className="hidden sm:block">{resultsRow}</div>
       </div>
 
       {/* ── FILTERS PANEL ── */}
       {tagGroups.length > 0 && (showMoreFilters || selectedTagIds.length > 0 || selectedPricing !== 'all' || freeTrialOnly) && (
-        <div className="pt-3">
+        <div className="order-3 sm:order-none min-w-0 sm:pt-3">
           {/* Active filter chips */}
           {(selectedTagIds.length > 0 || selectedPricing !== 'all' || freeTrialOnly) && (
             <div className="flex flex-wrap items-center gap-1.5 mb-3">
@@ -669,7 +731,7 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
 
           {/* Expanded filter panel */}
           {showMoreFilters && (
-            <div className="mt-3 p-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl space-y-3 max-h-[45vh] overflow-y-auto overscroll-contain">
+            <div className="hidden sm:block mt-3 p-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl space-y-3 max-h-[45vh] overflow-y-auto overscroll-contain">
               {/* Pricing & Free Trial */}
               <div className="border-b border-gray-100 dark:border-gray-800 pb-3">
                 <div className="flex flex-col gap-2">
@@ -774,6 +836,25 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
         </div>
       )}
       </div>
+
+      <div className="sm:hidden mt-2.5 mb-2.5">{resultsRow}</div>
+
+      <BottomSheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        title="Filters"
+        flush
+        headerAction={(filterCount > 0 || (sortBy !== 'rating' && sortBy !== 'relevance') || searchQuery || selectedCategory !== defaultCategory) ? (
+          <button type="button" onClick={clearAllFilters} className="min-h-[44px] px-2 text-sm font-semibold text-brand font-jakarta">Clear all</button>
+        ) : null}
+        footer={(
+          <button type="button" onClick={() => setSheetOpen(false)} className="w-full min-h-[48px] rounded-xl bg-brand text-white font-jakarta font-bold text-[15px] active:scale-[0.98] transition-transform duration-150 motion-reduce:transition-none">
+            Show {filteredTools.length} {filteredTools.length === 1 ? 'tool' : 'tools'}
+          </button>
+        )}
+      >
+        <FilterList sheetOpen={sheetOpen} rows={sheetRows} />
+      </BottomSheet>
 
       {/* ── GRID VIEW ── */}
       {viewMode === 'grid' && (

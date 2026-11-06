@@ -88,16 +88,16 @@ export default function SmartSearchBox({
   return (
     <div className="relative w-full">
       <div
-        className={`group flex items-center gap-2.5 h-12 pl-4 pr-2 rounded-2xl border bg-white dark:bg-gray-900 transition-all ${
+        className={`group flex items-center gap-2 sm:gap-2.5 h-10 sm:h-12 pl-3 sm:pl-4 pr-1.5 sm:pr-2 rounded-xl sm:rounded-2xl border bg-white dark:bg-gray-900 transition-all ${
           focused
             ? 'border-brand ring-4 ring-brand/10 shadow-md'
             : 'border-gray-200 dark:border-gray-700 shadow-sm hover:border-gray-300 dark:hover:border-gray-600'
         }`}
       >
         {loading ? (
-          <Loader2 className="w-[18px] h-[18px] text-brand animate-spin shrink-0" aria-hidden />
+          <Loader2 className="w-4 h-4 sm:w-[18px] sm:h-[18px] text-brand animate-spin shrink-0" aria-hidden />
         ) : (
-          <Search className={`w-[18px] h-[18px] shrink-0 transition-colors ${focused ? 'text-brand' : 'text-gray-400'}`} aria-hidden />
+          <Search className={`w-4 h-4 sm:w-[18px] sm:h-[18px] shrink-0 transition-colors ${focused ? 'text-brand' : 'text-gray-400'}`} aria-hidden />
         )}
         <input
           ref={inputRef}
@@ -118,7 +118,7 @@ export default function SmartSearchBox({
           enterKeyHint="search"
           autoComplete="off"
           spellCheck={false}
-          className="flex-1 min-w-0 h-full bg-transparent text-base sm:text-[15px] text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none font-jakarta [&::-webkit-search-cancel-button]:hidden"
+          className="flex-1 min-w-0 h-full bg-transparent text-base sm:text-[15px] text-gray-900 dark:text-white placeholder:text-[14px] sm:placeholder:text-[15px] placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none font-jakarta [&::-webkit-search-cancel-button]:hidden"
         />
         {value ? (
           <button
