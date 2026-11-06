@@ -70,4 +70,12 @@ describe('2FA attempt limit', () => {
       expect(queryText()).toContain(`"${table}"`);
     }
   });
+
+  it('also limits employer accounts, on their own table', async () => {
+    db.sql.mockResolvedValueOnce([{ attempts: MAX_2FA_ATTEMPTS, email: 'o@acme.ai', name: 'Acme' }]);
+    expect(await recordTwoFactorFailure('employer', 'e1')).toBe(true);
+    expect(queryText()).toContain('"JobBoardEmployer"');
+    expect(db.sendEmail).toHaveBeenCalledWith(expect.objectContaining({ to: 'o@acme.ai' }));
+    expect(db.sendEmail.mock.calls[0][0].html).toContain('/employer/login');
+  });
 });

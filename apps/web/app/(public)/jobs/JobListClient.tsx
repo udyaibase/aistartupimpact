@@ -79,6 +79,34 @@ function SaveButton({ slug, initialSaved, onToggle }: { slug: string; initialSav
   );
 }
 
+const SKILLS_ON_PHONE = 2;
+const SKILLS_ON_DESKTOP = 5;
+
+/**
+ * A job's top skills as a calm row of outlined chips, with a count of the rest: some jobs list nearly 40. Long names
+ * are cut short and shown in full on hover. Phones show fewer, on one line, so a card stays short.
+ */
+function SkillChips({ skills }: { skills?: string[] | null }) {
+  const unique = [...new Map((skills ?? []).map((s) => s.trim()).filter(Boolean).map((s) => [s.toLowerCase(), s])).values()];
+  if (unique.length === 0) return null;
+  const moreOnPhone = unique.length - SKILLS_ON_PHONE;
+  const moreOnDesktop = unique.length - SKILLS_ON_DESKTOP;
+
+  return (
+    <ul aria-label="Skills" className="flex flex-nowrap sm:flex-wrap items-center gap-1.5 mt-3">
+      {unique.slice(0, SKILLS_ON_DESKTOP).map((skill, i) => (
+        <li key={skill} className={`min-w-0 ${i >= SKILLS_ON_PHONE ? 'hidden sm:block' : ''}`}>
+          <span title={skill} className="block max-w-[150px] sm:max-w-[190px] truncate rounded-full border border-gray-200/70 dark:border-gray-700/70 bg-white dark:bg-gray-900 px-2.5 py-1 text-xs font-medium leading-none font-jakarta text-gray-700 dark:text-gray-300 transition-colors group-hover:border-gray-300/70 dark:group-hover:border-gray-600/70">
+            {skill}
+          </span>
+        </li>
+      ))}
+      {moreOnPhone > 0 && <li className="sm:hidden shrink-0 whitespace-nowrap text-xs font-medium font-jakarta text-gray-500 dark:text-gray-400 pl-0.5">+{moreOnPhone} more</li>}
+      {moreOnDesktop > 0 && <li className="hidden sm:block whitespace-nowrap text-xs font-medium font-jakarta text-gray-500 dark:text-gray-400 pl-0.5">+{moreOnDesktop} more</li>}
+    </ul>
+  );
+}
+
 function JobCard({ job, isSaved, onToggleSave }: { job: any; isSaved: boolean; onToggleSave: (slug: string, saved: boolean) => void }) {
   const initials = job.companyName
     .split(/\s+/)
@@ -175,16 +203,7 @@ function JobCard({ job, isSaved, onToggleSave }: { job: any; isSaved: boolean; o
             </span>
           </div>
 
-          {/* Skills */}
-          {job.skills?.length > 0 && (
-            <div className="hidden sm:flex flex-wrap gap-1.5 mt-2.5">
-              {job.skills.slice(0, 5).map((skill: string) => (
-                <span key={skill} className="text-[11px] font-jakarta bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2.5 py-0.5 rounded-md border border-gray-200 dark:border-gray-700">
-                  {skill}
-                </span>
-              ))}
-            </div>
-          )}
+          <SkillChips skills={job.skills} />
 
           {/* Bottom row - mobile */}
           <div className="flex sm:hidden items-center justify-between mt-2.5">

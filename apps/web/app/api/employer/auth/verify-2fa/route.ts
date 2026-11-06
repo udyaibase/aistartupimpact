@@ -3,6 +3,8 @@ import { jwtVerify } from 'jose';
 import { sql } from '@/lib/db';
 import { setEmployerSession } from '@/lib/employer-auth';
 import { verifyTOTPToken, decryptSecret, verifyBackupCode } from '@/lib/two-factor';
+import { TWO_FACTOR_LOCKED_MESSAGE, clearTwoFactorFailures, isTwoFactorLocked, recordTwoFactorFailure } from '@/lib/auth/two-factor-attempts';
+import { twoFactorRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,6 +12,9 @@ const CHALLENGE_SECRET = new TextEncoder().encode(process.env.EMPLOYER_JWT_SECRE
 
 export async function POST(request: NextRequest) {
   try {
+    const { success: allowed } = await checkRateLimit(twoFactorRateLimit, getClientIdentifier(request));
+    if (!allowed) return NextResponse.json({ error: 'Too many attempts. Please try again later.' }, { status: 429 });
+
     const { challengeToken, token, isBackupCode } = await request.json();
 
     if (!challengeToken || !token) {
@@ -39,6 +44,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid challenge' }, { status: 400 });
     }
 
+    if (await isTwoFactorLocked('employer', userId)) {
+      return NextResponse.json({ error: TWO_FACTOR_LOCKED_MESSAGE }, { status: 429 });
+    }
+
     const employer = employers[0];
     let isValid = false;
 
@@ -63,9 +72,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (!isValid) {
-      return NextResponse.json({ error: 'Invalid verification code' }, { status: 401 });
+      const locked = await recordTwoFactorFailure('employer', userId);
+      return locked
+        ? NextResponse.json({ error: TWO_FACTOR_LOCKED_MESSAGE }, { status: 429 })
+        : NextResponse.json({ error: 'Invalid verification code' }, { status: 401 });
     }
 
+    await clearTwoFactorFailures('employer', userId);
     await sql`UPDATE "JobBoardEmployer" SET "lastLoginAt" = NOW() WHERE id = ${userId}`;
 
     await setEmployerSession({

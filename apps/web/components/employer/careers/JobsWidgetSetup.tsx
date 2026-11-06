@@ -50,6 +50,8 @@ export default function JobsWidgetSetup({ widget: initial, stats, referrers, ori
   const pending = useRef<Partial<JobsPortalWidget>>({});
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevStatus = useRef(initial.status);
+  const [screen, setScreen] = useState<"list" | "form-upload" | "form-details">("list");
+  const showScreen = (s: typeof screen) => { setScreen(s); previewRef.current?.pushConfig({ previewScreen: s }); };
 
   const platformId = (widget.platform as PlatformId | null) ?? null;
   const platform = getPlatform(platformId);
@@ -169,7 +171,7 @@ export default function JobsWidgetSetup({ widget: initial, stats, referrers, ori
         </div>
         <div className="flex items-center gap-2 w-full md:w-auto">
           <button onClick={() => setCustomizing(true)} className={`${btnSecondary} flex-1 md:flex-none`}>
-            <SlidersHorizontal className="w-4 h-4" aria-hidden /> Customize look
+            <SlidersHorizontal className="w-4 h-4" aria-hidden /> Customize
           </button>
           <div className="relative">
             <button onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen} aria-haspopup="menu" aria-label="More widget actions" className={btnSecondary}>
@@ -208,6 +210,17 @@ export default function JobsWidgetSetup({ widget: initial, stats, referrers, ori
           <button onClick={() => setJustWentLive(false)} aria-label="Dismiss" className={btnGhost}><X className="w-4 h-4" /></button>
         </div>
       )}
+
+      <div role="radiogroup" aria-label="What to preview" className="flex flex-wrap gap-2 mb-3">
+        {([["list", "Job list"], ["form-upload", "Apply: resume step"], ["form-details", "Apply: details step"]] as const).map(([v, l]) => (
+          <button key={v} type="button" role="radio" aria-checked={screen === v} onClick={() => showScreen(v)}
+            className={`min-h-[40px] px-3.5 rounded-full border text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#A50F15] ${
+              screen === v ? "bg-[#A50F15] border-[#A50F15] text-white" : "border-gray-300 dark:border-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-900"
+            }`}>
+            {l}
+          </button>
+        ))}
+      </div>
 
       <WidgetPreview
         ref={previewRef}

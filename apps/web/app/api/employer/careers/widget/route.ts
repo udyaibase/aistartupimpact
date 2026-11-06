@@ -4,6 +4,8 @@ import { prisma } from '@udyaibase/database';
 import { getEmployerSession } from '@/lib/employer-auth';
 import { ensureCareersWidget, JobsWidgetInputError, parseJobsWidgetInput, syncCareersCsp, toJobsPortalWidget } from '@/lib/jobs/careers';
 import { can, forbidden } from '@/lib/employer/permissions';
+import { parseApplyFormConfig, type ApplyFormConfig } from '@/lib/jobs/apply-form';
+import type { Prisma } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +28,13 @@ export async function PUT(request: NextRequest) {
   const widget = await ensureCareersWidget(session.id);
   const body = await request.json().catch(() => ({}));
 
+  // The application form belongs to the workspace, since it also runs on the Udyaibase job page.
+  let applyForm: ApplyFormConfig | undefined;
+  if ('applyForm' in body) {
+    applyForm = parseApplyFormConfig(body.applyForm);
+    await prisma.jobBoardEmployer.update({ where: { id: session.id }, data: { applyFormConfig: applyForm as unknown as Prisma.InputJsonValue } });
+  }
+
   let data: Record<string, unknown>;
   try {
     data = parseJobsWidgetInput(body);
@@ -37,5 +46,5 @@ export async function PUT(request: NextRequest) {
   const updated = await prisma.jobBoardCareersWidget.update({ where: { id: widget.id }, data });
   await syncCareersCsp(updated);
   revalidatePath(`/embed/jobs/${updated.id}`);
-  return NextResponse.json({ success: true, data: toJobsPortalWidget(updated) });
+  return NextResponse.json({ success: true, data: toJobsPortalWidget(updated, applyForm) });
 }

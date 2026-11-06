@@ -1,16 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import bcrypt from 'bcryptjs';
-import { requireEmployerAuth } from '@/lib/employer-auth';
+import { requireEmployerAuth, sessionCutoff, setEmployerSession } from '@/lib/employer-auth';
 import { changePasswordSchema, validateInput } from '@/lib/validation';
 import { can, forbidden } from '@/lib/employer/permissions';
+import { passwordSignInOpen } from '@/lib/employer/sign-in-policy';
+import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    const { success: allowed } = await checkRateLimit(strictRateLimit, getClientIdentifier(request));
+    if (!allowed) return NextResponse.json({ success: false, error: 'Too many requests. Try again later.' }, { status: 429 });
+
     const session = await requireEmployerAuth();
     if (!can(session.role, 'account.manage')) return forbidden();
+    if (!passwordSignInOpen()) {
+      return NextResponse.json({ success: false, error: 'Password sign-in has ended. You sign in with an email code now.' }, { status: 400 });
+    }
 
     const body = await request.json();
     const validation = validateInput(changePasswordSchema, body);
@@ -21,7 +29,7 @@ export async function POST(request: NextRequest) {
 
     const employer = await prisma.jobBoardEmployer.findUnique({
       where: { id: session.id },
-      select: { passwordHash: true },
+      select: { id: true, email: true, companyName: true, slug: true, plan: true, onboardingCompleted: true, passwordHash: true },
     });
 
     if (!employer?.passwordHash) {
@@ -36,8 +44,10 @@ export async function POST(request: NextRequest) {
     const hash = await bcrypt.hash(newPassword, 12);
     await prisma.jobBoardEmployer.update({
       where: { id: session.id },
-      data: { passwordHash: hash },
+      data: { passwordHash: hash, sessionsValidAfter: sessionCutoff() },
     });
+    // Signs out every other device; this one continues on a fresh session.
+    await setEmployerSession(employer, session.memberId ? { id: session.memberId, email: session.email } : undefined);
 
     return NextResponse.json({ success: true });
   } catch (error) {

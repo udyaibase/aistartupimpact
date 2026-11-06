@@ -3,6 +3,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { ArrowLeft, Check, CheckCircle2, FileText, Loader2, Sparkles, UploadCloud, X } from 'lucide-react';
 import TurnstileWidget from '@/components/shared/TurnstileWidget';
+import { AUTOFILL_CONSENT_TEXT } from '@/lib/jobs/consent';
+import { parseApplyFormConfig, type ApplyFieldKey, type ApplyFormConfig } from '@/lib/jobs/apply-form';
 
 const HAS_CAPTCHA = !!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
@@ -11,8 +13,10 @@ export interface ApplyJob {
   title: string;
   company: string;
   skills: string[];
-  screeningQuestions: { id: string; question: string; type: 'text' | 'yesno'; required: boolean }[];
+  screeningQuestions: { id: string; question: string; type: 'text' | 'yesno' | 'choice'; required: boolean; options?: string[] }[];
   consentText: string;
+  /** The employer's choice of fields and wording; defaults apply when absent. */
+  form?: ApplyFormConfig;
 }
 
 export interface ApplyAttribution {
@@ -53,7 +57,7 @@ const fieldStyle = { background: 'var(--af-surface)', color: 'var(--af-text)', b
  * skills and screening answers. Used on the job page and inside the website widget.
  */
 export default function JobApplyForm({
-  job, attribution, variant = 'page', style, onBack, onDone,
+  job, attribution, variant = 'page', style, onBack, onDone, preview,
 }: {
   job: ApplyJob;
   attribution: ApplyAttribution;
@@ -61,12 +65,19 @@ export default function JobApplyForm({
   style?: React.CSSProperties;
   onBack?: () => void;
   onDone?: () => void;
+  /** The employer's live preview: shows this step and never touches the server. */
+  preview?: 'upload' | 'details' | 'done';
 }) {
   const uid = useId();
-  const [step, setStep] = useState<'upload' | 'details' | 'done'>('upload');
+  const form = job.form ?? parseApplyFormConfig(null);
+  const shown = (k: ApplyFieldKey) => form.fields[k] !== 'hidden';
+  const [liveStep, setStep] = useState<'upload' | 'details' | 'done'>('upload');
+  const step = preview ?? liveStep;
   const [captcha, setCaptcha] = useState('');
   const [uploading, setUploading] = useState(false);
-  const [file, setFile] = useState<{ name: string; sizeBytes: number } | null>(null);
+  const [liveFile, setFile] = useState<{ name: string; sizeBytes: number } | null>(null);
+  const file = preview ? { name: 'your-resume.pdf', sizeBytes: 0 } : liveFile;
+  const [autofillOk, setAutofillOk] = useState(false);
   const [token, setToken] = useState('');
   const [pool, setPool] = useState(false);
   const [parsing, setParsing] = useState(false);
@@ -108,7 +119,7 @@ export default function JobApplyForm({
       setToken(data.token);
       setFile(data.file);
       setStep('details');
-      autofill(data.token);
+      if (autofillOk) autofill(data.token);
     } catch {
       setError('You seem to be offline. Check your connection and try again.');
     }
@@ -118,7 +129,7 @@ export default function JobApplyForm({
   async function autofill(t: string) {
     setParsing(true);
     try {
-      const res = await fetch('/api/jobs/apply/parse', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }) });
+      const res = await fetch('/api/jobs/apply/parse', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t, autofillConsent: true }) });
       const data = await res.json().catch(() => ({}));
       const p = data.prefill ?? {};
       let n = 0;
@@ -127,6 +138,7 @@ export default function JobApplyForm({
         for (const k of Object.keys(EMPTY) as (keyof Details)[]) {
           const v = p[k];
           if (v == null || v === '' || touched.current.has(k) || next[k]) continue;
+          if (k !== 'fullName' && k !== 'email' && !shown(k)) continue;
           next[k] = String(v);
           n++;
         }
@@ -140,10 +152,14 @@ export default function JobApplyForm({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (preview) return;
     setError('');
     const local: Record<string, string> = {};
     if (d.fullName.trim().length < 2) local.fullName = 'Enter your full name.';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d.email.trim())) local.email = 'Enter a valid email address.';
+    for (const f of Object.keys(form.fields) as ApplyFieldKey[]) {
+      if (form.fields[f] === 'required' && !d[f].trim()) local[f] = 'Please fill this in.';
+    }
     for (const q of job.screeningQuestions) if (q.required && !answers[q.id]?.trim()) local[`q_${q.id}`] = 'Please answer this question.';
     if (!agree) local.consent = 'Please agree to share your application.';
     if (Object.keys(local).length) {
@@ -157,7 +173,7 @@ export default function JobApplyForm({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          token, ...d, consent: true, talentPool: pool, confirmedSkills: skills,
+          token, ...d, consent: true, talentPool: pool, confirmedSkills: form.askSkills ? skills : [],
           screeningAnswers: job.screeningQuestions.map((q) => ({ id: q.id, answer: answers[q.id] ?? '' })),
           attribution,
         }),
@@ -186,6 +202,10 @@ export default function JobApplyForm({
       aria-invalid={!!errors[k] || undefined} aria-describedby={errors[k] ? `${id(k)}-err` : undefined}
       className={field} style={fieldStyle} {...rest} />
   );
+  // Name and email are always required, so only the employer's own fields carry a tag.
+  const Tag = ({ k, note }: { k: ApplyFieldKey; note?: string }) => (form.fields[k] === 'optional'
+    ? <span className="font-normal" style={{ color: 'var(--af-muted)' }}>{note ? `(${note}, optional)` : '(optional)'}</span>
+    : note ? <span className="font-normal" style={{ color: 'var(--af-muted)' }}>({note})</span> : null);
   const Err = ({ k }: { k: string }) => (errors[k] ? <p id={`${id(k)}-err`} className={`${help} text-red-700`}>{errors[k]}</p> : null);
 
   return (
@@ -201,7 +221,7 @@ export default function JobApplyForm({
           <CheckCircle2 className="w-12 h-12 mx-auto text-green-600" aria-hidden />
           <h2 className="text-xl font-bold mt-3">Application sent</h2>
           <p className="mt-1.5 text-[0.9375rem]" style={{ color: 'var(--af-muted)' }}>
-            {job.company} has your application for {job.title}. We emailed you a private link to track it.
+            {form.successMessage || `${job.company} has your application for ${job.title}.`} We emailed you a private link to track it.
           </p>
           {onBack && (
             <button type="button" onClick={onBack} className="mt-5 inline-flex items-center justify-center min-h-[44px] px-5 border text-sm font-semibold"
@@ -214,6 +234,7 @@ export default function JobApplyForm({
         <>
           <p className="text-[0.8125rem] font-semibold uppercase tracking-wide" style={{ color: 'var(--af-muted)' }}>Apply to {job.company}</p>
           <h2 className="text-xl font-bold leading-tight mt-0.5">{job.title}</h2>
+          {form.intro && <p className="mt-2 text-[0.9375rem] whitespace-pre-line" style={{ color: 'var(--af-muted)' }}>{form.intro}</p>}
           <ol className="flex items-center gap-2 mt-3 mb-5 text-[0.8125rem]" aria-label="Steps">
             {['Resume', 'Your details'].map((s, i) => {
               const done = i === 0 ? step === 'details' : false;
@@ -236,20 +257,25 @@ export default function JobApplyForm({
               <p className="text-[0.875rem] leading-relaxed p-3 border" style={{ borderColor: 'var(--af-border)', borderRadius: 'var(--af-radius)', background: 'var(--af-subtle)', color: 'var(--af-muted)' }}>
                 {job.consentText}
               </p>
-              {HAS_CAPTCHA && <TurnstileWidget onSuccess={setCaptcha} onExpire={() => setCaptcha('')} onError={() => setCaptcha('')} />}
+              <label htmlFor={id('autofill')} className="flex items-start gap-3 cursor-pointer">
+                <input id={id('autofill')} type="checkbox" checked={autofillOk} onChange={(e) => setAutofillOk(e.target.checked)}
+                  className="mt-0.5 w-5 h-5 shrink-0" style={{ accentColor: 'var(--af-accent)' }} />
+                <span className="text-[0.875rem]"><span className="font-semibold">Optional:</span> {AUTOFILL_CONSENT_TEXT}</span>
+              </label>
+              {HAS_CAPTCHA && !preview && <TurnstileWidget onSuccess={setCaptcha} onExpire={() => setCaptcha('')} onError={() => setCaptcha('')} />}
               <label htmlFor={id('file')}
-                className={`flex flex-col items-center justify-center gap-2 text-center px-4 py-8 border-2 border-dashed cursor-pointer ${HAS_CAPTCHA && !captcha ? 'opacity-60 cursor-not-allowed' : ''}`}
+                className={`flex flex-col items-center justify-center gap-2 text-center px-4 py-8 border-2 border-dashed cursor-pointer ${HAS_CAPTCHA && !captcha && !preview ? 'opacity-60 cursor-not-allowed' : ''}`}
                 style={{ borderColor: 'var(--af-border)', borderRadius: 'var(--af-radius)' }}
                 onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) upload(f); }}>
+                onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f && !preview) upload(f); }}>
                 {uploading ? <Loader2 className="w-7 h-7 animate-spin" aria-hidden style={{ color: 'var(--af-accent)' }} /> : <UploadCloud className="w-7 h-7" aria-hidden style={{ color: 'var(--af-accent)' }} />}
                 <span className="text-[0.9375rem] font-semibold">{uploading ? 'Uploading…' : 'Upload your resume'}</span>
-                <span className="text-[0.8125rem]" style={{ color: 'var(--af-muted)' }}>PDF or Word, up to 5 MB. We&apos;ll use it to fill in the form.</span>
+                <span className="text-[0.8125rem]" style={{ color: 'var(--af-muted)' }}>PDF or Word, up to 5 MB.</span>
                 <input id={id('file')} type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                  className="sr-only" disabled={uploading || (HAS_CAPTCHA && !captcha)}
+                  className="sr-only" disabled={uploading || !!preview || (HAS_CAPTCHA && !captcha)}
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ''; }} />
               </label>
-              {HAS_CAPTCHA && !captcha && <p className="text-[0.8125rem]" style={{ color: 'var(--af-muted)' }}>Complete the security check above to upload.</p>}
+              {HAS_CAPTCHA && !captcha && !preview && <p className="text-[0.8125rem]" style={{ color: 'var(--af-muted)' }}>Complete the security check above to upload.</p>}
             </div>
           )}
 
@@ -261,7 +287,7 @@ export default function JobApplyForm({
                   <span className="flex-1 min-w-0">
                     <span className="block text-sm font-semibold truncate">{file.name}</span>
                     <span className="block text-[0.8125rem]" style={{ color: 'var(--af-muted)' }}>
-                      {parsing ? 'Reading your resume to fill the form…' : filledCount > 0 ? `We filled ${filledCount} field${filledCount === 1 ? '' : 's'} from your resume. Please check them.` : 'Fill in your details below.'}
+                      {parsing ? 'Reading your resume to fill the form…' : filledCount > 0 ? `We filled ${filledCount} field${filledCount === 1 ? '' : 's'} from your resume. Please check them.` : 'Attached. Fill in your details below.'}
                     </span>
                   </span>
                   {parsing ? <Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> : filledCount > 0 ? <Sparkles className="w-4 h-4 shrink-0" aria-hidden style={{ color: 'var(--af-accent)' }} /> : null}
@@ -274,29 +300,38 @@ export default function JobApplyForm({
                 <legend className="sr-only">Contact</legend>
                 <div><label htmlFor={id('fullName')} className={label}>Full name</label>{Input({ k: 'fullName', autoComplete: 'name' })}<Err k="fullName" /></div>
                 <div><label htmlFor={id('email')} className={label}>Email</label>{Input({ k: 'email', type: 'email', autoComplete: 'email', inputMode: 'email' })}<Err k="email" /></div>
-                <div><label htmlFor={id('phone')} className={label}>Phone <span className="font-normal" style={{ color: 'var(--af-muted)' }}>(optional)</span></label>{Input({ k: 'phone', type: 'tel', autoComplete: 'tel', inputMode: 'tel' })}</div>
-                <div><label htmlFor={id('city')} className={label}>City <span className="font-normal" style={{ color: 'var(--af-muted)' }}>(optional)</span></label>{Input({ k: 'city', autoComplete: 'address-level2' })}</div>
+                {shown('phone') && <div><label htmlFor={id('phone')} className={label}>Phone <Tag k="phone" /></label>{Input({ k: 'phone', type: 'tel', autoComplete: 'tel', inputMode: 'tel' })}<Err k="phone" /></div>}
+                {shown('city') && <div><label htmlFor={id('city')} className={label}>City <Tag k="city" /></label>{Input({ k: 'city', autoComplete: 'address-level2' })}<Err k="city" /></div>}
               </fieldset>
 
-              <fieldset className="grid sm:grid-cols-2 gap-4">
-                <legend className="sr-only">Experience</legend>
-                <div><label htmlFor={id('currentTitle')} className={label}>Current role <span className="font-normal" style={{ color: 'var(--af-muted)' }}>(optional)</span></label>{Input({ k: 'currentTitle', autoComplete: 'organization-title' })}</div>
-                <div><label htmlFor={id('currentCompany')} className={label}>Current company <span className="font-normal" style={{ color: 'var(--af-muted)' }}>(optional)</span></label>{Input({ k: 'currentCompany', autoComplete: 'organization' })}</div>
-                <div><label htmlFor={id('experienceYears')} className={label}>Years of experience</label>{Input({ k: 'experienceYears', type: 'number', inputMode: 'numeric', min: 0, max: 60 })}</div>
-                <div>
-                  <label htmlFor={id('noticePeriodDays')} className={label}>Notice period</label>
-                  <select id={id('noticePeriodDays')} value={d.noticePeriodDays} onChange={(e) => set('noticePeriodDays', e.target.value)} className={field} style={fieldStyle}>
-                    <option value="">Select…</option>
-                    {NOTICE.map((n) => <option key={n.value} value={n.value}>{n.label}</option>)}
-                  </select>
-                </div>
-                <div className="sm:col-span-2">
-                  <label htmlFor={id('expectedCtcLakh')} className={label}>Expected salary <span className="font-normal" style={{ color: 'var(--af-muted)' }}>(₹ lakh per year, optional)</span></label>
-                  <div className="sm:max-w-[200px]">{Input({ k: 'expectedCtcLakh', type: 'number', inputMode: 'decimal', min: 0, step: '0.5', placeholder: 'e.g. 24' })}</div>
-                </div>
-              </fieldset>
+              {(['currentTitle', 'currentCompany', 'experienceYears', 'noticePeriodDays', 'expectedCtcLakh'] as const).some(shown) && (
+                <fieldset className="grid sm:grid-cols-2 gap-4">
+                  <legend className="sr-only">Experience</legend>
+                  {shown('currentTitle') && <div><label htmlFor={id('currentTitle')} className={label}>Current role <Tag k="currentTitle" /></label>{Input({ k: 'currentTitle', autoComplete: 'organization-title' })}<Err k="currentTitle" /></div>}
+                  {shown('currentCompany') && <div><label htmlFor={id('currentCompany')} className={label}>Current company <Tag k="currentCompany" /></label>{Input({ k: 'currentCompany', autoComplete: 'organization' })}<Err k="currentCompany" /></div>}
+                  {shown('experienceYears') && <div><label htmlFor={id('experienceYears')} className={label}>Years of experience <Tag k="experienceYears" /></label>{Input({ k: 'experienceYears', type: 'number', inputMode: 'numeric', min: 0, max: 60 })}<Err k="experienceYears" /></div>}
+                  {shown('noticePeriodDays') && (
+                    <div>
+                      <label htmlFor={id('noticePeriodDays')} className={label}>Notice period <Tag k="noticePeriodDays" /></label>
+                      <select id={id('noticePeriodDays')} value={d.noticePeriodDays} onChange={(e) => set('noticePeriodDays', e.target.value)} className={field} style={fieldStyle}
+                        aria-invalid={!!errors.noticePeriodDays || undefined}>
+                        <option value="">Select…</option>
+                        {NOTICE.map((n) => <option key={n.value} value={n.value}>{n.label}</option>)}
+                      </select>
+                      <Err k="noticePeriodDays" />
+                    </div>
+                  )}
+                  {shown('expectedCtcLakh') && (
+                    <div className="sm:col-span-2">
+                      <label htmlFor={id('expectedCtcLakh')} className={label}>Expected salary <Tag k="expectedCtcLakh" note="₹ lakh per year" /></label>
+                      <div className="sm:max-w-[200px]">{Input({ k: 'expectedCtcLakh', type: 'number', inputMode: 'decimal', min: 0, step: '0.5', placeholder: 'e.g. 24' })}</div>
+                      <Err k="expectedCtcLakh" />
+                    </div>
+                  )}
+                </fieldset>
+              )}
 
-              {job.skills.length > 0 && (
+              {form.askSkills && job.skills.length > 0 && (
                 <fieldset>
                   <legend className={label}>Which of these skills do you have?</legend>
                   <div className="flex flex-wrap gap-2">
@@ -335,6 +370,15 @@ export default function JobApplyForm({
                             ))}
                           </div>
                         </fieldset>
+                      ) : q.type === 'choice' ? (
+                        <>
+                          <label htmlFor={id(`q_${q.id}`)} className={label}>{q.question}{!q.required && <span className="font-normal" style={{ color: 'var(--af-muted)' }}> (optional)</span>}</label>
+                          <select id={id(`q_${q.id}`)} value={answers[q.id] ?? ''} className={field} style={fieldStyle} aria-invalid={!!errors[`q_${q.id}`] || undefined}
+                            onChange={(e) => { setAnswers((a) => ({ ...a, [q.id]: e.target.value })); setErrors((x) => ({ ...x, [`q_${q.id}`]: '' })); }}>
+                            <option value="">Select…</option>
+                            {(q.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        </>
                       ) : (
                         <>
                           <label htmlFor={id(`q_${q.id}`)} className={label}>{q.question}{!q.required && <span className="font-normal" style={{ color: 'var(--af-muted)' }}> (optional)</span>}</label>
@@ -350,18 +394,23 @@ export default function JobApplyForm({
                 </fieldset>
               )}
 
-              <fieldset className="grid sm:grid-cols-3 gap-4">
-                <legend className={label}>Links <span className="font-normal" style={{ color: 'var(--af-muted)' }}>(optional)</span></legend>
-                <div><label htmlFor={id('linkedinUrl')} className="sr-only">LinkedIn</label>{Input({ k: 'linkedinUrl', type: 'url', inputMode: 'url', placeholder: 'LinkedIn URL' })}</div>
-                <div><label htmlFor={id('githubUrl')} className="sr-only">GitHub</label>{Input({ k: 'githubUrl', type: 'url', inputMode: 'url', placeholder: 'GitHub URL' })}</div>
-                <div><label htmlFor={id('portfolioUrl')} className="sr-only">Portfolio</label>{Input({ k: 'portfolioUrl', type: 'url', inputMode: 'url', placeholder: 'Portfolio URL' })}</div>
-              </fieldset>
+              {(['linkedinUrl', 'githubUrl', 'portfolioUrl'] as const).some(shown) && (
+                <fieldset className="grid sm:grid-cols-3 gap-4">
+                  <legend className={label}>Links</legend>
+                  {shown('linkedinUrl') && <div><label htmlFor={id('linkedinUrl')} className="text-[0.8125rem] font-medium mb-1 block">LinkedIn <Tag k="linkedinUrl" /></label>{Input({ k: 'linkedinUrl', type: 'url', inputMode: 'url', placeholder: 'LinkedIn URL' })}<Err k="linkedinUrl" /></div>}
+                  {shown('githubUrl') && <div><label htmlFor={id('githubUrl')} className="text-[0.8125rem] font-medium mb-1 block">GitHub <Tag k="githubUrl" /></label>{Input({ k: 'githubUrl', type: 'url', inputMode: 'url', placeholder: 'GitHub URL' })}<Err k="githubUrl" /></div>}
+                  {shown('portfolioUrl') && <div><label htmlFor={id('portfolioUrl')} className="text-[0.8125rem] font-medium mb-1 block">Portfolio <Tag k="portfolioUrl" /></label>{Input({ k: 'portfolioUrl', type: 'url', inputMode: 'url', placeholder: 'Portfolio URL' })}<Err k="portfolioUrl" /></div>}
+                </fieldset>
+              )}
 
-              <div>
-                <label htmlFor={id('coverLetter')} className={label}>Note to the hiring team <span className="font-normal" style={{ color: 'var(--af-muted)' }}>(optional)</span></label>
-                <textarea id={id('coverLetter')} rows={3} maxLength={3000} value={d.coverLetter} onChange={(e) => set('coverLetter', e.target.value)}
-                  placeholder="Why this role? Anything they should know?" className={`${field} py-2.5 resize-y`} style={fieldStyle} />
-              </div>
+              {shown('coverLetter') && (
+                <div>
+                  <label htmlFor={id('coverLetter')} className={label}>Note to the hiring team <Tag k="coverLetter" /></label>
+                  <textarea id={id('coverLetter')} rows={3} maxLength={3000} value={d.coverLetter} onChange={(e) => set('coverLetter', e.target.value)}
+                    placeholder="Why this role? Anything they should know?" className={`${field} py-2.5 resize-y`} style={fieldStyle} aria-invalid={!!errors.coverLetter || undefined} />
+                  <Err k="coverLetter" />
+                </div>
+              )}
 
               <div>
                 <label className="flex items-start gap-3 cursor-pointer" htmlFor={id('consent')}>
@@ -382,7 +431,7 @@ export default function JobApplyForm({
 
               {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
               <button type="submit" disabled={submitting} className={`${primaryBtn} w-full sm:w-auto`} style={primaryStyle}>
-                {submitting && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} Submit application
+                {submitting && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} {form.submitLabel}
               </button>
             </form>
           )}

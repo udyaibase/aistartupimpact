@@ -121,17 +121,21 @@ export async function POST(request: NextRequest) {
     }
 
     // ✅ Password correct — reset failed attempts + update last login
-    await sql`
+    // With two-step sign-in on, the counter also limits wrong codes, so only a finished sign-in may reset it.
+    if (!employer.twoFactorEnabled) {
+      await sql`
       UPDATE "JobBoardEmployer"
       SET "failedLoginAttempts" = 0, "lockedUntil" = NULL, "lastLoginAt" = NOW()
       WHERE id = ${employer.id}
     `;
+    }
 
     if (employer.deactivatedAt) {
       return NextResponse.json({
         deactivated: true,
         deactivatedAt: employer.deactivatedAt,
         message: 'Your account has been deactivated. Would you like to reactivate it?',
+        error: 'This workspace is deactivated. Sign in with an email code to reactivate it.',
         reactivateUrl: '/api/employer/reactivate',
       });
     }

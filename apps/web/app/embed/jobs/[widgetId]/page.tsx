@@ -4,6 +4,7 @@ import JobsWidgetView, { type JobsWidgetConfig } from "@/components/embed/JobsWi
 import EmbedEmptyState from "@/components/embed/EmbedEmptyState";
 import { getCareersCompany, getCareersJobs } from "@/lib/jobs/careers";
 import { effectivePlan } from "@/lib/employer/plans";
+import { parseWidgetDesign } from "@/lib/jobs/widget-design";
 
 export const revalidate = 60;
 
@@ -49,6 +50,8 @@ export default async function JobsEmbedPage({ params }: { params: Promise<{ widg
     showSalary: widget.showSalary,
     showSkills: widget.showSkills,
     showPoweredBy: widget.showPoweredBy || !canHideBranding,
+    design: parseWidgetDesign(widget.design),
+    applyForm: company.applyForm,
     company: { name: company.name, logoUrl: company.logoUrl, slug: company.slug },
   };
 

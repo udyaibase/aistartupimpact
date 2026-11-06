@@ -8,6 +8,7 @@ import { isClaimVerified } from '@/lib/jobs/trust';
 import { applyConsentText } from '@/lib/jobs/consent';
 import JobApplyForm, { type ApplyJob } from '@/components/jobs/apply/JobApplyForm';
 import { publicQuestions } from '@/lib/jobs/composer';
+import { parseApplyFormConfig } from '@/lib/jobs/apply-form';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +30,7 @@ export default async function ApplyPage({ params, searchParams }: Props) {
     where: { ...publicListingWhere(), slug },
     select: {
       slug: true, title: true, skills: true, screeningQuestions: true, applicationType: true, applicationUrl: true, applicationEmail: true,
-      Employer: { select: { companyName: true, startupId: true, startupClaimMethod: true, Startup: { select: { name: true } } } },
+      Employer: { select: { companyName: true, startupId: true, startupClaimMethod: true, applyFormConfig: true, Startup: { select: { name: true } } } },
     },
   });
   if (!listing) notFound();
@@ -46,6 +47,7 @@ export default async function ApplyPage({ params, searchParams }: Props) {
     skills: listing.skills,
     screeningQuestions: publicQuestions(listing.screeningQuestions),
     consentText: applyConsentText(company),
+    form: parseApplyFormConfig(listing.Employer.applyFormConfig),
   };
 
   return (

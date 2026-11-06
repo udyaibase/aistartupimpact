@@ -5,6 +5,8 @@ import crypto from 'crypto';
 import { employerPasswordResetHtml } from '@udyaibase/utils';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 import { authRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
+import { hashResetToken } from '@/lib/employer/reset-token';
+import { passwordSignInOpen } from '@/lib/employer/sign-in-policy';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +28,10 @@ export async function POST(request: NextRequest) {
     }
     const { email } = body;
 
+    if (!passwordSignInOpen()) {
+      return NextResponse.json({ error: 'Password sign-in has ended. Sign in with an email code instead.' }, { status: 400 });
+    }
+
     if (!email?.trim()) return NextResponse.json({ error: 'Email required' }, { status: 400 });
 
     const employers = await sql`
@@ -45,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     await sql`
       UPDATE "JobBoardEmployer"
-      SET "resetToken" = ${resetToken}, "resetTokenExpiry" = ${resetTokenExpiry.toISOString()}::timestamp, "updatedAt" = NOW()
+      SET "resetToken" = ${hashResetToken(resetToken)}, "resetTokenExpiry" = ${resetTokenExpiry.toISOString()}::timestamp, "updatedAt" = NOW()
       WHERE id = ${employer.id}
     `;
 

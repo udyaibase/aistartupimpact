@@ -11,9 +11,11 @@ export default function EmployerSettingsPage() {
   const [exporting, setExporting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
-  const [deactivatePassword, setDeactivatePassword] = useState('');
+  const [deactivateCode, setDeactivateCode] = useState('');
   const [deactivating, setDeactivating] = useState(false);
-  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteCode, setDeleteCode] = useState('');
+  const [codeSentTo, setCodeSentTo] = useState('');
+  const [sendingCode, setSendingCode] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
@@ -70,14 +72,24 @@ export default function EmployerSettingsPage() {
     } catch { setError('Failed to export data'); } finally { setExporting(false); }
   };
 
+  const sendCode = async () => {
+    setError(''); setSendingCode(true);
+    try {
+      const res = await fetch('/api/employer/account-code', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) setCodeSentTo(data.sentTo);
+      else setError(data.error || 'We couldn’t send the code. Try again.');
+    } catch { setError('We couldn’t send the code. Try again.'); } finally { setSendingCode(false); }
+  };
+
   const handleDeactivate = async (e: React.FormEvent) => {
     e.preventDefault(); setError('');
-    if (!deactivatePassword) { setError('Password is required'); return; }
+    if (deactivateCode.length !== 6) { setError('Enter the 6-digit code from the email'); return; }
     setDeactivating(true);
     try {
       const res = await fetch('/api/employer/deactivate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: deactivatePassword }),
+        body: JSON.stringify({ code: deactivateCode }),
       });
       const data = await res.json();
       if (data.success) {
@@ -90,12 +102,12 @@ export default function EmployerSettingsPage() {
   const handleDelete = async (e: React.FormEvent) => {
     e.preventDefault(); setError('');
     if (deleteConfirmation !== 'DELETE') { setError('Please type DELETE to confirm'); return; }
-    if (!deletePassword) { setError('Password is required'); return; }
+    if (deleteCode.length !== 6) { setError('Enter the 6-digit code from the email'); return; }
     setDeleting(true);
     try {
       const res = await fetch('/api/employer/delete-account', {
         method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: deletePassword }),
+        body: JSON.stringify({ code: deleteCode }),
       });
       const data = await res.json();
       if (data.success) {
@@ -259,7 +271,7 @@ export default function EmployerSettingsPage() {
         <div className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="relative bg-white dark:bg-gray-900 rounded-2xl p-6 max-w-md w-full shadow-2xl border border-amber-200 dark:border-amber-800">
             <button
-              onClick={() => { setShowDeactivateModal(false); setDeactivatePassword(''); setError(''); }}
+              onClick={() => { setShowDeactivateModal(false); setDeactivateCode(''); setCodeSentTo(''); setError(''); }}
               className="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               aria-label="Close"
             >
@@ -270,7 +282,7 @@ export default function EmployerSettingsPage() {
                 <svg className="w-5 h-5 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" /></svg>
               </div>
               <h3 className="font-semibold text-lg text-amber-600 dark:text-amber-400 mb-1">Deactivate Account</h3>
-              <p className="text-gray-600 dark:text-gray-400 text-sm">You can reactivate anytime by logging in again.</p>
+              <p className="text-gray-600 dark:text-gray-400 text-sm">You can reactivate anytime by signing in with an email code.</p>
             </div>
             <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4">
               <p className="text-xs text-amber-800 dark:text-amber-300 font-semibold mb-1">This will temporarily:</p>
@@ -281,11 +293,9 @@ export default function EmployerSettingsPage() {
               </ul>
             </div>
             <form onSubmit={handleDeactivate} className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Enter your password to confirm</label>
-                <input type="password" autoComplete="current-password" value={deactivatePassword} onChange={(e) => setDeactivatePassword(e.target.value)} required placeholder="Your account password" className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 font-jakarta" />
-              </div>
-              <button type="submit" disabled={deactivating || !deactivatePassword} className="w-full px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              <ActionCodeField id="deactivate-code" value={deactivateCode} onChange={setDeactivateCode} sentTo={codeSentTo} sending={sendingCode} onSend={sendCode} />
+              {error && <p role="alert" className="text-xs text-red-700 dark:text-red-400">{error}</p>}
+              <button type="submit" disabled={deactivating || deactivateCode.length !== 6} className="w-full px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                 {deactivating ? 'Deactivating...' : 'Deactivate My Account'}
               </button>
             </form>
@@ -298,7 +308,7 @@ export default function EmployerSettingsPage() {
         <div className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="relative bg-white dark:bg-gray-900 rounded-2xl p-6 max-w-md w-full shadow-2xl border border-red-200 dark:border-red-800">
             <button
-              onClick={() => { setShowDeleteModal(false); setDeletePassword(''); setDeleteConfirmation(''); setError(''); }}
+              onClick={() => { setShowDeleteModal(false); setDeleteCode(''); setCodeSentTo(''); setDeleteConfirmation(''); setError(''); }}
               className="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               aria-label="Close"
             >
@@ -318,21 +328,20 @@ export default function EmployerSettingsPage() {
               <ul className="text-xs text-red-700 dark:text-red-400 space-y-0.5 list-disc list-inside">
                 <li>Your company profile</li>
                 <li>All job listings</li>
-                <li>All applications received</li>
+                <li>All applications received, including resumes</li>
                 <li>Newsletter subscription</li>
               </ul>
+              <p className="text-xs text-red-700 dark:text-red-400 mt-2">Invoices you’ve paid are kept, as tax law requires.</p>
             </div>
 
             <form onSubmit={handleDelete} className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Enter your password</label>
-                <input type="password" autoComplete="current-password" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} required placeholder="Your account password" className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500 font-jakarta" />
-              </div>
+              <ActionCodeField id="delete-code" value={deleteCode} onChange={setDeleteCode} sentTo={codeSentTo} sending={sendingCode} onSend={sendCode} />
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Type <span className="font-bold text-red-600">DELETE</span> to confirm</label>
                 <input type="text" value={deleteConfirmation} onChange={(e) => setDeleteConfirmation(e.target.value)} required placeholder="DELETE" className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500 font-jakarta" />
               </div>
-              <button type="submit" disabled={deleting || deleteConfirmation !== 'DELETE' || !deletePassword} className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              {error && <p role="alert" className="text-xs text-red-700 dark:text-red-400">{error}</p>}
+              <button type="submit" disabled={deleting || deleteConfirmation !== 'DELETE' || deleteCode.length !== 6} className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                 {deleting ? 'Deleting Account...' : 'Delete My Account'}
               </button>
             </form>
@@ -358,6 +367,27 @@ export default function EmployerSettingsPage() {
           onError={(msg) => { setError(msg); setTimeout(() => setError(''), 5000); }}
         />
       )}
+    </div>
+  );
+}
+
+/** Sends a code to the signed-in owner's email, then takes the code. */
+function ActionCodeField({ id, value, onChange, sentTo, sending, onSend }: {
+  id: string; value: string; onChange: (v: string) => void; sentTo: string; sending: boolean; onSend: () => void;
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Confirm with an email code</label>
+      <div className="flex gap-2">
+        <input id={id} inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={value} placeholder="6-digit code"
+          onChange={(e) => onChange(e.target.value.replace(/\D/g, ''))}
+          className="flex-1 min-w-0 min-h-[44px] px-3 py-2 text-base sm:text-sm tracking-widest border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-500/20 focus:border-gray-500 font-jakarta" />
+        <button type="button" onClick={onSend} disabled={sending}
+          className="shrink-0 min-h-[44px] px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 rounded-lg text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
+          {sending ? <Loader2 className="w-4 h-4 animate-spin" aria-label="Sending" /> : sentTo ? 'Send again' : 'Send code'}
+        </button>
+      </div>
+      <p aria-live="polite" className="mt-1 text-xs text-gray-500">{sentTo ? `We sent a code to ${sentTo}. It expires in 10 minutes.` : 'We’ll email a code to your sign-in address.'}</p>
     </div>
   );
 }

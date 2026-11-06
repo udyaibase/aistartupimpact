@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import bcrypt from 'bcryptjs';
-import { requireEmployerAuth, clearEmployerSession } from '@/lib/employer-auth';
+import { requireEmployerAuth, clearEmployerSession, sessionCutoff } from '@/lib/employer-auth';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
 import { can, forbidden } from '@/lib/employer/permissions';
-import { refreshPaths, refreshSections } from '@/lib/revalidate';
+import { refreshSections } from '@/lib/revalidate';
+import { checkActionCode } from '@/lib/employer/account-action';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,15 +17,9 @@ export async function POST(request: NextRequest) {
     const session = await requireEmployerAuth();
     if (!can(session.role, 'account.manage')) return forbidden();
 
-    const body = await request.json().catch(() => ({}));
-    const { password } = body as { password?: string };
-    if (!password) {
-      return NextResponse.json({ error: 'Password is required' }, { status: 400 });
-    }
-
     const employer = await prisma.jobBoardEmployer.findUnique({
       where: { id: session.id },
-      select: { passwordHash: true, deactivatedAt: true },
+      select: { deactivatedAt: true },
     });
 
     if (!employer) {
@@ -36,15 +30,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Account is already deactivated' }, { status: 400 });
     }
 
-    const valid = await bcrypt.compare(password, employer.passwordHash);
-    if (!valid) {
-      return NextResponse.json({ error: 'Incorrect password' }, { status: 401 });
-    }
+    const body = await request.json().catch(() => ({}));
+    const check = await checkActionCode(session.email, (body as { code?: unknown }).code);
+    if (!check.ok) return NextResponse.json({ error: check.error }, { status: check.status });
 
     await prisma.$transaction(async (tx) => {
       await tx.jobBoardEmployer.update({
         where: { id: session.id },
-        data: { deactivatedAt: new Date() },
+        // The cut-off keeps old sessions signed out if the workspace is reactivated later.
+        data: { deactivatedAt: new Date(), sessionsValidAfter: sessionCutoff() },
       });
 
       await tx.jobBoardListing.updateMany({
