@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useRef, useEffect } from 'react';
-import Link from 'next/link';
+import IntentLink from '@/components/IntentLink';
 import Image from 'next/image';
 import { Search, X, Loader2 } from 'lucide-react';
 
@@ -154,7 +154,7 @@ export default function StoriesListClient({ stories, excludeSlugs = [], children
       ) : (
         <div className="border border-gray-200 dark:border-gray-700">
           {shown.map((story, idx) => (
-            <Link key={story.slug} href={`/stories/${story.slug}`} prefetch={false} className={`group block ${idx < shown.length - 1 ? 'border-b border-gray-200 dark:border-gray-700' : ''}`}>
+            <IntentLink key={story.slug} href={`/stories/${story.slug}`} className={`group block ${idx < shown.length - 1 ? 'border-b border-gray-200 dark:border-gray-700' : ''}`}>
               <div className="bg-gray-50 dark:bg-gray-900 hover:bg-white dark:hover:bg-gray-800 transition-all duration-300 hover:border-l-4 hover:border-l-red-500 flex flex-row items-center p-2.5 sm:p-3 gap-2.5 sm:gap-4">
                 {(story.thumbnailImage || story.coverImage) && (
                   <div className="relative w-20 h-20 sm:w-28 sm:h-28 shrink-0 overflow-hidden">
@@ -190,7 +190,7 @@ export default function StoriesListClient({ stories, excludeSlugs = [], children
                   </div>
                 </div>
               </div>
-            </Link>
+            </IntentLink>
           ))}
         </div>
       )}

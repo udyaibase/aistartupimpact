@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import Link from 'next/link';
+import IntentLink from '@/components/IntentLink';
 import Image from 'next/image';
 import { Star, ChevronLeft, ChevronRight, TrendingUp, ThumbsUp, Sparkles } from 'lucide-react';
 
@@ -182,9 +182,8 @@ function PricingBadge({ pricing }: { pricing?: string }) {
 
 function TrendingCard({ tool, rank }: { tool: ToolCard; rank: number }) {
   return (
-    <Link
+    <IntentLink
       href={`/tools/${tool.slug}`}
-      prefetch={false}
       className="shrink-0 w-44 sm:w-56 p-2.5 sm:p-3 rounded-xl active:scale-[0.97] border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-orange-300 dark:hover:border-orange-700 hover:shadow-sm transition-all group relative"
     >
       <div className="absolute -top-1.5 -left-1 bg-orange-500 text-white text-[10px] font-bold px-1 py-px rounded shadow-sm leading-tight">#{rank}</div>
@@ -205,15 +204,14 @@ function TrendingCard({ tool, rank }: { tool: ToolCard; rank: number }) {
         ) : <span />}
         <PricingBadge pricing={tool.pricingModel} />
       </div>
-    </Link>
+    </IntentLink>
   );
 }
 
 function UpvotedCard({ tool }: { tool: ToolCard }) {
   return (
-    <Link
+    <IntentLink
       href={`/tools/${tool.slug}`}
-      prefetch={false}
       className="shrink-0 w-44 sm:w-56 p-2.5 sm:p-3 rounded-xl active:scale-[0.97] border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-brand/30 hover:shadow-sm transition-all group"
     >
       <div className="flex items-center gap-2.5 mb-2">
@@ -231,15 +229,14 @@ function UpvotedCard({ tool }: { tool: ToolCard }) {
         </div>
         <PricingBadge pricing={tool.pricingModel} />
       </div>
-    </Link>
+    </IntentLink>
   );
 }
 
 function NewCard({ tool }: { tool: ToolCard }) {
   return (
-    <Link
+    <IntentLink
       href={`/tools/${tool.slug}`}
-      prefetch={false}
       className="shrink-0 w-44 sm:w-56 p-2.5 sm:p-3 rounded-xl active:scale-[0.97] border border-green-100 dark:border-green-900/30 bg-white dark:bg-gray-900 hover:border-green-300 dark:hover:border-green-700 hover:shadow-sm transition-all group relative"
     >
       <div className="absolute -top-1.5 right-2 bg-green-500 text-white text-[10px] font-bold px-1.5 py-px rounded shadow-sm leading-tight">NEW</div>
@@ -260,15 +257,14 @@ function NewCard({ tool }: { tool: ToolCard }) {
         ) : <span />}
         <PricingBadge pricing={tool.pricingModel} />
       </div>
-    </Link>
+    </IntentLink>
   );
 }
 
 function EditorPickCard({ tool }: { tool: ToolCard }) {
   return (
-    <Link
+    <IntentLink
       href={`/tools/${tool.slug}`}
-      prefetch={false}
       className="shrink-0 w-44 sm:w-56 p-2.5 sm:p-3 rounded-xl active:scale-[0.97] border border-purple-100 dark:border-purple-900/30 bg-gradient-to-br from-white to-purple-50/50 dark:from-gray-900 dark:to-purple-950/20 hover:border-purple-300 dark:hover:border-purple-700 hover:shadow-sm transition-all group"
     >
       <div className="flex items-center gap-2.5 mb-2">
@@ -286,6 +282,6 @@ function EditorPickCard({ tool }: { tool: ToolCard }) {
         </div>
         <PricingBadge pricing={tool.pricingModel} />
       </div>
-    </Link>
+    </IntentLink>
   );
 }

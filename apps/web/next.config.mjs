@@ -7,6 +7,9 @@ const nextConfig = {
   poweredByHeader: false,
   experimental: {
     optimizePackageImports: ['lucide-react', 'recharts', 'date-fns', 'react-simple-maps'],
+    // Keep visited dynamic pages in the browser for 30s so back/forward doesn't show a skeleton again
+    // (default 0). Static pages already keep 300s.
+    staleTimes: { dynamic: 30 },
   },
   // Images are never optimised by Vercel (billed per transformation): every next/image goes through
   // lib/image-loader.ts, which serves our media from Cloudflare (resized there when enabled).

@@ -6,13 +6,14 @@
  * - TTL jitter (±15%) to prevent synchronized expiration
  * - Compression for payloads > 50KB
  * - Graceful fallthrough on Redis failure
- * - Deployment-based versioning (auto-invalidates on deploy)
+ * - Fixed cache version shared with the admin app (survives deploys; bump by hand on shape changes)
  * - Metrics tracking (hit/miss/stale/error counters)
  * - No wildcard invalidation — explicit key lists
  * - PostgreSQL remains source of truth (Redis is acceleration layer only)
  */
 
 import { Redis } from '@upstash/redis';
+import { after } from 'next/server';
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
@@ -30,9 +31,10 @@ function getRedis(): Redis | null {
   return redis;
 }
 
-// Deployment-based version: uses BUILD_ID or git SHA if available, falls back to manual version.
-// This auto-invalidates all caches on every Vercel deploy without manual bumps.
-const CACHE_VERSION = process.env.NEXT_BUILD_ID || process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 8) || 'v1';
+// Fixed so the cache survives deploys and admin (apps/admin/lib/cache-invalidate.ts) deletes the same keys.
+// Bump in BOTH files only when the shape of cached data changes. Local and preview builds share this Redis
+// but read other databases, so they get their own prefix and can never overwrite production's entries.
+const CACHE_VERSION = process.env.VERCEL_ENV === 'production' ? 'c1' : `c1-${process.env.VERCEL_ENV || 'local'}`;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -72,7 +74,7 @@ export async function cached<T>(
 
     if (raw && raw.t && raw.d) {
       const ageSeconds = (Date.now() - raw.t) / 1000;
-      const data = deserialize<T>(raw);
+      const data = await deserialize<T>(raw);
 
       // Fresh hit
       if (ageSeconds < options.ttl) {
@@ -80,20 +82,11 @@ export async function cached<T>(
         return data;
       }
 
-      // Stale — try to rebuild (one process only)
+      // Stale — serve it now and rebuild after the response (one process only)
       if (options.staleTtl && ageSeconds < options.ttl + options.staleTtl) {
         trackMetric(client, key, 'stale');
-        const locked = await client.set(lockKey, '1', { nx: true, ex: 30 });
-        if (locked) {
-          try {
-            const fresh = await fetcher();
-            await storeWithJitter(client, fullKey, fresh, options);
-            return fresh;
-          } finally {
-            await client.del(lockKey).catch(() => {});
-          }
-        }
-        return data; // Serve stale — another process is rebuilding
+        refreshInBackground(client, key, fullKey, lockKey, fetcher, options);
+        return data;
       }
     }
 
@@ -101,7 +94,7 @@ export async function cached<T>(
     const locked = await client.set(lockKey, '1', { nx: true, ex: 30 });
     if (!locked && raw?.d) {
       trackMetric(client, key, 'stale');
-      return deserialize<T>(raw); // Serve stale while locked
+      return await deserialize<T>(raw); // Serve stale while locked
     }
 
     try {
@@ -123,13 +116,36 @@ export async function cached<T>(
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+let warnedNoAfter = false;
+
+/** Rebuild a stale entry without making the visitor wait: after the response, or in the background outside a request. */
+function refreshInBackground<T>(client: Redis, key: string, fullKey: string, lockKey: string, fetcher: () => Promise<T>, options: CacheOptions): void {
+  const rebuild = async () => {
+    const locked = await client.set(lockKey, '1', { nx: true, ex: 30 });
+    if (!locked) return; // another process is rebuilding
+    try {
+      await storeWithJitter(client, fullKey, await fetcher(), options);
+    } finally {
+      await client.del(lockKey).catch(() => {});
+    }
+  };
+  const run = () => rebuild().catch((err) => console.error(`[cache] background rebuild failed ${key}:`, (err as Error)?.message));
+  try {
+    after(run);
+  } catch {
+    // after() only works inside a request (not at build time, in scripts or tests).
+    if (!warnedNoAfter) { warnedNoAfter = true; console.warn('[cache] after() unavailable; rebuilding stale entries in the background'); }
+    void run();
+  }
+}
+
 /** Store with TTL jitter (±15%) to prevent synchronized expiration */
 async function storeWithJitter<T>(client: Redis, fullKey: string, data: T, options: CacheOptions): Promise<void> {
   const totalTtl = options.ttl + (options.staleTtl || 60);
   const jitter = 0.85 + Math.random() * 0.3; // 0.85 to 1.15
   const finalTtl = Math.round(totalTtl * jitter);
 
-  const entry = serialize(data, options.compress);
+  const entry = await serialize(data, options.compress);
 
   try {
     await client.set(fullKey, entry, { ex: finalTtl });
@@ -140,17 +156,38 @@ async function storeWithJitter<T>(client: Redis, fullKey: string, data: T, optio
   }
 }
 
-/** Serialize data — compress if > 50KB or forced */
-function serialize<T>(data: T, forceCompress?: boolean): CacheEntry {
+const COMPRESS_OVER_BYTES = 50 * 1024;
+
+// Web streams + base64, not Node's zlib: this module is also imported by Edge routes.
+async function gzipToBase64(text: string): Promise<string> {
+  const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));
+  const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
+async function gunzipFromBase64(b64: string): Promise<string> {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Response(stream).text();
+}
+
+/** Serialize data — gzip (stored as base64) if > 50KB or forced */
+async function serialize<T>(data: T, forceCompress?: boolean): Promise<CacheEntry> {
   const json = JSON.stringify(data);
-  // Note: In Edge/Serverless, native zlib isn't always available.
-  // For now, store raw JSON. Add compression later with a WASM-based gzip if needed.
+  if (forceCompress || json.length > COMPRESS_OVER_BYTES) {
+    return { d: await gzipToBase64(json), t: Date.now(), c: true };
+  }
   return { d: json, t: Date.now(), c: false };
 }
 
-/** Deserialize cached entry */
-function deserialize<T>(entry: CacheEntry): T {
-  return JSON.parse(entry.d) as T;
+/** Deserialize cached entry (entries written before compression existed have no `c` flag) */
+async function deserialize<T>(entry: CacheEntry): Promise<T> {
+  const json = entry.c ? await gunzipFromBase64(entry.d) : entry.d;
+  return JSON.parse(json) as T;
 }
 
 /** Track metric (fire-and-forget, never blocks) */
@@ -177,7 +214,7 @@ export async function writeThrough<T>(key: string, data: T, ttlSeconds: number):
   const client = getRedis();
   if (!client) return;
   try {
-    const entry = serialize(data);
+    const entry = await serialize(data);
     const jitter = 0.85 + Math.random() * 0.3;
     await client.set(`${CACHE_VERSION}:${key}`, entry, { ex: Math.round((ttlSeconds + 60) * jitter) });
   } catch {}

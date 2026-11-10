@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useMemo, useRef, useEffect, useDeferredValue } from 'react';
-import Link from 'next/link';
+import React, { useState, useMemo, useRef, useEffect, useDeferredValue, useCallback } from 'react';
+import IntentLink from '@/components/IntentLink';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useListRestore } from '@/hooks/useListRestore';
@@ -14,6 +14,7 @@ import FilterList, { type FilterRow } from './ui/FilterList';
 import SmartSearchBox, { type SearchSuggestion } from './search/SmartSearchBox';
 import { indexTools, searchTools } from '@/lib/search/tool-search';
 import { removeChipFromQuery } from '@/lib/search/understand';
+import type { ToolFacets } from '@/lib/tools/facets';
 
 const TOOL_EXAMPLES = [
   'Free AI tool to write blog posts',
@@ -81,6 +82,13 @@ interface ToolsListProps {
   initialSubcategory?: string | null;
   /** Called whenever the selected subcategory changes ('all' for none). */
   onSubcategoryChange?: (slug: string) => void;
+  /**
+   * Set on /tools: `picks` is only the first, top-rated part of the directory and `fullDataUrl` returns all of it
+   * (`{ tools, toolTagMap }`). It is loaded the first time the visitor interacts with the list; until then the
+   * filter options and counts come from `facets` (computed from the full directory on the server).
+   */
+  fullDataUrl?: string;
+  facets?: ToolFacets;
 }
 
 type SortOption = 'relevance' | 'rating' | 'upvotes' | 'name' | 'newest';
@@ -92,9 +100,29 @@ const ITEMS_PER_PAGE = 30;
 // Primary filter groups shown expanded by default (sortOrder 1-4)
 const PRIMARY_GROUP_SLUGS = ['pricing-access', 'platform-access', 'target-user', 'ai-model-technology'];
 
-export default function ToolsListWithComparison({ picks, tagGroups = [], toolTagMap = {}, initialTagId, initialPricing, scopeCategory, initialSubcategory, onSubcategoryChange }: ToolsListProps) {
+export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: firstTagGroups = [], toolTagMap: firstTagMap = {}, initialTagId, initialPricing, scopeCategory, initialSubcategory, onSubcategoryChange, fullDataUrl, facets }: ToolsListProps) {
   const defaultCategory = scopeCategory || 'all';
   const router = useRouter();
+  const [full, setFull] = useState<{ tools: ToolPick[]; toolTagMap: Record<string, string[]>; tagGroups: TagGroupItem[] } | null>(null);
+  const [loadingFull, setLoadingFull] = useState(false);
+  const fullRequested = useRef(false);
+  /** A ?tag=<slug> link waiting for the full tag list. */
+  const pendingTagSlug = useRef<string | null>(null);
+  const picks = full?.tools ?? firstPicks;
+  const toolTagMap = full?.toolTagMap ?? firstTagMap;
+  const tagGroups = full?.tagGroups ?? firstTagGroups;
+  /** Only the first tools are loaded so far (see `fullDataUrl`). */
+  const partial = !!fullDataUrl && !full;
+  const ensureFull = useCallback(() => {
+    if (!fullDataUrl || fullRequested.current) return;
+    fullRequested.current = true;
+    setLoadingFull(true);
+    fetch(fullDataUrl)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`directory ${res.status}`))))
+      .then((data) => setFull({ tools: data.tools || [], toolTagMap: data.toolTagMap || {}, tagGroups: data.tagGroups || firstTagGroups }))
+      .catch(() => { fullRequested.current = false; })
+      .finally(() => setLoadingFull(false));
+  }, [fullDataUrl, firstTagGroups]);
   const [selectedTools, setSelectedTools] = useState<ToolPick[]>([]);
   const [categoryBeforeCompare, setCategoryBeforeCompare] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -180,6 +208,7 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
 
   // Get parent categories with counts
   const parentCategories = useMemo(() => {
+    if (partial && facets) return facets.parentCategories;
     const catMap = new Map<string, { name: string; slug: string; count: number }>();
     picks.forEach(p => {
       const slug = p.parentCategorySlug || p.categorySlug;
@@ -192,11 +221,12 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
       }
     });
     return Array.from(catMap.values()).sort((a, b) => b.count - a.count);
-  }, [picks]);
+  }, [picks, partial, facets]);
 
   // Get subcategories for selected parent
   const subcategories = useMemo(() => {
     if (selectedCategory === 'all') return [];
+    if (partial && facets) return facets.subcategoriesByParent[selectedCategory] || [];
     const subMap = new Map<string, { name: string; slug: string; count: number }>();
     picks.forEach(p => {
       const parentSlug = p.parentCategorySlug || p.categorySlug;
@@ -207,18 +237,20 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
       }
     });
     return Array.from(subMap.values()).sort((a, b) => b.count - a.count);
-  }, [picks, selectedCategory]);
+  }, [picks, selectedCategory, partial, facets]);
 
   // Tag counts for the tools on this page (a category page shows fewer tools than the site-wide counts).
   const tagCounts = useMemo(() => {
+    if (partial && facets) return new Map(facets.tagCounts);
     const counts = new Map<string, number>();
     for (const p of picks) for (const id of toolTagMap[p.id] || []) counts.set(id, (counts.get(id) || 0) + 1);
     return counts;
-  }, [picks, toolTagMap]);
+  }, [picks, toolTagMap, partial, facets]);
 
   const pricingModels = useMemo(() => {
+    if (partial && facets) return facets.pricingModels;
     return Array.from(new Set(picks.map(p => p.pricing))).sort();
-  }, [picks]);
+  }, [picks, partial, facets]);
 
   // Relevance search: index once per tool list, rank on every (deferred) keystroke.
   const tagNameById = useMemo(() => {
@@ -299,12 +331,24 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
     return result;
   }, [picks, searchResult, selectedCategory, selectedSubcategory, selectedPricing, effectiveSort, selectedTagIds, freeTrialOnly, toolTagMap, tagGroups]);
 
+  // Until the full directory arrives, filters and other sorts can't be applied to the first tools alone: those
+  // stay on screen (with a loading note) and the chosen filters apply as soon as everything is loaded.
+  const filtersActive = !!searchQuery.trim() || selectedCategory !== defaultCategory
+    || selectedSubcategory !== (initialSubcategory || 'all') || selectedPricing !== 'all'
+    || selectedTagIds.length > 0 || freeTrialOnly || effectiveSort !== 'rating';
+  const waitingForFull = partial && filtersActive;
+
+  useEffect(() => {
+    if (filtersActive || visibleCount > firstPicks.length) ensureFull();
+  }, [filtersActive, visibleCount, firstPicks.length, ensureFull]);
+
   // Paginated tools
   const visibleTools = useMemo(() => {
-    return filteredTools.slice(0, visibleCount);
-  }, [filteredTools, visibleCount]);
+    return (waitingForFull ? firstPicks : filteredTools).slice(0, visibleCount);
+  }, [waitingForFull, firstPicks, filteredTools, visibleCount]);
 
-  const hasMore = visibleCount < filteredTools.length;
+  const matchingCount = partial ? (waitingForFull ? null : facets?.total ?? firstPicks.length) : filteredTools.length;
+  const hasMore = visibleCount < (matchingCount ?? firstPicks.length);
 
   const searchSuggestions = useMemo<SearchSuggestion[]>(() => {
     if (!searchQuery.trim()) return [];
@@ -405,10 +449,22 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
     if (sp.get('view') === 'list') setViewMode('list');
     const tags = sp.get('tags')?.split(',').filter(Boolean);
     if (tags?.length) setSelectedTagIds(tags);
+    // Older links name one tag by slug (?tag=chatbots); it may only be in the full tag list.
+    const tagSlug = sp.get('tag');
+    if (!tags?.length && tagSlug) { pendingTagSlug.current = tagSlug; ensureFull(); }
     if (sp.get('trial') === '1') setFreeTrialOnly(true);
     // Once, on arrival.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const slug = pendingTagSlug.current;
+    const tag = slug ? tagGroups.flatMap((g) => g.tags).find((t) => t.slug === slug) : undefined;
+    if (!tag) return;
+    pendingTagSlug.current = null;
+    setSelectedTagIds([tag.id]);
+    setShowMoreFilters(true);
+  }, [tagGroups]);
 
   // Skip the first run: it happens with the defaults, before the URL's filters above are applied.
   const firstSync = useRef(true);
@@ -429,8 +485,14 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
   const resultsRow = (
         <div className="flex items-center justify-between gap-3 text-[13px] sm:text-sm text-gray-500 dark:text-gray-400 font-jakarta">
           <p aria-live="polite">
-            Found <span className="font-semibold sm:font-bold text-navy dark:text-white">{filteredTools.length}</span> {filteredTools.length === 1 ? 'tool' : 'tools'}
-            {hasMore && <span className="ml-1 text-gray-400">· showing {Math.min(visibleCount, filteredTools.length)}</span>}
+            {matchingCount === null ? (
+              <span className="inline-flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading all tools…</span>
+            ) : (
+              <>
+                Found <span className="font-semibold sm:font-bold text-navy dark:text-white">{matchingCount}</span> {matchingCount === 1 ? 'tool' : 'tools'}
+                {hasMore && <span className="ml-1 text-gray-400">· showing {Math.min(visibleCount, visibleTools.length)}</span>}
+              </>
+            )}
           </p>
           <div role="group" aria-label="View" className="flex items-center gap-1.5">
             <button
@@ -460,6 +522,11 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
   useEffect(() => {
     if (!window.matchMedia('(min-width: 640px)').matches) setShowMoreFilters(false);
   }, []);
+
+  // Opening the filters shows every tag ("show all"), so fetch the full directory then.
+  useEffect(() => {
+    if (showMoreFilters || sheetOpen || showAllInGroup.size > 0) ensureFull();
+  }, [showMoreFilters, sheetOpen, showAllInGroup, ensureFull]);
 
   const clearAllFilters = () => { setSearchQuery(''); setSelectedCategory(defaultCategory); setSelectedSubcategory('all'); setSelectedPricing('all'); setSelectedTagIds([]); setFreeTrialOnly(false); setVisibleCount(ITEMS_PER_PAGE); };
   const filterCount = selectedTagIds.length + (selectedPricing !== 'all' ? 1 : 0) + (freeTrialOnly ? 1 : 0);
@@ -540,7 +607,7 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
                 : 'bg-gray-200/60 sm:bg-gray-100 dark:bg-gray-800 text-gray-700 sm:text-gray-600 dark:text-gray-300 sm:dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
             }`}
           >
-            All ({picks.length})
+            All ({partial && facets ? facets.total : picks.length})
           </button>
           {parentCategories.map(cat => (
             <button
@@ -602,11 +669,11 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
           noun="AI tools"
           examples={TOOL_EXAMPLES}
           suggestions={searchSuggestions}
-          resultCount={searchQuery.trim() ? filteredTools.length : null}
+          resultCount={searchQuery.trim() && !waitingForFull ? filteredTools.length : null}
           chips={searchResult?.understood.chips}
           relaxed={searchResult?.relaxed}
           onRemoveChip={(chip) => handleSearchChange(removeChipFromQuery(searchQuery, chip))}
-          onOpenChange={setSearchOpen}
+          onOpenChange={(open) => { setSearchOpen(open); if (open) ensureFull(); }}
         />
         </div>
         <button
@@ -849,7 +916,7 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
         ) : null}
         footer={(
           <button type="button" onClick={() => setSheetOpen(false)} className="w-full min-h-[48px] rounded-xl bg-brand text-white font-jakarta font-bold text-[15px] active:scale-[0.98] transition-transform duration-150 motion-reduce:transition-none">
-            Show {filteredTools.length} {filteredTools.length === 1 ? 'tool' : 'tools'}
+            {matchingCount === null ? 'Show tools' : `Show ${matchingCount} ${matchingCount === 1 ? 'tool' : 'tools'}`}
           </button>
         )}
       >
@@ -874,10 +941,10 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
             }).filter(Boolean);
 
             return (
-              <Link
+              <IntentLink
                 key={tool.slug}
                 href={`/tools/${tool.slug}`}
-                prefetch={false}
+
                 className={`group block rounded-xl transition-all h-full active:scale-[0.98] ${isSelected ? 'ring-2 ring-brand ring-offset-2 dark:ring-offset-gray-950' : 'hover:shadow-lg hover:shadow-brand/5'}`}
               >
                 <div className="p-4 sm:p-5 flex flex-col gap-2.5 relative h-full bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl">
@@ -961,7 +1028,7 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
                     </span>
                   </div>
                 </div>
-              </Link>
+              </IntentLink>
             );
           })}
         </div>
@@ -985,10 +1052,10 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
             }).filter(Boolean);
 
             return (
-              <Link
+              <IntentLink
                 key={tool.slug}
                 href={`/tools/${tool.slug}`}
-                prefetch={false}
+
                 className={`group flex items-center gap-3 p-3 sm:p-3 rounded-lg transition-all bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 hover:border-brand/30 hover:shadow-sm active:scale-[0.99] ${isSelected ? 'ring-2 ring-brand' : ''}`}
               >
                 {/* Logo */}
@@ -1050,36 +1117,41 @@ export default function ToolsListWithComparison({ picks, tagGroups = [], toolTag
                 >
                   {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                 </button>
-              </Link>
+              </IntentLink>
             );
           })}
         </div>
       )}
 
       {/* ── Infinite Scroll / Load More ── */}
-      {filteredTools.length > 0 && hasMore && (
+      {visibleTools.length > 0 && hasMore && (
         <>
-          <ToolsInfiniteScrollTrigger onIntersect={() => setVisibleCount(prev => prev + ITEMS_PER_PAGE)} />
+          {!loadingFull && <ToolsInfiniteScrollTrigger onIntersect={() => setVisibleCount(prev => prev + ITEMS_PER_PAGE)} />}
           <div className="text-center pt-2 pb-4">
             <button
               onClick={() => setVisibleCount(prev => prev + ITEMS_PER_PAGE)}
-              className="px-6 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-jakarta font-semibold text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors active:scale-95"
+              disabled={loadingFull}
+              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-jakarta font-semibold text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors active:scale-95 disabled:opacity-70"
             >
-              Load more tools ({filteredTools.length - visibleCount} remaining)
+              {loadingFull ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Loading all tools…</>
+              ) : (
+                <>Load more tools{matchingCount !== null && ` (${matchingCount - visibleCount} remaining)`}</>
+              )}
             </button>
           </div>
         </>
       )}
 
       {/* End of list indicator */}
-      {filteredTools.length > 0 && !hasMore && visibleCount > ITEMS_PER_PAGE && (
+      {!partial && filteredTools.length > 0 && !hasMore && visibleCount > ITEMS_PER_PAGE && (
         <div className="text-center py-6">
           <p className="text-xs text-gray-400 font-jakarta">All {filteredTools.length} tools loaded</p>
         </div>
       )}
 
       {/* No Results */}
-      {filteredTools.length === 0 && (
+      {visibleTools.length === 0 && (
         <div className="text-center py-16">
           <div className="w-16 h-16 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-4">
             <SearchX className="w-7 h-7 text-gray-300 dark:text-gray-600" />

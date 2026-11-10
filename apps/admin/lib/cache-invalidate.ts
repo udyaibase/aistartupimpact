@@ -4,11 +4,26 @@
  * Uses REST API directly (no @upstash/redis dependency needed).
  */
 
+import { prisma } from '@udyaibase/database';
+
 const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 const WEB_REDIS_URL = process.env.WEB_UPSTASH_REDIS_REST_URL;
 const WEB_REDIS_TOKEN = process.env.WEB_UPSTASH_REDIS_REST_TOKEN;
-const CACHE_VERSION = process.env.NEXT_BUILD_ID || process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 8) || 'v1';
+// Must equal CACHE_VERSION in apps/web/lib/cache.ts, or these deletes miss the web app's keys.
+const CACHE_VERSION = process.env.VERCEL_ENV === 'production' ? 'c1' : `c1-${process.env.VERCEL_ENV || 'local'}`;
+
+/** The web app caches the tool directory per category (`tool:directory:<slug>`) plus `tool:directory:all`. */
+async function toolDirectoryKeys(): Promise<string[]> {
+  const keys = ['tool:directory:all'];
+  try {
+    const categories = await prisma.toolCategory.findMany({ select: { slug: true } });
+    for (const c of categories) keys.push(`tool:directory:${c.slug}`);
+  } catch {
+    // Category entries expire within minutes on their own.
+  }
+  return keys;
+}
 
 /**
  * Invalidate tool-related cache keys after admin actions.
@@ -24,6 +39,7 @@ export async function invalidateToolCache(slug?: string): Promise<void> {
     'homepage:stats',
   ];
   if (slug) keys.push(`tool:detail:${slug}`);
+  keys.push(...(await toolDirectoryKeys()));
   await deleteKeys(keys);
 }
 
@@ -44,7 +60,7 @@ export async function invalidateStartupCache(slug?: string): Promise<void> {
  * Invalidate category/tag cache keys.
  */
 export async function invalidateTaxonomyCache(): Promise<void> {
-  await deleteKeys(['tool:categories', 'tool:tag-groups', 'tool:tag-map']);
+  await deleteKeys(['tool:categories', 'tool:tag-groups', 'tool:tag-map', ...(await toolDirectoryKeys())]);
 }
 
 export async function invalidateToolTagsCache(toolId: string): Promise<void> {
@@ -61,8 +77,10 @@ async function deleteKeys(keys: string[]): Promise<void> {
     targets.map(async ({ url, token }) => {
       if (!url || !token) return;
       try {
-        await fetch(`${url}/del/${fullKeys.join('/')}`, {
+        await fetch(url, {
+          method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify(['DEL', ...fullKeys]),
         });
       } catch {
         // Silent failure — cache will expire naturally via TTL

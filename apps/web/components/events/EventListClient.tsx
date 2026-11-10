@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import Link from 'next/link';
+import IntentLink from '@/components/IntentLink';
 import { Calendar, MapPin, Video, Users, Clock, ExternalLink, BadgeCheck } from 'lucide-react';
 
 const PAGE_SIZE = 15;
@@ -90,7 +90,7 @@ function EventCard({ event }: { event: Event }) {
     : event.hostStartupName || event.organizerName;
 
   return (
-    <Link href={`/events/${event.slug}`} prefetch={false} className="block card p-4 sm:p-5 hover:border-gray-300 dark:hover:border-gray-600 transition-colors group cursor-pointer">
+    <IntentLink href={`/events/${event.slug}`} className="block card p-4 sm:p-5 hover:border-gray-300 dark:hover:border-gray-600 transition-colors group cursor-pointer">
       <div className="flex gap-3 sm:gap-4">
         {/* Date block */}
         <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg flex flex-col items-center justify-center shrink-0 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
@@ -238,7 +238,7 @@ function EventCard({ event }: { event: Event }) {
           </div>
         )}
       </div>
-    </Link>
+    </IntentLink>
   );
 }
 

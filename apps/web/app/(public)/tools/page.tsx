@@ -36,7 +36,11 @@ const DiscoverySections = dynamic(() => import('@/components/tools/DiscoverySect
   ),
 });
 
-export const revalidate = 60;
+// Admin edits refresh this page on demand (lib/revalidate.ts); the timer is a fallback.
+export const revalidate = 300;
+
+/** Tools sent with the page; the rest load from /api/tools/directory when the visitor uses the list. */
+const FIRST_TOOLS = 48;
 
 export const metadata: Metadata = {
   title: "Editor's Picks: Best AI Tools — Reviewed & Rated",
@@ -61,11 +65,10 @@ export const metadata: Metadata = {
 };
 
 import { getDirectoryToolsDirect, getToolCategoryTreeDirect, getToolTagGroupsForFilterDirect, getToolTagMappingsDirect, getTrendingToolsDirect, getRecentlyAddedToolsDirect, getEditorPicksDirect, getMostUpvotedThisMonthDirect } from '@/lib/db';
+import { computeToolFacets, topRated, trimTagGroups } from '@/lib/tools/facets';
 
-export default async function ToolsPage(
-  props: { searchParams: Promise<{ category?: string; tag?: string; pricing?: string }> }
-) {
-  const searchParams = await props.searchParams;
+// Rendered without the URL's filters so the page can be cached; the list applies them after load.
+export default async function ToolsPage() {
   const [picks, categoryTree, tagGroups, toolTagMap, trending, recentlyAdded, editorPicks, mostUpvoted] = await Promise.all([
     getDirectoryToolsDirect(),
     getToolCategoryTreeDirect(),
@@ -77,20 +80,10 @@ export default async function ToolsPage(
     getMostUpvotedThisMonthDirect(12),
   ]);
 
-  // Resolve initial tag slug to tag ID if ?tag= query param provided
-  const initialTagSlug = searchParams.tag || null;
-  let initialTagId: string | null = null;
-  if (initialTagSlug) {
-    for (const group of tagGroups) {
-      const found = group.tags.find((t: any) => t.slug === initialTagSlug);
-      if (found) {
-        initialTagId = found.id;
-        break;
-      }
-    }
-  }
-
-  const initialPricing = searchParams.pricing || null;
+  const facets = computeToolFacets(picks, toolTagMap);
+  const firstPicks = topRated(picks, FIRST_TOOLS);
+  const firstTagMap = Object.fromEntries(firstPicks.map((p) => [p.id, toolTagMap[p.id] || []]));
+  const firstTagGroups = trimTagGroups(tagGroups as any[], facets, firstPicks, toolTagMap);
 
   const siteUrl = 'https://udyaibase.com';
 
@@ -98,7 +91,7 @@ export default async function ToolsPage(
     name: "Editor's Picks: Best AI Tools",
     description: "AI tools reviewed and rated by the Udyaibase editorial team.",
     url: `${siteUrl}/tools`,
-    items: picks.map((t, i) => ({
+    items: firstPicks.map((t, i) => ({
       position: i + 1,
       name: t.name,
       url: `${siteUrl}/tools/${t.slug}`,
@@ -229,7 +222,7 @@ export default async function ToolsPage(
       )}
 
       {/* Tools List Component with State */}
-      <ToolsListWithComparison picks={picks} tagGroups={tagGroups} toolTagMap={toolTagMap} initialTagId={initialTagId} initialPricing={initialPricing} />
+      <ToolsListWithComparison picks={firstPicks} tagGroups={firstTagGroups} toolTagMap={firstTagMap} facets={facets} fullDataUrl="/api/tools/directory" />
 
 
     </div>

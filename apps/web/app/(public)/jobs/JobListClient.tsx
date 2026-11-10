@@ -3,11 +3,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { MapPin, Building2, ExternalLink, Bookmark } from 'lucide-react';
+import { MapPin, Building2, ExternalLink, Bookmark, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useUser } from '@/components/UserProvider';
-
-const PAGE_SIZE = 15;
+import { JOBS_PAGE_SIZE as PAGE_SIZE } from '@/lib/jobs/search-keys';
 
 const AVATAR_COLORS = [
   'bg-blue-600', 'bg-green-600', 'bg-purple-600', 'bg-red-600',
@@ -242,11 +241,13 @@ function JobCard({ job, isSaved, onToggleSave }: { job: any; isSaved: boolean; o
 interface JobListClientProps {
   jobs: any[];
   total: number;
+  /** Loads the next page; omitted when every matching job is already in `jobs`. */
+  onLoadMore?: () => void;
+  loadingMore?: boolean;
 }
 
-export default function JobListClient({ jobs, total }: JobListClientProps) {
+export default function JobListClient({ jobs, total, onLoadMore, loadingMore }: JobListClientProps) {
   const { user } = useUser();
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [savedSlugs, setSavedSlugs] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -277,13 +278,12 @@ export default function JobListClient({ jobs, total }: JobListClientProps) {
     });
   }, []);
 
-  const visibleJobs = jobs.slice(0, visibleCount);
-  const hasMore = visibleCount < jobs.length;
+  const hasMore = !!onLoadMore && jobs.length < total;
 
   return (
     <>
       <div className="space-y-3">
-        {visibleJobs.map((job: any) => (
+        {jobs.map((job: any) => (
           <JobCard key={job.id} job={job} isSaved={savedSlugs.has(job.slug)} onToggleSave={handleToggleSave} />
         ))}
       </div>
@@ -291,13 +291,15 @@ export default function JobListClient({ jobs, total }: JobListClientProps) {
       {hasMore && (
         <div className="text-center mt-6">
           <button
-            onClick={() => setVisibleCount(prev => prev + PAGE_SIZE)}
-            className="px-8 py-3 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-semibold font-jakarta text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            onClick={onLoadMore}
+            disabled={loadingMore}
+            className="inline-flex items-center gap-2 px-8 py-3 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-semibold font-jakarta text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-60"
           >
+            {loadingMore && <Loader2 className="w-4 h-4 animate-spin" />}
             Show more jobs
           </button>
           <p className="text-xs text-gray-400 font-jakarta mt-2">
-            Showing {visibleJobs.length} of {total} jobs
+            Showing {jobs.length} of {total} jobs
           </p>
         </div>
       )}

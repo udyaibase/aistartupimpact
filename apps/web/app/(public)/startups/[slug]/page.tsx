@@ -387,8 +387,9 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
         LIMIT 1
       `;
       if (redirectCheck.length > 0) {
-        const { redirect } = await import('next/navigation');
-        redirect(`/startups/${(redirectCheck[0] as any).slug}`);
+        // Old slug: a permanent redirect, so search engines move to the new URL.
+        const { permanentRedirect } = await import('next/navigation');
+        permanentRedirect(`/startups/${(redirectCheck[0] as any).slug}`);
       }
     } catch (e: any) {
       if (e?.digest?.startsWith('NEXT_REDIRECT')) throw e;

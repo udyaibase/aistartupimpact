@@ -14,7 +14,7 @@ export const SECTIONS = {
   opinions: ['/opinions', '/opinion'],
   authors: ['/authors'],
   startups: ['/startups'],
-  tools: ['/tools'],
+  tools: ['/tools', '/api/tools/directory'],
   funding: ['/funding'],
   jobs: ['/jobs'],
   events: ['/events'],

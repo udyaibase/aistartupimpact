@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import Link from 'next/link';
+import IntentLink from '@/components/IntentLink';
 import Image from 'next/image';
 import { Search, Building2, MapPin, X, Loader2, SlidersHorizontal, ChevronDown, ChevronUp, ArrowUpDown, ChevronLeft, ChevronRight, TrendingUp, Sparkles, LayoutGrid, List, Users } from 'lucide-react';
-import { useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useListRestore } from '@/hooks/useListRestore';
 import { VerifiedBadge } from './VerifiedBadge';
 import { useHeadroomBar } from '@/hooks/useHeadroomBar';
@@ -178,21 +178,20 @@ const STARTUP_EXAMPLES = [
 export default function StartupSearch({ initialStartups, initialTotal, initialCounts, initialUnderstood, initialFunding, cities }: Props) {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-
-  const [query, setQuery] = useState(searchParams.get('q') || '');
-  const [stage, setStage] = useState(searchParams.get('stage') || '');
-  const [category, setCategory] = useState(searchParams.get('category') || '');
-  const [businessType, setBusinessType] = useState(searchParams.get('businessType') || '');
-  const [status, setStatus] = useState(searchParams.get('status') || '');
-  const [city, setCity] = useState(searchParams.get('city') || '');
-  const [country, setCountry] = useState(searchParams.get('country') || '');
-  const [employeeRange, setEmployeeRange] = useState(searchParams.get('employeeRange') || '');
-  const [sort, setSort] = useState(searchParams.get('sort') || '');
-  const [funding, setFunding] = useState<Funding | 'all'>(() => {
-    const f = searchParams.get('funding');
-    return f === 'funded' || f === 'unfunded' || f === 'all' ? f : '';
-  });
+  // The page is cached without filters; filters in the URL are applied after mount (see the effect below the search).
+  const [query, setQuery] = useState('');
+  const [stage, setStage] = useState('');
+  const [category, setCategory] = useState('');
+  const [businessType, setBusinessType] = useState('');
+  const [status, setStatus] = useState('');
+  const [city, setCity] = useState('');
+  const [country, setCountry] = useState('');
+  const [employeeRange, setEmployeeRange] = useState('');
+  const [sort, setSort] = useState('');
+  const [funding, setFunding] = useState<Funding | 'all'>('');
+  const [listReady, setListReady] = useState(false);
+  const loadFromUrl = useRef(false);
+  const lastSearchedQuery = useRef('');
   const [counts, setCounts] = useState<FundingCounts>(initialCounts);
   const [appliedFunding, setAppliedFunding] = useState<Funding>(initialFunding ?? '');
 
@@ -302,11 +301,15 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
 
   // Fast debounced search — instant for filters, 150ms for typing
   useEffect(() => {
-    if (!hasUserInteracted.current) return;
+    const fromUrl = loadFromUrl.current;
+    if (!hasUserInteracted.current && !fromUrl) return;
+    loadFromUrl.current = false;
     clearTimeout(debounceRef.current);
-    const isTyping = query !== (searchParams.get('q') || '');
+    const isTyping = !fromUrl && query !== lastSearchedQuery.current;
+    lastSearchedQuery.current = query;
     debounceRef.current = setTimeout(async () => {
-      router.replace(filterParams ? `${pathname}?${filterParams}` : pathname, { scroll: false });
+      // Filters that came from the URL are already in it.
+      if (!fromUrl) router.replace(filterParams ? `${pathname}?${filterParams}` : pathname, { scroll: false });
       setLoading(true);
       setCurrentPage(1);
       try {
@@ -321,12 +324,32 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
       } catch (err) {
         // A newer request took over; it will clear the loading state.
         if ((err as Error)?.name !== 'AbortError') { setStartups([]); setTotal(0); setLoading(false); }
+      } finally {
+        if (fromUrl) setListReady(true);
       }
     }, isTyping ? 150 : 0);
     return () => clearTimeout(debounceRef.current);
-    // searchParams is read only to tell typing from filter clicks; it must not re-trigger the search.
+    // query is read only to tell typing from filter clicks; filterParams already carries it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterParams, fetchPage, pathname, router]);
+
+  // Apply filters from the URL once, after mount. The search effect above then loads their first page.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const get = (k: string) => p.get(k) || '';
+    const f = get('funding');
+    const fromUrl = {
+      q: get('q'), stage: get('stage'), category: get('category'), businessType: get('businessType'), status: get('status'),
+      city: get('city'), country: get('country'), employeeRange: get('employeeRange'), sort: get('sort'),
+      funding: (f === 'funded' || f === 'unfunded' || f === 'all' ? f : '') as Funding | 'all',
+    };
+    if (!Object.values(fromUrl).some(Boolean)) { setListReady(true); return; }
+    loadFromUrl.current = true;
+    lastSearchedQuery.current = fromUrl.q;
+    setQuery(fromUrl.q); setStage(fromUrl.stage); setCategory(fromUrl.category); setBusinessType(fromUrl.businessType);
+    setStatus(fromUrl.status); setCity(fromUrl.city); setCountry(fromUrl.country); setEmployeeRange(fromUrl.employeeRange);
+    setSort(fromUrl.sort); setFunding(fromUrl.funding);
+  }, []);
 
   useEffect(() => () => requestRef.current?.abort(), []);
 
@@ -339,7 +362,7 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
       if (!data.startups?.length) break;
     }
   }, [fetchPage]);
-  useListRestore('startups', filterParams, currentPage, restorePages);
+  useListRestore('startups', filterParams, currentPage, restorePages, listReady);
 
   const handleFundingChange = (value: Funding) => {
     if (value === shownFunding) return;
@@ -879,7 +902,7 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
         <div className={`${viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3' : 'flex flex-col gap-1.5 sm:gap-2'} transition-opacity duration-150 ${loading ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
           {startups.map(s => viewMode === 'list' ? (
             /* ── List View Card ── */
-            <Link key={s.slug} href={`/startups/${s.slug}`} prefetch={false} className="group">
+            <IntentLink key={s.slug} href={`/startups/${s.slug}`} className="group">
               <div className="relative bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl sm:rounded-lg px-3.5 sm:px-4 py-3 active:bg-gray-50 dark:active:bg-gray-800/60 sm:active:bg-white sm:dark:active:bg-gray-900 hover:shadow-md hover:border-brand/30 dark:hover:border-brand/30 transition-all duration-200 flex items-center gap-3">
                 {/* Logo */}
                 <div className="relative shrink-0">
@@ -943,10 +966,10 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
                   </svg>
                 </div>
               </div>
-            </Link>
+            </IntentLink>
           ) : (
             /* ── Grid View Card ── */
-            <Link key={s.slug} href={`/startups/${s.slug}`} prefetch={false} className="group">
+            <IntentLink key={s.slug} href={`/startups/${s.slug}`} className="group">
               <div className="relative bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3.5 sm:p-5 active:bg-gray-50 dark:active:bg-gray-800/60 sm:active:bg-white sm:dark:active:bg-gray-900 hover:shadow-xl hover:border-brand/30 dark:hover:border-brand/30 transition-all duration-300 h-full flex flex-col">
                 {/* Featured ribbon */}
                 {s.isFeatured && (
@@ -1021,7 +1044,7 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
                   </div>
                 </div>
               </div>
-            </Link>
+            </IntentLink>
           ))}
         </div>
       )}
