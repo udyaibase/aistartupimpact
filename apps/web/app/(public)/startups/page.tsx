@@ -8,7 +8,8 @@ import FounderActionButton from '@/components/auth/FounderActionButton';
 
 const StartupSearch = dynamic(() => import('@/components/StartupSearch'));
 
-export const revalidate = 60;
+// Admin and founder edits refresh this page on demand (lib/revalidate.ts); the timer is a fallback.
+export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: 'Indian AI Startup Directory — Browse & Discover',
@@ -46,19 +47,12 @@ async function getUniqueCities() {
   }
 }
 
-export default async function StartupsPage(
-  props: { searchParams: Promise<Record<string, string | string[] | undefined>> }
-) {
-  const searchParams = await props.searchParams;
-  const query = parseDirectoryQuery((key) => {
-    const v = searchParams[key];
-    return Array.isArray(v) ? v[0] : v;
-  });
-  // The first page always starts at page 1, whatever the URL says.
+// Rendered without the URL's filters so the page can be cached; StartupSearch applies them after load.
+export default async function StartupsPage() {
   const [cities, directorySize, initial] = await Promise.all([
     getUniqueCities(),
     getDirectorySize(),
-    searchDirectory({ ...query, page: 1, limit: 30 }).catch((e) => {
+    searchDirectory({ ...parseDirectoryQuery(() => undefined), page: 1, limit: 30 }).catch((e) => {
       console.error('startups directory error:', e instanceof Error ? e.message : e);
       return { startups: [], total: 0, counts: { all: 0, funded: 0, unfunded: 0 }, understood: null, funding: null };
     }),

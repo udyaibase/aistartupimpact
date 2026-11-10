@@ -34,14 +34,18 @@ function read(scope: string): Saved | null {
  * @param filters  The list's current filters; saving follows them (the URL mirrors them).
  * @param amount   How much is loaded now (items shown or pages fetched).
  * @param restore  Called once with the saved amount; resolve when that much is rendered, then the scroll is restored.
+ * @param ready    False while the list is still applying the filters from the URL; restoring waits for it.
  */
-export function useListRestore(scope: string, filters: string, amount: number, restore: (amount: number) => Promise<void> | void) {
+export function useListRestore(scope: string, filters: string, amount: number, restore: (amount: number) => Promise<void> | void, ready = true) {
   const restoring = useRef(false);
+  const attempted = useRef(false);
   const latestAmount = useRef(amount);
   latestAmount.current = amount;
 
-  // Restore once, on arrival.
+  // Restore once, on arrival (as soon as the list is ready).
   useEffect(() => {
+    if (!ready || attempted.current) return;
+    attempted.current = true;
     if (!cameFromHistory()) return;
     const saved = read(scope);
     if (!saved) return;
@@ -54,9 +58,9 @@ export function useListRestore(scope: string, filters: string, amount: number, r
         restoring.current = false;
       }, 60);
     }).catch(() => { restoring.current = false; });
-    // Only on mount.
+    // Only once, when ready.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [ready]);
 
   // Keep the saved state current while the visitor scrolls and loads more.
   useEffect(() => {

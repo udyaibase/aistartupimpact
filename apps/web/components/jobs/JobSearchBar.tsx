@@ -8,8 +8,8 @@ export default function JobSearchBar({ initialQuery, initialLocation }: { initia
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [query, setQuery] = useState(initialQuery || '');
-  const [location, setLocation] = useState(initialLocation || '');
+  const [query, setQuery] = useState(initialQuery ?? searchParams.get('q') ?? '');
+  const [location, setLocation] = useState(initialLocation ?? searchParams.get('location') ?? '');
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const pushSearch = useCallback((q: string, loc: string) => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useState, useCallback, useTransition } from 'react';
 import BottomSheet from '@/components/ui/BottomSheet';
 import FilterList, { type FilterRow } from '@/components/ui/FilterList';
@@ -76,20 +76,21 @@ export default function JobFilters({
 }: JobFiltersProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const [showAllRoles, setShowAllRoles] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [updating, startUpdate] = useTransition();
 
+  // The URL is read when a filter is clicked, not during render: useSearchParams would keep the filters out of
+  // the cached /jobs HTML.
   const setFilter = useCallback((key: string, value: string) => {
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(window.location.search);
     if (value === 'all' || !value) {
       params.delete(key);
     } else {
       params.set(key, value);
     }
     startUpdate(() => router.push(`${pathname}?${params.toString()}`, { scroll: false }));
-  }, [router, pathname, searchParams]);
+  }, [router, pathname]);
 
   const clearAll = useCallback(() => {
     startUpdate(() => router.push(pathname, { scroll: false }));
@@ -294,7 +295,6 @@ export default function JobFilters({
 export function SortDropdown({ currentSort }: { currentSort?: string }) {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
 
   return (
     <div className="flex items-center gap-2">
@@ -303,7 +303,7 @@ export function SortDropdown({ currentSort }: { currentSort?: string }) {
         <select
           value={currentSort || 'recent'}
           onChange={(e) => {
-            const params = new URLSearchParams(searchParams.toString());
+            const params = new URLSearchParams(window.location.search);
             if (e.target.value === 'recent') params.delete('sort');
             else params.set('sort', e.target.value);
             router.push(`${pathname}?${params.toString()}`, { scroll: false });
