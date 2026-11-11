@@ -25,11 +25,11 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'AI Ecosystem Opinions | Udyaibase',
     description: 'Expert opinions and deep analysis on India\'s AI ecosystem.',
-    images: ['https://udyaibase.com/og-image.png'],
+    images: ['https://udyaibase.com/og-image.webp'],
   },
 };
 
-export const revalidate = 60;
+export const revalidate = 300;
 
 const SITE_URL = 'https://udyaibase.com';
 

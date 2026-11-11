@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   alternates: { canonical: 'https://udyaibase.com/opinion' },
 };
 
-export const revalidate = 60;
+export const revalidate = 300;
 
 const formatDate = (d: string) =>
   d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';

@@ -116,7 +116,7 @@ export function generateArticleSchema(data: {
 }, seo?: Partial<SeoConfig>) {
   const d = domain(seo);
   const siteName = seo?.metaTitle?.split('–')[0]?.trim() || DEFAULT_NAME;
-  const siteLogo = `${d}/og-image.png`;
+  const siteLogo = `${d}/og-image.webp`;
   const publishedDate = new Date(data.date).toISOString();
   const modifiedDate = data.updatedAt
     ? new Date(data.updatedAt).toISOString()
@@ -348,7 +348,7 @@ export function buildArticleMetadata(article: Omit<ArticleSeoFields, 'title'> & 
   const description = article.excerpt || '';
   const images = article.coverImage
     ? [{ url: article.coverImage, width: 1200, height: 630, alt: article.title }]
-    : [{ url: `${d}/og-image.png`, width: 1200, height: 630 }];
+    : [{ url: `${d}/og-image.webp`, width: 2250, height: 1181 }];
 
   return withArticleSeo({
     title: article.title,

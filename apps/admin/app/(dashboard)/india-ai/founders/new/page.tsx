@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { prisma } from '@udyaibase/database';
 import FounderForm from '../FounderForm';
+import { refreshPublic } from '@/lib/refresh-public';
 
 export const metadata: Metadata = {
   title: 'Add Featured Founder | Admin',
@@ -29,6 +30,8 @@ export default function NewFounderPage() {
         isActive: formData.get('isActive') === 'on',
       },
     });
+
+    await refreshPublic(['india-ai', 'home']);
 
     redirect('/india-ai/founders');
   }

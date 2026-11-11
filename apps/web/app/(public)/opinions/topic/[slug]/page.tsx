@@ -7,7 +7,7 @@ import { getOpinionsDirect, getOpinionTagsDirect, getOpinionCountByTagDirect, sq
 import { generateCollectionPageSchema, generateBreadcrumbSchema } from '@/lib/seo';
 import TopicFilterPills from '@/components/opinions/TopicFilterPills';
 
-export const revalidate = 60;
+export const revalidate = 3600;
 
 const SITE_URL = 'https://udyaibase.com';
 const PER_PAGE = 12;

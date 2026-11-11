@@ -3,44 +3,73 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { prisma } from '@udyaibase/database';
 import {
-  Mail, BookOpen, Building2, Wrench, TrendingUp, Calendar,
-  MapPin, Eye, ShieldCheck, Users, Unlock, ChevronRight, Handshake,
+  Mail, BookOpen, Building2, Eye, ShieldCheck, Users, Unlock, ArrowRight, Handshake,
+  Target, Linkedin, GraduationCap, BadgeCheck,
 } from 'lucide-react';
+import SectionHeader from '@/components/about/SectionHeader';
+import EcosystemHub from '@/components/about/EcosystemHub';
+import VerificationFlow from '@/components/about/VerificationFlow';
+import GrowthLoops from '@/components/about/GrowthLoops';
+import PlatformStats, { type PlatformStat } from '@/components/about/PlatformStats';
+import { jsonLd } from '@/lib/json-ld';
+import { getSeoConfig } from '@/lib/seo-config';
+import { getBrandConfig } from '@/lib/brand';
 
-export const metadata: Metadata = {
-  title: 'About Udyaibase — One Place to Track the AI Startup Ecosystem',
-  description:
-    "Udyaibase is an independent platform tracking India's AI ecosystem — founder stories, startup discovery, funding rounds, and AI tools. Built by Lahori Venkatesh.",
-  alternates: { canonical: '/about' },
-  openGraph: {
-    title: 'About Udyaibase — One Place to Track the AI Startup Ecosystem',
-    description:
-      "Udyaibase is an independent platform tracking India's AI ecosystem — founder stories, startup discovery, funding rounds, and AI tools.",
-    url: 'https://udyaibase.com/about',
-  },
-};
+// Live counts (visitors, subscribers, listings) refresh hourly instead of only on deploy.
+export const revalidate = 3600;
+
+/** One number for every mention on this page. */
+const LINKEDIN_FOLLOWERS = '50K+';
+const LINKEDIN_URL = 'https://www.linkedin.com/company/udyaibase';
+
+const PAGE_TITLE = "About Udyaibase — India's AI Startup Ecosystem Platform";
+const PAGE_DESCRIPTION =
+  "Udyaibase is India's AI startup platform — founder stories, startup and AI tool directories, funding rounds and events in one place.";
+
+// A page's openGraph/twitter objects replace the layout's rather than merging, so every field is set here.
+export async function generateMetadata(): Promise<Metadata> {
+  const [seo, brand] = await Promise.all([getSeoConfig(), getBrandConfig()]);
+  const siteName = seo.metaTitle.split(/\s[–—|-]\s/)[0]?.trim() || 'Udyaibase';
+  const ogImage = brand.ogImage || '/og-image.webp';
+  return {
+    title: { absolute: PAGE_TITLE },
+    description: PAGE_DESCRIPTION,
+    alternates: { canonical: '/about' },
+    openGraph: {
+      title: PAGE_TITLE,
+      description: PAGE_DESCRIPTION,
+      url: `${seo.canonicalDomain}/about`,
+      siteName,
+      type: 'website',
+      locale: 'en_IN',
+      images: [{ url: ogImage, ...(brand.ogImage ? {} : { width: 2250, height: 1181 }), alt: PAGE_TITLE }],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      site: seo.twitterHandle,
+      creator: seo.twitterHandle,
+      title: PAGE_TITLE,
+      description: PAGE_DESCRIPTION,
+      images: [ogImage],
+    },
+  };
+}
 
 // ── Fetch live counts from DB ─────────────────────────────────────────────────
 async function getLiveCounts() {
   try {
-    const [startups, tools, subscribers, pageViewData] = await Promise.all([
+    const [startups, tools, subscribers, funding] = await Promise.all([
       prisma.startup.count({ where: { isApproved: true, deletedAt: null } }),
       prisma.aiTool.count({ where: { status: 'APPROVED' } }),
       prisma.newsletterSubscriber.count({ where: { isActive: true } }),
-      // Unique sessions in the last 30 days as "monthly visitors"
-      prisma.$queryRaw<[{ unique_visitors: bigint }]>`
-        SELECT COUNT(DISTINCT "sessionHash") AS unique_visitors
-        FROM "PageView"
-        WHERE "createdAt" >= NOW() - INTERVAL '30 days'
-      `,
+      // Same total as the funding dashboard (rounds of non-deleted startups); amountUsd is stored in cents.
+      prisma.fundingRound.aggregate({ _sum: { amountUsd: true }, where: { Startup: { deletedAt: null } } }),
     ]);
-
-    const monthlyVisitors = Number((pageViewData as any)[0]?.unique_visitors ?? 0);
-
-    return { startups, tools, subscribers, monthlyVisitors };
+    const fundingUsd = Number(funding._sum.amountUsd ?? BigInt(0)) / 100;
+    return { startups, tools, subscribers, fundingUsd };
   } catch {
     // Graceful fallback — never break the page
-    return { startups: 0, tools: 0, subscribers: 0, monthlyVisitors: 0 };
+    return { startups: 0, tools: 0, subscribers: 0, fundingUsd: 0 };
   }
 }
 
@@ -50,46 +79,19 @@ function fmt(n: number): string {
   return n > 0 ? `${n}+` : '—';
 }
 
-// ── Static content ────────────────────────────────────────────────────────────
-const sections = [
-  {
-    icon: BookOpen,
-    title: 'Founder Stories',
-    desc: 'In-depth profiles of the people building AI startups — their journeys, decisions, and lessons. The stories behind the products, told first-hand.',
-    href: '/stories',
-  },
-  {
-    icon: Building2,
-    title: 'AI Startups Directory',
-    desc: 'A structured, searchable directory of AI startups — teams, technology, stage, and funding. Built so promising startups get discovered, not buried.',
-    href: '/startups',
-  },
-  {
-    icon: Wrench,
-    title: 'AI Tools Directory',
-    desc: 'A catalogue of AI tools and products, reviewed independently and organized for discovery. Find what works, with ratings that are never paid for.',
-    href: '/tools',
-  },
-  {
-    icon: TrendingUp,
-    title: 'Funding Dashboard',
-    desc: 'A live view of AI startup funding — rounds, investors, and the trends shaping where capital is moving across the ecosystem.',
-    href: '/funding',
-  },
-  {
-    icon: Calendar,
-    title: 'AI Events',
-    desc: 'Conferences, hackathons, meetups, and workshops — discover upcoming AI events, register, and connect with the community in person.',
-    href: '/events',
-  },
-  {
-    icon: MapPin,
-    title: 'IndiaAI',
-    desc: "A dedicated hub for India's AI landscape — policy, government schemes, support programs, and resources that founders and operators need to know.",
-    href: '/india-ai',
-  },
-];
+/** Exact counts read better for directories (780+), rounded down so the "+" stays true. */
+function countPlus(n: number): string {
+  return n > 0 ? `${n.toLocaleString('en-IN')}+` : '—';
+}
 
+/** US$ total, rounded down so the "+" stays true: $53B+, $850M+. */
+function usdPlus(dollars: number): string {
+  if (dollars >= 1e9) return `$${Math.floor(dollars / 1e9)}B+`;
+  if (dollars >= 1e6) return `$${Math.floor(dollars / 1e6)}M+`;
+  return '—';
+}
+
+// ── Static content ────────────────────────────────────────────────────────────
 const values = [
   {
     icon: Eye,
@@ -117,445 +119,327 @@ const values = [
 export default async function AboutPage() {
   const counts = await getLiveCounts();
 
-  const stats = [
-    { value: '50K+', label: 'LinkedIn Followers', href: 'https://www.linkedin.com/company/udyaibase' },
-    {
-      value: counts.monthlyVisitors > 0 ? fmt(counts.monthlyVisitors) : '—',
-      label: 'Monthly Visitors',
-    },
-    {
-      value: counts.subscribers > 0 ? fmt(counts.subscribers) : '—',
-      label: 'Newsletter Subscribers',
-      href: '/newsletter',
-    },
-    {
-      value: counts.startups > 0 ? fmt(counts.startups) : '—',
-      label: 'AI Startups Listed',
-      href: '/startups',
-    },
-    {
-      value: counts.tools > 0 ? fmt(counts.tools) : '—',
-      label: 'AI Tools Listed',
-      href: '/tools',
-    },
+  const stats: PlatformStat[] = [
+    { value: countPlus(counts.startups), label: 'AI Startups', href: '/startups' },
+    { value: countPlus(counts.tools), label: 'AI Tools', href: '/tools' },
+    { value: usdPlus(counts.fundingUsd), label: 'Funding Tracked', href: '/funding' },
+    { value: LINKEDIN_FOLLOWERS, label: 'LinkedIn Community', href: LINKEDIN_URL },
   ];
 
+  // Real numbers only: the newsletter figure is the live count, and is left out if it couldn't be read.
+  const subscriberPhrase = counts.subscribers > 0 ? ` and ${fmt(counts.subscribers)} newsletter subscribers` : '';
+
+  const aboutSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'AboutPage',
+    name: PAGE_TITLE,
+    description: PAGE_DESCRIPTION,
+    url: 'https://udyaibase.com/about',
+    about: {
+      '@type': 'Organization',
+      name: 'Udyaibase Technologies Private Limited',
+      alternateName: 'Udyaibase',
+      url: 'https://udyaibase.com',
+      sameAs: [LINKEDIN_URL],
+      founder: { '@type': 'Person', name: 'Lahori Venkatesh' },
+    },
+    mainEntity: {
+      '@type': 'Person',
+      name: 'Lahori Venkatesh',
+      jobTitle: 'Founder & Director',
+      image: 'https://udyaibase.com/founder-venkatesh.png',
+      worksFor: { '@type': 'Organization', name: 'Udyaibase Technologies Private Limited', url: 'https://udyaibase.com' },
+      alumniOf: { '@type': 'CollegeOrUniversity', name: 'Malaviya National Institute of Technology Jaipur', alternateName: 'MNIT Jaipur' },
+    },
+  };
+
+  const wrap = 'max-w-6xl mx-auto px-4 sm:px-6 lg:px-8';
+  const tintIcon = 'bg-[color:color-mix(in_srgb,var(--brand-color)_10%,transparent)] text-brand';
+
   return (
-    <main className="max-w-5xl mx-auto px-3 sm:px-4 lg:px-6 py-10 sm:py-16">
+    // The (public) layout already provides <main>.
+    <div className="overflow-x-clip">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(aboutSchema) }} />
 
       {/* ── Hero ──────────────────────────────────────────── */}
-      <section className="text-center mb-12 sm:mb-16" aria-labelledby="about-hero-heading">
-        <span className="inline-block text-brand text-xs font-bold uppercase tracking-widest mb-3 font-sora">
-          About Udyaibase
-        </span>
-        <h1
-          id="about-hero-heading"
-          className="font-sora font-extrabold text-2xl sm:text-4xl md:text-[44px] md:leading-[1.15] text-navy dark:text-white max-w-3xl mx-auto"
-        >
-          One place to track the entire{' '}
-          <span className="text-brand">AI startup ecosystem</span>
-        </h1>
-        <p className="text-gray-500 dark:text-gray-400 font-jakarta text-sm sm:text-lg mt-4 sm:mt-5 max-w-2xl mx-auto leading-relaxed">
-          Udyaibase is an independent platform built to give AI startups the visibility they
-          deserve. From founder stories to funding rounds, from startup discovery to tool reviews —
-          we bring everything into one place, and put it in front of a global audience.
-        </p>
-        <p className="text-gray-400 dark:text-gray-500 font-jakarta text-sm mt-4 max-w-xl mx-auto italic">
-          Too many great AI startups get buried on crowded listing sites. We make sure they get seen.
-        </p>
-      </section>
-
-      {/* ── Stats ─────────────────────────────────────────── */}
-      <section aria-label="Platform statistics" className="mb-14 sm:mb-20">
-        <h2 className="text-center font-sora font-bold text-xs uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-6">
-          At a Glance
-        </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-          {stats.map((s) => {
-            const inner = (
-              <>
-                <div className="font-sora font-extrabold text-2xl sm:text-3xl text-brand">{s.value}</div>
-                <div className="text-xs sm:text-xs text-gray-400 dark:text-gray-500 font-jakarta mt-1 leading-snug">
-                  {s.label}
-                </div>
-              </>
-            );
-            return s.href ? (
-              <Link
-                key={s.label}
-                href={s.href}
-                {...(s.href.startsWith('http') ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                className="card p-4 sm:p-5 text-center hover:border-brand/30 transition-colors"
-              >
-                {inner}
-              </Link>
-            ) : (
-              <div
-                key={s.label}
-                className="card p-4 sm:p-5 text-center hover:border-brand/30 transition-colors"
-              >
-                {inner}
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* ── Vision ────────────────────────────────────────── */}
-      <section className="mb-14 sm:mb-20" aria-labelledby="vision-heading">
-        <span className="text-brand text-xs font-bold uppercase tracking-widest font-sora">
-          Our Vision
-        </span>
-        <h2
-          id="vision-heading"
-          className="font-sora font-extrabold text-xl sm:text-3xl text-navy dark:text-white mt-2 mb-4 sm:mb-5"
-        >
-          Give every AI startup the visibility it deserves
-        </h2>
-        <div className="space-y-3 sm:space-y-4 font-jakarta text-gray-600 dark:text-gray-400 text-sm sm:text-base leading-relaxed">
-          <p>
-            {"India's AI ecosystem is booming. New startups launch every week, solving real problems and building genuinely original technology. But most of them stay invisible — buried under thousands of listings on crowded global platforms like Product Hunt, where standing out is nearly impossible and regional builders rarely break through."}
+      <section className="relative isolate overflow-hidden border-b border-gray-100 dark:border-gray-900" aria-labelledby="about-hero-heading">
+        <div
+          className="absolute inset-0 -z-10 [background-image:linear-gradient(color-mix(in_srgb,currentColor_7%,transparent)_1px,transparent_1px),linear-gradient(90deg,color-mix(in_srgb,currentColor_7%,transparent)_1px,transparent_1px)] [background-size:44px_44px] [mask-image:radial-gradient(ellipse_70%_60%_at_50%_0%,black_30%,transparent_80%)] text-navy dark:text-white"
+          aria-hidden="true"
+        />
+        <div
+          className="absolute -z-10 -top-40 left-1/2 -translate-x-1/2 w-[900px] max-w-[140%] h-[420px] rounded-full blur-3xl bg-[color:color-mix(in_srgb,var(--brand-color)_18%,transparent)]"
+          aria-hidden="true"
+        />
+        <div className={`${wrap} pt-14 pb-16 sm:pt-24 sm:pb-24 text-center`}>
+          <span className="inline-flex items-center gap-2 rounded-full border border-gray-200 dark:border-gray-800 bg-white/70 dark:bg-gray-950/70 backdrop-blur px-3.5 py-1.5 font-jakarta text-xs font-semibold text-gray-600 dark:text-gray-300">
+            <span className="relative flex w-2 h-2" aria-hidden="true">
+              <span className="absolute inline-flex w-full h-full rounded-full bg-brand opacity-60 animate-ping motion-reduce:animate-none" />
+              <span className="relative inline-flex w-2 h-2 rounded-full bg-brand" />
+            </span>
+            About Udyaibase
+          </span>
+          <h1
+            id="about-hero-heading"
+            className="mt-6 font-sora font-extrabold tracking-tight text-[32px] leading-[1.1] sm:text-5xl md:text-6xl md:leading-[1.05] text-navy dark:text-white max-w-4xl mx-auto"
+          >
+            One place to track{' '}
+            <span className="bg-gradient-to-r from-brand to-[color:color-mix(in_srgb,var(--brand-color)_60%,#f59e0b)] bg-clip-text text-transparent">
+              India&apos;s AI startup ecosystem
+            </span>
+          </h1>
+          <p className="mt-5 sm:mt-6 font-jakarta text-base sm:text-xl text-gray-500 dark:text-gray-400 max-w-2xl mx-auto leading-relaxed">
+            Founder stories, startups, AI tools, jobs, funding and events — connected in one
+            independent platform, so India&apos;s AI startups get the visibility they deserve.
           </p>
-          <p className="font-semibold text-navy dark:text-white text-base sm:text-lg">
-            {"We believe great work shouldn't depend on who shouts the loudest."}
-          </p>
-          <p>
-            Udyaibase exists to surface the AI startups that deserve attention but
-            {"aren't getting it — and to carry their stories to a global audience. We're building"}{" "}
-            the single, trusted place where anyone can discover what&apos;s actually being built
-            in AI, who&apos;s behind it, and where it&apos;s headed.
-          </p>
-        </div>
-      </section>
-
-      {/* ── Mission ───────────────────────────────────────── */}
-      <section className="mb-14 sm:mb-20" aria-labelledby="mission-heading">
-        <span className="text-brand text-xs font-bold uppercase tracking-widest font-sora">
-          Our Mission
-        </span>
-        <h2
-          id="mission-heading"
-          className="font-sora font-extrabold text-xl sm:text-3xl text-navy dark:text-white mt-2 mb-4 sm:mb-5"
-        >
-          Empower founders by bringing everything into one place
-        </h2>
-        <div className="space-y-3 sm:space-y-4 font-jakarta text-gray-600 dark:text-gray-400 text-sm sm:text-base leading-relaxed">
-          <p>
-            {"Founders shouldn't have to piece together fragments from a dozen sources to understand their own ecosystem. Who's raising, which tools work, what other founders are doing, where the opportunities are — today that information is scattered, gated, or lost in noise."}
-          </p>
-          <p className="font-semibold text-navy dark:text-white">
-            Our mission is to consolidate it.
-          </p>
-          <p>
-            Udyaibase brings together founder stories, a complete startup directory, an AI
-            tools directory, and a live funding dashboard — so a founder, investor, or operator
-            can understand the whole picture in one visit, without paying for access. When the
-            ecosystem is easy to see, it&apos;s easier to build in.
-          </p>
-        </div>
-      </section>
-
-      {/* ── What You'll Find ──────────────────────────────── */}
-      <section className="mb-14 sm:mb-20" aria-labelledby="features-heading">
-        <h2
-          id="features-heading"
-          className="font-sora font-extrabold text-xl sm:text-3xl text-navy dark:text-white mb-6 sm:mb-8"
-        >
-          What You&apos;ll Find Here
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {sections.map((item) => (
-            <Link
-              key={item.title}
-              href={item.href}
-              className="card p-5 flex items-start gap-4 group hover:border-brand/40 transition-colors"
-            >
-              <div className="w-10 h-10 rounded-xl bg-brand/10 dark:bg-brand/20 flex items-center justify-center shrink-0 group-hover:bg-brand transition-colors">
-                <item.icon className="w-5 h-5 text-brand group-hover:text-white transition-colors" />
-              </div>
-              <div>
-                <h3 className="font-sora font-bold text-sm text-navy dark:text-white group-hover:text-brand transition-colors">
-                  {item.title}
-                </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 font-jakarta mt-1 leading-relaxed">
-                  {item.desc}
-                </p>
-              </div>
+          <div className="mt-8 flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3">
+            <Link href="/startups" className="btn-brand inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-semibold">
+              Explore AI startups <ArrowRight className="w-4 h-4" aria-hidden="true" />
             </Link>
+            <a
+              href="#contact-heading"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-6 py-3 font-jakarta text-sm font-semibold text-navy dark:text-white hover:border-gray-300 dark:hover:border-gray-700 transition-colors"
+            >
+              Partner with us
+            </a>
+          </div>
+          <ul className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 font-jakarta text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+            <li className="inline-flex items-center gap-1.5"><BadgeCheck className="w-4 h-4 text-brand" aria-hidden="true" /> DPIIT-recognised startup</li>
+            <li className="inline-flex items-center gap-1.5"><ShieldCheck className="w-4 h-4 text-brand" aria-hidden="true" /> Independent &amp; free to use</li>
+            <li className="inline-flex items-center gap-1.5"><Linkedin className="w-4 h-4 text-brand" aria-hidden="true" /> {LINKEDIN_FOLLOWERS} LinkedIn community</li>
+          </ul>
+        </div>
+      </section>
+
+      {/* ── Vision + Mission ──────────────────────────────── */}
+      <div className={`${wrap} py-16 sm:py-24`}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+          {[
+            {
+              id: 'vision-heading', n: '01', label: 'Our Vision', icon: Eye,
+              title: 'Give every AI startup the visibility it deserves',
+              text: "Great Indian AI startups get buried on crowded global platforms. We believe great work shouldn't depend on who shouts the loudest — so we surface it.",
+            },
+            {
+              id: 'mission-heading', n: '02', label: 'Our Mission', icon: Target,
+              title: 'Bring the whole ecosystem into one place',
+              text: "Who's raising, who's hiring, which tools work — today it's scattered across a dozen sites. We connect it, free to access, so founders and investors see the full picture in one visit.",
+            },
+          ].map((b) => (
+            <section
+              key={b.id}
+              aria-labelledby={b.id}
+              className="group relative overflow-hidden rounded-3xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-950 p-6 sm:p-9 transition-shadow hover:shadow-xl hover:shadow-black/5"
+            >
+              <span className="absolute top-4 right-6 font-sora font-extrabold text-6xl sm:text-7xl text-gray-100 dark:text-gray-900 select-none" aria-hidden="true">{b.n}</span>
+              <span className={`relative w-12 h-12 rounded-2xl flex items-center justify-center ${tintIcon}`}>
+                <b.icon className="w-6 h-6" aria-hidden="true" />
+              </span>
+              <p className="relative mt-6 font-sora text-xs font-bold uppercase tracking-[0.16em] text-brand">{b.label}</p>
+              <h2 id={b.id} className="relative mt-2 font-sora font-extrabold tracking-tight text-xl sm:text-2xl text-navy dark:text-white">{b.title}</h2>
+              <p className="relative mt-3 font-jakarta text-sm sm:text-base text-gray-600 dark:text-gray-400 leading-relaxed">{b.text}</p>
+            </section>
           ))}
         </div>
-      </section>
+      </div>
 
-      {/* ── Where We Show Up ──────────────────────────────── */}
-      <section
-        className="card p-5 sm:p-8 mb-14 sm:mb-20 bg-gradient-to-br from-brand-50 to-white dark:from-brand-900/15 dark:to-gray-900 border-brand/20"
-        aria-labelledby="reach-heading"
-      >
-        <span className="text-brand text-xs font-bold uppercase tracking-widest font-sora">
-          Where We Show Up
-        </span>
-        <h2
-          id="reach-heading"
-          className="font-sora font-extrabold text-xl sm:text-2xl text-navy dark:text-white mt-2 mb-4"
-        >
-          Visibility only matters if people actually see it
-        </h2>
-        <div className="space-y-4 font-jakarta text-gray-600 dark:text-gray-400 text-sm sm:text-base leading-relaxed">
-          <p>
-            We&apos;ve built a strong presence where the AI community already is — most notably a
-            LinkedIn community with{' '}
-            <strong className="text-navy dark:text-white">45,000+ members</strong>, where we
-            regularly share founder stories, funding rounds, and updates on AI startups.
-          </p>
-          <p>
-            That reach is the engine behind what we do: when we feature a startup, it
-            doesn&apos;t sit on a page waiting to be found. It goes out to a large, engaged
-            audience of founders, investors, and operators — exactly the people who can help it
-            grow.
-          </p>
+      {/* ── Ecosystem hub ─────────────────────────────────── */}
+      <div className="border-y border-gray-100 dark:border-gray-900 bg-gray-50/70 dark:bg-white/[0.015]">
+        <div className={`${wrap} py-16 sm:py-24`}>
+          <EcosystemHub />
+        </div>
+      </div>
+
+      {/* ── Verification ──────────────────────────────────── */}
+      <div className={`${wrap} py-16 sm:py-24`}>
+        <VerificationFlow />
+      </div>
+
+      {/* ── Growth loops ──────────────────────────────────── */}
+      <div className="border-y border-gray-100 dark:border-gray-900 bg-gray-50/70 dark:bg-white/[0.015]">
+        <div className={`${wrap} py-16 sm:py-24`}>
+          <GrowthLoops />
+        </div>
+      </div>
+
+      {/* ── Stats ─────────────────────────────────────────── */}
+      <div className={`${wrap} pt-16 sm:pt-24`}>
+        <PlatformStats stats={stats} />
+      </div>
+
+      {/* ── Values ────────────────────────────────────────── */}
+      <section className={`${wrap} py-16 sm:py-24`} aria-labelledby="values-heading">
+        <SectionHeader id="values-heading" eyebrow="Our Principles" title="What We Stand For" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+          {values.map((v, i) => (
+            <div
+              key={v.title}
+              className="group rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-950 p-6 sm:p-7 transition-all duration-300 hover:-translate-y-0.5 hover:border-[color:color-mix(in_srgb,var(--brand-color)_30%,transparent)] hover:shadow-xl hover:shadow-black/5 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+            >
+              <div className="flex items-center justify-between">
+                <span className={`w-11 h-11 rounded-xl flex items-center justify-center transition-colors group-hover:bg-brand group-hover:text-white ${tintIcon}`}>
+                  <v.icon className="w-5 h-5" aria-hidden="true" />
+                </span>
+                <span className="font-sora text-xs font-bold text-gray-300 dark:text-gray-700" aria-hidden="true">0{i + 1}</span>
+              </div>
+              <h3 className="mt-5 font-sora font-bold text-base sm:text-lg text-navy dark:text-white">{v.title}</h3>
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 font-jakarta leading-relaxed">{v.desc}</p>
+            </div>
+          ))}
         </div>
       </section>
 
       {/* ── DPIIT Recognition ─────────────────────────────── */}
-      <section
-        className="card p-5 sm:p-8 mb-14 sm:mb-20 border-[#FF9933]/20 overflow-hidden relative"
-        aria-labelledby="dpiit-heading"
-      >
-        <div className="absolute inset-0 bg-gradient-to-r from-[#FF9933]/5 via-transparent to-[#138808]/5 pointer-events-none" />
-        <div className="relative flex flex-col sm:flex-row items-start sm:items-center gap-5">
-          {/* Seal */}
-          <div className="flex-shrink-0">
-            <svg viewBox="0 0 72 72" fill="none" className="w-16 h-16 sm:w-20 sm:h-20">
-              <circle cx="36" cy="36" r="34" stroke="#FF9933" strokeWidth="3" fill="none" />
-              <circle cx="36" cy="36" r="27" stroke="white" strokeWidth="2" fill="none" opacity="0.3" />
-              <circle cx="36" cy="36" r="21" stroke="#138808" strokeWidth="2" fill="none" />
-              {[0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 195, 210, 225, 240, 255, 270, 285, 300, 315, 330, 345].map(angle => (
-                <line
-                  key={angle}
-                  x1="36"
-                  y1="36"
-                  x2={36 + 14 * Math.cos((angle * Math.PI) / 180)}
-                  y2={36 + 14 * Math.sin((angle * Math.PI) / 180)}
-                  stroke="#000080"
-                  strokeWidth="0.8"
-                  opacity="0.5"
-                />
-              ))}
-              <circle cx="36" cy="36" r="5" fill="#000080" opacity="0.7" />
-              <circle cx="36" cy="36" r="2.5" fill="white" />
-              <path d="M28 37l5 5 11-11" stroke="#138808" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-            </svg>
-          </div>
-          {/* Text */}
-          <div>
-            <div className="flex items-center gap-2 mb-1.5">
-              <h2 id="dpiit-heading" className="font-sora font-extrabold text-lg sm:text-xl text-navy dark:text-white">
-                DPIIT Recognised Startup
-              </h2>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#FF9933] bg-[#FF9933]/10 px-2 py-0.5 rounded-full">
-                Startup India
-              </span>
-            </div>
-            <p className="font-jakarta text-sm sm:text-base text-gray-600 dark:text-gray-400 leading-relaxed">
-              Udyaibase Technologies Private Limited is recognised by the{' '}
-              <strong className="text-navy dark:text-white">Department for Promotion of Industry and Internal Trade (DPIIT)</strong>,
-              Government of India, under the{' '}
-              <strong className="text-navy dark:text-white">Startup India</strong> initiative.
-              This recognition validates our commitment to innovation in AI ecosystem development
-              and our mission to give every AI startup the visibility it deserves.
-              <span className="block mt-2 text-xs text-gray-500 dark:text-gray-500">
-                CIN: U63122AP2026PTC128342
-              </span>
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Values ────────────────────────────────────────── */}
-      <section className="mb-14 sm:mb-20" aria-labelledby="values-heading">
-        <h2
-          id="values-heading"
-          className="font-sora font-extrabold text-xl sm:text-3xl text-navy dark:text-white mb-6 sm:mb-8"
+      <div className={wrap}>
+        <section
+          className="relative overflow-hidden rounded-3xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-950"
+          aria-labelledby="dpiit-heading"
         >
-          What We Stand For
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
-          {values.map((v) => (
-            <div key={v.title} className="card p-5 flex items-start gap-4">
-              <div className="w-10 h-10 rounded-xl bg-brand/10 dark:bg-brand/20 flex items-center justify-center shrink-0">
-                <v.icon className="w-5 h-5 text-brand" />
-              </div>
-              <div>
-                <h3 className="font-sora font-bold text-sm text-navy dark:text-white">{v.title}</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 font-jakarta mt-1 leading-relaxed">
-                  {v.desc}
-                </p>
-              </div>
+          <div className="flex h-1" aria-hidden="true">
+            <span className="flex-1 bg-[#FF9933]" />
+            <span className="flex-1 bg-white dark:bg-gray-200" />
+            <span className="flex-1 bg-[#138808]" />
+          </div>
+          <div className="absolute inset-0 top-1 bg-gradient-to-r from-[#FF9933]/[0.06] via-transparent to-[#138808]/[0.06] pointer-events-none" aria-hidden="true" />
+          <div className="relative p-6 sm:p-9 flex flex-col sm:flex-row items-start sm:items-center gap-6">
+            {/* Official DPIIT / Startup India mark. The file has wide white margins, so the tile crops them. */}
+            <div className="relative shrink-0 w-[200px] sm:w-[220px] aspect-[2/1] rounded-2xl overflow-hidden bg-white ring-1 ring-black/5 dark:ring-white/10 shadow-[0_10px_30px_-12px_rgba(0,0,0,0.35)]">
+              <Image
+                src="/startup-india.png"
+                alt="DPIIT #startupindia — Government of India"
+                fill
+                sizes="220px"
+                className="object-cover scale-[1.12]"
+              />
             </div>
-          ))}
-        </div>
-      </section>
+            <div className="flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 id="dpiit-heading" className="font-sora font-extrabold tracking-tight text-xl sm:text-2xl text-navy dark:text-white">
+                  DPIIT Recognised Startup
+                </h2>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#E07B00] bg-[#FF9933]/10 border border-[#FF9933]/25 px-2 py-0.5 rounded-full">
+                  Startup India
+                </span>
+              </div>
+              <p className="mt-2 font-jakarta text-sm sm:text-base text-gray-600 dark:text-gray-400 leading-relaxed max-w-3xl">
+                Udyaibase Technologies Private Limited is recognised by the Department for Promotion of
+                Industry and Internal Trade (DPIIT), Government of India, under the Startup India initiative.
+              </p>
+            </div>
+            <div className="sm:text-right shrink-0 font-jakarta">
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500">CIN</p>
+              <p className="mt-0.5 font-mono text-xs sm:text-sm text-gray-700 dark:text-gray-300">U63122AP2026PTC128342</p>
+            </div>
+          </div>
+        </section>
+      </div>
 
       {/* ── Founder ───────────────────────────────────────── */}
-      <section className="mb-14 sm:mb-20" aria-labelledby="founder-heading">
-        <h2
-          id="founder-heading"
-          className="font-sora font-extrabold text-xl sm:text-3xl text-navy dark:text-white mb-6 sm:mb-8"
-        >
-          The Founder
-        </h2>
-        <div className="card p-6 sm:p-8 flex flex-col sm:flex-row items-start gap-6">
-          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden shrink-0 bg-brand/10 dark:bg-brand/20">
-            <Image
-              src="/founder-venkatesh.png"
-              alt="Lahori Venkatesh — Founder & CEO, Udyaibase"
-              width={96}
-              height={96}
-              sizes="96px"
-              className="w-full h-full object-cover"
-            />
+      <section className={`${wrap} py-16 sm:py-24`} aria-labelledby="founder-heading">
+        <SectionHeader id="founder-heading" eyebrow="Leadership" title="The Founder" />
+        <div className="grid grid-cols-1 md:grid-cols-[300px_minmax(0,1fr)] lg:grid-cols-[340px_minmax(0,1fr)] gap-8 md:gap-12 items-center">
+          <div className="relative mx-auto w-full max-w-[260px] md:max-w-[340px]">
+            <div className="absolute -inset-3 rounded-[2rem] bg-gradient-to-br from-[color:color-mix(in_srgb,var(--brand-color)_35%,transparent)] to-transparent blur-2xl opacity-70" aria-hidden="true" />
+            <div className="relative aspect-[4/5] rounded-3xl overflow-hidden border border-gray-100 dark:border-gray-800 bg-gray-100 dark:bg-gray-900">
+              <Image
+                src="/founder-venkatesh.png"
+                alt="Lahori Venkatesh — Founder & Director, Udyaibase"
+                fill
+                sizes="(min-width: 1024px) 340px, (min-width: 768px) 300px, 90vw"
+                className="object-cover"
+              />
+              <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/70 to-transparent" aria-hidden="true" />
+              <div className="absolute bottom-4 left-4 right-4">
+                <p className="font-sora font-bold text-white text-base leading-tight">Lahori Venkatesh</p>
+                <p className="font-jakarta text-xs text-white/75">Founder &amp; Director</p>
+              </div>
+            </div>
           </div>
+
           <div>
-            <h3 className="font-sora font-extrabold text-lg sm:text-xl text-navy dark:text-white">
-              Lahori Venkatesh
-            </h3>
-            <p className="text-brand font-jakarta font-semibold text-sm mt-0.5">
-              Founder & CEO, Udyaibase
-            </p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 font-jakarta mt-1 mb-4">
-              MNIT Jaipur
-            </p>
-            <div className="space-y-2.5 sm:space-y-3 font-jakarta text-gray-600 dark:text-gray-400 text-sm sm:text-base leading-relaxed">
-              <p>
-                Lahori Venkatesh is the Founder & CEO of Udyaibase, a global AI startup media and ecosystem platform dedicated to showcasing AI startups, founders, AI tools, industry news, funding, and events.
-              </p>
-              <p>
-                With a vision to build one of the world&apos;s leading AI ecosystem platforms, he helps AI companies increase visibility, build credibility, and connect with customers, investors, partners, and talent through trusted media, community, and strategic partnerships.
-              </p>
-              <p>
-                A graduate of Malaviya National Institute of Technology (MNIT) Jaipur, Lahori is passionate about accelerating AI innovation and making emerging technologies more discoverable through high-quality content and ecosystem building. Under his leadership, Udyaibase reaches millions of professionals worldwide and continues to support the growth of the global AI ecosystem.
-              </p>
+            <h3 className="font-sora font-extrabold tracking-tight text-2xl sm:text-3xl text-navy dark:text-white">Lahori Venkatesh</h3>
+            <div className="mt-3 flex flex-wrap gap-2 font-jakarta text-xs font-semibold">
+              <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 bg-[color:color-mix(in_srgb,var(--brand-color)_10%,transparent)] text-brand">
+                <Building2 className="w-3.5 h-3.5" aria-hidden="true" /> Founder &amp; Director, Udyaibase
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-300">
+                <GraduationCap className="w-3.5 h-3.5" aria-hidden="true" /> MNIT Jaipur
+              </span>
             </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {['Artificial Intelligence', 'AI Startups', 'AI Founders', 'AI Tools', 'Startup Ecosystem', 'AI News', 'Founder Stories', 'AI Events', 'Technology Media', 'Innovation'].map((tag) => (
-                <span
-                  key={tag}
-                  className="inline-block text-xs font-jakarta font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2.5 py-1 rounded-full"
-                >
-                  {tag}
-                </span>
-              ))}
+            <div className="mt-6 space-y-4 font-jakarta text-gray-600 dark:text-gray-400 text-sm sm:text-base leading-relaxed">
+              <p>
+                Lahori Venkatesh is the Founder &amp; Director of Udyaibase, India&apos;s AI startup media and ecosystem platform, dedicated to showcasing AI startups, founders, AI tools, industry news, funding, and events.
+              </p>
+              <p>
+                With a vision to build the go-to platform for India&apos;s AI ecosystem, he helps AI companies increase visibility, build credibility, and connect with customers, investors, partners, and talent through trusted media, community, and strategic partnerships.
+              </p>
+              <p>
+                A graduate of Malaviya National Institute of Technology (MNIT) Jaipur, Lahori is passionate about making Indian AI innovation more discoverable through high-quality content and ecosystem building. Under his leadership, Udyaibase reaches India&apos;s AI startup community through {LINKEDIN_FOLLOWERS} LinkedIn followers{subscriberPhrase}.
+              </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── Collaborate ───────────────────────────────────── */}
-      <section className="mb-8 sm:mb-10" aria-labelledby="collab-heading">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-
-          {/* Feature your startup */}
-          <div className="card p-5 flex flex-col gap-3 hover:border-brand/40 transition-colors">
-            <div className="w-10 h-10 rounded-xl bg-brand/10 dark:bg-brand/20 flex items-center justify-center shrink-0">
-              <Building2 className="w-5 h-5 text-brand" />
-            </div>
-            <div>
-              <h3 className="font-sora font-bold text-sm text-navy dark:text-white">
-                Feature Your Startup
-              </h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta mt-1 leading-relaxed">
-                Get your startup in front of 45K+ founders, investors, and operators who follow the AI ecosystem.
-              </p>
-            </div>
-            <a
-              href="mailto:contact@udyaibase.com?subject=Feature My Startup"
-              className="mt-auto text-xs font-semibold font-jakarta text-brand hover:underline inline-flex items-center gap-1"
-            >
-              Get featured <ChevronRight className="w-3.5 h-3.5" />
-            </a>
-          </div>
-
-          {/* Partnership */}
-          <div className="card p-5 flex flex-col gap-3 hover:border-brand/40 transition-colors">
-            <div className="w-10 h-10 rounded-xl bg-brand/10 dark:bg-brand/20 flex items-center justify-center shrink-0">
-              <Handshake className="w-5 h-5 text-brand" />
-            </div>
-            <div>
-              <h3 className="font-sora font-bold text-sm text-navy dark:text-white">
-                Partner With Us
-              </h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta mt-1 leading-relaxed">
-                Sponsorships, media partnerships, co-promotions, or advertising — let&apos;s build something together.
-              </p>
-            </div>
-            <a
-              href="mailto:contact@udyaibase.com?subject=Partnership Inquiry"
-              className="mt-auto text-xs font-semibold font-jakarta text-brand hover:underline inline-flex items-center gap-1"
-            >
-              Start a conversation <ChevronRight className="w-3.5 h-3.5" />
-            </a>
-          </div>
-
-          {/* Share your story */}
-          <div className="card p-5 flex flex-col gap-3 hover:border-brand/40 transition-colors">
-            <div className="w-10 h-10 rounded-xl bg-brand/10 dark:bg-brand/20 flex items-center justify-center shrink-0">
-              <BookOpen className="w-5 h-5 text-brand" />
-            </div>
-            <div>
-              <h3 className="font-sora font-bold text-sm text-navy dark:text-white">
-                Share Your Story
-              </h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta mt-1 leading-relaxed">
-                Are you a founder with a story worth telling? We&apos;d love to hear about what you&apos;re building.
-              </p>
-            </div>
-            <a
-              href="mailto:contact@udyaibase.com?subject=Founder Story"
-              className="mt-auto text-xs font-semibold font-jakarta text-brand hover:underline inline-flex items-center gap-1"
-            >
-              Pitch your story <ChevronRight className="w-3.5 h-3.5" />
-            </a>
-          </div>
-
-        </div>
-      </section>
-
-      {/* ── Contact ───────────────────────────────────────── */}
-      <section
-        className="card p-6 sm:p-10 text-center bg-gradient-to-r from-brand-50 to-white dark:from-brand-900/15 dark:to-gray-900"
-        aria-labelledby="contact-heading"
-      >
-        <h2
-          id="contact-heading"
-          className="font-sora font-extrabold text-xl sm:text-2xl text-navy dark:text-white"
+      {/* ── Collaborate + Contact ─────────────────────────── */}
+      <div className={`${wrap} pb-16 sm:pb-24`}>
+        <section
+          className="relative overflow-hidden rounded-3xl bg-gray-950 border border-white/10 p-6 sm:p-10 lg:p-12"
+          aria-labelledby="contact-heading"
         >
-          Get in Touch
-        </h2>
-        <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400 font-jakarta mt-2 max-w-lg mx-auto leading-relaxed">
-          Partnerships, getting your startup featured, advertising, or a correction — we read
-          every message.
-        </p>
-        <div className="flex flex-wrap justify-center gap-3 mt-6">
-          <Link
-            href="/contact"
-            className="btn-brand text-sm flex items-center gap-2 px-5 py-2.5"
-          >
-            <Mail className="w-4 h-4" />
-            Contact Us
-          </Link>
-          <a
-            href="mailto:contact@udyaibase.com"
-            className="inline-flex items-center gap-2 text-sm font-jakarta font-semibold text-gray-600 dark:text-gray-400 hover:text-brand dark:hover:text-brand transition-colors border border-gray-200 dark:border-gray-800 rounded-xl px-5 py-2.5"
-          >
-            <Mail className="w-4 h-4" />
-            contact@udyaibase.com
-          </a>
-        </div>
-        <p className="text-xs text-gray-400 dark:text-gray-600 font-jakarta mt-8 italic">
-          Udyaibase — One place to track the AI startup ecosystem.
-        </p>
-      </section>
+          <div
+            className="absolute inset-0 opacity-40 [background-image:linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] [background-size:36px_36px] [mask-image:radial-gradient(ellipse_at_top_left,black_20%,transparent_70%)]"
+            aria-hidden="true"
+          />
+          <div className="absolute -top-32 -left-24 w-96 h-96 rounded-full blur-3xl bg-[color:color-mix(in_srgb,var(--brand-color)_30%,transparent)]" aria-hidden="true" />
+          <div className="relative grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-8 lg:gap-12 items-center">
+            <div>
+              <p className="font-sora text-xs font-bold uppercase tracking-[0.16em] text-brand">Work with us</p>
+              <h2 id="contact-heading" className="mt-3 font-sora font-extrabold tracking-tight text-2xl sm:text-4xl text-white">
+                Let&apos;s build India&apos;s AI ecosystem together
+              </h2>
+              <p className="mt-3 font-jakarta text-sm sm:text-base text-gray-400 leading-relaxed max-w-md">
+                Partnerships, getting your startup featured, advertising, or a correction — we read every message.
+              </p>
+              <div className="mt-7 flex flex-col sm:flex-row gap-3">
+                <Link href="/contact" className="btn-brand inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-semibold">
+                  Contact us <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                </Link>
+                <a
+                  href="mailto:contact@udyaibase.com"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 px-6 py-3 font-jakarta text-sm font-semibold text-white/90 hover:bg-white/5 transition-colors"
+                >
+                  <Mail className="w-4 h-4" aria-hidden="true" /> contact@udyaibase.com
+                </a>
+              </div>
+            </div>
 
-    </main>
+            <ul className="space-y-3">
+              {[
+                { icon: Building2, title: 'Feature Your Startup', desc: `Get in front of our ${LINKEDIN_FOLLOWERS} LinkedIn followers — founders, investors and operators.`, href: 'mailto:contact@udyaibase.com?subject=Feature My Startup' },
+                { icon: Handshake, title: 'Partner With Us', desc: "Sponsorships, media partnerships, co-promotions or advertising.", href: 'mailto:contact@udyaibase.com?subject=Partnership Inquiry' },
+                { icon: BookOpen, title: 'Share Your Story', desc: "A founder with a story worth telling? Tell us what you're building.", href: 'mailto:contact@udyaibase.com?subject=Founder Story' },
+              ].map((c) => (
+                <li key={c.title}>
+                  <a
+                    href={c.href}
+                    className="group flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5 hover:bg-white/[0.06] hover:border-[color:color-mix(in_srgb,var(--brand-color)_45%,transparent)] transition-colors"
+                  >
+                    <span className="w-11 h-11 shrink-0 rounded-xl flex items-center justify-center bg-[color:color-mix(in_srgb,var(--brand-color)_18%,transparent)] text-brand">
+                      <c.icon className="w-5 h-5" aria-hidden="true" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-sora font-bold text-sm sm:text-base text-white">{c.title}</span>
+                      <span className="block mt-0.5 font-jakarta text-xs sm:text-sm text-gray-400 leading-relaxed">{c.desc}</span>
+                    </span>
+                    <ArrowRight className="w-4 h-4 shrink-0 text-gray-500 transition-all group-hover:text-brand group-hover:translate-x-0.5" aria-hidden="true" />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      </div>
+    </div>
   );
 }

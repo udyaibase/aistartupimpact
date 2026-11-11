@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
 import { careersJobPostings, getCareersCompany, getCareersJobs } from "@/lib/jobs/careers";
 
-export const revalidate = 60;
+export const revalidate = 300;
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://udyaibase.com";
 const CORS = { "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=60, s-maxage=60" };

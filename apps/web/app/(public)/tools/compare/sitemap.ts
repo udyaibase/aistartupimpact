@@ -1,5 +1,6 @@
 import { MetadataRoute } from 'next';
 import { sql } from '@/lib/db';
+import { compareHref } from '@/lib/tools/compare-slug';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 3600;
@@ -19,7 +20,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     `;
 
     return (pairs as any[]).map((p) => ({
-      url: `${SITE_URL}/tools/compare/${p.slug_a}-vs-${p.slug_b}`,
+      url: `${SITE_URL}${compareHref([p.slug_a, p.slug_b])}`,
       lastModified: new Date(p.lastModified),
       changeFrequency: 'weekly' as const,
       priority: 0.5,

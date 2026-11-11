@@ -9,6 +9,7 @@ import { validateInput } from '@/lib/validation';
 import { toolSubmissionSchema } from '@/lib/founder/listing-validation';
 import { listingFieldLabel } from '@udyaibase/utils';
 import { listingAccess } from '@/lib/founder/listing-access';
+import { refreshPublicListing } from '@/lib/founder/refresh-listing';
 import { logFounderActivity } from '@/lib/founder/activity';
 import { founderAtToolLimit, TOOL_LIMIT_MESSAGE } from '@/lib/founder/limits';
 
@@ -297,6 +298,7 @@ export async function updateToolAction(id: string, data: ToolSubmission) {
     // On the owner's log whoever did it, and on the teammate's too.
     const by: Record<string, string> = access.role === 'OWNER' ? {} : { by: session.name };
     if (result.published.length) {
+      await refreshPublicListing('tool', id);
       await logFounderActivity(access.ownerId, 'tool_updated', { metadata: { name: data.name, ...by } });
       if (access.role !== 'OWNER') await logFounderActivity(session.userId, 'tool_updated', { metadata: { name: data.name } });
     }

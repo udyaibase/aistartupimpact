@@ -28,7 +28,7 @@ import TrackView from '@/components/TrackView';
 import ShareMenu from '@/components/shared/ShareMenu';
 import ReportButton from '@/components/ReportButton';
 
-export const revalidate = 300;
+export const revalidate = 3600;
 
 export async function generateStaticParams() {
   try {

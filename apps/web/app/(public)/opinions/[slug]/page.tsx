@@ -17,7 +17,7 @@ import KeyTakeaways from '@/components/opinions/KeyTakeaways';
 import AgreeDisagreeActions from '@/components/opinions/AgreeDisagreeActions';
 import OpinionCard from '@/components/opinions/OpinionCard';
 
-export const revalidate = 60;
+export const revalidate = 3600;
 
 const SITE_URL = 'https://udyaibase.com';
 
@@ -29,7 +29,7 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
   const canonical = `${SITE_URL}/opinions/${params.slug}`;
   const images = article.coverImage
     ? [{ url: article.coverImage, width: 1200, height: 630, alt: article.title }]
-    : [{ url: `${SITE_URL}/og-image.png`, width: 1200, height: 630 }];
+    : [{ url: `${SITE_URL}/og-image.webp`, width: 2250, height: 1181 }];
 
   return withArticleSeo({
     title: article.title,

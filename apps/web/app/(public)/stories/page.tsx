@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     type: 'website',
     url: 'https://udyaibase.com/stories',
     siteName: 'Udyaibase',
-    images: [{ url: 'https://udyaibase.com/og-image.png', width: 1200, height: 630 }],
+    images: [{ url: 'https://udyaibase.com/og-image.webp', width: 2250, height: 1181 }],
   },
   twitter: {
     card: 'summary_large_image',
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
 const formatDate = (d: string) =>
   d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
 
-export const revalidate = 60;
+export const revalidate = 300;
 
 export default async function StoriesPage() {
   const [editorialStories, founderStories] = await Promise.all([

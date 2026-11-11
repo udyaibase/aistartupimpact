@@ -58,7 +58,7 @@ export const viewport: Viewport = {
 export async function generateMetadata(): Promise<Metadata> {
   const [seo, brand] = await Promise.all([getSeoConfig(), getBrandConfig()]);
   const siteName = seo.metaTitle.split(/\s[–—|-]\s/)[0]?.trim() || 'Udyaibase';
-  const ogImage = brand.ogImage || '/og-image.png';
+  const ogImage = brand.ogImage || '/og-image.webp';
 
   return {
     metadataBase: new URL(seo.canonicalDomain),
@@ -85,7 +85,7 @@ export async function generateMetadata(): Promise<Metadata> {
       siteName,
       type: 'website',
       locale: 'en_IN',
-      images: [{ url: ogImage, width: 1200, height: 630, alt: seo.metaTitle }],
+      images: [{ url: ogImage, ...(brand.ogImage ? {} : { width: 2250, height: 1181 }), alt: seo.metaTitle }],
     },
     twitter: {
       card: 'summary_large_image',

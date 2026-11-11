@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { prisma } from '@udyaibase/database';
 import StatForm from '../../StatForm';
+import { refreshPublic } from '@/lib/refresh-public';
 
 interface EditStatPageProps {
   params: Promise<{
@@ -62,6 +63,8 @@ export default async function EditStatPage(props: EditStatPageProps) {
         updatedAt: new Date(),
       },
     });
+
+    await refreshPublic(['india-ai', 'home']);
 
     redirect('/india-ai/stats');
   }

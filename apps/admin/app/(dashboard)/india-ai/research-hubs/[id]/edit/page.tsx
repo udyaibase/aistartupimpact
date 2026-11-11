@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { prisma } from '@udyaibase/database';
 import ResearchHubForm from '../../ResearchHubForm';
+import { refreshPublic } from '@/lib/refresh-public';
 
 export const metadata: Metadata = {
   title: 'Edit Research Institution | Admin',
@@ -51,6 +52,8 @@ export default async function EditResearchHubPage(props: { params: Promise<{ id:
         isActive: formData.get('isActive') === 'on',
       },
     });
+
+    await refreshPublic(['india-ai', 'home']);
 
     redirect('/india-ai/research-hubs');
   }

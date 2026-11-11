@@ -1,4 +1,4 @@
-export const revalidate = 120;
+export const revalidate = 300;
 
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     type: 'website',
     url: 'https://udyaibase.com/funding',
     siteName: 'Udyaibase',
-    images: [{ url: 'https://udyaibase.com/og-image.png', width: 1200, height: 630 }],
+    images: [{ url: 'https://udyaibase.com/og-image.webp', width: 2250, height: 1181 }],
   },
 };
 

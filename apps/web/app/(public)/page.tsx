@@ -10,7 +10,7 @@ import HomeCTA from '@/components/HomeCTA';
 
 // ISR: revalidate every 60s — much better than force-dynamic for production
 // Hero slots change infrequently; this gives CDN caching + fresh data
-export const revalidate = 60;
+export const revalidate = 300;
 
 import {
   getHeroArticleDirect as getHeroArticle,

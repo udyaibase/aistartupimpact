@@ -7,6 +7,7 @@ import { authRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-l
 import { emailDomain, emailMatchesDomain, isFreeMailDomain, websiteDomain } from '@/lib/jobs/trust';
 import { checkDomainCode, sendDomainCode } from '@/lib/startups/domain-otp';
 import { markStartupVerified } from '@/lib/startups/ownership';
+import { refreshPublicListing } from '@/lib/founder/refresh-listing';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,6 +67,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
 
   await markStartupVerified(prisma, startup.id, companyDomain, session.userId);
+  await refreshPublicListing('startup', startup.id); // verified badge
   await logFounderActivity(session.userId, 'startup_claim_verified', { request, metadata: { startupId: startup.id, method: 'email' } });
   return NextResponse.json({ success: true, startup: { id: startup.id, name: startup.name } });
 }

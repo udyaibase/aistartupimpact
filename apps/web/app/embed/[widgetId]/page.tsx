@@ -4,7 +4,7 @@ import { prisma } from "@udyaibase/database";
 import EmbedWidgetView, { type EmbedEvent, type WidgetConfig } from "@/components/embed/EmbedWidgetView";
 import EmbedEmptyState from "@/components/embed/EmbedEmptyState";
 
-export const revalidate = 60;
+export const revalidate = 300;
 
 export const metadata: Metadata = { title: "Events", robots: { index: false, follow: false } };
 

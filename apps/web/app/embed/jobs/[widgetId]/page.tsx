@@ -6,7 +6,7 @@ import { getCareersCompany, getCareersJobs } from "@/lib/jobs/careers";
 import { effectivePlan } from "@/lib/employer/plans";
 import { parseWidgetDesign } from "@/lib/jobs/widget-design";
 
-export const revalidate = 60;
+export const revalidate = 300;
 
 export const metadata: Metadata = { title: "Open roles", robots: { index: false, follow: false } };
 

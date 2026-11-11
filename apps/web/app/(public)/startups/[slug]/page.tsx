@@ -27,7 +27,7 @@ import SignInGate from '@/components/SignInGate';
 import TrackView from '@/components/TrackView';
 import { SignedIn, SignedOut } from '@/components/auth/SignedIn';
 
-export const revalidate = 300;
+export const revalidate = 3600;
 
 export async function generateStaticParams() {
   try {

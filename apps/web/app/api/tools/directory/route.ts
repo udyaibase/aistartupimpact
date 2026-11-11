@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDirectoryToolsDirect, getToolTagMappingsDirect, getToolTagGroupsForFilterDirect } from '@/lib/db';
+import { encodeDirectory } from '@/lib/tools/directory-wire';
 
 // The full /tools list, loaded by the browser only when someone filters, searches or scrolls past the first tools.
 // Cached at the edge; refreshed with the tools section (lib/revalidate.ts) and at most every 5 minutes.
@@ -22,7 +23,8 @@ export async function GET() {
   for (const [id, tags] of Object.entries(tagMap)) if (ids.has(id)) toolTagMap[id] = tags;
 
   return NextResponse.json(
-    { tools: slim, toolTagMap, tagGroups },
+    // Compact format (lib/tools/directory-wire.ts): about half the size of the plain JSON.
+    encodeDirectory({ tools: slim, toolTagMap, tagGroups: tagGroups as any }),
     { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' } },
   );
 }
