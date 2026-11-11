@@ -221,8 +221,27 @@ jobs:
       - name: Build web app
         run: npx turbo run build --filter=@udyaibase/web
 
+      # Browser download is reused between runs; the install only fetches what's missing.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      # A stalled download used to hang this step for 10 minutes and fail the run before any test ran.
+      # Each attempt is capped at 4 minutes and retried up to 3 times.
       - name: Install Playwright Chromium
-        run: npx playwright install chromium --with-deps
+        timeout-minutes: 15
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 240 npx playwright install chromium --with-deps; then
+              exit 0
+            fi
+            echo "::warning::Playwright install attempt $attempt failed, retrying in 20s"
+            sleep 20
+          done
+          echo "::error::Playwright Chromium could not be installed after 3 attempts"
+          exit 1
 
       - name: Run E2E tests
         run: npm run test:e2e --workspace=apps/web
