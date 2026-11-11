@@ -7,6 +7,7 @@ import { claimToken } from '@/lib/startups/claim';
 import { founderAtStartupLimit, STARTUP_LIMIT_MESSAGE } from '@/lib/founder/limits';
 import { logFounderActivity } from '@/lib/founder/activity';
 import { markStartupVerified } from '@/lib/startups/ownership';
+import { refreshPublicListing } from '@/lib/founder/refresh-listing';
 
 export const dynamic = 'force-dynamic';
 
@@ -92,6 +93,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
     if (isVerified) {
       // Proof given: this founder becomes the owner and everything we hold for the startup moves to them.
       await markStartupVerified(prisma, id, domain, session.userId);
+      await refreshPublicListing('startup', id); // verified badge
       await logFounderActivity(session.userId, 'startup_claim_verified', { request, metadata: { startupId: id, method: 'dns' } });
 
       // Log successful verification using raw query

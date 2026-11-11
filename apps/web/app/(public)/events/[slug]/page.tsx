@@ -6,7 +6,7 @@ import EventDetailClient from "./EventDetailClient";
 import TrackView from '@/components/TrackView';
 import { sanitizeHtml } from "@/lib/sanitize";
 
-export const revalidate = 60;
+export const revalidate = 3600;
 
 async function getEvent(slug: string) {
   try {

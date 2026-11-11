@@ -32,7 +32,7 @@ export const metadata: Metadata = {
 const formatDate = (d: string) =>
   d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
 
-export const revalidate = 60;
+export const revalidate = 300;
 
 export default async function StoriesPage() {
   const [editorialStories, founderStories] = await Promise.all([

@@ -15,6 +15,7 @@ import SmartSearchBox, { type SearchSuggestion } from './search/SmartSearchBox';
 import { indexTools, searchTools } from '@/lib/search/tool-search';
 import { removeChipFromQuery } from '@/lib/search/understand';
 import type { ToolFacets } from '@/lib/tools/facets';
+import { compareHref } from '@/lib/tools/compare-slug';
 
 const TOOL_EXAMPLES = [
   'Free AI tool to write blog posts',
@@ -1179,8 +1180,7 @@ export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: 
           </div>
           <button
             onClick={() => {
-              const slugs = selectedTools.map(t => t.slug).join('-vs-');
-              router.push(`/tools/compare/${slugs}`);
+              router.push(compareHref(selectedTools.map(t => t.slug)));
             }}
             disabled={selectedTools.length < 2}
             className="bg-brand text-white text-sm font-bold px-4 py-2 rounded-full hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100 whitespace-nowrap"

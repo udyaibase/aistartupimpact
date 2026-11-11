@@ -16,7 +16,7 @@ import ShareMenu from '@/components/shared/ShareMenu';
 import ArticleActions from '@/components/ArticleActions';
 import SubscribeForm from '@/components/SubscribeForm';
 
-export const revalidate = 60;
+export const revalidate = 3600;
 
 export async function generateMetadata(props: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const params = await props.params;

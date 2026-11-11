@@ -6,8 +6,9 @@ import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { Star, Check, X as XIcon, ChevronRight, Zap, Shield, Smartphone, Globe, Calendar, DollarSign, ArrowRight } from 'lucide-react';
 import { getAiToolBySlugDirect, getToolProsConsDirect, getSimilarToolsDirect } from '@/lib/db';
+import { compareHref } from '@/lib/tools/compare-slug';
 
-export const revalidate = 60;
+export const revalidate = 86400;
 
 // Pages are built on first visit and then cached (no list at build time); refreshed when content changes.
 export async function generateStaticParams() {
@@ -23,7 +24,7 @@ export async function generateMetadata(props: { params: Promise<{ slugs: string 
   const names = tools.map((t: any) => t.name);
   const title = `${names.join(' vs ')}: Which Is Better in ${new Date().getFullYear()}?`;
   const description = `Compare ${names.join(' and ')} — features, pricing, pros & cons, ratings side by side.`;
-  return { title, description, alternates: { canonical: `https://udyaibase.com/tools/compare/${params.slugs}` }, openGraph: { title, description } };
+  return { title, description, alternates: { canonical: `https://udyaibase.com${compareHref(parts)}` }, openGraph: { title, description } };
 }
 
 const PRICING_LABEL: Record<string, string> = {
@@ -306,7 +307,7 @@ export default async function ComparePage(props: { params: Promise<{ slugs: stri
               .map((s: any) => (
                 <Link
                   key={s.slug}
-                  href={`/tools/compare/${tt[0].slug}-vs-${s.slug}`}
+                  href={compareHref([tt[0].slug, s.slug])}
                   className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:border-brand/50 hover:shadow-sm transition-all text-xs font-jakarta"
                 >
                   {s.logoUrl && (

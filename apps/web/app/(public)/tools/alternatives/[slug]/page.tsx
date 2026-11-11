@@ -6,7 +6,7 @@ import { notFound } from 'next/navigation';
 import { Star, ChevronRight, ExternalLink } from 'lucide-react';
 import { getAiToolBySlugDirect, getToolAlternativesDirect } from '@/lib/db';
 
-export const revalidate = 60;
+export const revalidate = 86400;
 
 // Pages are built on first visit and then cached (no list at build time); refreshed when content changes.
 export async function generateStaticParams() {

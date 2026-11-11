@@ -8,6 +8,7 @@ import { validateInput } from '@/lib/validation';
 import { startupSubmissionSchema } from '@/lib/founder/listing-validation';
 import { listingFieldLabel } from '@udyaibase/utils';
 import { listingAccess } from '@/lib/founder/listing-access';
+import { refreshPublicListing } from '@/lib/founder/refresh-listing';
 import { logFounderActivity } from '@/lib/founder/activity';
 import { founderAtStartupLimit, STARTUP_LIMIT_MESSAGE } from '@/lib/founder/limits';
 import { checkLocation } from '@/lib/locations';
@@ -319,6 +320,7 @@ export async function updateStartupAction(id: string, data: StartupSubmission) {
     // On the owner's log whoever did it, and on the teammate's too.
     const by: Record<string, string> = access.role === 'OWNER' ? {} : { by: session.name };
     if (result.published.length) {
+      await refreshPublicListing('startup', id);
       await logFounderActivity(access.ownerId, 'startup_updated', { metadata: { name: data.name, ...by } });
       if (access.role !== 'OWNER') await logFounderActivity(session.userId, 'startup_updated', { metadata: { name: data.name } });
     }

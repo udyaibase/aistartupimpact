@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 import { neon } from '@neondatabase/serverless';
 import { Redis } from '@upstash/redis';
+import { canonicalCompareSlug } from '@/lib/tools/compare-slug';
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.FOUNDER_JWT_SECRET!
@@ -114,6 +115,16 @@ export async function middleware(request: NextRequest) {
       if (!isCronOrWebhook && !isSignedUnsubscribe) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
+    }
+  }
+
+  // Comparisons: one URL per set of tools. "b-vs-a" and "a-vs-b" were separate cached pages, so crawlers
+  // following compare links rebuilt the same comparison under every order. Alphabetical order is the canonical one.
+  if (pathname.startsWith('/tools/compare/')) {
+    const raw = pathname.slice('/tools/compare/'.length);
+    const canonical = canonicalCompareSlug(raw);
+    if (canonical && canonical !== raw) {
+      return NextResponse.redirect(new URL(`/tools/compare/${canonical}`, request.url), 301);
     }
   }
 

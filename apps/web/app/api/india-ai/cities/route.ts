@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 
 export const runtime = 'edge';
-export const revalidate = 60; // Revalidate every 1 minute
+export const revalidate = 300; // Revalidate every 1 minute
 
 export async function GET() {
   try {

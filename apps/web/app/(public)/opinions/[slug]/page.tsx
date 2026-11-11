@@ -17,7 +17,7 @@ import KeyTakeaways from '@/components/opinions/KeyTakeaways';
 import AgreeDisagreeActions from '@/components/opinions/AgreeDisagreeActions';
 import OpinionCard from '@/components/opinions/OpinionCard';
 
-export const revalidate = 60;
+export const revalidate = 3600;
 
 const SITE_URL = 'https://udyaibase.com';
 

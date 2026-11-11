@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   },
 };
 
-export const revalidate = 60;
+export const revalidate = 300;
 
 const SITE_URL = 'https://udyaibase.com';
 

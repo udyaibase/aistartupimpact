@@ -7,7 +7,7 @@ import { ChevronRight, Clock } from 'lucide-react';
 import { getAuthorBySlugDirect } from '@/lib/db';
 import { generatePersonSchema, generateBreadcrumbSchema } from '@/lib/seo';
 
-export const revalidate = 120;
+export const revalidate = 3600;
 
 // Pages are built on first visit and then cached (no list at build time); refreshed when content changes.
 export async function generateStaticParams() {
