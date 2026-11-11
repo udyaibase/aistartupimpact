@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { prisma } from '@udyaibase/database';
 import MissionForm from '../../MissionForm';
+import { refreshPublic } from '@/lib/refresh-public';
 
 export const metadata: Metadata = {
   title: 'Edit Mission Pillar | Admin',
@@ -35,6 +36,8 @@ export default async function EditMissionPillarPage(props: { params: Promise<{ i
         updatedAt: new Date(),
       },
     });
+
+    await refreshPublic(['india-ai', 'home']);
 
     redirect('/india-ai/mission-tracker');
   }

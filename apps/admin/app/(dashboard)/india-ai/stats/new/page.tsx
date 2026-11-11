@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { prisma } from '@udyaibase/database';
 import StatForm from '../StatForm';
+import { refreshPublic } from '@/lib/refresh-public';
 
 export const metadata: Metadata = {
   title: 'Add Live Stat | Admin',
@@ -34,6 +35,8 @@ export default function NewStatPage() {
         isActive,
       },
     });
+
+    await refreshPublic(['india-ai', 'home']);
 
     redirect('/india-ai/stats');
   }

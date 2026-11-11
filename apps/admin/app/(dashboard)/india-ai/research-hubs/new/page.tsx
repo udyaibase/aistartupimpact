@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { prisma } from '@udyaibase/database';
 import ResearchHubForm from '../ResearchHubForm';
+import { refreshPublic } from '@/lib/refresh-public';
 
 export const metadata: Metadata = {
   title: 'Add Research Institution | Admin',
@@ -42,6 +43,8 @@ export default function NewResearchHubPage() {
         isActive: formData.get('isActive') === 'on',
       },
     });
+
+    await refreshPublic(['india-ai', 'home']);
 
     redirect('/india-ai/research-hubs');
   }

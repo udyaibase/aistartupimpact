@@ -36,9 +36,9 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
       siteName: 'Udyaibase',
       publishedTime: round.announcedAt,
       images: [{
-        url: 'https://udyaibase.com/og-image.png',
-        width: 1200,
-        height: 630,
+        url: 'https://udyaibase.com/og-image.webp',
+        width: 2250,
+        height: 1181,
       }],
     },
     twitter: {

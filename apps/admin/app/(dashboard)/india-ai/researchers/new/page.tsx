@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { prisma } from '@udyaibase/database';
 import ResearcherForm from '../ResearcherForm';
+import { refreshPublic } from '@/lib/refresh-public';
 
 export const metadata: Metadata = {
   title: 'Add AI Researcher | Admin',
@@ -32,6 +33,8 @@ export default function NewResearcherPage() {
         isActive: formData.get('isActive') === 'on',
       },
     });
+
+    await refreshPublic(['india-ai', 'home']);
 
     redirect('/india-ai/researchers');
   }

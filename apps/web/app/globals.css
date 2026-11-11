@@ -42,6 +42,17 @@
   }
 }
 
+/* Dashed connector lines that flow toward the centre (About page ecosystem hub). */
+@keyframes dashFlow {
+  to { stroke-dashoffset: -20; }
+}
+.dash-flow {
+  animation: dashFlow 1.2s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dash-flow { animation: none; }
+}
+
 /* ═══════════════════════════════════════════════════
    BASE — Mobile-first defaults, dark mode ready
    ═══════════════════════════════════════════════════ */

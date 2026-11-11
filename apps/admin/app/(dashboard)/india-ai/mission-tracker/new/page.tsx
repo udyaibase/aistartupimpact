@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { prisma } from '@udyaibase/database';
 import MissionForm from '../MissionForm';
+import { refreshPublic } from '@/lib/refresh-public';
 
 export const metadata: Metadata = {
   title: 'Add Mission Pillar | Admin',
@@ -26,6 +27,8 @@ export default function NewMissionPillarPage() {
         isActive: formData.get('isActive') === 'on',
       },
     });
+
+    await refreshPublic(['india-ai', 'home']);
 
     redirect('/india-ai/mission-tracker');
   }
