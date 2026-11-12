@@ -1,7 +1,7 @@
 import { MetadataRoute } from 'next';
 import { sql } from '@/lib/db';
+import { isBuildPhase } from '@/lib/build-fallback';
 
-export const dynamic = 'force-dynamic';
 export const revalidate = 3600;
 
 const SITE_URL = 'https://udyaibase.com';
@@ -34,6 +34,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     return [listingPage, ...eventRoutes];
   } catch (error) {
     console.error('Error generating events sitemap:', error);
+    // At runtime keep serving the last good sitemap; only the build falls back.
+    if (!isBuildPhase()) throw error;
     return [listingPage];
   }
 }

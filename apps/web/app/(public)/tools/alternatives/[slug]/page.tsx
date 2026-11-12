@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { Star, ChevronRight, ExternalLink } from 'lucide-react';
-import { getAiToolBySlugDirect, getToolAlternativesDirect } from '@/lib/db';
+import { getAiToolBySlugDirect, getToolAlternativesDirect, getSimilarToolsDirect } from '@/lib/db';
 
 export const revalidate = 86400;
 
@@ -13,12 +13,31 @@ export async function generateStaticParams() {
   return [];
 }
 
+/**
+ * Hand-picked alternatives first (ToolAlternative), topped up with the best-rated tools in the same category.
+ * The sitemap lists every tool that has another tool in its category, so a page with no hand-picked alternatives
+ * used to 404 — every /tools/alternatives URL in the sitemap that Google fetched came back "not found".
+ */
+async function loadAlternatives(tool: any): Promise<any[]> {
+  const curated = (await getToolAlternativesDirect(tool.id)) as any[];
+  if (curated.length >= 10 || !tool.categoryId) return curated.slice(0, 10);
+  const similar = (await getSimilarToolsDirect(tool.categoryId, tool.slug, 10)) as any[];
+  const seen = new Set(curated.map((a) => a.id));
+  return [...curated, ...similar.filter((t) => t.id !== tool.id && !seen.has(t.id))].slice(0, 10);
+}
+
 export async function generateMetadata(props: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const params = await props.params;
   const tool = await getAiToolBySlugDirect(params.slug) as any;
   if (!tool) return { title: 'Not Found' };
-  const title = `10 Best ${tool.name} Alternatives in ${new Date().getFullYear()}`;
-  const description = `Looking for alternatives to ${tool.name}? Compare the best ${tool.name} alternatives with features, pricing, and ratings.`;
+  const alternatives = await loadAlternatives(tool);
+  const year = new Date().getFullYear();
+  const count = alternatives.length >= 3 ? `${alternatives.length} ` : '';
+  const title = `${count}Best ${tool.name} Alternatives in ${year} (Free & Paid)`;
+  const names = alternatives.slice(0, 3).map((a) => a.name).join(', ');
+  const description = names
+    ? `Top ${tool.name} alternatives in ${year}: ${names} and more — compared by features, pricing and ratings.`
+    : `Looking for alternatives to ${tool.name}? Compare the best options by features, pricing and ratings.`;
   return {
     title,
     description,
@@ -32,8 +51,10 @@ export default async function AlternativesPage(props: { params: Promise<{ slug: 
   const tool = await getAiToolBySlugDirect(params.slug) as any;
   if (!tool) notFound();
 
-  const alternatives = await getToolAlternativesDirect(tool.id);
+  const alternatives = await loadAlternatives(tool);
   if (alternatives.length < 1) notFound();
+  const category = tool.categoryName || tool.category?.name || null;
+  const freeCount = alternatives.filter((a) => /FREE|OPEN_SOURCE|FREEMIUM/.test(a.pricingModel || '')).length;
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
@@ -52,8 +73,11 @@ export default async function AlternativesPage(props: { params: Promise<{ slug: 
       <h1 className="font-sora font-extrabold text-2xl md:text-3xl text-navy dark:text-white mb-2">
         Best {tool.name} Alternatives in {new Date().getFullYear()}
       </h1>
-      <p className="text-gray-500 dark:text-gray-400 font-jakarta text-sm mb-8 max-w-2xl">
-        Looking for something different? Here are the top alternatives to {tool.name}, compared by features, pricing, and user ratings.
+      <p className="text-gray-500 dark:text-gray-400 font-jakarta text-sm mb-8 max-w-2xl leading-relaxed">
+        {tool.name} is {tool.tagline ? <>{tool.tagline.replace(/\.$/, '').charAt(0).toLowerCase() + tool.tagline.replace(/\.$/, '').slice(1)}</> : 'an AI tool'}
+        {category ? <> in the {category} category</> : null}. If it isn&apos;t the right fit, here are {alternatives.length} alternatives
+        {freeCount > 0 ? <> — {freeCount} with a free or freemium plan</> : null}, ranked by user ratings. Open any tool for its full
+        review, pricing and features, or compare it with {tool.name} side by side.
       </p>
 
       {/* Main tool summary */}

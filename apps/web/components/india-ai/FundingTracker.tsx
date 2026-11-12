@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { TrendingUp, Building2, MapPin, Calendar, ArrowRight } from 'lucide-react';
 import Image from 'next/image';
+import { roundLabel } from '@/lib/funding/format';
 
 interface FundingRound {
   id: string;
@@ -12,6 +13,8 @@ interface FundingRound {
   startupSlug: string;
   startupLogo: string | null;
   headquartersCity: string | null;
+  /** The round's own page; null until the slug migration has run. */
+  slug?: string | null;
 }
 
 interface FundingTrackerProps {
@@ -103,7 +106,7 @@ export default function FundingTracker({ recentFunding }: FundingTrackerProps) {
           recentFunding.map((funding) => (
             <Link
               key={funding.id}
-              href={`/startups/${funding.startupSlug}`}
+              href={funding.slug ? `/funding/${funding.slug}` : `/startups/${funding.startupSlug}`}
               className="group card p-3 sm:p-6 hover:shadow-lg transition-all block"
             >
               <div className="flex gap-3 sm:gap-4">
@@ -134,7 +137,7 @@ export default function FundingTracker({ recentFunding }: FundingTrackerProps) {
                       </h3>
                       <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-0.5 sm:mt-1">
                         <span className="inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                          {funding.roundType}
+                          {roundLabel(funding.roundType)}
                         </span>
                         {funding.headquartersCity && (
                           <span className="inline-flex items-center gap-0.5 sm:gap-1 text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">

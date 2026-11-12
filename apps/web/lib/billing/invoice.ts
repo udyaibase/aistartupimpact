@@ -126,6 +126,18 @@ async function setPaymentFields(table: InvoiceTable, id: string, data: PaymentPa
 }
 
 /** The numbering columns of a payment, read inside the numbering transaction. */
+const PAYMENT_TABLES: Record<InvoiceTable, string> = { employer: 'JobBoardPayment', organizer: 'OrganizerPayment', funding: 'FundingDataPurchase' };
+
+/**
+ * Lock the payment row for the rest of the transaction. Numbering reads "has a number?" then takes the next one;
+ * without the lock, the post-payment email and the daily retry could both take a number for the same payment and
+ * leave a gap in the series (GST invoice numbers must be consecutive).
+ */
+async function lockPaymentRow(tx: typeof prisma, table: InvoiceTable, id: string) {
+  // Table name from the fixed map above; the id is a bound parameter.
+  await tx.$queryRawUnsafe(`SELECT id FROM "${PAYMENT_TABLES[table]}" WHERE id = $1 FOR UPDATE`, id);
+}
+
 async function numbersOf(tx: typeof prisma, table: InvoiceTable, id: string) {
   const select = { invoiceNumber: true, billingSnapshot: true, creditNoteNumber: true } as const;
   if (table === 'employer') return tx.jobBoardPayment.findUnique({ where: { id }, select });
@@ -158,6 +170,7 @@ export async function issueInvoice(table: InvoiceTable, paymentId: string): Prom
     const issuedOn = pay.paidAt ?? pay.createdAt;
     const fresh: BillingSnapshot = { ...profileFromRow(loaded.account, loaded.account.email), accountName: loaded.accountName, accountEmail: loaded.account.email };
     await prisma.$transaction(async (tx) => {
+      await lockPaymentRow(tx as typeof prisma, table, pay.id);
       const current = await numbersOf(tx as typeof prisma, table, pay.id);
       let number = current?.invoiceNumber ?? null;
       if (!number) {
@@ -440,6 +453,7 @@ export async function issueCreditNote(table: InvoiceTable, paymentId: string): P
   if (!pay.creditNoteNumber) {
     const refundedAt = pay.refundedAt!;
     await prisma.$transaction(async (tx) => {
+      await lockPaymentRow(tx as typeof prisma, table, pay.id);
       const current = await numbersOf(tx as typeof prisma, table, pay.id);
       if (current?.creditNoteNumber) return;
       const fy = financialYear(refundedAt);

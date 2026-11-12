@@ -1,5 +1,6 @@
 import { ImageResponse } from 'next/og';
 import { sql } from '@/lib/db';
+import { hqInIndia } from '@/lib/india-hq';
 
 export const runtime = 'edge';
 export const alt = 'India AI Ecosystem - Live Map & Data';
@@ -8,8 +9,8 @@ export const contentType = 'image/png';
 
 export default async function OGImage() {
   const [startupCount, fundingResult] = await Promise.all([
-    sql`SELECT COUNT(*)::int as count FROM "Startup" WHERE "isIndian" = true AND "deletedAt" IS NULL AND "isApproved" = true`,
-    sql`SELECT COALESCE(SUM("amountInr"), 0)::bigint as total FROM "FundingRound" fr JOIN "Startup" s ON fr."startupId" = s.id WHERE s."isIndian" = true AND s."deletedAt" IS NULL`,
+    sql`SELECT COUNT(*)::int as count FROM "Startup" WHERE ${hqInIndia('"Startup"')} AND "deletedAt" IS NULL AND "isApproved" = true`,
+    sql`SELECT COALESCE(SUM("amountInr"), 0)::bigint as total FROM "FundingRound" fr JOIN "Startup" s ON fr."startupId" = s.id WHERE ${hqInIndia('s')} AND s."deletedAt" IS NULL`,
   ]);
 
   const startups = startupCount[0]?.count || 0;

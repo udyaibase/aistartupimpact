@@ -680,6 +680,8 @@ model FundingDigest {
 
 model FundingRound {
   id            String   @id
+  /// URL slug for /funding/<slug>, set by a database trigger on insert (migration 20261112100000_funding_round_slug).
+  slug          String?  @unique
   startupId     String
   roundType     String
   amountInr     BigInt

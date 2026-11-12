@@ -167,7 +167,7 @@ function EventRegistrationCard({ reg, isPast }: { reg: Registration; isPast?: bo
         {/* Event Cover */}
         <div className="hidden sm:block w-20 h-20 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 shrink-0">
           {reg.eventCoverImageUrl ? (
-            <Image src={reg.eventCoverImageUrl} alt="" width={80} height={80} className="w-full h-full object-cover" />
+            <Image src={reg.eventCoverImageUrl} alt={`${reg.eventTitle ?? 'Event'} cover image`} width={80} height={80} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
               <Calendar className="w-6 h-6 text-gray-300" />

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
+import { hqInIndia } from '@/lib/india-hq';
 import { trackCronRoute } from '@/lib/ops/cron';
 
 export const dynamic = 'force-dynamic';
@@ -39,14 +40,14 @@ async function refresh(req: NextRequest) {
       sql`
         SELECT COUNT(*)::int as count
         FROM "Startup"
-        WHERE "isIndian" = true
+        WHERE ${hqInIndia('"Startup"')}
           AND "deletedAt" IS NULL
           AND "isApproved" = true
       `,
       sql`
         SELECT COUNT(*)::int as count
         FROM "Startup"
-        WHERE "isIndian" = true
+        WHERE ${hqInIndia('"Startup"')}
           AND "deletedAt" IS NULL
           AND "isApproved" = true
           AND "createdAt" >= date_trunc('month', NOW())
@@ -55,14 +56,14 @@ async function refresh(req: NextRequest) {
         SELECT COALESCE(SUM("amountInr"), 0)::bigint as total
         FROM "FundingRound" fr
         JOIN "Startup" s ON fr."startupId" = s.id
-        WHERE s."isIndian" = true
+        WHERE ${hqInIndia('s')}
           AND s."deletedAt" IS NULL
       `,
       sql`
         SELECT COALESCE(SUM("amountInr"), 0)::bigint as total
         FROM "FundingRound" fr
         JOIN "Startup" s ON fr."startupId" = s.id
-        WHERE s."isIndian" = true
+        WHERE ${hqInIndia('s')}
           AND s."deletedAt" IS NULL
           AND fr."announcedAt" >= date_trunc('month', NOW())
       `,

@@ -31,11 +31,12 @@ export async function generateMetadata(
   const noindex = count < 3 || page > 1;
 
   return {
-    title: `${tag.name} Opinions — Udyaibase`,
+    title: `${tag.name}: Opinions & Analysis on India's AI Ecosystem`,
     description: `Expert opinions and analysis on ${tag.name} from founders, investors, and ecosystem leaders.`,
     alternates: { canonical },
     ...(noindex ? { robots: { index: false, follow: true } } : {}),
     openGraph: {
+      images: [{ url: '/og-image.webp', width: 2250, height: 1181 }],
       title: `${tag.name} Opinions — Udyaibase`,
       description: `Expert opinions and analysis on ${tag.name}.`,
       type: 'website',

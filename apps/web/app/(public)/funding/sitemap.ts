@@ -1,38 +1,43 @@
 import { MetadataRoute } from 'next';
-import { sql } from '@/lib/db';
+import { isBuildPhase } from '@/lib/build-fallback';
+import { getFundingRounds } from '@/lib/funding/rounds';
+import { byCity, byInvestor, HUB_MIN_ROUNDS, inScope, monthsWithRounds, newestFirst, roundsInMonth } from '@/lib/funding/insights';
 
-export const dynamic = 'force-dynamic';
 export const revalidate = 3600;
 
 const SITE_URL = 'https://udyaibase.com';
 
+/**
+ * The funding tracker, every round's own page, and the India hub pages above their thin-content thresholds:
+ * monthly reports, city hubs and investor pages. Same round list as the pages, so the two always agree.
+ */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const listingPage: MetadataRoute.Sitemap[0] = {
-    url: `${SITE_URL}/funding`,
-    lastModified: new Date(),
-    changeFrequency: 'weekly',
-    priority: 0.8,
-  };
-
+  const tracker: MetadataRoute.Sitemap[0] = { url: `${SITE_URL}/funding`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.9 };
   try {
-    const rounds = await sql`
-      SELECT slug, "updatedAt", "announcedAt"
-      FROM "FundingRound"
-      WHERE "deletedAt" IS NULL AND slug IS NOT NULL
-      ORDER BY "announcedAt" DESC
-      LIMIT 5000
-    `;
+    const all = await getFundingRounds();
+    const india = inScope(all, 'india');
+    const newest = (iso: string | undefined) => (iso ? new Date(iso) : new Date());
 
-    const roundRoutes: MetadataRoute.Sitemap = (rounds as any[]).map((r) => ({
-      url: `${SITE_URL}/funding/${r.slug}`,
-      lastModified: new Date(r.updatedAt || r.announcedAt),
-      changeFrequency: 'monthly' as const,
-      priority: 0.6,
+    const rounds = all.filter((r) => r.slug).map((r) => ({
+      url: `${SITE_URL}/funding/${r.slug}`, lastModified: new Date(r.announcedAt), changeFrequency: 'monthly' as const, priority: 0.5,
     }));
-
-    return [listingPage, ...roundRoutes];
+    const months = monthsWithRounds(india, HUB_MIN_ROUNDS.month).map((m) => ({
+      url: `${SITE_URL}/funding/india/${m.slug}`,
+      lastModified: newest(newestFirst(roundsInMonth(india, m.year, m.month))[0]?.announcedAt),
+      changeFrequency: 'weekly' as const,
+      priority: 0.7,
+    }));
+    const cities = byCity(india).filter((c) => c.deals >= HUB_MIN_ROUNDS.city).map((c) => ({
+      url: `${SITE_URL}/funding/india/${c.slug}`, lastModified: newest(newestFirst(india.filter((r) => r.city === c.name))[0]?.announcedAt), changeFrequency: 'weekly' as const, priority: 0.7,
+    }));
+    const investors = byInvestor(india).filter((i) => i.deals >= HUB_MIN_ROUNDS.investor).map((i) => ({
+      url: `${SITE_URL}/funding/investors/${i.slug}`, lastModified: new Date(), changeFrequency: 'weekly' as const, priority: 0.6,
+    }));
+    return [{ ...tracker, lastModified: newest(newestFirst(india)[0]?.announcedAt) }, ...months, ...cities, ...investors, ...rounds];
   } catch (error) {
     console.error('Error generating funding sitemap:', error);
-    return [listingPage];
+    // At runtime keep serving the last good sitemap; only the build falls back.
+    if (!isBuildPhase()) throw error;
+    return [tracker];
   }
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
 import { requirePermission } from "@/lib/organizer-auth/require-permission";
-import { checkoutSignatureValid } from "@/lib/billing/razorpay";
+import { checkoutSignatureValid, ensureCaptured } from "@/lib/billing/razorpay";
 import { activateOrganizerPayment } from "@/lib/events/billing";
 
 export const dynamic = "force-dynamic";
@@ -14,10 +14,14 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const orderId = String(body.razorpay_order_id ?? "");
   const paymentId = String(body.razorpay_payment_id ?? "");
-  const pay = await prisma.organizerPayment.findUnique({ where: { razorpayOrderId: orderId }, select: { organizerId: true } });
+  const pay = await prisma.organizerPayment.findUnique({ where: { razorpayOrderId: orderId }, select: { organizerId: true, totalPaise: true } });
   if (!pay || pay.organizerId !== result.organizerId) return NextResponse.json({ success: false, error: "Payment not found." }, { status: 404 });
   if (!checkoutSignatureValid(orderId, paymentId, String(body.razorpay_signature ?? ""))) {
     return NextResponse.json({ success: false, error: "We couldn’t confirm this payment. If money was taken, it will activate within a few minutes or be refunded." }, { status: 400 });
+  }
+  // The signature proves authorisation only; activate on money actually captured, for the amount we charged.
+  if (!(await ensureCaptured(paymentId, orderId, pay.totalPaise)).ok) {
+    return NextResponse.json({ success: false, error: "We couldn’t confirm this payment yet. If money was taken, it will activate within a few minutes or be refunded." }, { status: 402 });
   }
   await activateOrganizerPayment(orderId, paymentId);
   return NextResponse.json({ success: true });

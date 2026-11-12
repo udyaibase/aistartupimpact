@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { buildFallback } from '@/lib/build-fallback';
 import { sql } from '@/lib/db';
+import { hqInIndia } from '@/lib/india-hq';
+import { getMapData } from '@/lib/india-ai/map-data';
 import FundingTracker from '@/components/india-ai/FundingTracker';
 import NewsletterCapture from '@/components/india-ai/NewsletterCapture';
 import GovernmentSchemes from '@/components/india-ai/GovernmentSchemes';
@@ -50,33 +52,12 @@ interface MissionPillar {
   displayOrder: number | null;
 }
 
-interface CityRow {
-  id: string;
-  cityName: string;
-  slug: string;
-  state: string;
-  latitude: number;
-  longitude: number;
-  topSectors: string[];
-  totalFunding: string;
-  aliases: string[];
-  totalStartups: number;
-}
 
-interface StartupRow {
-  id: string;
-  name: string;
-  slug: string;
-  tagline: string;
-  logoUrl: string | null;
-  headquartersCity: string;
-  stage: string;
-  totalFundingInr: string;
-  foundedYear: number;
-}
+
 
 interface FundingRow {
   id: string;
+  slug?: string | null;
   roundType: string;
   amountInr: string;
   announcedAt: string;
@@ -89,8 +70,8 @@ interface FundingRow {
 
 // SEO Metadata with target keywords
 export const metadata: Metadata = {
-  title: 'India AI Startups - Live Ecosystem Map | IndiaAI Mission, Funding & Policy',
-  description: 'Explore India\'s AI ecosystem — thousands of startups, live funding data, IndiaAI Mission ₹10,372Cr budget tracker, AI policy updates, and top AI companies in Bangalore, Mumbai, Hyderabad. Real-time intelligence on India\'s AI revolution.',
+  title: 'India AI Startups: Live Ecosystem Map, Funding & IndiaAI Mission',
+  description: 'India\'s AI startups on a live map — funding rounds, the ₹10,372 Cr IndiaAI Mission tracker, government schemes and top AI hubs like Bengaluru, Mumbai and Hyderabad.',
   keywords: [
     'India AI startups',
     'AI funding India',
@@ -110,6 +91,7 @@ export const metadata: Metadata = {
     description: 'Explore India\'s AI revolution with real-time data on startups, funding, IndiaAI Mission tracker, policy updates, and talent insights.',
     type: 'website',
     url: 'https://udyaibase.com/india-ai',
+    images: [{ url: '/og-image.webp', width: 2250, height: 1181 }],
   },
   twitter: {
     card: 'summary_large_image',
@@ -124,18 +106,18 @@ export const metadata: Metadata = {
 // Fetch all data server-side
 async function getIndiaAIData() {
   return loadIndiaAIData().catch(buildFallback({
-    stats: [] as StatItem[], cities: [] as CityRow[], mission: [] as MissionPillar[],
-    missionDisbursement: [] as DisbursementStat[], recentFunding: [] as FundingRow[], allStartups: [] as (StartupRow & { sector: string })[],
+    stats: [] as StatItem[], mission: [] as MissionPillar[],
+    missionDisbursement: [] as DisbursementStat[], recentFunding: [] as FundingRow[],
   }, 'india-ai'));
 }
 
 async function loadIndiaAIData() {
-  const [computedStartupCount, thisMonthStartups, totalFundingResult, thisMonthFundingResult, manualStats, cities, mission, missionDisbursement, , recentFunding, allStartups] = await Promise.all([
+  const [computedStartupCount, thisMonthStartups, totalFundingResult, thisMonthFundingResult, manualStats, mission, missionDisbursement, , recentFunding] = await Promise.all([
     // Live computed: total startups
     sql`
       SELECT COUNT(*)::int as count
       FROM "Startup"
-      WHERE "isIndian" = true
+      WHERE ${hqInIndia('"Startup"')}
         AND "deletedAt" IS NULL
         AND "isApproved" = true
     `,
@@ -143,7 +125,7 @@ async function loadIndiaAIData() {
     sql`
       SELECT COUNT(*)::int as count
       FROM "Startup"
-      WHERE "isIndian" = true
+      WHERE ${hqInIndia('"Startup"')}
         AND "deletedAt" IS NULL
         AND "isApproved" = true
         AND "createdAt" >= date_trunc('month', NOW())
@@ -153,7 +135,7 @@ async function loadIndiaAIData() {
       SELECT COALESCE(SUM("amountInr"), 0)::bigint as total
       FROM "FundingRound" fr
       JOIN "Startup" s ON fr."startupId" = s.id
-      WHERE s."isIndian" = true
+      WHERE ${hqInIndia('s')}
         AND s."deletedAt" IS NULL
     `,
     // Live computed: funding this month
@@ -161,7 +143,7 @@ async function loadIndiaAIData() {
       SELECT COALESCE(SUM("amountInr"), 0)::bigint as total
       FROM "FundingRound" fr
       JOIN "Startup" s ON fr."startupId" = s.id
-      WHERE s."isIndian" = true
+      WHERE ${hqInIndia('s')}
         AND s."deletedAt" IS NULL
         AND fr."announcedAt" >= date_trunc('month', NOW())
     `,
@@ -172,38 +154,6 @@ async function loadIndiaAIData() {
       WHERE "isActive" = true
         AND "metricKey" IN ('ai_engineers', 'global_rank')
       ORDER BY "displayOrder" ASC
-    `,
-    // Cities for map — get ALL cities that have real startups, with coordinates from IndiaAICity
-    sql`
-      SELECT 
-        c.id,
-        c."cityName",
-        c.slug,
-        c.state,
-        c.latitude::float as latitude,
-        c.longitude::float as longitude,
-        c."topSectors",
-        c."totalFunding",
-        c.aliases,
-        COUNT(s.id)::int as "totalStartups"
-      FROM "IndiaAICity" c
-      INNER JOIN "Startup" s 
-        ON (
-          LOWER(s."headquartersCity") = LOWER(c."cityName")
-          OR LOWER(s."headquartersCity") = ANY(
-            SELECT LOWER(unnest(c.aliases))
-          )
-        )
-      WHERE c."isActive" = true
-        AND c.latitude != 0
-        AND c.longitude != 0
-        AND s."isIndian" = true
-        AND s."deletedAt" IS NULL
-        AND s."isApproved" = true
-      GROUP BY c.id, c."cityName", c.slug, c.state, c.latitude, c.longitude, c."topSectors", c."totalFunding", c.aliases
-      HAVING COUNT(s.id) > 0
-      ORDER BY COUNT(s.id) DESC
-      LIMIT 50
     `,
     // IndiaAI Mission
     sql`
@@ -232,6 +182,7 @@ async function loadIndiaAIData() {
     sql`
       SELECT 
         fr.id,
+        to_jsonb(fr) ->> 'slug' AS slug, -- works before the slug migration too
         fr."roundType",
         fr."amountInr",
         fr."announcedAt",
@@ -242,31 +193,10 @@ async function loadIndiaAIData() {
         s."headquartersCity"
       FROM "FundingRound" fr
       JOIN "Startup" s ON fr."startupId" = s.id
-      WHERE s."isIndian" = true
+      WHERE ${hqInIndia('s')}
         AND fr."announcedAt" >= NOW() - INTERVAL '90 days'
       ORDER BY fr."announcedAt" DESC
       LIMIT 10
-    `,
-    // All Indian AI Startups for the map — only those with a headquarters city
-    sql`
-      SELECT 
-        id,
-        name,
-        slug,
-        tagline,
-        "logoUrl",
-        "headquartersCity",
-        stage,
-        "totalFundingInr",
-        "foundedYear"
-      FROM "Startup"
-      WHERE "isIndian" = true
-        AND "deletedAt" IS NULL
-        AND "isApproved" = true
-        AND "headquartersCity" IS NOT NULL
-        AND "headquartersCity" != ''
-      ORDER BY "totalFundingInr" DESC
-      LIMIT 500
     `,
   ]);
 
@@ -315,22 +245,11 @@ async function loadIndiaAIData() {
     ...(manualStats as StatItem[]),
   ];
 
-  // Add sector mapping (you can enhance this based on your data)
-  const startupsWithSectors = (allStartups as StartupRow[]).map((s) => ({
-    ...s,
-    sector: s.stage?.includes('FinTech') ? 'FinTech' :
-            s.stage?.includes('Health') ? 'HealthTech' :
-            s.stage?.includes('Ed') ? 'EdTech' : 'SaaS',
-    headquartersCity: s.headquartersCity || 'Other',
-  }));
-
   return {
     stats,
-    cities: cities as CityRow[],
     mission: mission as MissionPillar[],
     missionDisbursement: missionDisbursement as DisbursementStat[],
     recentFunding: recentFunding as FundingRow[],
-    allStartups: startupsWithSectors,
   };
 }
 
@@ -356,7 +275,10 @@ const iconMap: Record<string, typeof Rocket> = {
 };
 
 export default async function IndiaAIPage() {
-  const { stats, cities, mission, missionDisbursement, recentFunding, allStartups } = await getIndiaAIData();
+  const [{ stats, mission, missionDisbursement, recentFunding }, mapData] = await Promise.all([
+    getIndiaAIData(),
+    getMapData().catch((e) => { console.error('[india-ai] map data', e); return { cities: [], startups: [], jobsByCity: [], eventPlaces: [], rounds: [] }; }),
+  ]);
 
   // Extract computed startup count for dynamic subtitle
   const startupStat = stats.find((s) => s.metricKey === 'total_startups');
@@ -470,7 +392,7 @@ export default async function IndiaAIPage() {
           </p>
 
           {/* Interactive Map Component */}
-          <RealIndiaMap cities={cities} allStartups={allStartups} />
+          <RealIndiaMap data={mapData} />
         </section>
 
         {/* ============================================

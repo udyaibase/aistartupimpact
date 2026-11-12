@@ -5,7 +5,7 @@ import { getArticlesDirect } from '@/lib/db';
 import EmptyState from '@/components/ui/EmptyState';
 
 export const metadata: Metadata = {
-  title: 'Opinion & Analysis — Udyaibase',
+  title: "Opinion & Analysis on India's AI Ecosystem",
   description:
     'Deep analysis and bold opinions on India\'s AI ecosystem from our editorial team and guest contributors.',
   alternates: { canonical: 'https://udyaibase.com/opinion' },

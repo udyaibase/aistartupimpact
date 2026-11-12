@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Trademark Policy — Udyaibase",
+  title: "Trademark Policy",
   description: "Udyaibase's policy on trademark use, disputes, and how to report trademark infringement.",
 };
 

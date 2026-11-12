@@ -22,10 +22,10 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
   if (!author) return { title: 'Author Not Found' };
 
   const canonical = `${SITE_URL}/authors/${params.slug}`;
-  const description = author.bio || `Articles by ${author.name} on Udyaibase.`;
+  const description = author.bio || `Read ${author.name}'s articles on Udyaibase — India's AI startups, funding rounds, founders and AI tools.`;
 
   return {
-    title: `${author.name} — Udyaibase`,
+    title: `${author.name}: Articles on India's AI Startups & Tech`,
     description,
     alternates: { canonical },
     openGraph: {
@@ -33,7 +33,7 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
       description,
       type: 'profile',
       url: canonical,
-      ...(author.avatar ? { images: [{ url: author.avatar, width: 200, height: 200 }] } : {}),
+      images: author.avatar ? [{ url: author.avatar, width: 200, height: 200 }] : [{ url: '/og-image.webp', width: 2250, height: 1181 }],
     },
     twitter: {
       card: 'summary',

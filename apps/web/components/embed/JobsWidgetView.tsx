@@ -401,7 +401,7 @@ function Logo({ config, size }: { config: JobsWidgetConfig; size: "sm" | "md" })
       style={{ borderRadius: "var(--r-control)", borderColor: "var(--w-border)", background: "var(--w-surface)", color: "var(--w-muted)" }}>
       {config.company.logoUrl
         // eslint-disable-next-line @next/next/no-img-element
-        ? <img src={config.company.logoUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+        ? <img src={config.company.logoUrl} alt={`${config.company.name} logo`} className="w-full h-full object-cover" loading="lazy" />
         : config.company.name.charAt(0).toUpperCase()}
     </span>
   );

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isSection, refreshPaths, refreshSections, type Section } from '@/lib/revalidate';
 import { internalAuthorized } from '@/lib/internal-auth';
+import { invalidateCache } from '@/lib/cache';
+import { FUNDING_ROUNDS_KEY } from '@/lib/funding/rounds';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,6 +20,9 @@ export async function POST(request: NextRequest) {
     : [];
   if (!sections.length && !paths.length) return NextResponse.json({ error: 'Nothing to refresh.' }, { status: 400 });
 
+  // Funding pages read one cached round list; drop it so the refreshed pages show the change (rounds are edited
+  // from the funding screens and from startup edits).
+  if (sections.some((s) => s === 'funding' || s === 'startups' || s === 'all')) await invalidateCache(FUNDING_ROUNDS_KEY);
   refreshSections(sections);
   refreshPaths(paths);
   return NextResponse.json({ revalidated: true, sections, paths: paths.length });

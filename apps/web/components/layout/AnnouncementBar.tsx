@@ -74,7 +74,7 @@ export default function AnnouncementBar() {
   const current = items[activeIndex];
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[250] h-[36px] overflow-hidden">
+    <div className="fixed top-0 left-0 right-0 z-[250] h-[44px] overflow-hidden">
       {/* Animated gradient background */}
       <div className="absolute inset-0 bg-gradient-to-r from-[#1a0a0a] via-brand/90 to-[#1a0a0a] animate-[shimmer_6s_ease-in-out_infinite]" />
       <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent_25%,rgba(255,255,255,0.08)_50%,transparent_75%)] bg-[length:250%_100%] animate-[shine_4s_ease-in-out_infinite]" />

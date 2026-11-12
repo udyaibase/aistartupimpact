@@ -124,7 +124,7 @@ export default function Navbar() {
 
       {/* ─── Fixed Header ──────────────────────────── */}
       <header
-        className={`fixed top-[36px] left-0 right-0 z-sticky transition-all duration-300 pt-[env(safe-area-inset-top)] ${scrolled
+        className={`fixed top-[44px] left-0 right-0 z-sticky transition-all duration-300 pt-[env(safe-area-inset-top)] ${scrolled
           ? 'bg-white/95 dark:bg-gray-950/95 backdrop-blur-md shadow-sm border-b border-gray-100 dark:border-gray-800'
           : 'bg-white dark:bg-gray-950 border-b border-transparent'
           }`}

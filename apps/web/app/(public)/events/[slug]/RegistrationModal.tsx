@@ -159,7 +159,7 @@ export default function RegistrationModal({ event, customQuestions, ticketTiers,
               {/* Cover image (16:9) */}
               {event.coverImageUrl && (
                 <div style={{ aspectRatio: "16/9" }} className="w-full">
-                  <Image src={event.coverImageUrl} alt="" width={400} height={225} sizes="(max-width: 768px) 100vw, 50vw" className="w-full h-full object-cover" />
+                  <Image src={event.coverImageUrl} alt={`${event.title} cover image`} width={400} height={225} sizes="(max-width: 768px) 100vw, 50vw" className="w-full h-full object-cover" />
                 </div>
               )}
               <div className="p-3">

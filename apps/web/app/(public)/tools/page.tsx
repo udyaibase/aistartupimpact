@@ -43,14 +43,15 @@ export const revalidate = 300;
 const FIRST_TOOLS = 48;
 
 export const metadata: Metadata = {
-  title: "Editor's Picks: Best AI Tools — Reviewed & Rated",
+  // Was "150+ AI tools"; the directory lists ~1,460. Rounded down so the "+" stays true as it grows.
+  title: 'Best AI Tools Directory — 1,400+ Tools Reviewed & Rated',
   description:
-    "150+ AI tools reviewed and rated by our editorial team. Honest verdicts, ratings, and pricing — no pay-to-play, no affiliate bias.",
+    '1,400+ AI tools reviewed and rated, with pricing, free trials, alternatives and side-by-side comparisons. Honest verdicts — no pay-to-play, no affiliate bias.',
   alternates: { canonical: 'https://udyaibase.com/tools' },
   openGraph: {
     title: "Editor's Picks: Best AI Tools — Reviewed & Rated",
     description:
-      "150+ AI tools reviewed and rated by our editorial team. Honest verdicts, ratings, and pricing.",
+      '1,400+ AI tools reviewed and rated, with pricing, alternatives and comparisons.',
     type: 'website',
     url: 'https://udyaibase.com/tools',
     siteName: 'Udyaibase',
@@ -59,7 +60,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: "Editor's Picks: Best AI Tools",
-    description: "150+ AI tools reviewed and rated. Honest verdicts, ratings, and pricing.",
+    description: '1,400+ AI tools reviewed and rated, with pricing, alternatives and comparisons.',
     creator: '@aikitstartup',
   },
 };

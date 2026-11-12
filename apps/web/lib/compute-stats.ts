@@ -10,6 +10,7 @@
  */
 
 import { sql } from '@/lib/db';
+import { hqInIndia } from '@/lib/india-hq';
 
 interface ComputedStat {
   metricKey: string;
@@ -82,7 +83,7 @@ export async function computeEcosystemStats(): Promise<ComputedStat[]> {
     sql`
       SELECT COUNT(*)::int as count
       FROM "Startup"
-      WHERE "isIndian" = true
+      WHERE ${hqInIndia('"Startup"')}
         AND "deletedAt" IS NULL
         AND "isApproved" = true
     `,
@@ -90,7 +91,7 @@ export async function computeEcosystemStats(): Promise<ComputedStat[]> {
     sql`
       SELECT COUNT(*)::int as count
       FROM "Startup"
-      WHERE "isIndian" = true
+      WHERE ${hqInIndia('"Startup"')}
         AND "deletedAt" IS NULL
         AND "isApproved" = true
         AND "createdAt" >= date_trunc('month', NOW())
@@ -100,7 +101,7 @@ export async function computeEcosystemStats(): Promise<ComputedStat[]> {
       SELECT COALESCE(SUM(fr."amountInr"), 0)::bigint as total
       FROM "FundingRound" fr
       JOIN "Startup" s ON fr."startupId" = s.id
-      WHERE s."isIndian" = true
+      WHERE ${hqInIndia('s')}
         AND s."deletedAt" IS NULL
     `,
     // Funding announced this month
@@ -108,7 +109,7 @@ export async function computeEcosystemStats(): Promise<ComputedStat[]> {
       SELECT COALESCE(SUM(fr."amountInr"), 0)::bigint as total
       FROM "FundingRound" fr
       JOIN "Startup" s ON fr."startupId" = s.id
-      WHERE s."isIndian" = true
+      WHERE ${hqInIndia('s')}
         AND s."deletedAt" IS NULL
         AND fr."announcedAt" >= date_trunc('month', NOW())
     `,

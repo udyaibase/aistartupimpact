@@ -8,12 +8,12 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
  * scroll up. `keepOpen` (filters panel or typeahead open) stops it hiding.
  */
 export function useHeadroomBar(anchorRef: RefObject<HTMLDivElement | null>, keepOpen: boolean) {
-  const [headerOffset, setHeaderOffset] = useState(96);
+  const [headerOffset, setHeaderOffset] = useState(104); // announcement bar (44px) + navbar; measured on mount
   const [stuck, setStuck] = useState(false);
   const [hidden, setHidden] = useState(false);
   const keepOpenRef = useRef(keepOpen);
   keepOpenRef.current = keepOpen;
-  const offsetRef = useRef(96);
+  const offsetRef = useRef(104);
   const ignoreUntil = useRef(0);
 
   // The site header is fixed; its height differs by breakpoint and safe-area inset, so measure it.

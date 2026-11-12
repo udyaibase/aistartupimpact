@@ -12,6 +12,8 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { sql } from '@/lib/db';
+import { INDIA_CITY_KEYS, MIN_CITY_STARTUPS } from '@/lib/india-hq';
+import { jsonLd } from '@/lib/json-ld';
 
 export const revalidate = 3600;
 
@@ -28,43 +30,50 @@ interface CityPageProps {
 }
 
 async function getCityData(slug: string) {
-
   const [city] = await sql`
     SELECT * FROM "IndiaAICity"
     WHERE slug = ${slug} AND "isActive" = true
     LIMIT 1
   `;
+  if (!city) return null;
+  // The India AI section covers Indian cities only (Oslo, Dammam… are in the table from imports).
+  if (!INDIA_CITY_KEYS.includes(String(city.cityName).trim().toLowerCase())) return null;
 
-  if (!city) {
-    return null;
-  }
-
-  // Get city deep dive data if exists
   const [deepDive] = await sql`
     SELECT * FROM "CityDeepDive"
     WHERE slug = ${slug} AND "isActive" = true
     LIMIT 1
   `;
 
-  // Get startups from this city
-  const startups = await sql`
-    SELECT 
-      id,
-      name,
-      slug,
-      tagline,
-      "logoUrl",
-      stage,
-      "totalFundingInr"
-    FROM "Startup"
-    WHERE "headquartersCity" = ${city.cityName}
-      AND "isIndian" = true
-      AND "deletedAt" IS NULL
-    ORDER BY "totalFundingInr" DESC
-    LIMIT 20
-  `;
+  // Live numbers, matched the same way as the India AI map (name or alias, any case). The stored
+  // totalStartups / totalFunding columns were never updated, so pages said "0+ companies".
+  const names = [city.cityName, ...((city.aliases as string[] | null) ?? [])].map((n) => String(n).trim().toLowerCase());
+  const [startups, [totals], stages] = await Promise.all([
+    sql`
+      SELECT id, name, slug, tagline, "logoUrl", stage, "totalFundingInr"
+      FROM "Startup"
+      WHERE LOWER(TRIM("headquartersCity")) = ANY(${names})
+        AND "isApproved" = true AND "deletedAt" IS NULL
+      ORDER BY "totalFundingInr" DESC NULLS LAST
+      LIMIT 20
+    `,
+    sql`
+      SELECT COUNT(*)::int AS count, COALESCE(SUM("totalFundingInr"), 0)::bigint AS funding
+      FROM "Startup"
+      WHERE LOWER(TRIM("headquartersCity")) = ANY(${names})
+        AND "isApproved" = true AND "deletedAt" IS NULL
+    `,
+    sql`
+      SELECT stage, COUNT(*)::int AS n
+      FROM "Startup"
+      WHERE LOWER(TRIM("headquartersCity")) = ANY(${names})
+        AND "isApproved" = true AND "deletedAt" IS NULL AND stage IS NOT NULL
+      GROUP BY stage ORDER BY n DESC LIMIT 3
+    `,
+  ]);
 
-  return { city, deepDive, startups };
+  const live: Record<string, any> = { ...(city as Record<string, any>), totalStartups: Number(totals?.count ?? 0), totalFunding: Number(totals?.funding ?? 0) };
+  return { city: live, deepDive, startups, stages: stages as { stage: string; n: number }[] };
 }
 
 function formatCurrency(paise: number): string {
@@ -76,33 +85,32 @@ function formatCurrency(paise: number): string {
   return `₹${Math.round(inr).toLocaleString('en-IN')}`;
 }
 
+const stageLabel = (s: string) => s.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+
 export async function generateMetadata(props: CityPageProps): Promise<Metadata> {
   const params = await props.params;
   const data = await getCityData(params.slug);
+  if (!data) return { title: 'City Not Found', robots: { index: false } };
 
-  if (!data) {
-    return {
-      title: 'City Not Found',
-    };
-  }
-
-  const { city } = data;
+  const { city, startups } = data;
+  const year = new Date().getFullYear();
+  const n = city.totalStartups;
+  const title = `AI Startups in ${city.cityName} (${year}): ${n} Companies & Funding`;
+  const top = (startups as any[]).slice(0, 3).map((s) => String(s.name).trim()).join(', ');
+  const funding = city.totalFunding > 0 ? `, ${formatCurrency(city.totalFunding)} raised` : '';
+  const description = n > 0
+    ? `${n} AI startups in ${city.cityName}, ${city.state}${funding}. Top companies: ${top}. Stages, funding and founders on Udyaibase.`
+    : `AI startups in ${city.cityName}, ${city.state}: companies, funding and the local AI ecosystem on Udyaibase.`;
+  const url = `https://udyaibase.com/india-ai/cities/${params.slug}`;
 
   return {
-    title: `${city.cityName} AI Startups 2026 - ${city.totalStartups}+ Companies | AI Ecosystem`,
-    description: `Discover ${city.totalStartups}+ AI startups in ${city.cityName}, ${city.state}. Total funding: ${formatCurrency(city.totalFunding)}. Explore top AI companies, sectors, accelerators, and ecosystem data.`,
-    keywords: [
-      `AI startups ${city.cityName}`,
-      `${city.cityName} AI companies`,
-      `AI ecosystem ${city.cityName}`,
-      `${city.cityName} tech startups`,
-      `AI funding ${city.cityName}`,
-    ],
-    openGraph: {
-      title: `${city.cityName} AI Startups - ${city.totalStartups}+ Companies`,
-      description: `${city.totalStartups}+ AI startups, ${formatCurrency(city.totalFunding)} total funding. Explore ${city.cityName}'s AI ecosystem.`,
-      type: 'website',
-    },
+    title,
+    description,
+    alternates: { canonical: url },
+    // Thin pages (a city with 0–2 startups) stay out of Google until they have something to show.
+    robots: n >= MIN_CITY_STARTUPS ? undefined : { index: false, follow: true },
+    openGraph: { title, description, url, type: 'website', images: [{ url: '/og-image.webp', width: 2250, height: 1181 }] },
+    twitter: { card: 'summary_large_image', title, description, images: ['/og-image.webp'] },
   };
 }
 
@@ -114,10 +122,38 @@ export default async function CityPage(props: CityPageProps) {
     notFound();
   }
 
-  const { city, deepDive, startups } = data;
+  const { city, deepDive, startups, stages } = data;
+  const year = new Date().getFullYear();
+  const pageUrl = `https://udyaibase.com/india-ai/cities/${params.slug}`;
+  const topNames = (startups as any[]).slice(0, 3).map((s) => String(s.name).trim());
+  const listSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: `AI Startups in ${city.cityName}`,
+    url: pageUrl,
+    about: { '@type': 'Place', name: `${city.cityName}, ${city.state}, India` },
+    mainEntity: {
+      '@type': 'ItemList',
+      numberOfItems: city.totalStartups,
+      itemListElement: (startups as any[]).map((s, i) => ({
+        '@type': 'ListItem', position: i + 1, url: `https://udyaibase.com/startups/${s.slug}`, name: s.name,
+      })),
+    },
+  };
+  const breadcrumbSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://udyaibase.com' },
+      { '@type': 'ListItem', position: 2, name: 'India AI', item: 'https://udyaibase.com/india-ai' },
+      { '@type': 'ListItem', position: 3, name: city.cityName, item: pageUrl },
+    ],
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(listSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbSchema) }} />
       {/* Back Link */}
       <Link
         href="/india-ai"
@@ -132,10 +168,24 @@ export default async function CityPage(props: CityPageProps) {
         <div className="flex items-start justify-between mb-4">
           <div>
             <h1 className="font-sora font-extrabold text-3xl sm:text-4xl md:text-5xl text-navy dark:text-white mb-2">
-              {city.cityName}
+              AI Startups in {city.cityName}
             </h1>
             <p className="text-lg text-gray-600 dark:text-gray-300">
               {city.state} • {deepDive?.tagline || 'AI Startup Hub'}
+            </p>
+            {/* A written summary from live data, so the page says something beyond a list of logos. */}
+            <p className="mt-3 max-w-3xl font-jakarta text-sm sm:text-base text-gray-600 dark:text-gray-400 leading-relaxed">
+              {city.totalStartups > 0 ? (
+                <>
+                  Udyaibase tracks {city.totalStartups} AI startup{city.totalStartups === 1 ? '' : 's'} headquartered in {city.cityName}, {city.state}
+                  {city.totalFunding > 0 ? <>, which together have raised {formatCurrency(city.totalFunding)}</> : null}.
+                  {topNames.length > 0 ? <> The most funded include {topNames.join(', ')}.</> : null}
+                  {stages.length > 0 ? <> Most are at the {stages.map((s) => stageLabel(s.stage)).join(', ')} stage{stages.length > 1 ? 's' : ''}.</> : null}
+                  {' '}Below are the leading AI companies in {city.cityName} in {year}, with their funding and stage.
+                </>
+              ) : (
+                <>We don&apos;t list any AI startups in {city.cityName} yet. Founders based here can add their startup for free.</>
+              )}
             </p>
           </div>
           <MapPin className="w-8 h-8 text-brand" />

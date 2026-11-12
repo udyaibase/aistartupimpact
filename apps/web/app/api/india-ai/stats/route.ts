@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
+import { hqInIndia } from '@/lib/india-hq';
 
 export const runtime = 'edge';
 export const revalidate = 300; // Revalidate every 5 minutes
@@ -18,14 +19,14 @@ export async function GET() {
       sql`
         SELECT COUNT(*)::int as count
         FROM "Startup"
-        WHERE "isIndian" = true
+        WHERE ${hqInIndia('"Startup"')}
           AND "deletedAt" IS NULL
           AND "isApproved" = true
       `,
       sql`
         SELECT COUNT(*)::int as count
         FROM "Startup"
-        WHERE "isIndian" = true
+        WHERE ${hqInIndia('"Startup"')}
           AND "deletedAt" IS NULL
           AND "isApproved" = true
           AND "createdAt" >= date_trunc('month', NOW())
@@ -34,14 +35,14 @@ export async function GET() {
         SELECT COALESCE(SUM("amountInr"), 0)::bigint as total
         FROM "FundingRound" fr
         JOIN "Startup" s ON fr."startupId" = s.id
-        WHERE s."isIndian" = true
+        WHERE ${hqInIndia('s')}
           AND s."deletedAt" IS NULL
       `,
       sql`
         SELECT COALESCE(SUM("amountInr"), 0)::bigint as total
         FROM "FundingRound" fr
         JOIN "Startup" s ON fr."startupId" = s.id
-        WHERE s."isIndian" = true
+        WHERE ${hqInIndia('s')}
           AND s."deletedAt" IS NULL
           AND fr."announcedAt" >= date_trunc('month', NOW())
       `,

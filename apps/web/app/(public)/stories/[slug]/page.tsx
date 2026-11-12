@@ -65,7 +65,7 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
   const articleSchema = generateArticleSchema({
     title: story.title,
     excerpt: story.excerpt || '',
-    author: { name: story.author?.name || 'ASI Editorial', slug: story.author?.slug || 'editorial' },
+    author: { name: story.author?.name || 'Udyaibase Editorial', slug: story.author?.slug || 'udyaibase-editorial' },
     date: story.publishedAt,
     updatedAt: story.updatedAt,
     url: storyUrl,

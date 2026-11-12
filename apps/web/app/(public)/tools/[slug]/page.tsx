@@ -27,6 +27,7 @@ import SimilarToolsCarousel from '@/components/tools/SimilarToolsCarousel';
 import TrackView from '@/components/TrackView';
 import ShareMenu from '@/components/shared/ShareMenu';
 import ReportButton from '@/components/ReportButton';
+import { fitTitle, metaSnippet } from '@/lib/seo-text';
 
 export const revalidate = 3600;
 
@@ -52,8 +53,17 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
   const tool = await getToolCached(params.slug) as any;
   if (!tool) return { title: 'Tool Not Found' };
 
-  const title = `${tool.name} - ${tool.tagline} | Udyaibase`;
-  const description = (tool.description || tool.tagline || '').slice(0, 155);
+  // What people search for a tool: "<name> review", "<name> pricing", "<name> alternatives". The layout adds
+  // "| Udyaibase"; this used to add it again and run to ~130 characters with the full tagline.
+  const year = new Date().getFullYear();
+  const name = String(tool.name).trim();
+  const title = fitTitle([
+    `${name} Review ${year}: Pricing, Features & Alternatives`,
+    `${name}: Pricing, Features & Alternatives`,
+    `${name} Review & Pricing`,
+    name,
+  ]);
+  const description = metaSnippet(tool.description || tool.tagline || '');
   const url = `https://udyaibase.com/tools/${tool.slug}`;
 
   // Use dynamic OG image (auto-generated from opengraph-image.tsx)

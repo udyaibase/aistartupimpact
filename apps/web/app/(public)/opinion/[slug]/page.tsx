@@ -60,7 +60,7 @@ export default async function OpinionArticlePage(props: { params: Promise<{ slug
   const articleSchema = generateArticleSchema({
     title: article.title,
     excerpt: article.excerpt || '',
-    author: { name: article.author?.name || 'ASI Editorial', slug: article.author?.slug || 'editorial' },
+    author: { name: article.author?.name || 'Udyaibase Editorial', slug: article.author?.slug || 'udyaibase-editorial' },
     date: article.publishedAt,
     updatedAt: article.updatedAt,
     url: articleUrl,

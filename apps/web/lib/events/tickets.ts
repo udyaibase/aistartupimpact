@@ -1,5 +1,5 @@
 import { prisma } from '@udyaibase/database';
-import { razorpayApi, RazorpayApiError, razorpayKeys } from '@/lib/billing/razorpay';
+import { razorpayApi, RazorpayApiError, razorpayKeys, refundPayment } from '@/lib/billing/razorpay';
 import { effectiveHostPlan, registrationLimit } from '@/lib/events/plans';
 import { generateQrToken } from '@/lib/events/qr-token';
 import { handleNewsletterSubscription, sendConfirmationEmail } from '@/lib/events/register-event';
@@ -127,20 +127,95 @@ async function createRazorpayOrderWithTransfer(amount: ReturnType<typeof splitTi
   return { orderId: order.id, keyId: keys.keyId };
 }
 
-/** Mark a ticket paid and confirm the seat. Safe to call twice (checkout callback + webhook). */
-export async function confirmTicketPayment(orderId: string, paymentId: string): Promise<'confirmed' | 'already' | 'unknown'> {
-  const reg = await prisma.eventRegistration.findFirst({ where: { razorpayOrderId: orderId }, select: { id: true, eventId: true, guestEmail: true, guestName: true, qrToken: true, ticketTierId: true } });
-  if (!reg) return 'unknown';
-  const flipped = await prisma.eventRegistration.updateMany({
-    where: { id: reg.id, paymentStatus: { in: ['PENDING', 'FAILED', 'EXPIRED'] } },
-    data: { status: 'CONFIRMED', paymentStatus: 'PAID', razorpayPaymentId: paymentId, paidAt: new Date(), paymentExpiresAt: null, cancelledAt: null },
+/**
+ * Mark a ticket paid and confirm the seat. Safe to call twice (checkout callback + webhook).
+ *
+ * A buyer whose 15-minute hold was still valid has a reserved seat and is always confirmed. A payment that lands
+ * after the hold expired is confirmed only if a seat is still free (counted under the same event lock as checkout);
+ * otherwise it is refunded in full, the host's transfer reversed, and the buyer emailed. Without this, a late
+ * payment could confirm a seat that had meanwhile sold to someone else.
+ */
+export async function confirmTicketPayment(orderId: string, paymentId: string): Promise<'confirmed' | 'already' | 'unknown' | 'refunded'> {
+  const reg = await prisma.eventRegistration.findFirst({
+    where: { razorpayOrderId: orderId },
+    select: { id: true, eventId: true, guestEmail: true, guestName: true, qrToken: true, ticketTierId: true, amountPaise: true },
   });
-  if (!flipped.count) return 'already';
-  if (reg.ticketTierId) await prisma.eventTicketTier.update({ where: { id: reg.ticketTierId }, data: { soldCount: { increment: 1 } } }).catch(() => {});
+  if (!reg) return 'unknown';
+
+  const outcome = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Event" WHERE id = ${reg.eventId} FOR UPDATE`;
+    const cur = await tx.eventRegistration.findUnique({ where: { id: reg.id }, select: { status: true, paymentStatus: true, paymentExpiresAt: true } });
+    if (!cur || !['PENDING', 'FAILED', 'EXPIRED'].includes(cur.paymentStatus ?? '')) return 'already' as const;
+    const now = new Date();
+    const holdValid = cur.status === 'PENDING_PAYMENT' && !!cur.paymentExpiresAt && cur.paymentExpiresAt > now;
+    if (!holdValid && !(await seatStillFree(tx, reg.eventId, reg.ticketTierId, reg.guestEmail ?? '', now))) {
+      // Claim it for refund first, so the webhook and the checkout callback can't both refund.
+      await tx.eventRegistration.update({ where: { id: reg.id }, data: { status: 'CANCELLED', paymentStatus: 'REFUND_PENDING', razorpayPaymentId: paymentId, paidAt: now, paymentExpiresAt: null, cancelledAt: now } });
+      return 'no_room' as const;
+    }
+    await tx.eventRegistration.update({
+      where: { id: reg.id },
+      data: { status: 'CONFIRMED', paymentStatus: 'PAID', razorpayPaymentId: paymentId, paidAt: now, paymentExpiresAt: null, cancelledAt: null },
+    });
+    if (reg.ticketTierId) await tx.eventTicketTier.update({ where: { id: reg.ticketTierId }, data: { soldCount: { increment: 1 } } });
+    return 'confirmed' as const;
+  });
+
+  if (outcome === 'already') return 'already';
+  if (outcome === 'no_room') {
+    await refundSoldOutPayment(reg.id, paymentId, reg.amountPaise ?? 0, reg.eventId, reg.guestEmail, reg.guestName);
+    return 'refunded';
+  }
   sendConfirmationEmail(reg.eventId, reg.guestEmail!, reg.guestName || 'there', reg.qrToken).catch(() => {});
   const ev = await prisma.event.findUnique({ where: { id: reg.eventId }, select: { slug: true } });
   if (ev) refreshPaths([`/events/${ev.slug}`]); // spots left
   return 'confirmed';
+}
+
+type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+/** Same rule as checkout: confirmed seats plus other buyers' unexpired holds must leave room, for the event and the tier. */
+async function seatStillFree(tx: Tx, eventId: string, ticketTierId: string | null, email: string, now: Date): Promise<boolean> {
+  const event = await tx.event.findUnique({
+    where: { id: eventId },
+    select: { capacity: true, boostedAt: true, registrationCount: true, organizer: { select: { email: true, plan: true, planExpiresAt: true } } },
+  });
+  if (!event) return false;
+  const limit = registrationLimit(effectiveHostPlan(event.organizer), event);
+  const holds = await tx.eventRegistration.count({ where: { eventId, status: 'PENDING_PAYMENT', paymentExpiresAt: { gt: now }, deletedAt: null, NOT: { guestEmail: email } } });
+  if (event.registrationCount + holds >= limit) return false;
+  if (ticketTierId) {
+    const tier = await tx.eventTicketTier.findUnique({ where: { id: ticketTierId }, select: { quantity: true } });
+    if (tier?.quantity != null) {
+      const taken = await tx.eventRegistration.count({
+        where: { ticketTierId, deletedAt: null, NOT: { guestEmail: email }, OR: [{ status: { in: ['CONFIRMED', 'CHECKED_IN'] } }, { status: 'PENDING_PAYMENT', paymentExpiresAt: { gt: now } }] },
+      });
+      if (taken >= tier.quantity) return false;
+    }
+  }
+  return true;
+}
+
+/** Refund a payment that arrived after its seat sold (full amount, host transfer reversed) and tell the buyer. */
+async function refundSoldOutPayment(registrationId: string, paymentId: string, amountPaise: number, eventId: string, email: string | null, name: string | null) {
+  try {
+    const refundId = await refundPayment(paymentId, amountPaise, { registrationId, reason: 'sold_out_after_hold_expired' }, { reverseTransfers: true });
+    await prisma.eventRegistration.update({ where: { id: registrationId }, data: { paymentStatus: 'REFUNDED', refundId, refundedAt: new Date() } });
+  } catch (err) {
+    // Stays REFUND_PENDING: visible to admins and retried from the dashboard; the buyer still gets told.
+    console.error('[ticket] sold-out refund failed', registrationId, err instanceof Error ? err.message : err);
+  }
+  if (!email) return;
+  const ev = await prisma.event.findUnique({ where: { id: eventId }, select: { title: true } });
+  sendEmailFireAndForget({
+    to: email,
+    subject: `Sold out: your payment for ${ev?.title ?? 'the event'} is being refunded`,
+    type: 'event_ticket_sold_out_refund',
+    html: shell(`
+<h1 style="font-size:20px;margin:0 0 8px">Sorry, the last seat sold while you were paying</h1>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.6">Hi ${esc(name || 'there')}, your payment for <strong>${esc(ev?.title ?? 'the event')}</strong> came through after your 15-minute hold ended, and the event had sold out by then. We've refunded the full ₹${(amountPaise / 100).toLocaleString('en-IN')} to your original payment method. Banks usually show it within 5–7 working days.</p>
+<p style="margin:0">${button(`${SITE}/events`, 'Find other events')}</p>`),
+  });
 }
 
 export async function markTicketPaymentFailed(orderId: string) {

@@ -28,10 +28,17 @@ export type CheckoutOutcome = { ok: true; data?: Record<string, unknown> } | { o
 export async function payWithRazorpay(order: CheckoutOrder, verifyUrl: string): Promise<CheckoutOutcome> {
   if (!(await loadCheckout()) || !window.Razorpay) return { ok: false, error: 'Couldn’t load the payment window. Check your connection or ad blocker.' };
   return new Promise((resolve) => {
+    // A failed attempt doesn't end checkout: Razorpay keeps its window open so the buyer can retry (another card,
+    // UPI…). Resolving on the first failure showed "Payment failed" even when the retry then succeeded. The last
+    // failure is kept and reported only if the buyer closes the window without paying.
+    let lastFailure: string | null = null;
     const rzp = new window.Razorpay!({
       key: order.keyId, order_id: order.orderId, amount: order.amount, currency: order.currency,
       name: order.name, description: order.description, prefill: order.prefill, theme: { color: '#A50F15' },
-      modal: { ondismiss: () => resolve({ ok: false, cancelled: true, error: '' }) },
+      retry: { enabled: true, max_count: 4 },
+      modal: {
+        ondismiss: () => resolve(lastFailure ? { ok: false, error: lastFailure } : { ok: false, cancelled: true, error: '' }),
+      },
       handler: async (r: Record<string, string>) => {
         try {
           const v = await fetch(verifyUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(r) });
@@ -42,7 +49,9 @@ export async function payWithRazorpay(order: CheckoutOrder, verifyUrl: string): 
         }
       },
     });
-    rzp.on('payment.failed', (r: any) => resolve({ ok: false, error: r?.error?.description || 'Payment failed. No money was taken.' }));
+    rzp.on('payment.failed', (r: any) => {
+      lastFailure = r?.error?.description ? `${r.error.description} No money was taken.` : 'Payment failed. No money was taken.';
+    });
     rzp.open();
   });
 }

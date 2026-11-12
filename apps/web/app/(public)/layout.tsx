@@ -19,7 +19,7 @@ export default function PublicLayout(
     <AuthContext>
       <AnnouncementBar />
       <Navbar />
-      <div className="pt-[96px] sm:pt-[103px] min-h-screen flex flex-col">
+      <div className="pt-[104px] sm:pt-[111px] min-h-screen flex flex-col">
         <main className="flex-1 pb-16 lg:pb-0 pb-safe">
           {children}
         </main>

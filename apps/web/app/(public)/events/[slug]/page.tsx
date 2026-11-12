@@ -5,6 +5,7 @@ import { sql } from "@/lib/db";
 import EventDetailClient from "./EventDetailClient";
 import TrackView from '@/components/TrackView';
 import { sanitizeHtml } from "@/lib/sanitize";
+import { descriptionHtml, descriptionText, metaSnippet } from "@/lib/events/description";
 
 export const revalidate = 3600;
 
@@ -167,28 +168,44 @@ export async function generateMetadata(
   const event = await getEvent(params.slug);
   if (!event) return { title: "Event Not Found" };
 
-  const title = event.metaTitle || event.title;
+  // Search-friendly title: what, where and when ("HACK 6.0 — Hackathon in Hamirpur, 22 Jan 2027").
+  const name = event.title.replace(/\s*\[[A-Z ]+\]\s*$/, "").trim(); // imported titles end in "[ONLINE]"
+  const kind = String(event.category || "Event").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase());
+  const place = event.format === "VIRTUAL" ? "Online" : String(event.venueName || event.address || "").split(",")[0].trim();
+  const when = new Date(event.startAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: event.timezone || "Asia/Kolkata" });
+  const where = place ? (place === "Online" ? " (Online)" : ` in ${place}`) : "";
+  const built = `${name} — ${kind}${where}, ${when}`;
+  const title = event.metaTitle || (built.length <= 70 ? built : `${name} — ${kind}, ${when}`);
+  const bodyText = metaSnippet(descriptionText(event.description));
+  // Imported events store a cut-off copy of the body as metaDescription ("…synthetic waves f"); only a
+  // genuinely different, organizer-written one wins over the body text.
+  const custom = metaSnippet(event.metaDescription || "");
+  const isCustom = custom.length > 60 && !/^hosted by /i.test(custom) && !bodyText.startsWith(custom.slice(0, 40));
   const description =
-    event.metaDescription ||
-    event.subtitle ||
-    `${event.category.replace("_", " ")} - ${new Date(event.startAt).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}`;
+    isCustom
+      ? custom
+      : bodyText.length > 60
+        ? bodyText
+        : `${name}: ${kind.toLowerCase()} ${place === "Online" ? "online" : place ? `in ${place}` : ""} on ${when}. See the agenda, speakers and how to register on Udyaibase.`.replace(/\s+/g, " ");
+  const url = `https://udyaibase.com/events/${event.slug}`;
+  const image = event.socialImageUrl || event.coverImageUrl || "/og-image.webp";
 
   return {
     title,
     description,
+    alternates: { canonical: url },
     openGraph: {
       title,
       description,
       type: "website",
-      url: `https://udyaibase.com/events/${event.slug}`,
-      images: event.socialImageUrl || event.coverImageUrl
-        ? [{ url: event.socialImageUrl || event.coverImageUrl }]
-        : undefined,
+      url,
+      images: [{ url: image }],
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
+      images: [image],
     },
   };
 }
@@ -238,15 +255,13 @@ export default async function EventDetailPage(
     ]);
 
   const eventUrl = `https://udyaibase.com/events/${event.slug}`;
-  const descriptionText = typeof event.description === 'string'
-    ? event.description.slice(0, 300)
-    : (event.subtitle || event.title);
+  const schemaDescription = metaSnippet(descriptionText(event.description), 300) || event.subtitle || event.title;
 
   const eventSchema: Record<string, any> = {
     "@context": "https://schema.org",
     "@type": "Event",
     "name": event.title,
-    "description": descriptionText,
+    "description": schemaDescription,
     "startDate": event.startAt,
     "url": eventUrl,
     "eventStatus": "https://schema.org/EventScheduled",
@@ -319,9 +334,11 @@ export default async function EventDetailPage(
       <EventDetailClient
         event={{
           ...event,
-          description: event.description && typeof event.description === "object" && event.description.html
-            ? { ...event.description, html: sanitizeHtml(event.description.html) }
-            : event.description,
+          // Editor HTML and rich-text documents both arrive as sanitized HTML.
+          description: (() => {
+            const html = descriptionHtml(event.description);
+            return html ? { html: sanitizeHtml(html) } : event.description;
+          })(),
         }}
         speakers={speakers as any}
         agenda={agenda as any}

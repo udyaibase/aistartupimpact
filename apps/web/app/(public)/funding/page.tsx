@@ -3,109 +3,114 @@ export const revalidate = 300;
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { Metadata } from 'next';
-import { IndianRupee, TrendingUp, Calendar, ArrowRight, Clock, Building2, Megaphone } from 'lucide-react';
-import { FundingDashboardSchema } from '@/components/seo';
-
-import { getAllFundingRoundsDirect } from '@/lib/db';
+import { IndianRupee, ArrowRight, Megaphone } from 'lucide-react';
+import { jsonLd } from '@/lib/json-ld';
+import { getFundingRounds } from '@/lib/funding/rounds';
+import { byCity, byInvestor, fundingFaq, inScope, monthsWithRounds, moneyLabel, newestFirst, summarize, summaryText } from '@/lib/funding/insights';
+import { breadcrumbSchema, datasetSchema, faqSchema, roundsItemListSchema } from '@/lib/funding/schema';
+import FundingRoundList from './_components/FundingRoundList';
+import FundingFaq from './_components/FundingFaq';
+import FundingExplore from './_components/FundingExplore';
 
 const FundingDashboard = dynamic(() => import('./FundingDashboard'));
 
-export const metadata: Metadata = {
-  title: 'Funding Dashboard — AI Startups Funding Rounds Tracker',
-  description: 'Filterable tracker of all AI startup funding rounds. Track deals, top investors, and total capital flow in the AI ecosystem.',
-  alternates: { canonical: 'https://udyaibase.com/funding' },
-  openGraph: {
-    title: 'Funding Dashboard — AI Startups Funding Rounds Tracker',
-    description: 'Filterable tracker of all AI startup funding rounds. Track deals, top investors, and total capital flow.',
-    type: 'website',
-    url: 'https://udyaibase.com/funding',
-    siteName: 'Udyaibase',
-    images: [{ url: 'https://udyaibase.com/og-image.webp', width: 2250, height: 1181 }],
-  },
-};
+const PAGE_URL = 'https://udyaibase.com/funding';
+const istDate = (d: string | Date) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+
+/** India-first: the page targets "AI startup funding India"; the dashboard's Global switch shows everything. */
+async function loadIndia() {
+  const all = await getFundingRounds().catch((e) => { console.error('[funding] rounds', e); return []; });
+  const india = inScope(all, 'india');
+  return { all, india, summary: summarize(india) };
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const { india, summary } = await loadIndia();
+  const year = summary.year;
+  // The layout adds "| Udyaibase"; an absolute title keeps this one inside Google's ~60 characters.
+  const title = `AI Startup Funding India ${year} — Live Tracker, Deals & Trends`;
+  const deals = india.length >= 100 ? `${Math.floor(india.length / 10) * 10}+` : `${india.length}`;
+  const description = india.length
+    ? `Track ${deals} Indian AI startup funding rounds live — ${moneyLabel(summary.paise).split(' (')[0]} raised, top investors, city and sector trends. Updated daily.`
+    : 'Live tracker of Indian AI startup funding rounds — deals, investors, city and sector trends. Updated daily.';
+  return {
+    title: { absolute: title },
+    description,
+    alternates: { canonical: PAGE_URL },
+    openGraph: { title, description, type: 'website', url: PAGE_URL, siteName: 'Udyaibase', images: [{ url: 'https://udyaibase.com/og-image.webp', width: 2250, height: 1181 }] },
+    twitter: { card: 'summary_large_image', title, description, images: ['https://udyaibase.com/og-image.webp'] },
+  };
+}
 
 export default async function FundingPage() {
-  const siteUrl = 'https://udyaibase.com';
+  const { all, india, summary } = await loadIndia();
+  const updated = istDate(summary.latestDate ?? new Date());
+  const latest = newestFirst(india).slice(0, 25);
+  const faq = fundingFaq(summary, 'india', updated);
+  const cities = byCity(india).filter((c) => c.deals >= 3).slice(0, 8);
+  const months = monthsWithRounds(india, 3).slice(0, 8);
+  const investors = byInvestor(india).filter((i) => i.deals >= 2).slice(0, 8);
 
-  // Real DB connection 
-  const rounds = await getAllFundingRoundsDirect();
-
-  // Helper function to get most active investor
-  const getMostActiveInvestor = (rounds: any[]): string => {
-    const counts = new Map<string, number>();
-    rounds.forEach(r => {
-      r.leadInvestors?.forEach((inv: string) => {
-        counts.set(inv, (counts.get(inv) || 0) + 1);
-      });
-    });
-    const sorted = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
-    return sorted[0]?.[0] || 'Various Investors';
-  };
-
-  // Calculate stats from DB data
-  // amountUsd is stored in cents in the DB, so divide by 100 to get dollars
-  const totalRaisedDollars = rounds.reduce((sum, r) => sum + (Number(r.amountUsd || 0) / 100), 0);
-
-  const formatTotalRaised = (dollars: number): string => {
-    if (dollars >= 1e9) return `$${(dollars / 1e9).toFixed(1)}B`;
-    if (dollars >= 1e6) return `$${(dollars / 1e6).toFixed(0)}M`;
-    if (dollars >= 1e3) return `$${(dollars / 1e3).toFixed(0)}K`;
-    return `$${dollars.toFixed(0)}`;
-  };
-
-  const stats = {
-    totalRaisedUsd: totalRaisedDollars,
-    totalRaisedDisplay: formatTotalRaised(totalRaisedDollars),
-    totalDeals: rounds.length,
-    avgDealSizeUsd: rounds.length > 0 ? totalRaisedDollars / rounds.length : 0,
-    topInvestor: getMostActiveInvestor(rounds),
-    lastUpdated: rounds[0]?.announcedAt || new Date().toISOString()
-  };
+  const schemas = [
+    datasetSchema({
+      name: `AI Startup Funding in India (${summary.year}) — Udyaibase Tracker`,
+      description: `Funding rounds raised by AI startups headquartered in India: ${summary.deals} rounds worth ${moneyLabel(summary.paise)}, with round type, amount, date, investors and city.`,
+      url: PAGE_URL,
+      dateModified: summary.latestDate,
+      keywords: ['AI startup funding India', 'Indian AI startups', 'venture capital', 'AI funding rounds', 'AI investors India'],
+      spatial: 'India',
+    }),
+    roundsItemListSchema('Latest AI funding rounds in India', PAGE_URL, latest),
+    faqSchema(faq),
+    breadcrumbSchema([{ name: 'Home', url: 'https://udyaibase.com' }, { name: 'AI Startup Funding India', url: PAGE_URL }]),
+  ];
 
   return (
     <div className="max-w-[1440px] mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-10">
-      <FundingDashboardSchema rounds={rounds as any} stats={stats} />
+      {schemas.map((s, i) => <script key={i} type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(s) }} />)}
 
       {/* Header */}
       <div className="mb-4 sm:mb-10 text-center">
         <div className="flex items-center justify-center gap-1.5 sm:gap-3 mb-1.5 sm:mb-2">
-          <IndianRupee className="w-4 h-4 sm:w-8 sm:h-8 text-brand" />
+          <IndianRupee className="w-4 h-4 sm:w-8 sm:h-8 text-brand" aria-hidden />
           <h1 className="font-sora font-extrabold text-lg sm:text-4xl md:text-5xl text-navy dark:text-white tracking-tight">
-            AI Startups <span className="text-brand">Funding Tracker</span>
+            AI Startup Funding in India <span className="text-brand">— Live Tracker</span>
           </h1>
         </div>
-        <p className="text-gray-500 dark:text-gray-400 font-jakarta text-xs sm:text-sm max-w-2xl mx-auto mt-1.5 sm:mt-4 px-1 sm:px-0">
-          The most comprehensive, continuously-updated dashboard of capital raised by Artificial Intelligence startups.
+        {/* Written from live data so the page has real, current text (refreshed with the page). */}
+        <p className="text-gray-600 dark:text-gray-400 font-jakarta text-xs sm:text-base max-w-3xl mx-auto mt-2 sm:mt-4 px-1 sm:px-0 leading-relaxed">
+          {summaryText(summary, 'india')}
+        </p>
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 font-jakarta">
+          Updated <time dateTime={(summary.latestDate ?? new Date().toISOString()).slice(0, 10)}>{updated}</time> · {all.length - india.length} more rounds from Indian-founded and global AI startups under <span className="font-semibold">Global</span>
         </p>
 
-        {/* Stats Bar */}
-        <div className="mt-2 sm:mt-6 mb-2 sm:mb-4">
-          <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-jakarta">
-            <strong className="text-brand font-bold">{stats.totalRaisedDisplay}</strong> raised across{' '}
-            <strong className="text-brand font-bold">{stats.totalDeals}</strong> deals • Updated{' '}
-            <span className="text-gray-500">
-              {new Date(stats.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-            </span>
-          </p>
-        </div>
-
         <div className="mt-3 sm:mt-8 flex flex-wrap justify-center gap-2 sm:gap-4">
-          <Link href="/advertise" className="group flex items-center gap-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-brand/30 rounded-lg sm:rounded-xl px-3 sm:px-5 py-2 sm:py-3 shadow-sm hover:shadow-md transition-all">
-            <div className="flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg bg-brand/10 text-brand group-hover:bg-brand group-hover:text-white transition-colors">
-              <Megaphone className="w-3 h-3 sm:w-4 sm:h-4" />
+          <Link href="/advertise" className="group flex items-center gap-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg sm:rounded-xl px-3 sm:px-5 py-2 sm:py-3 shadow-sm hover:shadow-md transition-all">
+            <div className="flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg bg-[color:color-mix(in_srgb,var(--brand-color)_10%,transparent)] text-brand group-hover:bg-brand group-hover:text-white transition-colors">
+              <Megaphone className="w-3 h-3 sm:w-4 sm:h-4" aria-hidden />
             </div>
             <div className="flex flex-col text-left">
               <span className="text-xs sm:text-sm font-sora font-bold text-navy dark:text-white leading-none">Announce your round</span>
-              <span className="text-xs text-brand font-semibold mt-0.5 leading-none">Premium PR Service <ArrowRight className="inline w-2.5 h-2.5 sm:w-3 sm:h-3 ml-0.5" /></span>
+              <span className="text-xs text-brand font-semibold mt-0.5 leading-none">Premium PR Service <ArrowRight className="inline w-2.5 h-2.5 sm:w-3 sm:h-3 ml-0.5" aria-hidden /></span>
             </div>
           </Link>
         </div>
       </div>
 
-      {/* Mount our Client Dashboard */}
-      <FundingDashboard data={rounds as any} />
+      {/* Interactive dashboard (India by default, Global switch) */}
+      <FundingDashboard data={all as any} />
 
-
+      <div className="mt-6 sm:mt-10 space-y-4 sm:space-y-8">
+        <FundingRoundList
+          id="latest-rounds"
+          title="Latest AI funding rounds in India"
+          intro="The 25 most recent rounds raised by Indian AI startups. Open any round for its investors and details."
+          rounds={latest}
+        />
+        <FundingExplore cities={cities} months={months} investors={investors} />
+        <FundingFaq id="faq" title="VC funding for AI startups in India: FAQ" faq={faq} />
+      </div>
     </div>
   );
 }

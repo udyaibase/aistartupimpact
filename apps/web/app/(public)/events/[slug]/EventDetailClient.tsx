@@ -20,6 +20,7 @@ import RegistrationModal from "./RegistrationModal";
 import ShareMenu from "@/components/shared/ShareMenu";
 import ReportButton from "@/components/shared/ReportButton";
 import { EVENT_REPORT_REASONS } from "@/lib/events/report-reasons";
+import { descriptionHtml, descriptionText } from "@/lib/events/description";
 
 interface Event {
   id: string;
@@ -484,12 +485,9 @@ function DescriptionSection({ description }: { description: any }) {
 
   if (!description) return null;
 
-  const html = typeof description === "object" && description?.html ? description.html : null;
-  const text = typeof description === "string"
-    ? description
-    : typeof description === "object" && description?.text
-    ? description.text
-    : "";
+  // Plain text, editor HTML, or a rich-text document from imported events (see lib/events/description).
+  const html = descriptionHtml(description);
+  const text = html ? "" : descriptionText(description);
 
   if (!html && !text) return null;
 

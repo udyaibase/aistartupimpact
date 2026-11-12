@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { checkoutSignatureValid } from '@/lib/billing/razorpay';
+import { checkoutSignatureValid, ensureCaptured } from '@/lib/billing/razorpay';
 import { activateFundingPurchase, downloadUrl } from '@/lib/funding/purchase';
 
 export const dynamic = 'force-dynamic';
@@ -12,10 +12,14 @@ export async function POST(request: NextRequest) {
   const paymentId = String(body.razorpay_payment_id ?? '');
   const signature = String(body.razorpay_signature ?? '');
 
-  const p = await prisma.fundingDataPurchase.findUnique({ where: { razorpayOrderId: orderId }, select: { id: true } });
+  const p = await prisma.fundingDataPurchase.findUnique({ where: { razorpayOrderId: orderId }, select: { id: true, totalPaise: true } });
   if (!p) return NextResponse.json({ error: 'Payment not found.' }, { status: 404 });
   if (!checkoutSignatureValid(orderId, paymentId, signature)) {
     return NextResponse.json({ error: 'We couldn’t confirm this payment. If money was taken, the download link will be emailed within a few minutes.' }, { status: 400 });
+  }
+  // The signature proves authorisation only; activate on money actually captured, for the amount we charged.
+  if (!(await ensureCaptured(paymentId, orderId, p.totalPaise)).ok) {
+    return NextResponse.json({ error: 'We couldn’t confirm this payment yet. If money was taken, the download link will be emailed within a few minutes.' }, { status: 402 });
   }
   await activateFundingPurchase(orderId, paymentId);
   return NextResponse.json({ success: true, downloadUrl: downloadUrl(p.id) });
