@@ -2,7 +2,8 @@ import { cache } from 'react';
 import { sql } from '@/lib/db';
 import { cached } from '@/lib/cache';
 import { hqInIndia } from '@/lib/india-hq';
-import { getFundingRounds } from '@/lib/funding/rounds';
+import { loadFundingRounds } from '@/lib/funding/rounds';
+import { buildFallback } from '@/lib/build-fallback';
 import { inrPaiseOf, inScope } from '@/lib/funding/insights';
 import type { Activity, MapData } from '@/components/india-ai/map-model';
 import { roundLabel } from '@/lib/funding/format';
@@ -26,7 +27,11 @@ function optional<T>(name: string, q: Promise<T[]>): Promise<T[]> {
  * loader, so every surface shows the same numbers. Cached for 5 minutes (Redis) and once per request (React).
  * Throws when the core data (cities, startups, funding) fails, so a broken map is never cached.
  */
-export const getMapData = cache(async (): Promise<MapData> => {
+const EMPTY_MAP: MapData = { cities: [], startups: [], jobsByCity: [], eventPlaces: [], rounds: [], activity: [] };
+
+export const getMapData = cache((): Promise<MapData> => loadMapData().catch(buildFallback(EMPTY_MAP, 'India AI map data')));
+
+async function loadMapData(): Promise<MapData> {
   return cached(MAP_DATA_KEY, { ttl: 300, staleTtl: 900 }, async () => {
     const [cities, startups, jobsByCity, eventRows, rounds, newStartups, newJobs] = await Promise.all([
       // Indian cities (with coordinates) that have at least one approved Indian startup.
@@ -78,7 +83,7 @@ export const getMapData = cache(async (): Promise<MapData> => {
         LIMIT 500
       `),
       // Funding rounds of Indian startups, reduced to city + amount + year (for the Funding view and the time-lapse).
-      getFundingRounds(),
+      loadFundingRounds(),
       // Recent activity for the live ticker: startups added, jobs published.
       optional('new startups', sql`
         SELECT name, slug, "headquartersCity" AS city, COALESCE("approvedAt", "createdAt")::text AS at
@@ -120,4 +125,4 @@ export const getMapData = cache(async (): Promise<MapData> => {
         .map((r) => ({ c: r.city!.toLowerCase(), p: inrPaiseOf(r), y: Number(r.announcedAt.slice(0, 4)) })),
     };
   });
-});
+}
