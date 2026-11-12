@@ -91,7 +91,7 @@ export default function EventFilters({
     <>
       {/* ─── DESKTOP SIDEBAR ─── */}
       <aside className="hidden lg:block w-60 shrink-0">
-        <div className="sticky top-28 bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 p-5 shadow-sm max-h-[calc(100vh-8rem)] overflow-y-auto">
+        <div className="sticky top-[var(--events-filter-top,7rem)] bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 p-5 shadow-sm max-h-[calc(100vh-var(--events-filter-top,7rem)-1rem)] overflow-y-auto">
           <div className="flex items-center justify-between mb-5">
             <h3 className="font-sora font-bold text-base text-navy dark:text-white">Filters</h3>
             {activeFilterCount > 0 && (

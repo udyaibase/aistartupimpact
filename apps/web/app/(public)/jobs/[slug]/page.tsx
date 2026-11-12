@@ -12,6 +12,7 @@ import SubscribeForm from '@/components/SubscribeForm';
 import ReportJobButton from '@/components/jobs/ReportJobButton';
 import { isClaimVerified } from '@/lib/jobs/trust';
 import { jobPostingSalary } from '@/lib/jobs/public';
+import { fitTitle, metaSnippet } from '@/lib/seo-text';
 
 function listingIsOpen(job: { status?: string; expiresAt?: string | null; moderationHold?: boolean }): boolean {
   if (job.status && job.status !== 'OPEN') return false;
@@ -41,10 +42,46 @@ export async function generateStaticParams() {
   return [];
 }
 
+// What job seekers search: role + company + city (or "Remote"). The old description was a one-line template
+// ("X position at Y. Apply now"), which Google treats as thin.
+function jobPlace(job: any): string {
+  if (job.workType === 'REMOTE') return 'Remote';
+  const city = job.city ? String(job.city).split(',')[0].trim() : '';
+  return job.workType === 'HYBRID' && city ? `${city} (Hybrid)` : city;
+}
+
+function jobTitle(job: any): string {
+  const role = String(job.title).trim();
+  const company = String(job.companyName).trim();
+  const place = jobPlace(job);
+  return fitTitle([
+    place ? `${role} Job at ${company}, ${place}` : `${role} Job at ${company}`,
+    place ? `${role} at ${company} — ${place}` : `${role} at ${company}`,
+    `${role} at ${company}`,
+    role,
+  ]);
+}
+
+function jobDescription(job: any): string {
+  if (job.shortDescription && String(job.shortDescription).length > 80) return metaSnippet(job.shortDescription);
+  const place = jobPlace(job);
+  const type = String(job.employmentType || '').replace(/_/g, '-').toLowerCase();
+  const exp = job.experienceMin != null
+    ? `, ${job.experienceMin}${job.experienceMax ? `–${job.experienceMax}` : '+'} yrs experience`
+    : '';
+  const skills = Array.isArray(job.skills) && job.skills.length ? ` Skills: ${job.skills.slice(0, 4).join(', ')}.` : '';
+  const body = String(job.description || '').replace(/<[^>]+>/g, ' ').replace(/[#*_`>]/g, ' ');
+  return metaSnippet(
+    `${job.companyName} is hiring a ${job.title}${place ? ` (${place}` : ' ('}${type ? `${place ? ', ' : ''}${type}` : ''}${exp}).${skills} ${body}`
+      .replace(/\(\)/g, ''),
+  );
+}
+
 export async function generateMetadata(props: PageProps): Promise<Metadata> {
   const params = await props.params;
   const jobs = await sql`
-    SELECT jl.title, jl."shortDescription", jl.status, jl."moderationHold", jl."expiresAt"::text AS "expiresAt", e."companyName"
+    SELECT jl.title, jl."shortDescription", jl.description, jl.status, jl."moderationHold", jl."expiresAt"::text AS "expiresAt",
+           jl.city, jl."workType", jl."employmentType", jl."experienceMin", jl."experienceMax", jl.skills, e."companyName"
     FROM "JobBoardListing" jl
     JOIN "JobBoardEmployer" e ON e.id = jl."employerId"
     WHERE jl.slug = ${params.slug} AND jl."deletedAt" IS NULL
@@ -54,8 +91,8 @@ export async function generateMetadata(props: PageProps): Promise<Metadata> {
   const job = jobs[0] as any;
   return {
     ...(listingIsOpen(job) ? {} : { robots: { index: false, follow: true } }),
-    title: `${job.title} at ${job.companyName} — AI Jobs`,
-    description: job.shortDescription || `${job.title} position at ${job.companyName}. Apply now on Udyaibase.`,
+    title: jobTitle(job),
+    description: jobDescription(job),
     alternates: { canonical: `/jobs/${params.slug}` },
   };
 }

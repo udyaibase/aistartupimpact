@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import IntentLink from '@/components/IntentLink';
 import { Calendar, MapPin, Video, Users, Clock, ExternalLink, BadgeCheck } from 'lucide-react';
 
@@ -56,17 +56,41 @@ function formatTime(dateStr: string): string {
   return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 }
 
-function getRelativeLabel(dateStr: string): string {
+/** Whole calendar days from `from` to `to` in the viewer's timezone (11th 11pm → 12th 1am is 1 day). */
+function calendarDaysBetween(from: Date, to: Date): number {
+  const a = Date.UTC(from.getFullYear(), from.getMonth(), from.getDate());
+  const b = Date.UTC(to.getFullYear(), to.getMonth(), to.getDate());
+  return Math.round((b - a) / 86_400_000);
+}
+
+/**
+ * "Live Now", "In 3h", "Today" or "Tomorrow", by calendar day in the viewer's timezone. It used to count 24-hour
+ * blocks, so an event at 1am two days away (36 hours) showed as "Tomorrow".
+ */
+export function getRelativeLabel(dateStr: string, now: Date): string {
   const d = new Date(dateStr);
-  const now = new Date();
   const diffMs = d.getTime() - now.getTime();
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  if (diffMs < 0 && diffMs > -3 * 60 * 60 * 1000) return 'Live Now';
-  if (diffHours > 0 && diffHours <= 24) return `In ${diffHours}h`;
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Tomorrow';
-  return '';
+  if (diffMs <= 0) return diffMs > -3 * 60 * 60 * 1000 ? 'Live Now' : '';
+  const days = calendarDaysBetween(now, d);
+  if (days === 0) {
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    return hours >= 1 ? `In ${hours}h` : 'Today';
+  }
+  return days === 1 ? 'Tomorrow' : '';
+}
+
+/**
+ * The current time, only in the browser: the list HTML is cached on the server (UTC, built minutes earlier), so
+ * labels are worked out after the page loads, in the viewer's timezone, and kept fresh every minute.
+ */
+function useNow(): Date | null {
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    setNow(new Date());
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
 }
 
 function extractCity(address: string): string {
@@ -77,10 +101,10 @@ function extractCity(address: string): string {
   return parts[0] || '';
 }
 
-function EventCard({ event }: { event: Event }) {
+function EventCard({ event, now }: { event: Event; now: Date | null }) {
   const isFull = event.capacity ? event.registrationCount >= event.capacity : false;
   const fewSpots = event.capacity ? (event.capacity - event.registrationCount) <= 10 && !isFull : false;
-  const relLabel = getRelativeLabel(event.startAt);
+  const relLabel = now ? getRelativeLabel(event.startAt, now) : '';
   const city = extractCity(event.address || event.venueName || '');
   const catColor = CATEGORY_COLORS[event.category] || 'bg-gray-600';
 
@@ -229,7 +253,7 @@ function EventCard({ event }: { event: Event }) {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={event.coverImageUrl}
-                alt=""
+                alt={`${event.title} cover image`}
                 className="w-full h-full object-cover"
                 loading="lazy"
                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -249,6 +273,7 @@ interface EventListClientProps {
 
 export default function EventListClient({ events, total }: EventListClientProps) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const now = useNow();
   const visibleEvents = useMemo(() => events.slice(0, visibleCount), [events, visibleCount]);
   const hasMore = visibleCount < events.length;
 
@@ -256,7 +281,7 @@ export default function EventListClient({ events, total }: EventListClientProps)
     <>
       <div className="space-y-3">
         {visibleEvents.map((event) => (
-          <EventCard key={event.id} event={event} />
+          <EventCard key={event.id} event={event} now={now} />
         ))}
       </div>
 

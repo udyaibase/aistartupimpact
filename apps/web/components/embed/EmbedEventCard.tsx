@@ -150,7 +150,7 @@ export default function EmbedEventCard({ event, layout, config, onOpen }: Props)
         style={{ borderRadius: "var(--r-card)", borderColor: "var(--card-border)", background: "var(--card-bg)", boxShadow: "var(--card-shadow)", opacity: muted ? 0.75 : 1 }}
       >
         {cover ? (
-          <img src={event.coverImageUrl!} alt="" loading="lazy" className="w-full aspect-[16/9] object-cover" style={{ background: "var(--w-subtle)" }} />
+          <img src={event.coverImageUrl!} alt={`${event.title} cover image`} loading="lazy" className="w-full aspect-[16/9] object-cover" style={{ background: "var(--w-subtle)" }} />
         ) : null}
         <div className="flex-1 flex flex-col p-4 gap-2">
           <div className="flex items-start gap-3">
@@ -190,7 +190,7 @@ export default function EmbedEventCard({ event, layout, config, onOpen }: Props)
         <div className="relative shrink-0 w-full aspect-[16/9] sm:w-28 sm:h-[72px] sm:aspect-auto">
           <img
             src={event.coverImageUrl!}
-            alt=""
+            alt={`${event.title} cover image`}
             loading="lazy"
             className="absolute inset-0 w-full h-full object-cover sm:rounded-[var(--r-control)]"
             style={{ background: "var(--w-subtle)" }}

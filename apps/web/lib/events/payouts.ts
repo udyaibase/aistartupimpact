@@ -1,5 +1,7 @@
 import { prisma } from '@udyaibase/database';
 import { razorpayApi, RazorpayApiError } from '@/lib/billing/razorpay';
+import { sendEmailFireAndForget } from '@/lib/email/send';
+import { button, esc, shell } from '@/lib/jobs/apply-emails';
 
 /**
  * Host payouts for paid tickets via Razorpay Route linked accounts.
@@ -93,15 +95,57 @@ export async function setUpPayouts(organizerId: string, input: PayoutInput): Pro
   }
 }
 
-/** Re-read activation status from Razorpay (KYC review finishes asynchronously). */
+/**
+ * Re-read activation status from Razorpay (KYC review finishes asynchronously). Called from the host's refresh
+ * button, the Razorpay account webhooks and the daily cron. The host is emailed when they become able to sell.
+ */
 export async function refreshPayoutStatus(organizerId: string): Promise<PayoutStatus | null> {
-  const org = await prisma.eventOrganizer.findUnique({ where: { id: organizerId }, select: { payoutAccountId: true, payoutProductId: true } });
+  const org = await prisma.eventOrganizer.findUnique({ where: { id: organizerId }, select: { payoutAccountId: true, payoutProductId: true, payoutStatus: true, email: true, name: true } });
   if (!org?.payoutAccountId || !org.payoutProductId) return null;
   const prod = await razorpayApi<{ activation_status?: string; requirements?: { field_reference?: string }[] }>('GET', `/v2/accounts/${org.payoutAccountId}/products/${org.payoutProductId}`);
   const status = mapStatus(prod.activation_status);
   const note = prod.requirements?.length ? `Razorpay needs: ${prod.requirements.map((r) => r.field_reference).filter(Boolean).join(', ')}` : null;
   await prisma.eventOrganizer.update({ where: { id: organizerId }, data: { payoutStatus: status, payoutNote: note, payoutUpdatedAt: new Date() } });
+  if (status !== org.payoutStatus && (status === 'ACTIVATED' || status === 'NEEDS_CLARIFICATION')) sendPayoutStatusEmail(org.email, org.name, status, note);
   return status;
+}
+
+/** Linked-account webhook: refresh the host that owns this Razorpay account. */
+export async function refreshPayoutByAccount(accountId: string): Promise<PayoutStatus | null> {
+  const org = await prisma.eventOrganizer.findFirst({ where: { payoutAccountId: accountId }, select: { id: true } });
+  return org ? refreshPayoutStatus(org.id) : null;
+}
+
+/** Daily: re-check hosts still waiting on KYC review (fallback if a webhook was missed). */
+export async function refreshPendingPayouts(limit = 50): Promise<number> {
+  const pending = await prisma.eventOrganizer.findMany({
+    where: { payoutStatus: { in: ['UNDER_REVIEW', 'NEEDS_CLARIFICATION'] }, payoutAccountId: { not: null }, payoutProductId: { not: null } },
+    select: { id: true },
+    take: limit,
+  });
+  let changed = 0;
+  for (const o of pending) {
+    const s = await refreshPayoutStatus(o.id).catch((e) => { console.error('[payouts] refresh', o.id, e instanceof Error ? e.message : e); return null; });
+    if (s === 'ACTIVATED') changed++;
+  }
+  return changed;
+}
+
+function sendPayoutStatusEmail(to: string, name: string, status: PayoutStatus, note: string | null) {
+  const site = (process.env.NEXT_PUBLIC_SITE_URL || 'https://udyaibase.com').replace(/\/$/, '');
+  const activated = status === 'ACTIVATED';
+  sendEmailFireAndForget({
+    to,
+    subject: activated ? 'Payouts are active: you can now sell paid tickets' : 'Razorpay needs a little more information for your payouts',
+    type: activated ? 'organizer_payouts_activated' : 'organizer_payouts_clarification',
+    html: shell(activated ? `
+<h1 style="font-size:20px;margin:0 0 8px">You can now sell paid tickets</h1>
+<p style="margin:0 0 20px;font-size:15px;line-height:1.6">Hi ${esc(name)}, Razorpay has approved your payout account. Add paid ticket tiers to your events; each ticket's payout is released to your bank 2 days after the event ends.</p>
+<p style="margin:0">${button(`${site}/organizer`, 'Go to your dashboard')}</p>` : `
+<h1 style="font-size:20px;margin:0 0 8px">Your payout setup needs attention</h1>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.6">Hi ${esc(name)}, Razorpay reviewed your payout details and needs a little more before you can sell paid tickets.${note ? ` ${esc(note)}.` : ''}</p>
+<p style="margin:0">${button(`${site}/organizer/settings`, 'Update payout details')}</p>`),
+  });
 }
 
 export async function canSellTickets(organizerId: string): Promise<boolean> {

@@ -1,4 +1,5 @@
 import { sql } from '@/lib/db';
+import { hqInIndia, hqOutsideIndia } from '@/lib/india-hq';
 import { startupCategoryFor, understandStartupQuery, type SearchChip, type StartupQuery } from '@/lib/search/understand';
 
 /**
@@ -173,7 +174,7 @@ function baseWhere(f: DirectoryFilters, text: ReturnType<typeof textSearch>) {
     ${f.businessType ? sql`AND s."businessType" = ${f.businessType}` : sql``}
     ${f.status ? sql`AND s.status = ${f.status}::"CompanyStatus"` : sql``}
     ${f.city ? sql`AND lower(s."headquartersCity") = lower(${f.city})` : sql``}
-    ${f.country === 'India' ? sql`AND s."isIndian" = true` : f.country === 'International' ? sql`AND s."isIndian" = false` : sql``}
+    ${f.country === 'India' ? sql`AND ${hqInIndia('s')}` : f.country === 'International' ? sql`AND ${hqOutsideIndia('s')}` : sql``}
     ${employeeClause(f.employeeRange)}
   `;
 }

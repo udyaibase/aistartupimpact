@@ -18,6 +18,7 @@ export const metadata: Metadata = {
     'AI tools directory contact',
   ],
   openGraph: {
+    images: [{ url: '/og-image.webp', width: 2250, height: 1181 }],
     title: 'Contact Udyaibase — Partnerships, Press & Support',
     description:
       'Reach the Udyaibase team for startup listings, partnerships, advertising, press inquiries, or feedback. Based in Vijayawada, India.',

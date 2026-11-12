@@ -8,7 +8,7 @@ import { searchJobs, getJobWorkTypeCounts, JOBS_PAGE_SIZE } from '@/lib/jobs/sea
 
 export const metadata: Metadata = {
   title: 'AI Jobs in India — Find Your Next Role in Artificial Intelligence',
-  description: 'Browse 60+ AI jobs — ML Engineer, LLM Engineer, AI Product Manager, Data Scientist, and more. Remote, hybrid, and on-site roles at top AI companies.',
+  description: 'AI jobs at Indian AI startups — ML Engineer, LLM Engineer, AI Product Manager, Data Scientist and more. Remote, hybrid and on-site roles, updated daily.',
   alternates: { canonical: '/jobs' },
 };
 
@@ -47,6 +47,18 @@ export default async function JobsPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbJsonLd) }} />
+      {jobs.length > 0 && (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd({
+          '@context': 'https://schema.org',
+          '@type': 'ItemList',
+          name: 'AI Jobs in India',
+          url: 'https://udyaibase.com/jobs',
+          numberOfItems: jobs.length,
+          itemListElement: jobs.map((j: any, i: number) => ({
+            '@type': 'ListItem', position: i + 1, url: `https://udyaibase.com/jobs/${j.slug}`, name: j.companyName ? `${j.title} at ${j.companyName}` : j.title,
+          })),
+        }) }} />
+      )}
 
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-xs font-jakarta text-gray-400 dark:text-gray-500 mb-4">

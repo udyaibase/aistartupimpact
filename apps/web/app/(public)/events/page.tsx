@@ -6,6 +6,7 @@ import { sql } from "@/lib/db";
 import { ChevronRight, Bell } from "lucide-react";
 import EventSearchBar from "@/components/events/EventSearchBar";
 import EventsBrowser from "@/components/events/EventsBrowser";
+import StickySearchBar from "@/components/shared/StickySearchBar";
 import { searchEvents } from "@/lib/events/search";
 import CreateEventButton from "@/components/events/CreateEventButton";
 import SubscribeForm from "@/components/SubscribeForm";
@@ -24,6 +25,7 @@ export const metadata: Metadata = {
       "Discover upcoming AI events near you. Register for free conferences, hackathons, workshops, and meetups.",
     type: "website",
     url: "https://udyaibase.com/events",
+    images: [{ url: "/og-image.webp", width: 2250, height: 1181 }],
   },
 };
 
@@ -64,6 +66,18 @@ export default async function EventsPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbJsonLd) }} />
+      {(events as any[]).length > 0 && (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd({
+          "@context": "https://schema.org",
+          "@type": "ItemList",
+          name: "Upcoming AI Events",
+          url: "https://udyaibase.com/events",
+          numberOfItems: Math.min((events as any[]).length, 30),
+          itemListElement: (events as any[]).slice(0, 30).map((e, i) => ({
+            "@type": "ListItem", position: i + 1, url: `https://udyaibase.com/events/${e.slug}`, name: e.title,
+          })),
+        }) }} />
+      )}
 
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-xs font-jakarta text-gray-400 dark:text-gray-500 mb-4">
@@ -94,10 +108,12 @@ export default async function EventsPage() {
         </div>
       </div>
 
-      {/* Search bar */}
-      <Suspense fallback={<div className="h-14 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />}>
-        <EventSearchBar />
-      </Suspense>
+      {/* Search bar: sticky under the site header, like /jobs */}
+      <StickySearchBar topVar="--events-filter-top">
+        <Suspense fallback={<div className="h-14 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />}>
+          <EventSearchBar />
+        </Suspense>
+      </StickySearchBar>
 
       {/* Main layout: sidebar + events */}
       <EventsBrowser initialEvents={events as any}>

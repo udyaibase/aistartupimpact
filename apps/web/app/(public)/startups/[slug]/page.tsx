@@ -26,6 +26,8 @@ import SubscribeForm from '@/components/SubscribeForm';
 import SignInGate from '@/components/SignInGate';
 import TrackView from '@/components/TrackView';
 import { SignedIn, SignedOut } from '@/components/auth/SignedIn';
+import { fitTitle, metaSnippet } from '@/lib/seo-text';
+import { roundLabel } from '@/lib/funding/format';
 
 export const revalidate = 3600;
 
@@ -91,7 +93,8 @@ const getStartup = cache(async (slug: string) => {
       sql`
         SELECT "roundType", "amountUsd", "amountInr",
                "announcedAt"::text AS "announcedAt",
-               "leadInvestors", "allInvestors"
+               "leadInvestors", "allInvestors",
+               to_jsonb("FundingRound") ->> 'slug' AS slug -- works before the slug migration too
         FROM "FundingRound"
         WHERE "startupId" = ${s.id}
         ORDER BY "announcedAt" DESC
@@ -311,8 +314,18 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
   const s = await getStartup(params.slug) as any;
   if (!s) return { title: 'Startup Not Found' };
 
-  const title = `${s.name} - ${s.tagline || 'AI Startup'} | Udyaibase`;
-  const description = (s.description || s.tagline || '').slice(0, 155);
+  // What people search for a startup: its name with "funding", "founders", the city or the sector. The layout adds
+  // "| Udyaibase"; this used to add it again and run to ~140 characters with the full tagline.
+  const name = String(s.name).trim();
+  const sector = getIndustryTag(s);
+  const city = s.headquartersCity ? String(s.headquartersCity).split(',')[0].trim() : '';
+  const title = fitTitle([
+    `${name}: ${sector ? `${sector} ` : ''}AI Startup${city ? ` in ${city}` : ''} — Funding & Founders`,
+    `${name}: AI Startup${city ? ` in ${city}` : ''} — Funding & Founders`,
+    `${name} — AI Startup Funding & Founders`,
+    name,
+  ]);
+  const description = metaSnippet(s.description || s.tagline || '');
   const url = `https://udyaibase.com/startups/${s.slug}`;
 
   // Use dynamic OG image (auto-generated from opengraph-image.tsx)
@@ -855,7 +868,11 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
                             <IndianRupee className="w-5 h-5 text-brand" />
                           </div>
                           <div>
-                            <span className="font-sora font-bold text-xs text-navy dark:text-white block">{r.roundType}</span>
+                            {r.slug ? (
+                              <Link href={`/funding/${r.slug}`} className="font-sora font-bold text-xs text-navy dark:text-white hover:text-brand block">{roundLabel(r.roundType)}</Link>
+                            ) : (
+                              <span className="font-sora font-bold text-xs text-navy dark:text-white block">{roundLabel(r.roundType)}</span>
+                            )}
                             <span className="text-[11px] text-gray-400 font-jakarta">
                               {r.leadInvestors?.length > 0 ? r.leadInvestors.join(', ') : 'Undisclosed'}
                               {r.announcedAt && ` · ${new Date(r.announcedAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`}

@@ -1,12 +1,19 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
+import { jsonLd } from '@/lib/json-ld';
 import { ChevronRight, IndianRupee, Rocket, Award, Briefcase } from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: 'Government AI Funding Schemes India | IndiaAI Mission, SISFS, MeitY Grants',
-  description: 'Complete guide to government funding schemes for AI startups in India. Explore IndiaAI Mission, Startup India Seed Fund, and MeitY grants with eligibility criteria and application process.',
+  title: 'Government AI Funding Schemes in India: IndiaAI, SISFS & MeitY',
+  description: 'Government funding for AI startups in India — IndiaAI Mission, Startup India Seed Fund and MeitY grants, with eligibility, funding amounts and how to apply.',
   alternates: {
     canonical: 'https://udyaibase.com/india-ai/schemes',
+  },
+  openGraph: {
+    title: 'Government AI Funding Schemes in India',
+    url: 'https://udyaibase.com/india-ai/schemes',
+    type: 'website',
+    images: [{ url: '/og-image.webp', width: 2250, height: 1181 }],
   },
 };
 
@@ -46,6 +53,25 @@ export default function GovernmentSchemesPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-0 sm:px-2 lg:px-4 py-6 sm:py-10">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd({
+        '@context': 'https://schema.org',
+        '@type': 'ItemList',
+        name: 'Government AI Funding Schemes in India',
+        url: 'https://udyaibase.com/india-ai/schemes',
+        numberOfItems: schemes.length,
+        itemListElement: schemes.map((sc, i) => ({
+          '@type': 'ListItem', position: i + 1, name: sc.name, url: `https://udyaibase.com/india-ai/schemes/${sc.slug}`,
+        })),
+      }) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd({
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://udyaibase.com' },
+          { '@type': 'ListItem', position: 2, name: 'India AI', item: 'https://udyaibase.com/india-ai' },
+          { '@type': 'ListItem', position: 3, name: 'Funding Schemes', item: 'https://udyaibase.com/india-ai/schemes' },
+        ],
+      }) }} />
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-xs sm:text-sm font-jakarta text-gray-400 dark:text-gray-500 mb-6">
         <Link href="/" className="hover:text-brand">Home</Link>

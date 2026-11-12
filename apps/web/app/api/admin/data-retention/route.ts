@@ -7,6 +7,7 @@ import { runHiringMaintenance } from '@/lib/employer/lifecycle';
 import { runHostPlanMaintenance } from '@/lib/events/billing';
 import { finishRecentlyApprovedEvents, processSuspendedEvents } from '@/lib/events/trust';
 import { expireTicketHolds } from '@/lib/events/tickets';
+import { refreshPendingPayouts } from '@/lib/events/payouts';
 import { trackCronRoute } from '@/lib/ops/cron';
 import { sizePendingLogos } from '@/lib/media/logo-sizes';
 import { refreshPaths, refreshSections } from '@/lib/revalidate';
@@ -152,6 +153,8 @@ async function runCleanup(request: NextRequest) {
     results.suspendedEventsHandled = await processSuspendedEvents();
     // Unpaid ticket holds (they stop counting after 15 minutes anyway; this tidies their status).
     Object.assign(results, await expireTicketHolds(now));
+    // Hosts waiting on Razorpay KYC review: re-check (fallback if the account webhook was missed).
+    try { results.payoutsActivated = await refreshPendingPayouts(); } catch (err) { console.error('[data-retention] payouts', err); }
 
     // Audit logs older than 1 year
     const auditCutoff = new Date(now);

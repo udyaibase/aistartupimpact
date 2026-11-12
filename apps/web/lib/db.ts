@@ -291,8 +291,8 @@ export async function getOpinionBySlugDirect(slug: string) {
       `,
     ]);
 
-    const authorName = a.authorName || a.founderAuthorName || 'ASI Editorial';
-    const authorSlug = a.authorSlug || (a.founderAuthorId ? `founder-${a.founderAuthorId}` : 'editorial');
+    const authorName = a.authorName || a.founderAuthorName || 'Udyaibase Editorial';
+    const authorSlug = a.authorSlug || (a.founderAuthorId ? `founder-${a.founderAuthorId}` : 'udyaibase-editorial'); // the editorial author's real profile slug
 
     return {
       ...a,
@@ -560,8 +560,8 @@ export async function getOpinionCountByTagDirect(tagSlug: string): Promise<numbe
 }
 
 function mapOpinionRow(a: any) {
-  const authorName = a.authorName || a.founderAuthorName || 'ASI Editorial';
-  const authorSlug = a.authorSlug || (a.founderAuthorId ? `founder-${a.founderAuthorId}` : 'editorial');
+  const authorName = a.authorName || a.founderAuthorName || 'Udyaibase Editorial';
+  const authorSlug = a.authorSlug || (a.founderAuthorId ? `founder-${a.founderAuthorId}` : 'udyaibase-editorial'); // the editorial author's real profile slug
   return {
     id: a.id,
     title: a.title,
@@ -1330,6 +1330,8 @@ export async function getAllFundingRoundsDirect() {
     const rows = await sql`
       SELECT
         fr.id, fr."roundType", fr."amountInr", fr."amountUsd",
+        -- Read through to_jsonb so this keeps working before the slug column exists (migration not yet applied).
+        to_jsonb(fr) ->> 'slug' AS slug,
         fr."announcedAt"::text AS "announcedAt", fr."leadInvestors", fr."allInvestors",
         s.name AS "startupName", s.slug AS "startupSlug", s."headquartersCity",
         s.category AS "startupCategory", s."logoUrl" AS "startupLogoUrl"
@@ -1411,12 +1413,15 @@ export async function getActiveSponsorDirect() {
 export async function getFundingRoundBySlugDirect(slug: string) {
   try {
     const rows = await sql`
-      SELECT 
-        fr.id, fr.slug, fr."roundType", fr."amountInr", fr."amountUsd",
-        fr."announcedAt"::text AS "announcedAt", 
+      SELECT
+        fr.id, fr.slug, fr."startupId", fr."roundType", fr."amountInr", fr."amountUsd", fr.valuation,
+        fr."announcedAt"::text AS "announcedAt",
         fr."leadInvestors", fr."allInvestors", fr."sourceUrl",
-        s.name AS "startupName", 
-        s.slug AS "startupSlug", 
+        s.name AS "startupName",
+        s.slug AS "startupSlug",
+        s.tagline AS "startupTagline",
+        s."logoUrl" AS "startupLogoUrl",
+        s.category AS "startupCategory",
         s."headquartersCity"
       FROM "FundingRound" fr
       JOIN "Startup" s ON s.id = fr."startupId"
@@ -1430,6 +1435,22 @@ export async function getFundingRoundBySlugDirect(slug: string) {
   }
 }
 
+
+/** The startup's other rounds, newest first, for the round page's "funding history". */
+export async function getStartupRoundsDirect(startupId: string) {
+  try {
+    return await sql`
+      SELECT fr.id, to_jsonb(fr) ->> 'slug' AS slug, fr."roundType", fr."amountInr", fr."amountUsd", fr."announcedAt"::text AS "announcedAt", fr."leadInvestors"
+      FROM "FundingRound" fr
+      WHERE fr."startupId" = ${startupId}
+      ORDER BY fr."announcedAt" DESC
+      LIMIT 20
+    `;
+  } catch (error) {
+    console.error('getStartupRoundsDirect error:', error);
+    return [];
+  }
+}
 
 // ── db adapter for API routes that use db.query() pattern ─────────────────────
 export const db = {

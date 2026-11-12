@@ -4,11 +4,12 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { useHeadroomBar } from '@/hooks/useHeadroomBar';
 
 /**
- * Search (and, on mobile, the filter row) for /jobs, stuck under the site header like the startups and tools bars:
- * always visible on desktop; on smaller screens it slides away while scrolling down and returns on scroll up.
- * Publishes where it ends as --jobs-filter-top so the desktop filter sidebar sticks just below it.
+ * A list page's search bar (and, on mobile, its filter row), stuck under the site header like the startups and
+ * tools bars: always visible on desktop; on smaller screens it slides away while scrolling down and returns on
+ * scroll up. Used on /jobs and /events. Publishes where it ends as the CSS variable `topVar` so the page's desktop
+ * filter sidebar can stick just below it.
  */
-export default function JobsStickyBar({ children }: { children: ReactNode }) {
+export default function StickySearchBar({ children, topVar }: { children: ReactNode; topVar: `--${string}` }) {
   const anchorRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const bar = useHeadroomBar(anchorRef, false);
@@ -17,12 +18,12 @@ export default function JobsStickyBar({ children }: { children: ReactNode }) {
     const el = barRef.current;
     if (!el) return;
     const root = document.documentElement;
-    const publish = () => root.style.setProperty('--jobs-filter-top', `${bar.headerOffset + el.offsetHeight + 16}px`);
+    const publish = () => root.style.setProperty(topVar, `${bar.headerOffset + el.offsetHeight + 16}px`);
     publish();
     const ro = new ResizeObserver(publish);
     ro.observe(el);
-    return () => { ro.disconnect(); root.style.removeProperty('--jobs-filter-top'); };
-  }, [bar.headerOffset]);
+    return () => { ro.disconnect(); root.style.removeProperty(topVar); };
+  }, [bar.headerOffset, topVar]);
 
   return (
     <>

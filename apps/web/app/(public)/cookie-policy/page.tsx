@@ -1,7 +1,7 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Cookie Policy | Udyaibase',
+  title: 'Cookie Policy',
   description: 'Learn about how we use cookies and similar technologies on Udyaibase.',
 };
 

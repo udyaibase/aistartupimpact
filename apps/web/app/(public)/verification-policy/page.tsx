@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Verification Policy — Udyaibase",
+  title: "Startup Verification Policy",
   description: "Learn how startup and organizer verification works on Udyaibase, including DNS domain verification and what the verified badge means.",
 };
 

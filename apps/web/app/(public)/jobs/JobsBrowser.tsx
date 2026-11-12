@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Briefcase, Loader2 } from 'lucide-react';
 import JobFilters, { SortDropdown } from '@/components/jobs/JobFilters';
 import JobSearchBar from '@/components/jobs/JobSearchBar';
-import JobsStickyBar from '@/components/jobs/JobsStickyBar';
+import StickySearchBar from '@/components/shared/StickySearchBar';
 import JobListClient from './JobListClient';
 import { JOB_SEARCH_KEYS, JOBS_PAGE_SIZE } from '@/lib/jobs/search-keys';
 
@@ -109,12 +109,12 @@ export default function JobsBrowser({ initialJobs, initialTotal, workTypeCounts,
       </Suspense>
 
       {/* Search bar (+ mobile filter row): sticky under the site header */}
-      <JobsStickyBar>
+      <StickySearchBar topVar="--jobs-filter-top">
         <Suspense fallback={<div className="h-12 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />}>
           <JobSearchBar />
         </Suspense>
         <JobFilters part="mobile" {...filterProps} />
-      </JobsStickyBar>
+      </StickySearchBar>
 
       {/* Main layout: sidebar + jobs */}
       <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 mt-3">

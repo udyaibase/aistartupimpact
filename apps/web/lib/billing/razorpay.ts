@@ -43,6 +43,38 @@ function safeEqual(a: string, b: string) {
   return x.length === y.length && crypto.timingSafeEqual(x, y);
 }
 
+export type CaptureCheck = { ok: true } | { ok: false; reason: 'not_captured' | 'mismatch' | 'error' };
+
+/**
+ * A valid checkout signature proves the payment was authorised for this order, not that money was captured.
+ * Before activating anything, read the payment back from Razorpay: it must belong to this order, be in INR for the
+ * exact amount we charged, and be captured. An authorised-but-uncaptured payment (account set to manual capture)
+ * is captured here, so activation never runs on money Razorpay would later auto-refund.
+ */
+export async function ensureCaptured(paymentId: string, orderId: string, expectedPaise: number): Promise<CaptureCheck> {
+  try {
+    let p = await razorpayApi<{ status?: string; order_id?: string; amount?: number; currency?: string }>('GET', `/v1/payments/${encodeURIComponent(paymentId)}`);
+    if (p.order_id !== orderId || p.currency !== 'INR' || p.amount !== expectedPaise) return { ok: false, reason: 'mismatch' };
+    if (p.status === 'authorized') {
+      // A parallel capture (webhook or the other tab) makes this fail with "already captured": re-read instead.
+      await razorpayApi('POST', `/v1/payments/${encodeURIComponent(paymentId)}/capture`, { amount: expectedPaise, currency: 'INR' }).catch(() => null);
+      p = await razorpayApi('GET', `/v1/payments/${encodeURIComponent(paymentId)}`);
+    }
+    return p.status === 'captured' ? { ok: true } : { ok: false, reason: 'not_captured' };
+  } catch (err) {
+    console.error('[razorpay] capture check', paymentId, err instanceof Error ? err.message : err);
+    return { ok: false, reason: 'error' };
+  }
+}
+
+/** Full refund of a captured payment (optionally reversing Route transfers). Returns the refund id. */
+export async function refundPayment(paymentId: string, amountPaise: number, notes: Record<string, string>, opts: { reverseTransfers?: boolean } = {}): Promise<string> {
+  const refund = await razorpayApi<{ id: string }>('POST', `/v1/payments/${encodeURIComponent(paymentId)}/refund`, {
+    amount: amountPaise, speed: 'normal', notes, ...(opts.reverseTransfers ? { reverse_all: 1 } : {}),
+  });
+  return refund.id;
+}
+
 export class RazorpayApiError extends Error {
   constructor(message: string, public status: number, public field?: string) { super(message); }
 }

@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Content Guidelines — Udyaibase",
+  title: "Content Guidelines",
   description: "Community standards and content guidelines for startups, tools, events, and user-generated content on Udyaibase.",
 };
 

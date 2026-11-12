@@ -10,10 +10,11 @@ import EmptyState from '@/components/ui/EmptyState';
 import { generateCollectionPageSchema, generateBreadcrumbSchema } from '@/lib/seo';
 
 export const metadata: Metadata = {
-  title: 'AI Ecosystem Opinions — Independent Perspectives | Udyaibase',
+  title: "India AI Opinions & Analysis — Founders, Investors, Policy",
   description: 'Expert opinions and deep analysis on India\'s AI ecosystem — funding, policy, open-source, startups, and edge AI — from founders, investors, and ecosystem leaders.',
   alternates: { canonical: 'https://udyaibase.com/opinions' },
   openGraph: {
+    images: [{ url: '/og-image.webp', width: 2250, height: 1181 }],
     title: 'AI Ecosystem Opinions — Independent Perspectives | Udyaibase',
     description: 'Expert opinions and deep analysis on India\'s AI ecosystem from founders, investors, and ecosystem leaders.',
     type: 'website',

@@ -4,6 +4,7 @@ import { button, esc, shell } from '@/lib/jobs/apply-emails';
 import { effectiveHostPlan, HOST_GRACE_DAYS, HOST_PLANS, hostCycleDays, hostPeriodStart, hostPlanPhase, isPlatformOrganizer } from '@/lib/events/plans';
 import { promoteWaitlist, promoteWaitlistsForOrganizer } from '@/lib/events/waitlist';
 import { emailInvoice } from '@/lib/billing/invoice';
+import { refundPayment } from '@/lib/billing/razorpay';
 
 /** Upcoming = published and not yet ended. */
 export const upcomingWhere = (organizerId: string, now = new Date()) => ({
@@ -42,6 +43,7 @@ export async function hostPlanStatus(organizerId: string) {
  */
 export async function activateOrganizerPayment(orderId: string, paymentId: string): Promise<'activated' | 'already' | 'unknown'> {
   let applied: { kind: string; organizerId: string; eventId: string | null; paymentId: string } | null = null;
+  let boostVoid: { id: string; organizerId: string; totalPaise: number } | null = null;
   const result = await prisma.$transaction(async (tx) => {
     const pay = await tx.organizerPayment.findUnique({ where: { razorpayOrderId: orderId } });
     if (!pay) return 'unknown';
@@ -67,16 +69,24 @@ export async function activateOrganizerPayment(orderId: string, paymentId: strin
       await tx.organizerPayment.update({ where: { id: pay.id }, data: { periodStart: new Date(base), periodEnd: end } });
       await featureUpcoming(tx, pay.organizerId, new Date(end.getTime() + HOST_GRACE_DAYS * 864e5));
     } else if (pay.kind === 'BOOST' && pay.eventId) {
-      const ev = await tx.event.findFirst({ where: { id: pay.eventId, organizerId: pay.organizerId }, select: { endAt: true, featuredUntil: true } });
-      if (ev) {
+      const ev = await tx.event.findFirst({ where: { id: pay.eventId, organizerId: pay.organizerId, deletedAt: null }, select: { endAt: true, featuredUntil: true } });
+      if (ev && ev.endAt.getTime() > now) {
         const until = ev.featuredUntil && ev.featuredUntil > ev.endAt ? ev.featuredUntil : ev.endAt;
         await tx.event.update({ where: { id: pay.eventId }, data: { boostedAt: new Date(), featuredUntil: until, promoCredits: { increment: 1 } } });
+      } else {
+        // The event was deleted or ended between checkout and payment: nothing to boost, so the payment is refunded.
+        boostVoid = { id: pay.id, organizerId: pay.organizerId, totalPaise: pay.totalPaise };
       }
     }
     applied = { kind: pay.kind, organizerId: pay.organizerId, eventId: pay.eventId, paymentId: pay.id };
     return 'activated' as const;
   });
 
+  const voided = boostVoid as { id: string; organizerId: string; totalPaise: number } | null;
+  if (result === 'activated' && voided) {
+    await refundVoidBoost(voided.id, paymentId, voided.totalPaise, voided.organizerId);
+    return result;
+  }
   const done = applied as { kind: string; organizerId: string; eventId: string | null; paymentId: string } | null;
   if (result === 'activated' && done) {
     await emailInvoice('organizer', done.paymentId).catch((e) => console.error('[invoice] organizer', e));
@@ -85,6 +95,33 @@ export async function activateOrganizerPayment(orderId: string, paymentId: strin
     await fill.catch((e) => console.error('promoteWaitlist after payment failed', e));
   }
   return result;
+}
+
+/** Refund a Boost that couldn't be applied (event deleted or ended before the payment landed) and tell the host. */
+async function refundVoidBoost(organizerPaymentId: string, razorpayPaymentId: string, totalPaise: number, organizerId: string) {
+  const reason = 'Event was deleted or ended before the Boost payment completed';
+  try {
+    const refundId = await refundPayment(razorpayPaymentId, totalPaise, { organizerPaymentId, reason: 'boost_event_unavailable' });
+    await prisma.organizerPayment.update({
+      where: { id: organizerPaymentId },
+      data: { refundId, refundedAt: new Date(), refundAmountPaise: totalPaise, refundReason: reason, refundedByEmail: 'system' },
+    });
+  } catch (err) {
+    // Left as a paid, unrefunded Boost for an admin to refund from Billing; logged so it's found.
+    console.error('[boost] auto-refund failed', organizerPaymentId, err instanceof Error ? err.message : err);
+    return;
+  }
+  const o = await prisma.eventOrganizer.findUnique({ where: { id: organizerId }, select: { email: true, name: true } });
+  if (!o?.email) return;
+  sendEmailFireAndForget({
+    to: o.email,
+    subject: 'Your Event Boost payment has been refunded',
+    type: 'organizer_boost_refunded',
+    html: shell(`
+<h1 style="font-size:20px;margin:0 0 8px">Your Boost payment has been refunded</h1>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.6">The event you boosted was deleted or had already ended by the time your payment completed, so there was nothing to boost. We've refunded the full ₹${(totalPaise / 100).toLocaleString('en-IN')} to your original payment method; banks usually show it within 5–7 working days.</p>
+<p style="margin:0">${button(`${(process.env.NEXT_PUBLIC_SITE_URL || 'https://udyaibase.com').replace(/\/$/, '')}/organizer/billing`, 'Go to billing')}</p>`),
+  });
 }
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];

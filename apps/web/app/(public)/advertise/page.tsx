@@ -6,6 +6,7 @@ import {
   ChevronDown, X, CreditCard, HelpCircle, Clock, Shield, Package, Eye,
 } from 'lucide-react';
 import { sql } from '@/lib/db';
+import { hqInIndia } from '@/lib/india-hq';
 import { buildFallback } from '@/lib/build-fallback';
 
 function LinkedInIcon({ className }: { className?: string }) {
@@ -35,8 +36,10 @@ function RazorpayIcon({ className }: { className?: string }) {
 export const revalidate = 3600;
 
 export const metadata = {
-  title: 'Advertise — Udyaibase',
+  // The layout adds "| Udyaibase"; this used to repeat it ("Advertise — Udyaibase | Udyaibase").
+  title: "Advertise to India's AI Startup Ecosystem — Packages from ₹2,999",
   description: 'Launch Year pricing: AI jobs & events free for 12 months. One-time placement packages from ₹2,999. No subscriptions.',
+  alternates: { canonical: '/advertise' },
 };
 
 /* ── Placement Zone Data ────────────────── */
@@ -234,7 +237,7 @@ function zoneTable(rate: number): Omit<ZoneRow, 'name'> {
 
 export default async function AdvertisePage() {
   const [startupCountResult, articleCountResult, toolCountResult, newsletterCountResult] = await Promise.all([
-    sql`SELECT COUNT(*)::int as count FROM "Startup" WHERE "isIndian" = true AND "deletedAt" IS NULL AND "isApproved" = true`.catch(buildFallback([{ count: 0 }], 'advertise counts')),
+    sql`SELECT COUNT(*)::int as count FROM "Startup" WHERE ${hqInIndia('"Startup"')} AND "deletedAt" IS NULL AND "isApproved" = true`.catch(buildFallback([{ count: 0 }], 'advertise counts')),
     sql`SELECT COUNT(*)::int as count FROM "Article" WHERE status = 'PUBLISHED'`.catch(buildFallback([{ count: 0 }], 'advertise counts')),
     sql`SELECT COUNT(*)::int as count FROM "AiTool" WHERE status IN ('APPROVED', 'FEATURED') AND "deletedAt" IS NULL`.catch(buildFallback([{ count: 0 }], 'advertise counts')),
     sql`SELECT COUNT(*)::int as count FROM "NewsletterSubscriber" WHERE "isActive" = true`.catch(() => [{ count: 0 }]),

@@ -136,7 +136,7 @@ export function generateArticleSchema(data: {
     description: data.excerpt,
     image: data.imageUrl
       ? [{ '@type': 'ImageObject', url: data.imageUrl, width: 1200, height: 630 }]
-      : [{ '@type': 'ImageObject', url: siteLogo, width: 1200, height: 630 }],
+      : [{ '@type': 'ImageObject', url: siteLogo, width: 2250, height: 1181 }],
     datePublished: publishedDate,
     dateModified: modifiedDate,
     author: {

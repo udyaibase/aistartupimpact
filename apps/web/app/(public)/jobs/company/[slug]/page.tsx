@@ -1,4 +1,7 @@
+import { cache } from 'react';
 import { sql } from '@/lib/db';
+import { jsonLd } from '@/lib/json-ld';
+import { fitTitle, metaSnippet } from '@/lib/seo-text';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import Link from 'next/link';
@@ -17,31 +20,16 @@ export async function generateStaticParams() {
   return [];
 }
 
-export async function generateMetadata(props: PageProps): Promise<Metadata> {
-  const params = await props.params;
-  const employers = await sql`
-    SELECT "companyName" FROM "JobBoardEmployer" WHERE slug = ${params.slug} LIMIT 1
-  `;
-  if (employers.length === 0) return { title: 'Company Not Found' };
-  return {
-    title: `Jobs at ${(employers[0] as any).companyName} — AI Jobs`,
-    description: `Browse open AI positions at ${(employers[0] as any).companyName}. Apply now on Udyaibase.`,
-    alternates: { canonical: `/jobs/company/${params.slug}` },
-  };
-}
-
-export default async function CompanyJobsPage(props: PageProps) {
-  const params = await props.params;
+// One load for metadata and page (React cache de-duplicates it within a request).
+const getCompanyJobs = cache(async (slug: string) => {
   const employers = await sql`
     SELECT id, "companyName", slug, "logoUrl", "websiteUrl", description, industry, "companySize", location
     FROM "JobBoardEmployer"
-    WHERE slug = ${params.slug} AND "isActive" = true
+    WHERE slug = ${slug} AND "isActive" = true
     LIMIT 1
   `;
-
-  if (employers.length === 0) notFound();
+  if (employers.length === 0) return null;
   const company = employers[0] as any;
-
   const jobs = await sql`
     SELECT id, slug, title, "shortDescription", category, "workType",
            "salaryMin", "salaryMax", "salaryCurrency", "showSalary",
@@ -51,9 +39,78 @@ export default async function CompanyJobsPage(props: PageProps) {
       AND ("expiresAt" IS NULL OR "expiresAt" > NOW()) AND "showOnProfile" = true
     ORDER BY "isFeatured" DESC, "publishedAt" DESC
   `;
+  return { company, jobs: jobs as any[] };
+});
+
+const placeOf = (j: any) => (j.workType === 'REMOTE' ? 'Remote' : j.city ? String(j.city).split(',')[0].trim() : '');
+
+export async function generateMetadata(props: PageProps): Promise<Metadata> {
+  const params = await props.params;
+  const data = await getCompanyJobs(params.slug);
+  if (!data) return { title: 'Company Not Found' };
+  const { company, jobs } = data;
+  const name = String(company.companyName).trim();
+  const n = jobs.length;
+  const title = fitTitle([
+    `${name} Jobs ${new Date().getFullYear()}: ${n} Open AI Role${n === 1 ? '' : 's'}`,
+    `${name} Jobs: ${n} Open Role${n === 1 ? '' : 's'}`,
+    `Jobs at ${name}`,
+  ]);
+  const roles = jobs.slice(0, 3).map((j) => j.title).join(', ');
+  const places = Array.from(new Set(jobs.map(placeOf).filter(Boolean))).slice(0, 3).join(', ');
+  const description = metaSnippet(
+    n > 0
+      ? `${name} is hiring: ${roles}${n > 3 ? ` and ${n - 3} more` : ''}${places ? ` in ${places}` : ''}. ${company.description || ''}`
+      : `${name} has no open roles right now. ${company.description || ''} Browse other AI jobs on Udyaibase.`,
+  );
+  return {
+    title,
+    description,
+    alternates: { canonical: `/jobs/company/${params.slug}` },
+    // A company page with no open roles is a dead end in search results.
+    robots: n > 0 ? undefined : { index: false, follow: true },
+  };
+}
+
+export default async function CompanyJobsPage(props: PageProps) {
+  const params = await props.params;
+  const data = await getCompanyJobs(params.slug);
+  if (!data) notFound();
+  const { company, jobs } = data;
+  const pageUrl = `https://udyaibase.com/jobs/company/${params.slug}`;
+  const places = Array.from(new Set(jobs.map(placeOf).filter(Boolean)));
+  const schema = {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: `Jobs at ${company.companyName}`,
+    url: pageUrl,
+    about: {
+      '@type': 'Organization',
+      name: company.companyName,
+      ...(company.websiteUrl ? { url: company.websiteUrl } : {}),
+      ...(company.logoUrl ? { logo: company.logoUrl } : {}),
+      ...(company.description ? { description: company.description } : {}),
+    },
+    mainEntity: {
+      '@type': 'ItemList',
+      numberOfItems: jobs.length,
+      itemListElement: jobs.map((j, i) => ({ '@type': 'ListItem', position: i + 1, url: `https://udyaibase.com/jobs/${j.slug}`, name: j.title })),
+    },
+  };
+  const breadcrumb = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://udyaibase.com' },
+      { '@type': 'ListItem', position: 2, name: 'AI Jobs', item: 'https://udyaibase.com/jobs' },
+      { '@type': 'ListItem', position: 3, name: company.companyName, item: pageUrl },
+    ],
+  };
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(schema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumb) }} />
       {/* Company Header */}
       <div className="card p-5 sm:p-6 flex flex-col sm:flex-row items-start gap-4 mb-8">
         <div className="w-16 h-16 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden shrink-0">
@@ -82,6 +139,16 @@ export default async function CompanyJobsPage(props: PageProps) {
           </div>
         </div>
       </div>
+
+      {/* A written summary, so the page says more than a list of titles. */}
+      {jobs.length > 0 && (
+        <p className="mb-6 max-w-3xl font-jakarta text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+          {company.companyName} is hiring for {jobs.length} role{jobs.length === 1 ? '' : 's'} on Udyaibase
+          {places.length > 0 ? <>, {places.length === 1 ? 'based in' : 'across'} {places.slice(0, 4).join(', ')}</> : null}
+          {company.industry ? <>, in {company.industry}</> : null}. Open roles include {jobs.slice(0, 3).map((j) => j.title).join(', ')}
+          {jobs.length > 3 ? <> and {jobs.length - 3} more</> : null}. Applications go straight to the {company.companyName} hiring team.
+        </p>
+      )}
 
       {/* Job Listings */}
       <h2 className="font-sora font-bold text-base text-navy dark:text-white mb-4">

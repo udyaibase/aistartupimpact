@@ -7,6 +7,7 @@ import { notFound } from 'next/navigation';
 import { Star, Check, X as XIcon, ChevronRight, Zap, Shield, Smartphone, Globe, Calendar, DollarSign, ArrowRight } from 'lucide-react';
 import { getAiToolBySlugDirect, getToolProsConsDirect, getSimilarToolsDirect } from '@/lib/db';
 import { compareHref } from '@/lib/tools/compare-slug';
+import { fitTitle, metaSnippet } from '@/lib/seo-text';
 
 export const revalidate = 86400;
 
@@ -21,10 +22,27 @@ export async function generateMetadata(props: { params: Promise<{ slugs: string 
   if (parts.length < 2 || parts.length > 3) return { title: 'Compare Tools' };
   const tools = await Promise.all(parts.map(s => getAiToolBySlugDirect(s)));
   if (tools.some(t => !t)) return { title: 'Compare Tools' };
-  const names = tools.map((t: any) => t.name);
-  const title = `${names.join(' vs ')}: Which Is Better in ${new Date().getFullYear()}?`;
-  const description = `Compare ${names.join(' and ')} — features, pricing, pros & cons, ratings side by side.`;
-  return { title, description, alternates: { canonical: `https://udyaibase.com${compareHref(parts)}` }, openGraph: { title, description } };
+  const names = tools.map((t: any) => String(t.name).trim());
+  const year = new Date().getFullYear();
+  const title = fitTitle([
+    `${names.join(' vs ')}: Which Is Better in ${year}?`,
+    `${names.join(' vs ')} (${year}): Pricing & Features`,
+    names.join(' vs '),
+  ]);
+  const facts = (tools as any[]).map((t) => {
+    const r = t.avgRating && parseFloat(t.avgRating) > 0 ? `${parseFloat(t.avgRating).toFixed(1)}★` : '';
+    const p = PRICING_LABEL[t.pricingModel] || '';
+    return `${String(t.name).trim()}${r || p ? ` (${[r, p].filter(Boolean).join(', ')})` : ''}`;
+  });
+  const description = metaSnippet(`${facts.join(' vs ')}: compare features, pricing, free trials, API access and pros & cons side by side, with a quick verdict on which to choose in ${year}.`);
+  const url = `https://udyaibase.com${compareHref(parts)}`;
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: { title, description, url, images: [{ url: '/og-image.webp', width: 2250, height: 1181 }] },
+    twitter: { card: 'summary_large_image', title, description, images: ['/og-image.webp'] },
+  };
 }
 
 const PRICING_LABEL: Record<string, string> = {
@@ -92,8 +110,9 @@ export default async function ComparePage(props: { params: Promise<{ slugs: stri
       <h1 className="font-sora font-extrabold text-2xl md:text-3xl text-navy dark:text-white mb-2">
         {tt.map(t => t.name).join(' vs ')}
       </h1>
-      <p className="text-gray-500 dark:text-gray-400 font-jakarta text-sm mb-8">
-        Side-by-side comparison to help you choose the right tool for your needs.
+      {/* Quick verdict written from the data, so the page has real text and not only a spec table. */}
+      <p className="text-gray-600 dark:text-gray-400 font-jakarta text-sm mb-8 max-w-3xl leading-relaxed">
+        {compareVerdict(tt)}
       </p>
 
       {/* ── Tool Header Cards ── */}
@@ -102,7 +121,7 @@ export default async function ComparePage(props: { params: Promise<{ slugs: stri
         {tt.map((t, i) => (
           <div key={t.slug} className="flex flex-col items-center text-center p-4 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800">
             {t.logoUrl && (
-              <Image src={t.logoUrl} alt="" width={48} height={48} sizes="48px" className="w-12 h-12 rounded-xl object-contain border border-gray-100 dark:border-gray-700 p-1 mb-3" />
+              <Image src={t.logoUrl} alt={`${t.name} logo`} width={48} height={48} sizes="48px" className="w-12 h-12 rounded-xl object-contain border border-gray-100 dark:border-gray-700 p-1 mb-3" />
             )}
             <Link href={`/tools/${t.slug}`} className="font-sora font-bold text-sm text-navy dark:text-white hover:text-brand transition-colors">
               {t.name}
@@ -325,12 +344,59 @@ export default async function ComparePage(props: { params: Promise<{ slugs: stri
       {/* JSON-LD */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd({
         '@context': 'https://schema.org',
-        '@type': 'WebPage',
+        '@type': 'ItemList',
         name: tt.map(t => t.name).join(' vs '),
-        description: `Comparison of ${tt.map(t => t.name).join(' and ')}`,
+        description: compareVerdict(tt),
+        numberOfItems: tt.length,
+        itemListElement: tt.map((t, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          item: {
+            '@type': 'SoftwareApplication',
+            name: t.name,
+            url: `https://udyaibase.com/tools/${t.slug}`,
+            applicationCategory: t.categoryName || 'BusinessApplication',
+            ...(t.tagline ? { description: t.tagline } : {}),
+            ...(t.logoUrl ? { image: t.logoUrl } : {}),
+          },
+        })),
+      }) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd({
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://udyaibase.com' },
+          { '@type': 'ListItem', position: 2, name: 'AI Tools', item: 'https://udyaibase.com/tools' },
+          { '@type': 'ListItem', position: 3, name: tt.map(t => t.name).join(' vs '), item: `https://udyaibase.com${compareHref(tt.map(t => t.slug))}` },
+        ],
       }) }} />
     </div>
   );
+}
+
+/** A short, factual verdict from the tools' data: rating, pricing, free trial, API and mobile app. */
+function compareVerdict(tt: any[]): string {
+  const name = (t: any) => String(t.name).trim();
+  const rating = (t: any) => (t.avgRating ? parseFloat(t.avgRating) : 0);
+  const parts: string[] = [];
+  const rated = tt.filter((t) => rating(t) > 0).sort((a, b) => rating(b) - rating(a));
+  if (rated.length >= 2 && rating(rated[0]) > rating(rated[1])) {
+    parts.push(`${name(rated[0])} has the higher user rating (${rating(rated[0]).toFixed(1)} vs ${rating(rated[1]).toFixed(1)}).`);
+  }
+  const free = tt.filter((t) => ['FREE', 'FREEMIUM', 'OPEN_SOURCE'].includes(t.pricingModel));
+  if (free.length > 0 && free.length < tt.length) {
+    parts.push(`${free.map(name).join(' and ')} ${free.length === 1 ? 'has' : 'have'} a free or freemium plan, so ${free.length === 1 ? "it's" : "they're"} easier to try first.`);
+  }
+  const trial = tt.filter((t) => t.freeTrialDays);
+  if (trial.length > 0 && trial.length < tt.length) parts.push(`${trial.map((t) => `${name(t)} offers a ${t.freeTrialDays}-day free trial`).join('; ')}.`);
+  const api = tt.filter((t) => t.hasApi);
+  if (api.length > 0 && api.length < tt.length) parts.push(`Only ${api.map(name).join(' and ')} ${api.length === 1 ? 'offers' : 'offer'} API access, which matters if you want to build it into your own product.`);
+  const mobile = tt.filter((t) => t.hasMobileApp);
+  if (mobile.length > 0 && mobile.length < tt.length) parts.push(`${mobile.map(name).join(' and ')} also ${mobile.length === 1 ? 'has' : 'have'} a mobile app.`);
+  const intro = `${tt.map(name).join(' and ')} ${tt.length === 2 ? 'are both' : 'are all'} ${tt[0].categoryName ? `${tt[0].categoryName} tools` : 'AI tools'}.`;
+  return parts.length
+    ? `${intro} ${parts.join(' ')} See the full feature, pricing and pros & cons comparison below.`
+    : `${intro} They are closely matched on pricing and features; compare the details and pros & cons below to pick the one that fits your workflow.`;
 }
 
 function SpecRow({ label, icon: Icon, values, isBoolean, winnerIndex, colCount }: {

@@ -5,10 +5,11 @@ import { sql } from '@/lib/db';
 import { generateBreadcrumbSchema } from '@/lib/seo';
 
 export const metadata: Metadata = {
-  title: 'Startup Milestones — Udyaibase',
+  title: 'Indian AI Startup Milestones — Launches, Funding & Awards',
   description: 'Track the latest milestones from Indian AI startups — funding rounds, product launches, partnerships, awards, and more.',
   alternates: { canonical: 'https://udyaibase.com/milestones' },
   openGraph: {
+    images: [{ url: '/og-image.webp', width: 2250, height: 1181 }],
     title: 'Startup Milestones — Udyaibase',
     description: 'Track the latest milestones from Indian AI startups.',
     type: 'website',

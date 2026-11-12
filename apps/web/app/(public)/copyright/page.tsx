@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Copyright & Takedown Policy — Udyaibase",
+  title: "Copyright & Takedown Policy",
   description: "Learn how to report copyright infringement on Udyaibase and our process for handling takedown requests.",
 };
 

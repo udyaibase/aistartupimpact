@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { IndianRupee, MapPin, Building2, Calendar, TrendingUp, Users, Map as MapIcon, Lock } from 'lucide-react';
 import { useUser } from '@/components/UserProvider';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 
 import { standardizeCityName } from '@udyaibase/utils/src/cities';
 import FundingDownloads from './FundingDownloads';
+import { roundLabel } from '@/lib/funding/format';
 
 interface FundingRound {
   id: string;
@@ -21,7 +22,13 @@ interface FundingRound {
   headquartersCity: string | null;
   startupCategory: string | null;
   startupLogoUrl: string | null;
+  /** /funding/<slug> page for this round (null until the slug migration has run). */
+  slug?: string | null;
+  /** Headquartered in India (server-side, standard city list). */
+  inIndia?: boolean;
 }
+
+type Scope = 'india' | 'global';
 
 const FREE_ROWS_LIMIT = 5;
 
@@ -32,8 +39,25 @@ const TOOLTIP_STYLE = {
   itemStyle: { color: '#e5e7eb' },
 };
 
-export default function FundingDashboard({ data: rawData }: { data: FundingRound[] }) {
+export default function FundingDashboard({ data: allRounds }: { data: FundingRound[] }) {
   const { user, signIn } = useUser();
+  // India-first: Indian startups by default, everything with the Global switch. Kept in the URL (?scope=global)
+  // so a view can be shared; read after load so the cached page stays the same for everyone.
+  const [scope, setScope] = useState<Scope>('india');
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('scope') === 'global') setScope('global');
+  }, []);
+  const changeScope = (next: Scope) => {
+    setScope(next);
+    setFilterCity('All');
+    setFilterInvestor('All');
+    const url = new URL(window.location.href);
+    if (next === 'global') url.searchParams.set('scope', 'global'); else url.searchParams.delete('scope');
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  };
+  const indiaCount = useMemo(() => allRounds.filter((d) => d.inIndia).length, [allRounds]);
+  const rawData = useMemo(() => (scope === 'india' ? allRounds.filter((d) => d.inIndia) : allRounds), [allRounds, scope]);
+  const where = scope === 'india' ? 'in India' : 'worldwide';
   const data = useMemo(() => {
     return rawData.map(d => ({
       ...d,
@@ -303,6 +327,26 @@ export default function FundingDashboard({ data: rawData }: { data: FundingRound
 
   return (
     <div className="space-y-4 sm:space-y-8">
+      {/* India / Global switch */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div role="tablist" aria-label="Funding data scope" className="inline-flex self-start rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-1 shadow-sm">
+          {([['india', `🇮🇳 India · ${indiaCount}`], ['global', `🌍 Global · ${allRounds.length}`]] as const).map(([key, label]) => (
+            <button
+              key={key}
+              role="tab"
+              aria-selected={scope === key}
+              onClick={() => changeScope(key)}
+              className={`px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-semibold font-jakarta transition-colors ${scope === key ? 'bg-brand text-white shadow' : 'text-gray-600 dark:text-gray-300 hover:text-navy dark:hover:text-white'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta">
+          {scope === 'india' ? 'Startups headquartered in India.' : 'All AI startups we track, including Indian-founded startups based abroad.'}
+        </p>
+      </div>
+
       <FundingDownloads />
 
       {/* Top Stats Cards - Redesigned with Trend Deltas */}
@@ -375,7 +419,7 @@ export default function FundingDashboard({ data: rawData }: { data: FundingRound
       <div className="card p-4 sm:p-6">
         <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-6">
           <Building2 className="w-4 h-4 sm:w-5 sm:h-5 text-brand" />
-          <h3 className="section-title">AI Sector Breakdown</h3>
+          <h2 className="section-title">AI startup funding by sector {where}</h2>
         </div>
         <div className="space-y-2.5 sm:space-y-3">
           {sectorData.map((sector, idx) => {
@@ -405,7 +449,7 @@ export default function FundingDashboard({ data: rawData }: { data: FundingRound
       <div className="card p-4 sm:p-6">
         <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-6">
           <MapIcon className="w-4 h-4 sm:w-5 sm:h-5 text-brand" />
-          <h3 className="section-title">Funding by City</h3>
+          <h2 className="section-title">AI startup funding by city {scope === 'india' ? 'in India' : ''}</h2>
         </div>
         <div className="space-y-2.5 sm:space-y-3">
           {cityData.slice(0, 10).map((city, idx) => {
@@ -435,7 +479,7 @@ export default function FundingDashboard({ data: rawData }: { data: FundingRound
       {/* Embedded Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-8">
         <div className="card p-4 sm:p-6 lg:col-span-2">
-          <h3 className="section-title mb-3 sm:mb-6">Funding Momentum (Last 12 Months)</h3>
+          <h2 className="section-title mb-3 sm:mb-6">AI funding trends {where} (last 12 months)</h2>
           <div className="h-48 sm:h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 10, right: 5, left: 0, bottom: 0 }}>
@@ -454,7 +498,7 @@ export default function FundingDashboard({ data: rawData }: { data: FundingRound
         </div>
 
         <div className="card p-4 sm:p-6 lg:self-start">
-          <h3 className="section-title mb-3 sm:mb-6 lg:mb-2">Dist. by Stage</h3>
+          <h2 className="section-title mb-3 sm:mb-6 lg:mb-2">AI funding rounds by stage</h2>
           <div className="h-60 sm:h-72 lg:h-60 w-full flex flex-col items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart margin={{ top: 20, right: 24, bottom: 20, left: 24 }}>
@@ -522,7 +566,7 @@ export default function FundingDashboard({ data: rawData }: { data: FundingRound
 
           {/* Title & Filters */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-            <h3 className="font-sora font-bold text-sm sm:text-lg whitespace-nowrap flex-shrink-0 sm:mr-1">All Rounds</h3>
+            <h2 className="font-sora font-bold text-sm sm:text-lg whitespace-nowrap flex-shrink-0 sm:mr-1">All AI funding rounds {scope === 'india' ? 'in India' : ''}</h2>
 
             <div className="flex flex-wrap gap-1.5 sm:gap-2">
               <select className="input-field !min-h-0 py-1 sm:py-2 px-1.5 sm:px-3 shadow-sm text-xs sm:text-sm min-w-0 w-auto cursor-pointer rounded-lg sm:rounded-xl" value={filterStage} onChange={(e) => setFilterStage(e.target.value)}>
@@ -609,7 +653,7 @@ export default function FundingDashboard({ data: rawData }: { data: FundingRound
                     <td className="px-3 sm:px-6 py-3 sm:py-4">
                       <div className="flex items-center gap-2 sm:gap-3">
                         {row.startupLogoUrl ? (
-                          <img src={row.startupLogoUrl} alt="" className="w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg object-contain bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 flex-shrink-0" />
+                          <img src={row.startupLogoUrl} alt={`${row.startupName} logo`} className="w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg object-contain bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 flex-shrink-0" />
                         ) : (
                           <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg bg-brand/10 flex items-center justify-center flex-shrink-0">
                             <span className="text-xs font-bold text-brand">{row.startupName?.charAt(0)}</span>
@@ -636,7 +680,11 @@ export default function FundingDashboard({ data: rawData }: { data: FundingRound
                       </div>
                     </td>
                     <td className="px-2 sm:px-6 py-3 sm:py-4">
-                      <span className="text-xs font-semibold bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full whitespace-nowrap">{row.roundType}</span>
+                      {row.slug ? (
+                        <a href={`/funding/${row.slug}`} title={`${row.startupName} ${roundLabel(row.roundType)} details`} className="text-xs font-semibold bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full whitespace-nowrap hover:underline">{roundLabel(row.roundType)}</a>
+                      ) : (
+                        <span className="text-xs font-semibold bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full whitespace-nowrap">{roundLabel(row.roundType)}</span>
+                      )}
                     </td>
                     <td className="px-2 sm:px-6 py-3 sm:py-4">
                       <span className="font-sora font-extrabold text-xs sm:text-sm text-brand block">
@@ -734,7 +782,7 @@ export default function FundingDashboard({ data: rawData }: { data: FundingRound
       {topInvestors.length > 0 && (
       <div className="card p-4 sm:p-8">
         <h2 className="font-sora font-bold text-sm sm:text-2xl mb-3 sm:mb-8 text-navy dark:text-white">
-          Most active investors in {new Date().getFullYear()}
+          Most active investors in {scope === 'india' ? 'Indian ' : ''}AI startups ({new Date().getFullYear()})
         </h2>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-6">
