@@ -11,9 +11,20 @@ import { moneyLabel } from '@/lib/funding/insights';
 export const MAP_DATA_KEY = 'india-ai:map:v2';
 
 /**
- * Everything the India AI map needs, for the /india-ai page, shared map views, their share images, the embed and
- * the city rankings — one loader, so every surface shows the same numbers. Cached for 5 minutes (Redis) and once
- * per request (React). Throws on a database error so a failure is never cached as an empty map.
+ * Optional layers (jobs, events, the live ticker) fall back to empty when their query fails, so a problem in one
+ * of those tables can't take the India AI pages (or a deploy that prerenders them) down. Logged loudly.
+ */
+function optional<T>(name: string, q: Promise<T[]>): Promise<T[]> {
+  return q.catch((err) => {
+    console.error(`[india-ai/map-data] ${name} query failed; showing the map without it`, err);
+    return [] as T[];
+  });
+}
+
+/**
+ * Everything the India AI map needs, for the /india-ai page, the loading placeholder and the city rankings — one
+ * loader, so every surface shows the same numbers. Cached for 5 minutes (Redis) and once per request (React).
+ * Throws when the core data (cities, startups, funding) fails, so a broken map is never cached.
  */
 export const getMapData = cache(async (): Promise<MapData> => {
   return cached(MAP_DATA_KEY, { ttl: 300, staleTtl: 900 }, async () => {
@@ -52,37 +63,37 @@ export const getMapData = cache(async (): Promise<MapData> => {
         LIMIT 3000
       `,
       // Open on-site/hybrid jobs per city (remote jobs have no place on a map).
-      sql`
+      optional('jobs', sql`
         SELECT LOWER(TRIM(city)) AS city, COUNT(*)::int AS n
         FROM "JobBoardListing"
         WHERE status = 'OPEN' AND "moderationHold" = false AND "deletedAt" IS NULL
           AND ("expiresAt" IS NULL OR "expiresAt" > NOW()) AND "workType" <> 'REMOTE' AND COALESCE(city, '') <> ''
         GROUP BY 1
-      `,
+      `),
       // Upcoming in-person events; events have no city field, so the map matches a city name in this text.
-      sql`
+      optional('events', sql`
         SELECT LOWER(CONCAT_WS(' ', "venueName", address)) AS place
         FROM "Event"
         WHERE status = 'PUBLISHED' AND visibility = 'PUBLIC' AND "deletedAt" IS NULL AND "endAt" > NOW() AND format <> 'VIRTUAL'
         LIMIT 500
-      `,
+      `),
       // Funding rounds of Indian startups, reduced to city + amount + year (for the Funding view and the time-lapse).
       getFundingRounds(),
       // Recent activity for the live ticker: startups added, jobs published.
-      sql`
+      optional('new startups', sql`
         SELECT name, slug, "headquartersCity" AS city, COALESCE("approvedAt", "createdAt")::text AS at
         FROM "Startup"
         WHERE ${hqInIndia('"Startup"')} AND "deletedAt" IS NULL AND "isApproved" = true
           AND COALESCE("approvedAt", "createdAt") > NOW() - INTERVAL '30 days'
         ORDER BY COALESCE("approvedAt", "createdAt") DESC LIMIT 12
-      `,
-      sql`
+      `),
+      optional('new jobs', sql`
         SELECT jl.title, jl.slug, jl.city, e."companyName", jl."publishedAt"::text AS at
         FROM "JobBoardListing" jl JOIN "JobBoardEmployer" e ON e.id = jl."employerId"
         WHERE jl.status = 'OPEN' AND jl."moderationHold" = false AND jl."deletedAt" IS NULL
           AND jl."publishedAt" > NOW() - INTERVAL '14 days' AND COALESCE(jl.city, '') <> '' AND jl."workType" <> 'REMOTE'
         ORDER BY jl."publishedAt" DESC LIMIT 12
-      `,
+      `),
     ]);
     const india = inScope(rounds, 'india');
     const recentRounds = india.filter((r) => r.city && Date.now() - new Date(r.announcedAt).getTime() <= 60 * 864e5).slice(0, 12);
