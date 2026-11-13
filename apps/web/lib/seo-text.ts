@@ -22,3 +22,13 @@ export function fitTitle(candidates: string[], max = 62): string {
   const clean = candidates.map((c) => c.replace(/\s+/g, ' ').trim()).filter(Boolean);
   return clean.find((c) => c.length <= max) ?? clean[clean.length - 1] ?? '';
 }
+
+/**
+ * A tagline used mid-sentence ("Acme, building X, raised…"): drops the final full stop and lowercases the first
+ * letter only when it starts an ordinary capitalised word ("Building" → "building"), never an acronym or brand
+ * ("AI-powered", "B2B", "GenAI", "iOS" stay as written).
+ */
+export function taglineClause(tagline: string): string {
+  const t = tagline.trim().replace(/\.$/, '');
+  return /^[A-Z][a-z]+(?:\s|$|,)/.test(t) ? t.charAt(0).toLowerCase() + t.slice(1) : t;
+}

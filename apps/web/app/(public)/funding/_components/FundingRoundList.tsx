@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { MapPin } from 'lucide-react';
-import { inrPaiseOf, moneyLabel, type FundingRoundRow } from '@/lib/funding/insights';
+import { inrPaiseOf, moneyLabel, type FundingRoundRow, roundMoneyLabel } from '@/lib/funding/insights';
 import { roundLabel } from '@/lib/funding/format';
 
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
@@ -18,7 +18,7 @@ export default function FundingRoundList({ id, title, rounds, intro }: { id: str
       <ol className="mt-4 divide-y divide-gray-100 dark:divide-gray-800">
         {rounds.map((r) => {
           const href = r.slug ? `/funding/${r.slug}` : `/startups/${r.startupSlug}`;
-          const amount = Number(r.amountInr ?? 0) > 0 || Number(r.amountUsd ?? 0) > 0 ? moneyLabel(inrPaiseOf(r)) : 'Undisclosed';
+          const amount = Number(r.amountInr ?? 0) > 0 || Number(r.amountUsd ?? 0) > 0 ? roundMoneyLabel(r) : 'Undisclosed';
           return (
             <li key={r.id} className="py-3 flex items-center gap-3 font-jakarta">
               {r.startupLogoUrl ? (

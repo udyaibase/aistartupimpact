@@ -102,7 +102,7 @@ export default function SecuritySection() {
       const data = await res.json();
 
       if (data.success) {
-        setToast({ type: 'success', message: '✅ Password changed successfully!' });
+        setToast({ type: 'success', message: 'Password changed successfully' });
         setShowPasswordModal(false);
         setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
       } else {
@@ -176,7 +176,7 @@ export default function SecuritySection() {
       const data = await res.json();
 
       if (data.success) {
-        setToast({ type: 'success', message: '✅ Account deleted successfully. Redirecting...' });
+        setToast({ type: 'success', message: 'Account deleted successfully. Redirecting...' });
         // Small delay to show the message before redirect
         setTimeout(() => {
           router.push('/');
@@ -382,7 +382,7 @@ export default function SecuritySection() {
             setTwoFAEnabled(!twoFAEnabled);
             setToast({
               type: 'success',
-              message: twoFAEnabled ? '✅ 2FA disabled successfully' : '✅ 2FA enabled successfully'
+              message: twoFAEnabled ? '2FA disabled successfully' : '2FA enabled successfully'
             });
             // Refresh 2FA status
             fetch('/api/founder/2fa-status')

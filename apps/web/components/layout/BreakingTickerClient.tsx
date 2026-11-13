@@ -1,6 +1,7 @@
 'use client';
 
 import { memo } from 'react';
+import { Zap } from 'lucide-react';
 
 const defaultItems = [
   'Sarvam AI open-sources OpenHathi, its first Hindi LLM, redefining vernacular data availability',
@@ -30,7 +31,7 @@ function BreakingTickerClient({ items }: BreakingTickerClientProps) {
 
         {/* Breaking chip — desktop only */}
         <span className="hidden sm:flex items-center gap-1 bg-brand text-white text-xs font-bold uppercase tracking-wider px-1.5 py-0.3 rounded shrink-0">
-          <span className="text-xs">⚡</span> Breaking
+          <Zap className="w-3 h-3" aria-hidden /> Breaking
         </span>
 
         {/* Scrolling marquee */}

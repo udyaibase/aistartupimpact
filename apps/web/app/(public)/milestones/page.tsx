@@ -3,6 +3,7 @@ import { Metadata } from 'next';
 import Link from 'next/link';
 import { sql } from '@/lib/db';
 import { generateBreadcrumbSchema } from '@/lib/seo';
+import { MilestoneIcon } from '@/components/milestones/MilestoneIcon';
 
 export const metadata: Metadata = {
   title: 'Indian AI Startup Milestones — Launches, Funding & Awards',
@@ -19,11 +20,6 @@ export const metadata: Metadata = {
 };
 
 export const revalidate = 300;
-
-const ICONS: Record<string, string> = {
-  FUNDING: '💰', LAUNCH: '🚀', PARTNERSHIP: '🤝', ACQUISITION: '🏢',
-  AWARD: '🏆', HIRING: '👥', REVENUE: '📈', USER_MILESTONE: '🎯',
-};
 
 export default async function MilestonesPage() {
   let milestones: any[] = [];
@@ -71,13 +67,13 @@ export default async function MilestonesPage() {
             {milestones.map((m: any) => (
               <div key={m.id} className="flex items-start gap-4 relative">
                 <div className="w-12 h-12 rounded-full bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 flex items-center justify-center text-xl shrink-0 z-[1] hidden sm:flex">
-                  {ICONS[m.type] || '📌'}
+                  <MilestoneIcon type={m.type} className="w-5 h-5" />
                 </div>
                 <div className="flex-1 card p-4 sm:p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <h2 className="font-sora font-bold text-base text-navy dark:text-white flex items-center gap-2 flex-wrap">
-                        <span className="sm:hidden text-lg">{ICONS[m.type] || '📌'}</span>
+                        <span className="sm:hidden inline-flex"><MilestoneIcon type={m.type} className="w-[18px] h-[18px]" /></span>
                         {m.title}
                         {m.verificationStatus === 'PLATFORM_VERIFIED' && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 font-jakarta font-medium">Verified</span>

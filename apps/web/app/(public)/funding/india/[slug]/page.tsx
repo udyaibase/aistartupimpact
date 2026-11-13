@@ -4,10 +4,7 @@ import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { jsonLd } from '@/lib/json-ld';
 import { getFundingRounds } from '@/lib/funding/rounds';
-import {
-  byCity, byInvestor, bySector, byStage, HUB_MIN_ROUNDS, inScope, inrPaiseOf, moneyLabel, monthTitle, newestFirst,
-  parseMonthSlug, roundsInCity, roundsInMonth, summarize, type FundingRoundRow, type Group,
-} from '@/lib/funding/insights';
+import { byCity, byInvestor, bySector, byStage, HUB_MIN_ROUNDS, inScope, inrPaiseOf, moneyLabel, monthTitle, newestFirst, parseMonthSlug, roundsInCity, roundsInMonth, summarize, type FundingRoundRow, type Group, roundMoneyLabel } from '@/lib/funding/insights';
 import { roundLabel } from '@/lib/funding/format';
 import { fitTitle, metaSnippet } from '@/lib/seo-text';
 import { breadcrumbSchema, datasetSchema, roundsItemListSchema } from '@/lib/funding/schema';
@@ -51,12 +48,12 @@ function overview(h: Hub): string {
   if (h.kind === 'month') {
     const before = total(h.previous);
     const change = before > 0 ? Math.round(((s.paise - before) / before) * 100) : null;
-    parts.push(`In ${h.label}, Indian AI startups raised ${moneyLabel(s.paise)} across ${s.deals} funding round${s.deals === 1 ? '' : 's'}${change != null ? `, ${change >= 0 ? 'up' : 'down'} ${Math.abs(change)}% on the previous month (${moneyLabel(before)} across ${h.previous.length})` : ''}.`);
+    parts.push(`In ${h.label}, Indian AI startups raised ${moneyLabel(s.paise)} across ${s.deals} funding round${s.deals === 1 ? '' : 's'}${change != null ? `, ${change === 0 ? 'in line with' : `${change > 0 ? 'up' : 'down'} ${Math.abs(change)}% on`} the previous month (${moneyLabel(before)} across ${h.previous.length})` : ''}.`);
   } else {
     parts.push(`AI startups headquartered in ${h.label} have raised ${moneyLabel(s.paise)} across ${s.deals} funding round${s.deals === 1 ? '' : 's'} tracked by Udyaibase.`);
     if (s.ytd.deals) parts.push(`${s.ytd.deals} of those rounds (${moneyLabel(s.ytd.paise)}) came in ${s.year}.`);
   }
-  if (largest) parts.push(`The largest was ${largest.startupName.trim()}'s ${moneyLabel(inrPaiseOf(largest))} ${roundLabel(largest.roundType)}.`);
+  if (largest) parts.push(`The largest was ${largest.startupName.trim()}'s ${roundMoneyLabel(largest)} ${roundLabel(largest.roundType)}.`);
   const stages = byStage(h.rounds);
   if (stages.length) parts.push(`By stage, ${names(stages, 3)} rounds led the count.`);
   const inv = byInvestor(h.rounds);

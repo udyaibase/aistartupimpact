@@ -4,7 +4,7 @@ import { cached } from '@/lib/cache';
 import { hqInIndia } from '@/lib/india-hq';
 import { loadFundingRounds } from '@/lib/funding/rounds';
 import { buildFallback } from '@/lib/build-fallback';
-import { inrPaiseOf, inScope } from '@/lib/funding/insights';
+import { inrPaiseOf, inScope, roundMoneyLabel } from '@/lib/funding/insights';
 import type { Activity, MapData } from '@/components/india-ai/map-model';
 import { roundLabel } from '@/lib/funding/format';
 import { moneyLabel } from '@/lib/funding/insights';
@@ -51,9 +51,10 @@ async function loadMapData(): Promise<MapData> {
         ORDER BY COUNT(s.id) DESC
         LIMIT 60
       `,
-      // Every approved Indian startup in a mapped city, so a dot's number and its list always agree.
+      // Every approved Indian startup in a mapped city, so a dot's number and its list always agree. The list shows
+      // one line of tagline, so only the first 90 characters are sent (this data is embedded in the page).
       sql`
-        SELECT id, name, slug, tagline, "logoUrl", "headquartersCity", stage, "totalFundingInr"::text AS "totalFundingInr",
+        SELECT id, name, slug, LEFT(tagline, 90) AS tagline, "logoUrl", "headquartersCity", stage, "totalFundingInr"::text AS "totalFundingInr",
                "foundedYear", COALESCE(NULLIF(TRIM(category), ''), 'Other') AS sector
         FROM "Startup"
         WHERE ${hqInIndia('"Startup"')} AND "deletedAt" IS NULL AND "isApproved" = true
@@ -107,7 +108,7 @@ async function loadMapData(): Promise<MapData> {
         kind: 'startup' as const, text: `${s.name.trim()} joined the map in ${s.city.split(',')[0].trim()}`, href: `/startups/${s.slug}`, city: s.city.trim().toLowerCase(), at: s.at,
       })),
       ...recentRounds.map((r) => ({
-        kind: 'round' as const, text: `${r.startupName.trim()} raised ${moneyLabel(inrPaiseOf(r)).split(' (')[0]} (${roundLabel(r.roundType)}) in ${r.city}`,
+        kind: 'round' as const, text: `${r.startupName.trim()} raised ${roundMoneyLabel(r).split(' (')[0]} (${roundLabel(r.roundType)}) in ${r.city}`,
         href: r.slug ? `/funding/${r.slug}` : `/startups/${r.startupSlug}`, city: r.city!.toLowerCase(), at: r.announcedAt,
       })),
       ...(newJobs as { title: string; slug: string; city: string; companyName: string; at: string }[]).map((j) => ({

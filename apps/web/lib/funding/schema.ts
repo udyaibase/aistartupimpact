@@ -3,7 +3,7 @@
  * Dataset makes the tracker eligible for Google Dataset Search; ItemList links the rounds' own pages; FAQPage
  * is built from the same FAQ text the page shows.
  */
-import { inrPaiseOf, moneyLabel, type Faq, type FundingRoundRow } from '@/lib/funding/insights';
+import { inrPaiseOf, moneyLabel, type Faq, type FundingRoundRow, roundMoneyLabel } from '@/lib/funding/insights';
 import { roundLabel } from '@/lib/funding/format';
 
 const SITE = 'https://udyaibase.com';
@@ -38,7 +38,7 @@ export function roundsItemListSchema(name: string, url: string, rounds: FundingR
       '@type': 'ListItem',
       position: i + 1,
       url: r.slug ? `${SITE}/funding/${r.slug}` : `${SITE}/startups/${r.startupSlug}`,
-      name: `${r.startupName.trim()} ${roundLabel(r.roundType)} — ${moneyLabel(inrPaiseOf(r))}`,
+      name: `${r.startupName.trim()} ${roundLabel(r.roundType)} — ${roundMoneyLabel(r)}`,
     })),
   };
 }

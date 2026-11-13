@@ -278,7 +278,7 @@ export default function ClaimStartupClient({ startup, startupId }: ClaimStartupC
 
               {/* Visual Example */}
               <div className="mt-6 p-4 bg-white dark:bg-gray-700 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
-                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">📋 Quick Summary:</p>
+                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">Quick summary:</p>
                 <div className="space-y-1 text-xs font-mono">
                   <div className="flex gap-2">
                     <span className="text-gray-500 dark:text-gray-400 w-20">Type:</span>

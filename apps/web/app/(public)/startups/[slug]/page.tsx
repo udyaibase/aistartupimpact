@@ -28,6 +28,7 @@ import TrackView from '@/components/TrackView';
 import { SignedIn, SignedOut } from '@/components/auth/SignedIn';
 import { fitTitle, metaSnippet } from '@/lib/seo-text';
 import { roundLabel } from '@/lib/funding/format';
+import { MilestoneIcon } from '@/components/milestones/MilestoneIcon';
 
 export const revalidate = 3600;
 
@@ -823,11 +824,10 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
                 <div className="absolute left-[19px] top-0 bottom-0 w-px bg-gray-200 dark:bg-gray-700" />
                 <div className="space-y-4">
                   {startup.startupMilestones.map((m: any) => {
-                    const icons: Record<string, string> = { FUNDING: '💰', LAUNCH: '🚀', PARTNERSHIP: '🤝', ACQUISITION: '🏢', AWARD: '🏆', HIRING: '👥', REVENUE: '📈', USER_MILESTONE: '🎯' };
                     return (
                       <div key={m.id} className="flex items-start gap-3 relative">
                         <div className="w-10 h-10 rounded-full bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 flex items-center justify-center text-lg shrink-0 z-[1]">
-                          {icons[m.type] || '📌'}
+                          <MilestoneIcon type={m.type} className="w-[18px] h-[18px]" />
                         </div>
                         <div className="pt-1.5">
                           <h3 className="font-sora font-bold text-xs text-navy dark:text-white flex items-center gap-1.5">

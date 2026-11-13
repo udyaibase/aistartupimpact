@@ -3,7 +3,7 @@
  * Pure functions over the round list (no database access), so every page computes the same numbers and the
  * logic is unit-tested. Amounts are stored in the smallest unit: amountInr in paise, amountUsd in cents.
  */
-import { inrLabel, roundLabel, usdLabel } from '@/lib/funding/format';
+import { inrLabel, roundDate, roundLabel, usdLabel } from '@/lib/funding/format';
 
 export const INR_PER_USD = 84;
 const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'] as const;
@@ -44,6 +44,17 @@ export function usdCentsOf(r: Pick<FundingRoundRow, 'amountInr' | 'amountUsd'>):
   const usd = Number(r.amountUsd ?? 0);
   if (usd > 0) return usd;
   return Math.round(Number(r.amountInr ?? 0) / INR_PER_USD);
+}
+
+/**
+ * One round's money, "₹5,724 Cr ($600M)": both figures as recorded on the round (each converted only when the other
+ * is missing). Use this for a single round; moneyLabel converts a rupee total at INR_PER_USD, which can disagree
+ * with the dollar amount actually announced.
+ */
+export function roundMoneyLabel(r: Pick<FundingRoundRow, 'amountInr' | 'amountUsd'>): string {
+  const inr = inrLabel(inrPaiseOf(r));
+  const usd = usdLabel(usdCentsOf(r));
+  return inr ? (usd ? `${inr} (${usd})` : inr) : usd ?? 'undisclosed';
 }
 
 /** "₹66,297 Cr ($7.9B)" style money for a paise total. */
@@ -176,7 +187,7 @@ const pct = (now: number, before: number) => (before > 0 ? Math.round(((now - be
 // ── Text ─────────────────────────────────────────────────────────────────────
 
 const list = (items: string[]) => (items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
-const longDate = (iso: string) => new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' });
+const longDate = (iso: string) => roundDate(iso)?.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }) ?? 'an unknown date';
 
 /** A short written overview from live numbers (crawlable body text, refreshed with the page). */
 export function summaryText(s: FundingSummary, scope: Scope): string {
@@ -185,9 +196,9 @@ export function summaryText(s: FundingSummary, scope: Scope): string {
   parts.push(`Udyaibase tracks ${plural(s.deals, 'funding round')} raised by ${where}, worth ${moneyLabel(s.paise)} in total.`);
   if (s.ytd.deals > 0) {
     const change = pct(s.ytd.paise, s.lastYearSamePeriod.paise);
-    parts.push(`In ${s.year} so far, ${plural(s.ytd.deals, 'round')} ${s.ytd.deals === 1 ? 'has' : 'have'} raised ${moneyLabel(s.ytd.paise)}${change != null ? ` (${change >= 0 ? 'up' : 'down'} ${Math.abs(change)}% on the same period last year)` : ''}.`);
+    parts.push(`In ${s.year} so far, ${plural(s.ytd.deals, 'round')} ${s.ytd.deals === 1 ? 'has' : 'have'} raised ${moneyLabel(s.ytd.paise)}${change != null ? ` (${change === 0 ? 'in line with' : `${change > 0 ? 'up' : 'down'} ${Math.abs(change)}% on`} the same period last year)` : ''}.`);
   }
-  if (s.largest) parts.push(`The largest round on record is ${s.largest.startupName.trim()}'s ${moneyLabel(inrPaiseOf(s.largest))} ${roundLabel(s.largest.roundType)} (${longDate(s.largest.announcedAt)}).`);
+  if (s.largest) parts.push(`The largest round on record is ${s.largest.startupName.trim()}'s ${roundMoneyLabel(s.largest)} ${roundLabel(s.largest.roundType)} (${longDate(s.largest.announcedAt)}).`);
   if (s.topCities.length) parts.push(`${list(s.topCities.slice(0, 3).map((c) => c.name))} lead by number of deals.`);
   if (s.topInvestors.length) parts.push(`The most active investors are ${list(s.topInvestors.slice(0, 3).map((i) => `${i.name} (${i.deals} deals)`))}.`);
   return parts.join(' ');
@@ -209,7 +220,7 @@ export function fundingFaq(s: FundingSummary, scope: Scope, updatedOn: string): 
   ];
   if (s.largest) faq.push({
     q: `Which AI startup raised the biggest funding round ${where}?`,
-    a: `${s.largest.startupName.trim()} raised the largest round tracked: ${moneyLabel(inrPaiseOf(s.largest))} in a ${roundLabel(s.largest.roundType)} round announced on ${longDate(s.largest.announcedAt)}.`,
+    a: `${s.largest.startupName.trim()} raised the largest round tracked: ${roundMoneyLabel(s.largest)} in a ${roundLabel(s.largest.roundType)} round announced on ${longDate(s.largest.announcedAt)}.`,
   });
   if (s.topInvestors.length) faq.push({
     q: `Who are the most active investors in ${who}?`,

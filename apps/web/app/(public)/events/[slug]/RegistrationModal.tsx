@@ -146,7 +146,7 @@ export default function RegistrationModal({ event, customQuestions, ticketTiers,
               </ul>
             </div>
             <div className="flex gap-2">
-              <a href={`/api/events/calendar?slug=${event.slug}`} download className="flex-1 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-jakarta font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 text-center transition-colors">📅 Download .ics</a>
+              <a href={`/api/events/calendar?slug=${event.slug}`} download className="flex-1 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-jakarta font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 text-center transition-colors inline-flex items-center justify-center gap-1.5"><Calendar className="w-4 h-4" aria-hidden /> Download .ics</a>
               <a href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(event.title)}&dates=${new Date(event.startAt).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "")}/${new Date(event.endAt).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "")}&ctz=${event.timezone}`} target="_blank" rel="noopener noreferrer" className="flex-1 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-jakarta font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 text-center transition-colors">Google Calendar</a>
             </div>
             <button onClick={onClose} className="w-full py-3 bg-brand hover:bg-brand-600 text-white font-bold font-jakarta text-sm rounded-xl transition-colors">Done</button>

@@ -7,7 +7,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 
 import { standardizeCityName } from '@udyaibase/utils/src/cities';
 import FundingDownloads from './FundingDownloads';
-import { roundLabel } from '@/lib/funding/format';
+import { roundDate, roundLabel } from '@/lib/funding/format';
 
 interface FundingRound {
   id: string;
@@ -724,7 +724,7 @@ export default function FundingDashboard({ data: allRounds }: { data: FundingRou
                       </span>
                     </td>
                     <td className="px-6 py-4 hidden md:table-cell text-xs text-gray-500 whitespace-nowrap">
-                      {new Date(row.announcedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {roundDate(row.announcedAt)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) ?? '—'}
                     </td>
                   </tr>
                 );

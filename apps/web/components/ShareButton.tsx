@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
-import { Share2, Check, X, Copy, ExternalLink } from 'lucide-react';
+import { Share2, Check, X, Copy, ExternalLink, MessageCircle, Send } from 'lucide-react';
 
 interface ShareButtonProps {
   title: string;
@@ -113,7 +113,7 @@ export default function ShareButton({ title, text, url, iconOnly = false, size =
                   <span className="text-xs text-gray-500 font-jakarta">LinkedIn</span>
                 </button>
                 <button onClick={shareWhatsApp} className="flex flex-col items-center gap-1 p-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                  <div className="w-10 h-10 rounded-full bg-[#25D366] flex items-center justify-center"><span className="text-white text-lg">💬</span></div>
+                  <div className="w-10 h-10 rounded-full bg-[#25D366] flex items-center justify-center"><MessageCircle className="w-5 h-5 text-white" aria-hidden /></div>
                   <span className="text-xs text-gray-500 font-jakarta">WhatsApp</span>
                 </button>
                 <button onClick={shareFacebook} className="flex flex-col items-center gap-1 p-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
@@ -121,7 +121,7 @@ export default function ShareButton({ title, text, url, iconOnly = false, size =
                   <span className="text-xs text-gray-500 font-jakarta">Facebook</span>
                 </button>
                 <button onClick={shareTelegram} className="flex flex-col items-center gap-1 p-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                  <div className="w-10 h-10 rounded-full bg-[#0088cc] flex items-center justify-center"><span className="text-white text-lg">✈</span></div>
+                  <div className="w-10 h-10 rounded-full bg-[#0088cc] flex items-center justify-center"><Send className="w-[18px] h-[18px] text-white" aria-hidden /></div>
                   <span className="text-xs text-gray-500 font-jakarta">Telegram</span>
                 </button>
               </div>
