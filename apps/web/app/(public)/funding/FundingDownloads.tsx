@@ -179,6 +179,7 @@ function MultiPick({ label, options, value, onChange }: { label: string; options
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 /** This browser's last invoice details for funding data (prefill only). */
+/** Old key: invoice details used to be saved here. Only read to delete it. */
 const BILL_TO_KEY = 'udyaibase:funding-bill-to';
 
 export default function FundingDownloads() {
@@ -204,20 +205,8 @@ export default function FundingDownloads() {
   const [addressLine1, setAddressLine1] = useState('');
   const [city, setCity] = useState('');
   const [pin, setPin] = useState('');
-  // Repeat buyers: invoice details are remembered in this browser only (a convenience; never required).
-  useEffect(() => {
-    try {
-      const b = JSON.parse(localStorage.getItem(BILL_TO_KEY) ?? 'null');
-      if (!b || typeof b !== 'object') return;
-      if (b.billingType === 'GST' || b.billingType === 'INDIVIDUAL') setBillingType(b.billingType);
-      if (typeof b.billingName === 'string') setBillingName(b.billingName);
-      if (typeof b.billingState === 'string') setBillingState(b.billingState);
-      if (typeof b.billingGstin === 'string') setGstin(b.billingGstin);
-      if (typeof b.billingAddressLine1 === 'string') setAddressLine1(b.billingAddressLine1);
-      if (typeof b.billingCity === 'string') setCity(b.billingCity);
-      if (typeof b.billingPostalCode === 'string') setPin(b.billingPostalCode);
-    } catch { /* storage blocked: start empty */ }
-  }, []);
+  // Invoice details are never stored in the browser (personal data). Remove copies an earlier version saved.
+  useEffect(() => { try { localStorage.removeItem(BILL_TO_KEY); } catch { /* storage blocked */ } }, []);
   const gstinValid = GSTIN_RE.test(gstin) && gstinChecksumValid(gstin) && !!GST_STATES[gstin.slice(0, 2)];
   const gstinHint = gstin.length < 15 ? 'Printed on your invoice so you can claim input tax credit.'
     : gstinValid ? `Registered in ${GST_STATES[gstin.slice(0, 2)]} · PAN ${panFromGstin(gstin)}`
@@ -284,7 +273,6 @@ export default function FundingDownloads() {
     const billing = billingType === 'GST'
       ? { billingType, billingName, billingGstin: gstin, billingAddressLine1: addressLine1, billingCity: city, billingPostalCode: pin }
       : { billingType, billingName, billingState };
-    try { localStorage.setItem(BILL_TO_KEY, JSON.stringify(billing)); } catch { /* storage blocked */ }
     const r = await post('/api/funding-data/checkout', { pass: verified.pass, consent, pack, filters, billing });
     if (r.status === 401) { setBusy(false); return passExpired(); }
     if (!r.ok) { setBusy(false); return setError(r.data.error || 'Couldn’t start the payment.'); }
