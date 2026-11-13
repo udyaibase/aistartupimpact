@@ -2,11 +2,6 @@ import { jsonLd } from "@/lib/json-ld";
 import { Metadata } from 'next';
 import {
   Flag,
-  MapPin,
-  Rocket,
-  Trophy,
-  IndianRupee,
-  Users,
   GraduationCap,
   FileText,
   Newspaper
@@ -26,14 +21,12 @@ import { RealIndiaMap } from '@/components/ClientOnly';
 
 export const revalidate = 300;
 
-interface StatItem {
-  id: string;
-  metricKey: string;
-  metricLabel: string;
-  metricValue: string;
-  metricChange: string | null;
-  metricIcon: string | null;
-  displayOrder?: number;
+/** The two live headline numbers shown at the top of the map (computed from the database, never typed in). */
+interface Headline {
+  startups: string;
+  startupsThisMonth: string | null;
+  funding: string;
+  fundingThisMonth: string | null;
 }
 
 interface DisbursementStat {
@@ -108,13 +101,13 @@ export const metadata: Metadata = {
 // Fetch all data server-side
 async function getIndiaAIData() {
   return loadIndiaAIData().catch(buildFallback({
-    stats: [] as StatItem[], mission: [] as MissionPillar[],
+    headline: null as Headline | null, mission: [] as MissionPillar[],
     missionDisbursement: [] as DisbursementStat[], recentFunding: [] as FundingRow[],
   }, 'india-ai'));
 }
 
 async function loadIndiaAIData() {
-  const [computedStartupCount, thisMonthStartups, totalFundingResult, thisMonthFundingResult, manualStats, mission, missionDisbursement, , recentFunding] = await Promise.all([
+  const [computedStartupCount, thisMonthStartups, totalFundingResult, thisMonthFundingResult, mission, missionDisbursement, , recentFunding] = await Promise.all([
     // Live computed: total startups
     sql`
       SELECT COUNT(*)::int as count
@@ -148,14 +141,6 @@ async function loadIndiaAIData() {
       WHERE ${hqInIndia('s')}
         AND s."deletedAt" IS NULL
         AND fr."announcedAt" >= date_trunc('month', NOW())
-    `,
-    // Manual stats (AI Engineers, Global Rank — can't be auto-computed)
-    sql`
-      SELECT id, "metricKey", "metricLabel", "metricValue", "metricChange", "metricIcon", source
-      FROM "IndiaAIStats"
-      WHERE "isActive" = true
-        AND "metricKey" IN ('ai_engineers', 'global_rank')
-      ORDER BY "displayOrder" ASC
     `,
     // IndiaAI Mission
     sql`
@@ -225,30 +210,15 @@ async function loadIndiaAIData() {
     return `₹${Math.round(lakhs)}L`;
   }
 
-  const stats = [
-    {
-      id: 'computed-startups',
-      metricKey: 'total_startups',
-      metricLabel: 'Active AI Startups',
-      metricValue: `${totalStartups.toLocaleString('en-IN')}+`,
-      metricChange: monthlyStartups > 0 ? `+${monthlyStartups} this month` : 'Updated live',
-      metricIcon: 'rocket',
-      displayOrder: 1,
-    },
-    {
-      id: 'computed-funding',
-      metricKey: 'total_funding',
-      metricLabel: 'Total Funding Tracked',
-      metricValue: `${formatFundingCr(totalFunding)}+`,
-      metricChange: monthlyFunding > 0 ? `+${formatFundingCr(monthlyFunding)} this month` : 'Updated live',
-      metricIcon: 'currency',
-      displayOrder: 2,
-    },
-    ...(manualStats as StatItem[]),
-  ];
+  const headline: Headline = {
+    startups: `${totalStartups.toLocaleString('en-IN')}+`,
+    startupsThisMonth: monthlyStartups > 0 ? `+${monthlyStartups.toLocaleString('en-IN')} this month` : null,
+    funding: `${formatFundingCr(totalFunding)}+`,
+    fundingThisMonth: monthlyFunding > 0 ? `+${formatFundingCr(monthlyFunding)} this month` : null,
+  };
 
   return {
-    stats,
+    headline,
     mission: mission as MissionPillar[],
     missionDisbursement: missionDisbursement as DisbursementStat[],
     recentFunding: recentFunding as FundingRow[],
@@ -269,22 +239,15 @@ function formatBudget(value: number | string | bigint): string {
   return `₹${crores.toLocaleString('en-IN', { maximumFractionDigits: 2 })} Cr`;
 }
 
-const iconMap: Record<string, typeof Rocket> = {
-  rocket: Rocket,
-  currency: IndianRupee,
-  users: Users,
-  trophy: Trophy,
-};
 
 export default async function IndiaAIPage() {
-  const [{ stats, mission, missionDisbursement, recentFunding }, mapData] = await Promise.all([
+  const [{ headline, mission, missionDisbursement, recentFunding }, mapData] = await Promise.all([
     getIndiaAIData(),
     getMapData(),
   ]);
 
-  // Extract computed startup count for dynamic subtitle
-  const startupStat = stats.find((s) => s.metricKey === 'total_startups');
-  const startupCount = startupStat?.metricValue || '3,000+';
+  // Live startup count for the subtitle and structured data.
+  const startupCount = headline?.startups ?? '3,000+';
 
   // Calculate mission totals — total budget from pillars, disbursement from official stat
   const totalBudget = mission.reduce((sum, item) => sum + Number(item.budgetAllocated), 0);
@@ -362,57 +325,24 @@ export default async function IndiaAIPage() {
         {/* ============================================
             SECTION 1: HERO WITH LIVE STATS
             ============================================ */}
-        <section aria-label="India AI live statistics" className="mb-8 sm:mb-12 lg:mb-16 text-center">
-          <div className="inline-flex items-center gap-2 badge-brand mb-2 sm:mb-3 text-xs sm:text-xs">
-            <Flag className="w-3 h-3" /> India AI Ecosystem — Live
-          </div>
+        <section aria-label="India AI" className="mb-5 sm:mb-6 text-center">
           <h1 className="font-sora font-extrabold text-lg sm:text-xl md:text-2xl lg:text-3xl text-navy dark:text-white max-w-4xl mx-auto px-2">
             India AI Startups — Live Ecosystem Map &amp; Tracker
           </h1>
           <p className="text-gray-600 dark:text-gray-300 font-jakarta text-xs sm:text-xs lg:text-sm mt-2 sm:mt-3 max-w-2xl mx-auto px-4 leading-relaxed">
-            Real-time intelligence on <strong>{startupCount} AI startups</strong>, funding, policy, and talent shaping India&apos;s AI future
+            Live map of <strong>{startupCount} AI startups</strong> across India. Filter by sector, stage and year, and compare funding, jobs and events by city.
           </p>
-
-          {/* Live Stats Counters */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mt-5 sm:mt-6 lg:mt-8">
-            {stats.map((stat) => {
-              const Icon = (stat.metricIcon && iconMap[stat.metricIcon]) || Rocket;
-              return (
-                <div key={stat.id} className="card p-3 sm:p-4 lg:p-5 text-center hover:shadow-lg transition-shadow">
-                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-brand/10 dark:bg-brand/20 flex items-center justify-center mx-auto mb-2">
-                    <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-brand" />
-                  </div>
-                  <div className="font-sora font-extrabold text-base sm:text-lg md:text-xl lg:text-2xl text-brand mb-0.5 sm:mb-1">
-                    {stat.metricValue}
-                  </div>
-                  <div className="text-xs sm:text-xs text-gray-500 dark:text-gray-400 font-jakarta mb-1">
-                    {stat.metricChange}
-                  </div>
-                  <div className="text-xs sm:text-xs text-gray-700 dark:text-gray-300 font-jakarta font-semibold leading-tight">
-                    {stat.metricLabel}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          {/* Newsletter CTA */}
-          <NewsletterCapture source="india-ai-hero" />
         </section>
 
         {/* ============================================
             SECTION 2: INTERACTIVE INDIA AI MAP
             ============================================ */}
         <section aria-label="Interactive India AI ecosystem map" className="mb-8 sm:mb-12 lg:mb-16">
-          <h2 className="section-title justify-center mb-2 sm:mb-3 text-xl sm:text-2xl">
-            <MapPin className="w-5 h-5 sm:w-6 sm:h-6" />
-            Live India AI Ecosystem Map
-          </h2>
-          <p className="text-center text-gray-600 dark:text-gray-300 mb-6 sm:mb-8 max-w-2xl mx-auto text-sm sm:text-base px-4 leading-relaxed">
-            Interactive map showing <strong>AI startups across India</strong> — filter by sector, stage, and year
-          </p>
+          {/* The page title above already introduces the map; this heading keeps the outline for screen readers. */}
+          <h2 className="sr-only">Live India AI ecosystem map</h2>
 
           {/* Interactive Map Component */}
-          <RealIndiaMap data={mapData} />
+          <RealIndiaMap data={mapData} headline={headline} />
 
           {topCityLinks.length > 0 && (
             <nav aria-label="Top AI cities in India" className="mt-6 sm:mt-8">

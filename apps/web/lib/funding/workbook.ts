@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { INR_PER_USD, stageLabel, type DataRound, type SelectedStartup } from '@/lib/funding/dataset';
+import { datasetUsdInrToday, stageLabel, type DataRound, type SelectedStartup } from '@/lib/funding/dataset';
 import { PACKS, PERIOD_LABELS, periodRange, type FundingFilters, type PackKey } from '@/lib/funding/packs';
 
 /**
@@ -101,7 +101,7 @@ export async function buildFundingWorkbook(opts: {
     ...(full ? [{ header: 'All investors', width: 50 }, { header: `Valuation ${curLabel}`, width: 16, fmt: 'money' as const }, { header: 'Source', width: 40, link: true }] : []),
   ], rounds.map(({ s, r }) => [
     r.announcedAt, s.name, r.roundType, amount(r), r.leadInvestors.join(', ') || null, s.sector, s.city,
-    ...(full ? [r.allInvestors.join(', ') || null, r.valuationInr ? (cur === 'INR' ? r.valuationInr : Math.round(r.valuationInr / INR_PER_USD)) : null, r.sourceUrl] : []),
+    ...(full ? [r.allInvestors.join(', ') || null, r.valuationInr ? (cur === 'INR' ? r.valuationInr : Math.round(r.valuationInr / r.usdInr)) : null, r.sourceUrl] : []),
   ]), cur, footer);
 
   const sheets = new Set(full ? ['summary', 'sector', 'stage', 'city', 'investors', 'quarterly'] : f.sheets);
@@ -192,7 +192,7 @@ export async function buildFundingWorkbook(opts: {
     scope,
     '',
     'Sources: public announcements, press coverage and founder submissions on Udyaibase. Undisclosed amounts are left blank.',
-    `Currency: ${cur === 'INR' ? 'Indian rupees' : 'US dollars'}. Rounds reported only in the other currency are converted at ₹${INR_PER_USD} per US$1.`,
+    `Currency: ${cur === 'INR' ? 'Indian rupees' : 'US dollars'}. A round reported in one currency is converted at the exchange rate on its announcement date (European Central Bank reference rates)${datasetUsdInrToday() ? `; startup totals without dated rounds at today's rate, ₹${datasetUsdInrToday()!.toFixed(2)} per US$1` : ''}.`,
     '',
     `Licence: for the use of ${opts.email} and their organisation. Sharing, reselling or publishing the dataset (in full or in substantial part) is not permitted. Quoting figures with credit to Udyaibase is welcome.`,
     `Order ${opts.orderId}. Questions or corrections: support@udyaibase.com`,

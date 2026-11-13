@@ -5,6 +5,7 @@ import { writeLimited } from '@/lib/employer/write-limit';
 import { can, forbidden } from '@/lib/employer/permissions';
 import { refreshSections } from '@/lib/revalidate';
 import { checkActionCode } from '@/lib/employer/account-action';
+import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,6 +51,7 @@ export async function POST(request: NextRequest) {
     await clearEmployerSession();
 
     refreshSections(['jobs', 'startups', 'home']);
+    await logEmployerActivity(session.id, 'account_deactivated', { actor: employerActor(session), request });
     return NextResponse.json({ success: true, message: 'Account deactivated' });
   } catch (error) {
     if (error instanceof Error && error.message === 'EMPLOYER_AUTH_REQUIRED') {

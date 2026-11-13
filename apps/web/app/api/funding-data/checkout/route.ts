@@ -10,9 +10,15 @@ import { CONSENT_TEXT, isPackKey, packOptions, PACKS, parseFilters, splitInclusi
 
 export const dynamic = 'force-dynamic';
 
-type Billing = { billingType: 'INDIVIDUAL' | 'GST'; billingName: string; billingState: string; billingGstin: string | null };
+type Billing =
+  | { billingType: 'INDIVIDUAL'; billingName: string; billingState: string; billingGstin: null }
+  | { billingType: 'GST'; billingName: string; billingState: string; billingGstin: string; billingAddressLine1: string; billingCity: string; billingPostalCode: string };
 
-/** Bill-to for the invoice: a name and state (place of supply) for everyone, plus a valid GSTIN for businesses. */
+/**
+ * Bill-to for the invoice. Individuals: name and state (place of supply); every pack is far below the ₹50,000 at
+ * which a B2C invoice must show the buyer's address. Businesses: a valid GSTIN plus the registered address, which a
+ * B2B tax invoice must show (the state comes from the GSTIN). Keys match the billing-profile fields the invoice reads.
+ */
 function parseBilling(raw: unknown): { ok: true; data: Billing } | { ok: false; error: string } {
   const b = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().replace(/\s+/g, ' ').slice(0, max) : '');
@@ -21,7 +27,13 @@ function parseBilling(raw: unknown): { ok: true; data: Billing } | { ok: false; 
   if (b.billingType === 'GST') {
     const gstin = str(b.billingGstin, 15).toUpperCase().replace(/\s/g, '');
     if (!GSTIN_RE.test(gstin) || !gstinChecksumValid(gstin) || !GST_STATES[gstin.slice(0, 2)]) return { ok: false, error: 'That GSTIN isn’t valid. Check it for a typo, or buy as an individual.' };
-    return { ok: true, data: { billingType: 'GST', billingName: name, billingState: gstin.slice(0, 2), billingGstin: gstin } };
+    const line1 = str(b.billingAddressLine1, 200);
+    if (line1.length < 3) return { ok: false, error: 'Enter the registered address for the GST invoice.' };
+    const city = str(b.billingCity, 80);
+    if (city.length < 2) return { ok: false, error: 'Enter the city.' };
+    const pin = str(b.billingPostalCode, 6);
+    if (!/^[1-9][0-9]{5}$/.test(pin)) return { ok: false, error: 'Enter a 6-digit PIN code.' };
+    return { ok: true, data: { billingType: 'GST', billingName: name, billingState: gstin.slice(0, 2), billingGstin: gstin, billingAddressLine1: line1, billingCity: city, billingPostalCode: pin } };
   }
   const state = str(b.billingState, 2);
   if (!GST_STATES[state]) return { ok: false, error: 'Choose your state.' };

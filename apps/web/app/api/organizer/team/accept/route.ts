@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from "@/lib/rate-limit";
+import { logOrganizerActivity } from '@/lib/workspace-activity';
+import { maskEmail } from '@/lib/mask';
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +69,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    await logOrganizerActivity(member.organizerId, 'team_invite_accepted', { actor: { email: member.email }, request, metadata: { member: maskEmail(member.email) } });
     return NextResponse.json({ success: true, message: "Welcome! You can now log in." });
   } catch (err) {
     console.error("[organizer/team/accept]", err);

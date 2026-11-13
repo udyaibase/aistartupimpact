@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from 'react-simple-maps';
-import { MapPin, Filter, X, Building2, Tag, DollarSign, Calendar, Info, Plus, Minus, RotateCcw, Briefcase, Trophy, Play, Pause, Search, Maximize2, Minimize2, Map as MapIcon, List, Radio, Rocket, TrendingUp } from 'lucide-react';
+import { MapPin, Filter, X, Building2, Tag, DollarSign, Calendar, Info, Plus, Minus, RotateCcw, Briefcase, Trophy, Play, Pause, Search, Maximize2, Minimize2, Map as MapIcon, List, Radio, Rocket, TrendingUp, IndianRupee } from 'lucide-react';
 import indiaStates from './india-states.geo.json';
 import Image from 'next/image';
 import {
@@ -13,6 +13,8 @@ import {
 
 interface RealIndiaMapProps {
   data: MapData;
+  /** All-India live totals shown above the map (from the page; null when unavailable). */
+  headline?: { startups: string; startupsThisMonth: string | null; funding: string; fundingThisMonth: string | null } | null;
 }
 
 // State outlines, simplified for display and bundled with this component (see india-states.geo.json).
@@ -42,7 +44,7 @@ const STATE_BY_SLUG = new Map(STATE_FEATURES.map((f) => [stateSlug(f.properties.
 
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-export default function RealIndiaMap({ data: rawData }: RealIndiaMapProps) {
+export default function RealIndiaMap({ data: rawData, headline = null }: RealIndiaMapProps) {
   // Only cities inside the drawn states (abroad or mis-geocoded cities would be stray dots).
   const data = useMemo(() => ({ ...rawData, cities: rawData.cities.filter((c) => c.state && MAP_STATES.has(normalizeStateName(c.state))) }), [rawData]);
   const [metric, setMetric] = useState<Metric>('startups');
@@ -60,6 +62,8 @@ export default function RealIndiaMap({ data: rawData }: RealIndiaMapProps) {
   const [canHover, setCanHover] = useState(false);
   useEffect(() => { setCanHover(window.matchMedia?.('(hover: hover) and (pointer: fine)').matches ?? false); }, []);
   const anim = useRef<number | null>(null);
+  // Map cursor: an open hand over the map (it can be dragged), a closed hand while dragging, a pointer on city dots.
+  const [dragging, setDragging] = useState(false);
 
   // Time-lapse: null = today; a year shows startups founded and funding raised up to then.
   const nowYear = new Date().getFullYear();
@@ -278,7 +282,10 @@ export default function RealIndiaMap({ data: rawData }: RealIndiaMapProps) {
     .map((p) => ({ p, value: metricValue(p.metrics, metric) }))
     .filter((x) => x.value > 0).sort((a, b) => b.value - a.value).slice(0, 6), [rows, metric]);
 
-  const metricHelp = metric === 'jobs' ? 'Open on-site and hybrid jobs' : metric === 'events' ? 'Upcoming in-person events' : metric === 'funding' ? 'Total funding raised by startups headquartered there' : 'AI startups headquartered there';
+  // Desktop: the sidebar is exactly as tall as the map column (the map sets the row height) and scrolls its own
+  // content, so the two end together. Full screen and mobile keep the normal flow.
+  const sideCard = fullscreen ? 'sticky top-24 relative' : 'relative lg:absolute lg:inset-0 lg:overflow-y-auto';
+    const metricHelp = metric === 'jobs' ? 'Open on-site and hybrid jobs' : metric === 'events' ? 'Upcoming in-person events' : metric === 'funding' ? 'Total funding raised by startups headquartered there' : 'AI startups headquartered there';
 
   return (
     <div className="relative">
@@ -396,6 +403,24 @@ export default function RealIndiaMap({ data: rawData }: RealIndiaMapProps) {
         role={fullscreen ? 'dialog' : undefined} aria-modal={fullscreen || undefined} aria-label={fullscreen ? 'India AI map, full screen' : undefined}>
         {/* Map (or the accessible list of the same data) */}
         <div className={fullscreen ? 'flex-1 min-h-0 min-w-0' : 'lg:col-span-2'}>
+          {headline && !fullscreen && (
+            <dl className="mb-3 grid grid-cols-2 divide-x divide-gray-200 dark:divide-gray-800 rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+              {([
+                { icon: Rocket, value: headline.startups, label: 'AI startups in India', change: headline.startupsThisMonth },
+                { icon: IndianRupee, value: headline.funding, label: 'Funding tracked', change: headline.fundingThisMonth },
+              ]).map(({ icon: Icon, value, label, change }) => (
+                <div key={label} className="flex items-center gap-2.5 px-3 sm:px-4 py-2.5 min-w-0">
+                  <span className="hidden sm:flex w-8 h-8 rounded-[10px] bg-brand/10 dark:bg-brand/20 items-center justify-center shrink-0" aria-hidden><Icon className="w-4 h-4 text-brand" /></span>
+                  <div className="min-w-0">
+                    <dd className="font-sora font-extrabold text-base sm:text-lg leading-tight text-navy dark:text-white tabular-nums">{value}</dd>
+                    <dt className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 leading-tight">
+                      {label}{change && <span className="ml-1 font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">{change}</span>}
+                    </dt>
+                  </div>
+                </div>
+              ))}
+            </dl>
+          )}
           {mode === 'list' && !fullscreen ? (
             <div className="card overflow-hidden">
               <div className="overflow-x-auto max-h-[640px]">
@@ -456,10 +481,15 @@ export default function RealIndiaMap({ data: rawData }: RealIndiaMapProps) {
               </button>
             </div>
 
-            <div ref={canvasRef} className={fullscreen ? 'relative flex-1 min-h-0 -mx-3 sm:-mx-4 -mt-3 sm:-mt-4 [&>svg]:absolute [&>svg]:inset-0 [&>svg]:w-full [&>svg]:h-full' : 'w-full aspect-square max-h-[600px] flex items-center justify-center'}>
+            <div ref={canvasRef} className={`${dragging ? 'cursor-grabbing [&_*]:!cursor-grabbing select-none' : 'cursor-grab'} ${fullscreen ? 'relative flex-1 min-h-0 -mx-3 sm:-mx-4 -mt-3 sm:-mt-4 [&>svg]:absolute [&>svg]:inset-0 [&>svg]:w-full [&>svg]:h-full' : 'w-full aspect-square max-h-[600px] flex items-center justify-center'}`}>
               <ComposableMap projection="geoMercator" projectionConfig={{ scale: 1050, center: [82.8, 22.5] }} width={canvas.w} height={canvas.h} className={fullscreen ? '' : 'w-full h-auto'}>
                 <ZoomableGroup zoom={position.zoom} center={position.coordinates}
-                  onMoveEnd={(p: { coordinates: [number, number]; zoom: number }) => { if (!anim.current) setPosition(p); }}
+                  onMoveStart={(_p: unknown, e: { sourceEvent?: Event | null }) => {
+                    // A press starts a drag; the mouse wheel or a button zoom doesn't.
+                    const t = e?.sourceEvent?.type;
+                    if (t === 'mousedown' || t === 'pointerdown' || t === 'touchstart') setDragging(true);
+                  }}
+                  onMoveEnd={(p: { coordinates: [number, number]; zoom: number }) => { setDragging(false); if (!anim.current) setPosition(p); }}
                   minZoom={MIN_ZOOM} maxZoom={MAX_ZOOM}>
                   <Geographies geography={INDIA_GEO_JSON}>
                     {({ geographies }) => geographies.map((geo, i) => {
@@ -468,15 +498,16 @@ export default function RealIndiaMap({ data: rawData }: RealIndiaMapProps) {
                       const selected = !!selectedState && normalizeStateName(selectedState) === k;
                       const value = metricValue(stateTotals.get(k) ?? { startups: 0, fundingPaise: 0, jobs: 0, events: 0 }, metric);
                       const fill = heatColor(value, bins);
+                      // Borders keep the same on-screen width at every zoom (non-scaling stroke), so a selected state stays crisp.
                       return (
                         <Geography key={geo.rsmKey || `geo-${i}`} geography={geo}
                           onClick={() => selectState(stateName)}
                           onMouseEnter={() => setHover({ kind: 'state', name: stateName })}
                           onMouseLeave={() => setHover((h) => (h?.kind === 'state' ? null : h))}
                           style={{
-                            default: { fill, stroke: selected ? '#e0f2fe' : 'rgba(148,197,253,0.35)', strokeWidth: selected ? 2 : 0.6, outline: 'none', cursor: 'pointer', transition: 'fill 300ms ease' },
-                            hover: { fill, stroke: '#e0f2fe', strokeWidth: 1.6, outline: 'none', cursor: 'pointer', filter: 'brightness(1.25)' },
-                            pressed: { fill, stroke: '#ffffff', strokeWidth: 2, outline: 'none' },
+                            default: { fill, stroke: selected ? '#e0f2fe' : 'rgba(148,197,253,0.35)', strokeWidth: selected ? 1.75 : 0.75, vectorEffect: 'non-scaling-stroke', outline: 'none', cursor: 'grab', transition: 'fill 300ms ease' },
+                            hover: { fill, stroke: '#e0f2fe', strokeWidth: 1.5, vectorEffect: 'non-scaling-stroke', outline: 'none', cursor: 'grab', filter: 'brightness(1.25)' },
+                            pressed: { fill, stroke: '#ffffff', strokeWidth: 1.75, vectorEffect: 'non-scaling-stroke', outline: 'none', cursor: 'grabbing' },
                           }}
                         />
                       );
@@ -608,9 +639,9 @@ export default function RealIndiaMap({ data: rawData }: RealIndiaMapProps) {
           ? (selectedState || selectedCity
               ? 'fixed z-[410] inset-x-2 bottom-2 max-h-[45vh] overflow-y-auto rounded-lg shadow-2xl lg:static lg:inset-auto lg:z-auto lg:w-[360px] lg:shrink-0 lg:max-h-none lg:shadow-none lg:flex lg:flex-col [&_.sticky]:static lg:[&>.card]:flex-1'
               : 'hidden lg:flex lg:flex-col w-[340px] shrink-0 overflow-y-auto rounded-lg [&_.sticky]:static [&>.card]:flex-1')
-          : 'lg:col-span-1'}>
+          : 'lg:col-span-1 lg:relative'}>
           {(selectedState || selectedCity) ? (
-            <div className="card p-5 sm:p-6 sticky top-24 relative">
+            <div className={`card p-5 sm:p-6 ${sideCard}`}>
               <button onClick={clearSelection} aria-label="Close" className="absolute top-4 right-4 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
                 <X className="w-5 h-5" aria-hidden />
               </button>
@@ -673,14 +704,14 @@ export default function RealIndiaMap({ data: rawData }: RealIndiaMapProps) {
             </div>
           ) : (
             // Default: a national leaderboard for the current metric, so the panel is never empty.
-            <div className="card p-5 sm:p-6 sticky top-24">
+            <div className={`card p-5 sm:p-6 ${sideCard}`}>
               <div className="flex items-center gap-2 mb-1">
                 <Trophy className="w-5 h-5 text-brand" aria-hidden />
                 <h3 className="font-sora font-bold text-lg text-navy dark:text-white">India&apos;s AI leaderboard</h3>
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">{metricHelp}. Click any row or the map. <a href="/india-ai/top-cities" className="font-semibold text-brand hover:underline whitespace-nowrap">Full rankings →</a></p>
               <dl className="grid grid-cols-2 gap-2 mb-5">
-                {[['Startups', national.startups.toLocaleString('en-IN')], ['Raised', rupees(national.fundingPaise)], ['Open jobs', String(national.jobs)], ['Upcoming events', String(national.events)]].map(([k, v]) => (
+                {[['Open jobs', String(national.jobs)], ['Upcoming events', String(national.events)]].map(([k, v]) => (
                   <div key={k} className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-2.5">
                     <dt className="text-[11px] text-gray-500 dark:text-gray-400">{k}</dt>
                     <dd className="font-sora font-bold text-base text-navy dark:text-white">{v}</dd>

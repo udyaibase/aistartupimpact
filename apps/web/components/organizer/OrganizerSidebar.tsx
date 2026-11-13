@@ -1,10 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { CreditCard,
-  LayoutDashboard, CalendarDays, Plus, Users, BarChart3,
-  Settings, Send, QrCode, HelpCircle, CodeXml,
-} from 'lucide-react';
+import { CreditCard, LayoutDashboard, CalendarDays, Plus, Users, BarChart3, Settings, Send, QrCode, HelpCircle, CodeXml, History } from 'lucide-react';
 import CollapsibleSidebar from '@/components/ui/CollapsibleSidebar';
 import SidebarNav, { type NavItem } from '@/components/ui/SidebarNav';
 import { useSidebar } from '@/components/ui/SidebarContext';
@@ -27,6 +24,7 @@ const getNavItems = (eventCount?: number): NavItem[] => [
   { label: 'Team', href: '/organizer/team', icon: Users },
   { label: 'Plans & billing', href: '/organizer/billing', icon: CreditCard },
   { label: 'Settings', href: '/organizer/settings', icon: Settings },
+  { label: 'Activity log', href: '/organizer/activity', icon: History },
   { label: 'Help & support', href: '/organizer/support', icon: HelpCircle },
 ];
 

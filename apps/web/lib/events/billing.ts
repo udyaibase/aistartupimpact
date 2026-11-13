@@ -5,6 +5,7 @@ import { effectiveHostPlan, HOST_GRACE_DAYS, HOST_PLANS, hostCycleDays, hostPeri
 import { promoteWaitlist, promoteWaitlistsForOrganizer } from '@/lib/events/waitlist';
 import { emailInvoice } from '@/lib/billing/invoice';
 import { refundPayment } from '@/lib/billing/razorpay';
+import { logOrganizerActivity, paiseLabel } from '@/lib/workspace-activity';
 
 /** Upcoming = published and not yet ended. */
 export const upcomingWhere = (organizerId: string, now = new Date()) => ({
@@ -42,7 +43,7 @@ export async function hostPlanStatus(organizerId: string) {
  * Either way the registration limit rises, so waitlisted people move into the new spots afterwards.
  */
 export async function activateOrganizerPayment(orderId: string, paymentId: string): Promise<'activated' | 'already' | 'unknown'> {
-  let applied: { kind: string; organizerId: string; eventId: string | null; paymentId: string } | null = null;
+  let applied: { kind: string; organizerId: string; eventId: string | null; paymentId: string; cycle: string; totalPaise: number; by: string | null } | null = null;
   let boostVoid: { id: string; organizerId: string; totalPaise: number } | null = null;
   const result = await prisma.$transaction(async (tx) => {
     const pay = await tx.organizerPayment.findUnique({ where: { razorpayOrderId: orderId } });
@@ -78,7 +79,7 @@ export async function activateOrganizerPayment(orderId: string, paymentId: strin
         boostVoid = { id: pay.id, organizerId: pay.organizerId, totalPaise: pay.totalPaise };
       }
     }
-    applied = { kind: pay.kind, organizerId: pay.organizerId, eventId: pay.eventId, paymentId: pay.id };
+    applied = { kind: pay.kind, organizerId: pay.organizerId, eventId: pay.eventId, paymentId: pay.id, cycle: pay.cycle, totalPaise: pay.totalPaise, by: pay.paidByEmail };
     return 'activated' as const;
   });
 
@@ -87,9 +88,17 @@ export async function activateOrganizerPayment(orderId: string, paymentId: strin
     await refundVoidBoost(voided.id, paymentId, voided.totalPaise, voided.organizerId);
     return result;
   }
-  const done = applied as { kind: string; organizerId: string; eventId: string | null; paymentId: string } | null;
+  const done = applied as { kind: string; organizerId: string; eventId: string | null; paymentId: string; cycle: string; totalPaise: number; by: string | null } | null;
   if (result === 'activated' && done) {
     await emailInvoice('organizer', done.paymentId).catch((e) => console.error('[invoice] organizer', e));
+    // Recorded once, after the payment is committed (checkout callback or webhook, whichever is first).
+    const actor = done.by ? { email: done.by } : null;
+    if (done.kind === 'BOOST') {
+      const ev = done.eventId ? await prisma.event.findUnique({ where: { id: done.eventId }, select: { title: true } }).catch(() => null) : null;
+      await logOrganizerActivity(done.organizerId, 'boost_purchased', { actor, metadata: { event: ev?.title ?? '', amount: paiseLabel(done.totalPaise) } });
+    } else {
+      await logOrganizerActivity(done.organizerId, 'plan_purchased', { actor, metadata: { plan: `Pro plan${done.cycle === 'ANNUAL' ? ' (1 year)' : ' (30 days)'}`, amount: paiseLabel(done.totalPaise) } });
+    }
     // Outside the payment transaction: a slow email or a busy waitlist must never undo a payment.
     const fill = done.kind === 'BOOST' && done.eventId ? promoteWaitlist(done.eventId) : promoteWaitlistsForOrganizer(done.organizerId);
     await fill.catch((e) => console.error('promoteWaitlist after payment failed', e));

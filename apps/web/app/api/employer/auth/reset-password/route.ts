@@ -6,6 +6,7 @@ import { strictRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate
 import { hashResetToken } from '@/lib/employer/reset-token';
 import { sessionCutoff } from '@/lib/employer-auth';
 import { passwordSignInOpen } from '@/lib/employer/sign-in-policy';
+import { logEmployerActivity } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
@@ -65,6 +66,7 @@ export async function POST(request: NextRequest) {
       WHERE id = ${employer.id}
     `;
 
+    await logEmployerActivity(employer.id, 'password_reset', { actor: { name: employer.companyName, email: employer.email }, request });
     const response = NextResponse.json({ success: true });
     response.cookies.delete('employer_session');
     return response;

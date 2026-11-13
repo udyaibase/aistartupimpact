@@ -5,6 +5,7 @@ import { Check, Download, FileSpreadsheet, FileText, Loader2, Lock, Mail, Search
 import Modal from '@/components/ui/Modal';
 import { payWithRazorpay } from '@/lib/billing/checkout-client';
 import { GST_STATES } from '@/lib/billing/gst-states';
+import { GSTIN_RE, gstinChecksumValid, panFromGstin } from '@/lib/billing/details';
 import {
   DEFAULT_FILTERS, PACKS, PERIOD_LABELS, PERIODS, SHEET_LABELS, SHEETS, rupees, suggestedPack,
   type FundingFilters, type PackKey, type Period, type SheetKey,
@@ -177,6 +178,10 @@ function MultiPick({ label, options, value, onChange }: { label: string; options
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 
+/** This browser's last invoice details for funding data (prefill only). */
+/** Old key: invoice details used to be saved here. Only read to delete it. */
+const BILL_TO_KEY = 'udyaibase:funding-bill-to';
+
 export default function FundingDownloads() {
   const [mode, setMode] = useState<null | 'free' | 'paid'>(null);
   const [verified, setVerified] = useState<{ pass: string; email: string } | null>(null);
@@ -197,6 +202,15 @@ export default function FundingDownloads() {
   const [billingName, setBillingName] = useState('');
   const [billingState, setBillingState] = useState('');
   const [gstin, setGstin] = useState('');
+  const [addressLine1, setAddressLine1] = useState('');
+  const [city, setCity] = useState('');
+  const [pin, setPin] = useState('');
+  // Invoice details are never stored in the browser (personal data). Remove copies an earlier version saved.
+  useEffect(() => { try { localStorage.removeItem(BILL_TO_KEY); } catch { /* storage blocked */ } }, []);
+  const gstinValid = GSTIN_RE.test(gstin) && gstinChecksumValid(gstin) && !!GST_STATES[gstin.slice(0, 2)];
+  const gstinHint = gstin.length < 15 ? 'Printed on your invoice so you can claim input tax credit.'
+    : gstinValid ? `Registered in ${GST_STATES[gstin.slice(0, 2)]} · PAN ${panFromGstin(gstin)}`
+    : 'That GSTIN doesn’t look right. Check it for a typo.';
 
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
@@ -256,10 +270,10 @@ export default function FundingDownloads() {
   const pay = async () => {
     if (!verified || !pack) return;
     setBusy(true); setError('');
-    const r = await post('/api/funding-data/checkout', {
-      pass: verified.pass, consent, pack, filters,
-      billing: { billingType, billingName, billingState, billingGstin: gstin },
-    });
+    const billing = billingType === 'GST'
+      ? { billingType, billingName, billingGstin: gstin, billingAddressLine1: addressLine1, billingCity: city, billingPostalCode: pin }
+      : { billingType, billingName, billingState };
+    const r = await post('/api/funding-data/checkout', { pass: verified.pass, consent, pack, filters, billing });
     if (r.status === 401) { setBusy(false); return passExpired(); }
     if (!r.ok) { setBusy(false); return setError(r.data.error || 'Couldn’t start the payment.'); }
     const outcome = await payWithRazorpay(r.data, '/api/funding-data/verify');
@@ -442,7 +456,19 @@ export default function FundingDownloads() {
                   <input required value={billingName} onChange={(e) => setBillingName(e.target.value)} autoComplete={billingType === 'GST' ? 'organization' : 'name'}
                     placeholder={billingType === 'GST' ? 'Legal business name' : 'Full name'} aria-label="Name on invoice" className="input-field w-full text-base" />
                   {billingType === 'GST' ? (
-                    <input required value={gstin} onChange={(e) => setGstin(e.target.value.toUpperCase().replace(/\s/g, '').slice(0, 15))} placeholder="GSTIN, e.g. 29ABCDE1234F1Z5" aria-label="GSTIN" className="input-field w-full text-base uppercase" />
+                    <>
+                      <div>
+                        <input required value={gstin} onChange={(e) => setGstin(e.target.value.toUpperCase().replace(/\s/g, '').slice(0, 15))} placeholder="GSTIN, e.g. 29ABCDE1234F1Z5" aria-label="GSTIN"
+                          aria-invalid={gstin.length === 15 && !gstinValid} aria-describedby="fd-gstin-hint" autoComplete="off" spellCheck={false}
+                          className={`input-field w-full text-base uppercase font-mono tracking-wide ${gstin.length === 15 && !gstinValid ? 'border-red-500' : ''}`} />
+                        <p id="fd-gstin-hint" className={`mt-1 text-xs ${gstin.length === 15 && !gstinValid ? 'text-red-600 dark:text-red-400' : gstinValid ? 'text-green-700 dark:text-green-400' : 'text-gray-500'}`}>{gstinHint}</p>
+                      </div>
+                      <input required value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} maxLength={200} autoComplete="street-address" placeholder="Registered address (building, street, area)" aria-label="Registered address" className="input-field w-full text-base" />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input required value={city} onChange={(e) => setCity(e.target.value)} maxLength={80} autoComplete="address-level2" placeholder="City" aria-label="City" className="input-field w-full text-base" />
+                        <input required value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="postal-code" placeholder="PIN code" aria-label="PIN code" className="input-field w-full text-base" />
+                      </div>
+                    </>
                   ) : (
                     <select required value={billingState} onChange={(e) => setBillingState(e.target.value)} aria-label="State" className="input-field w-full text-base">
                       <option value="">Your state</option>
@@ -451,7 +477,7 @@ export default function FundingDownloads() {
                   )}
                   <Consent checked={consent} onChange={setConsent} />
                   {error && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-                  <button type="submit" disabled={!consent || busy || !selected} className="btn-brand w-full justify-center gap-2 disabled:opacity-60">
+                  <button type="submit" disabled={!consent || busy || !selected || (billingType === 'GST' && !gstinValid)} className="btn-brand w-full justify-center gap-2 disabled:opacity-60">
                     {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />} Pay {selected ? rupees(selected.totalPaise) : ''}
                   </button>
                   <p className="text-xs text-gray-500 text-center">Secure payment by Razorpay. For your own or internal use; please don’t share or resell the file.</p>

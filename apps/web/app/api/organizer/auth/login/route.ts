@@ -8,6 +8,7 @@ import { authRateLimit } from "@/lib/rate-limit";
 import { SignJWT } from "jose";
 import { accountLockoutHtml } from "@udyaibase/utils";
 import { sendEmailFireAndForget } from "@/lib/email/send";
+import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
 
 const CHALLENGE_SECRET = new TextEncoder().encode(process.env.ORGANIZER_JWT_SECRET || process.env.USER_JWT_SECRET!);
 
@@ -70,6 +71,7 @@ export async function POST(request: NextRequest) {
 
     const valid = await verifyPassword(password, organizer.passwordHash);
     if (!valid) {
+      await logOrganizerActivity(organizer.id, 'sign_in_failed', { actor: { name: organizer.name, email: organizer.email }, request, metadata: { reason: 'wrong_password' } });
       const newAttempts = (organizer.failedLoginAttempts || 0) + 1;
 
       if (newAttempts >= MAX_FAILED_ATTEMPTS) {
@@ -128,6 +130,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, requires2FA: true, challengeToken });
     }
 
+    await logOrganizerActivity(organizer.id, 'signed_in', { actor: { name: organizer.name, email: organizer.email }, request, metadata: { method: 'password' } });
     await createOrganizerSession(organizer.id);
 
     return NextResponse.json({

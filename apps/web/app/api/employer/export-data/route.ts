@@ -3,6 +3,7 @@ import { prisma } from '@udyaibase/database';
 import { requireEmployerAuth } from '@/lib/employer-auth';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
 import { can, forbidden } from '@/lib/employer/permissions';
+import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,6 +72,7 @@ export async function GET(request: NextRequest) {
       emailsReceived: emailLogs,
     };
 
+    await logEmployerActivity(session.id, 'data_exported', { actor: employerActor(session), request });
     return new NextResponse(JSON.stringify(exportData, null, 2), {
       status: 200,
       headers: {

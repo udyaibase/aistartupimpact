@@ -31,7 +31,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const title = `AI Startup Funding India ${year} — Live Tracker, Deals & Trends`;
   const deals = india.length >= 100 ? `${Math.floor(india.length / 10) * 10}+` : `${india.length}`;
   const description = india.length
-    ? `Track ${deals} Indian AI startup funding rounds live — ${moneyLabel(summary.paise).split(' (')[0]} raised, top investors, city and sector trends. Updated daily.`
+    ? `Track ${deals} Indian AI startup funding rounds live — ${moneyLabel(summary.paise, summary.cents).split(' (')[0]} raised, top investors, city and sector trends. Updated daily.`
     : 'Live tracker of Indian AI startup funding rounds — deals, investors, city and sector trends. Updated daily.';
   return {
     title: { absolute: title },
@@ -54,7 +54,7 @@ export default async function FundingPage() {
   const schemas = [
     datasetSchema({
       name: `AI Startup Funding in India (${summary.year}) — Udyaibase Tracker`,
-      description: `Funding rounds raised by AI startups headquartered in India: ${summary.deals} rounds worth ${moneyLabel(summary.paise)}, with round type, amount, date, investors and city.`,
+      description: `Funding rounds raised by AI startups headquartered in India: ${summary.deals} rounds worth ${moneyLabel(summary.paise, summary.cents)}, with round type, amount, date, investors and city.`,
       url: PAGE_URL,
       dateModified: summary.latestDate,
       keywords: ['AI startup funding India', 'Indian AI startups', 'venture capital', 'AI funding rounds', 'AI investors India'],
@@ -77,12 +77,11 @@ export default async function FundingPage() {
             AI Startup Funding in India <span className="text-brand">— Live Tracker</span>
           </h1>
         </div>
-        {/* Written from live data so the page has real, current text (refreshed with the page). */}
-        <p className="text-gray-600 dark:text-gray-400 font-jakarta text-xs sm:text-base max-w-3xl mx-auto mt-2 sm:mt-4 px-1 sm:px-0 leading-relaxed">
-          {summaryText(summary, 'india')}
+        <p className="text-gray-600 dark:text-gray-400 font-jakarta text-xs sm:text-base max-w-2xl mx-auto mt-2 sm:mt-4 px-1 sm:px-0">
+          Every funding round raised by Indian AI startups, updated daily.
         </p>
-        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 font-jakarta">
-          Updated <time dateTime={(summary.latestDate ?? new Date().toISOString()).slice(0, 10)}>{updated}</time> · {all.length - india.length} more rounds from Indian-founded and global AI startups under <span className="font-semibold">Global</span>
+        <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400 font-jakarta">
+          Updated <time dateTime={(summary.latestDate ?? new Date().toISOString()).slice(0, 10)}>{updated}</time>
         </p>
 
         <div className="mt-3 sm:mt-8 flex flex-wrap justify-center gap-2 sm:gap-4">
@@ -109,7 +108,12 @@ export default async function FundingPage() {
           rounds={latest}
         />
         <FundingExplore cities={cities} months={months} investors={investors} />
-        <FundingFaq id="faq" title="VC funding for AI startups in India: FAQ" faq={faq} />
+        {/* Written from live data: plain, quotable sentences for search engines and AI answers. */}
+        <section aria-labelledby="in-numbers" className="card p-4 sm:p-6">
+          <h2 id="in-numbers" className="font-sora font-bold text-base sm:text-xl text-navy dark:text-white mb-2">Indian AI funding in numbers</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 font-jakarta leading-relaxed">{summaryText(summary, 'india')}</p>
+        </section>
+        <FundingFaq id="faq"title="VC funding for AI startups in India: FAQ" faq={faq} />
       </div>
     </div>
   );

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
 import { requirePermission } from "@/lib/organizer-auth/require-permission";
 import { canAssignRole, canManageMember } from "@/lib/organizer-auth/permissions";
+import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
+import { maskEmail } from '@/lib/mask';
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +35,9 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
       await prisma.eventTeamAssignment.createMany({ data: eventIds.map((eid: string) => ({ teamMemberId: params.id, eventId: eid })) });
     }
   }
+  if (role && role !== member.role) {
+    await logOrganizerActivity(session.organizerId, 'team_role_changed', { actor: organizerActor(session), request, metadata: { member: maskEmail(member.email), role: String(role) } });
+  }
 
   return NextResponse.json({ success: true });
 }
@@ -52,5 +57,6 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
   }
 
   await prisma.eventTeamMember.update({ where: { id: params.id }, data: { status: "REVOKED" } });
+  await logOrganizerActivity(session.organizerId, 'team_member_removed', { actor: organizerActor(session), request, metadata: { member: maskEmail(member.email) } });
   return NextResponse.json({ success: true });
 }

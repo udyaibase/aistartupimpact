@@ -2,6 +2,7 @@
 
 import { prisma } from '@udyaibase/database';
 import { checkLocation } from '@/lib/locations';
+import { latestUsdInr } from '@/lib/fx';
 
 export async function submitFreeToolAction(draft: any) {
   // The headquarters city from the standard list (with its country); anything else is left blank.
@@ -20,8 +21,8 @@ export async function submitFreeToolAction(draft: any) {
     // Parse pricing
     let startingPricePaise = null;
     if (draft.startingPrice && !isNaN(parseInt(draft.startingPrice))) {
-      // Convert USD to INR roughly (* 83), then to Paise (* 100)
-      startingPricePaise = parseInt(draft.startingPrice) * 83 * 100;
+      // Dollars → rupees at today's exchange rate, then to paise.
+      startingPricePaise = Math.round(parseInt(draft.startingPrice) * (await latestUsdInr()) * 100);
     }
 
     // Embed the extra data seamlessly into markdown format to ensure AI picks it up for scores

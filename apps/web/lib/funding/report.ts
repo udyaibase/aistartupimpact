@@ -8,11 +8,12 @@ import { PACK_KEYS, PACKS } from '@/lib/funding/packs';
  * Free "AI Startups Funding Snapshot", built on demand from the live funding tracker. A summary only: rounds from
  * the last SNAPSHOT_LAG_DAYS are left out (they're in the paid Excel datasets), lists stop at the top 5, and there
  * is no row-level data or investor list. The last page says what the paid datasets add.
- * Amounts in USD: rounds stored only in INR are converted at INR_PER_USD (stated in the report).
+ * Amounts in USD: each round's stored dollar amount (converted at its announcement-date rate when reported in INR).
  * Standard PDF fonts can't draw the rupee sign, so the report sticks to USD and ASCII.
  */
 
-const INR_PER_USD = 84;
+/** Only for a round stored without dollars (the database normally fills them at the announcement-date rate). */
+const FALLBACK_INR_PER_USD = 94;
 const TOKEN_DAYS = 7;
 export const SNAPSHOT_LAG_DAYS = 90;
 const TOP = 5;
@@ -23,7 +24,7 @@ interface Round {
   startupName: string; headquartersCity: string | null; startupCategory: string | null;
 }
 
-const usd = (r: Round) => (r.amountUsd ? r.amountUsd / 100 : r.amountInr ? r.amountInr / 100 / INR_PER_USD : 0);
+const usd = (r: Round) => (r.amountUsd ? r.amountUsd / 100 : r.amountInr ? r.amountInr / 100 / FALLBACK_INR_PER_USD : 0);
 const money = (n: number) => (n >= 1e9 ? `$${(n / 1e9).toFixed(2)}B` : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${Math.round(n / 1e3)}K` : n > 0 ? `$${Math.round(n)}` : '-');
 const label = (s: string | null) => (s ? s.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()) : 'Undisclosed');
 /** Keep text inside the WinAnsi set the standard fonts can encode. */
@@ -194,7 +195,7 @@ export async function buildFundingReportPdf(): Promise<Uint8Array> {
   w.text('Prices include GST. Buy at udyaibase.com/funding', { size: 11, color: MUTED, gap: 6 });
   w.heading('About this data');
   w.text('Rounds are collected from public announcements and founder submissions on Udyaibase.', { size: 9.5, color: MUTED });
-  if (s.convertedInr) w.text(`Rounds reported only in INR are converted at Rs ${INR_PER_USD} per USD.`, { size: 9.5, color: MUTED });
+  if (s.convertedInr) w.text(`Rounds reported in INR are converted to USD at the exchange rate on their announcement date.`, { size: 9.5, color: MUTED });
   w.text('Explore and filter the live data at udyaibase.com/funding.', { size: 9.5, color: MUTED });
   return doc.save();
 }

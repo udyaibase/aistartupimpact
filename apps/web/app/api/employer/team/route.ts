@@ -4,6 +4,8 @@ import { getEmployerSession, type EmployerRole } from '@/lib/employer-auth';
 import { can, forbidden } from '@/lib/employer/permissions';
 import { apiRateLimit, checkRateLimit } from '@/lib/rate-limit';
 import { cleanJobIds, inviteTeammate, listTeam } from '@/lib/employer/team';
+import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
+import { maskEmail } from '@/lib/mask';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,5 +46,6 @@ export async function POST(request: NextRequest) {
     email: String(b.email ?? ''), role, confirmOutsideDomain: b.confirmOutsideDomain === true, jobIds,
   });
   if (!r.ok) return NextResponse.json({ error: r.error, field: r.field, code: r.code, domain: r.domain }, { status: r.status });
+  await logEmployerActivity(session.id, 'team_member_invited', { actor: employerActor(session), request, metadata: { member: maskEmail(String(b.email ?? '')), role } });
   return NextResponse.json({ success: true, team: await listTeam(session.id) }, { status: 201 });
 }

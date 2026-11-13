@@ -184,7 +184,7 @@ export async function createFundingRoundDirectAction(data: {
       ) VALUES (
         gen_random_uuid(), ${startupId}, ${data.roundType},
         ${data.amountUsd ? parseInt(data.amountUsd) : null},
-        ${data.amountUsd ? BigInt(Math.round(parseInt(data.amountUsd) * 83)) : null},
+        ${null}, -- rupees: filled by the database at the announcement-date rate
         ${data.announcedAt}::timestamp,
         ${data.leadInvestors}, ${data.allInvestors || []},
         ${data.valuation ? parseInt(data.valuation) : null},

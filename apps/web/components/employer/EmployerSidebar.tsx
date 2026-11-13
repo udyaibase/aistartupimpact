@@ -2,9 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { UserCheck, CreditCard,
-  Home, Briefcase, Users, Globe, BarChart3, Building2, Settings, HelpCircle, Plus, BadgeCheck, AlertTriangle, UserPlus,
-} from 'lucide-react';
+import { UserCheck, CreditCard, Home, Briefcase, Users, Globe, BarChart3, Building2, Settings, HelpCircle, Plus, BadgeCheck, AlertTriangle, UserPlus, History } from 'lucide-react';
 import { can, WORKSPACE_WIDE_PAGES, type Permission } from '@/lib/employer/roles';
 import type { EmployerRole } from '@/lib/employer-auth';
 import CollapsibleSidebar from '@/components/ui/CollapsibleSidebar';
@@ -26,6 +24,7 @@ export function employerNav(newCandidates: number, role: EmployerRole = 'OWNER',
     { label: 'Team', href: '/employer/team', icon: UserPlus },
     { label: 'Plans & billing', href: '/employer/billing', icon: CreditCard, perm: 'account.manage' },
     { label: 'Settings', href: '/employer/settings', icon: Settings, perm: 'account.manage' },
+    { label: 'Activity log', href: '/employer/activity', icon: History, perm: 'account.manage' },
     { label: 'Help', href: '/employer/support', icon: HelpCircle },
   ];
   return items

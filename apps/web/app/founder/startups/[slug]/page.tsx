@@ -58,7 +58,7 @@ export default async function EditStartupPage(props: PageProps) {
   // Fetch funding rounds
   const fundingRounds = await sql`
     SELECT 
-      id, "roundType", "amountInr", "amountUsd",
+      id, "roundType", "amountInr", "amountUsd", to_jsonb("FundingRound") ->> 'fxDerived' AS "fxDerived",
       "announcedAt"::text AS "announcedAt",
       "leadInvestors", "allInvestors"
     FROM "FundingRound"

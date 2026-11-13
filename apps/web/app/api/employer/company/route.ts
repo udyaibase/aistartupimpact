@@ -5,6 +5,7 @@ import { can, forbidden } from '@/lib/employer/permissions';
 import { refreshPaths, refreshSections } from '@/lib/revalidate';
 import { checkLocation } from '@/lib/locations';
 import { writeLimited } from '@/lib/employer/write-limit';
+import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 export async function GET() {
@@ -75,6 +76,7 @@ export async function PUT(request: NextRequest) {
     `;
 
     refreshSections(['jobs']); // company name and logo show on every job and the company page
+    await logEmployerActivity(session.id, 'profile_updated', { actor: employerActor(session), request, metadata: { what: 'company profile' } });
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('[PUT /api/employer/company]', error);

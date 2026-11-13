@@ -34,7 +34,7 @@ function overview(d: NonNullable<Awaited<ReturnType<typeof loadInvestor>>>): str
   const s = summarize(d.rounds);
   const first = d.rounds[d.rounds.length - 1];
   const parts = [
-    `${d.name} has backed ${s.deals} Indian AI startup funding round${s.deals === 1 ? '' : 's'} tracked by Udyaibase, worth ${moneyLabel(s.paise)} in total${d.led ? `, leading ${d.led} of them` : ''}.`,
+    `${d.name} has backed ${s.deals} Indian AI startup funding round${s.deals === 1 ? '' : 's'} tracked by Udyaibase, worth ${moneyLabel(s.paise, s.cents)} in total${d.led ? `, leading ${d.led} of them` : ''}.`,
     `Its most recent deal was ${d.rounds[0].startupName.trim()} (${longDate(d.rounds[0].announcedAt)})${s.deals > 1 ? `; the earliest on record is ${first.startupName.trim()} (${longDate(first.announcedAt)})` : ''}.`,
   ];
   const sectors = bySector(d.rounds).filter((g) => g.name !== 'Other');

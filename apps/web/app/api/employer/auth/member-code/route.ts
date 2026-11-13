@@ -8,6 +8,7 @@ import { checkDomainCode } from '@/lib/startups/domain-otp';
 import { resendPendingInvites, sendMemberLoginCode } from '@/lib/employer/team';
 import { needsTwoFactor, signInMemberships, twoFactorChallenge } from '@/lib/employer/sign-in';
 import { ROLE_LABEL } from '@/lib/employer/roles';
+import { logEmployerActivity } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -91,6 +92,7 @@ export async function POST(request: NextRequest) {
       : { lastActiveAt: new Date() },
   });
   const e = chosen.Employer;
+  await logEmployerActivity(e.id, 'signed_in', { actor: { name: chosen.name ?? null, email: chosen.email }, request, metadata: { method: 'code' } });
   await setEmployerSession({ id: e.id, email: e.email, companyName: e.companyName, slug: e.slug, plan: e.plan, onboardingCompleted: true }, { id: chosen.id, email: chosen.email });
   return NextResponse.json({ success: true, redirect: chosen.role === 'INTERVIEWER' ? '/employer/applications' : '/employer/dashboard' });
 }

@@ -28,6 +28,7 @@ import TrackView from '@/components/TrackView';
 import ShareMenu from '@/components/shared/ShareMenu';
 import ReportButton from '@/components/ReportButton';
 import { fitTitle, metaSnippet } from '@/lib/seo-text';
+import { latestUsdInr } from '@/lib/fx';
 
 export const revalidate = 3600;
 
@@ -139,7 +140,7 @@ function getEmbedUrl(url: string): string {
 
 export default async function ToolDetailPage(props: { params: Promise<{ slug: string }> }) {
   const params = await props.params;
-  const tool = await getToolCached(params.slug) as any;
+  const [tool, usdInr] = await Promise.all([getToolCached(params.slug) as Promise<any>, latestUsdInr()]);
 
   if (!tool) {
     try {
@@ -625,7 +626,7 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
                 <div>
                   <p className="font-sora font-bold text-sm text-navy dark:text-white group-hover:text-brand transition-colors">{tool.startupName}</p>
                   {tool.totalFundingInr && Number(tool.totalFundingInr) > 0 && (() => {
-                    const usd = Number(tool.totalFundingInr) / 83;
+                    const usd = Number(tool.totalFundingInr) / 100 / usdInr; // paise → rupees → dollars at today's rate
                     const display = usd >= 1e9 ? `$${(usd / 1e9).toFixed(1)}B` : usd >= 1e6 ? `$${(usd / 1e6).toFixed(1)}M` : usd >= 1e3 ? `$${(usd / 1e3).toFixed(0)}K` : `$${Math.round(usd)}`;
                     return <p className="text-xs text-gray-400 font-jakarta">{display} raised</p>;
                   })()}

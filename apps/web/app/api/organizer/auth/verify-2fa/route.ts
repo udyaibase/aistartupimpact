@@ -4,6 +4,7 @@ import { prisma } from '@udyaibase/database';
 import { createOrganizerSession } from '@/lib/organizer-auth';
 import { isTwoFactorOn, verifyAccountCode } from '@/lib/auth/account-two-factor';
 import { checkRateLimit, getClientIdentifier, authRateLimit, twoFactorRateLimit } from '@/lib/rate-limit';
+import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,8 +56,10 @@ export async function POST(request: NextRequest) {
     const isValid = await verifyAccountCode(organizer.email, token, !!isBackupCode);
 
     if (!isValid) {
+      await logOrganizerActivity(organizer.id, 'sign_in_failed', { actor: { name: organizer.name, email: organizer.email }, request, metadata: { reason: 'wrong_2fa_code' } });
       return NextResponse.json({ success: false, error: 'Invalid verification code' }, { status: 401 });
     }
+    await logOrganizerActivity(organizer.id, 'signed_in', { actor: { name: organizer.name, email: organizer.email }, request, metadata: { method: 'password_2fa' } });
 
     await prisma.eventOrganizer.update({
       where: { id: userId },

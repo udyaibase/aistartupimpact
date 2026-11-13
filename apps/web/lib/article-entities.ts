@@ -18,7 +18,8 @@ export interface ToolCard {
 }
 export type EntityCard = StartupCard | ToolCard;
 
-const INR_PER_USD = 84;
+/** Only for a round stored without dollars (the database normally fills them at the announcement-date rate). */
+const FALLBACK_INR_PER_USD = 94;
 const MAX = 30;
 const LINK_RE = /<a\b[^>]*\shref="(?:https?:\/\/(?:www\.)?udyaibase\.com)?\/(startups|tools)\/([a-z0-9-]+)\/?(?:[?#][^"]*)?"/gi;
 
@@ -39,7 +40,7 @@ export async function getArticleEntityCards(html: string): Promise<Record<string
         ? sql`
             SELECT s.name, s.slug, s."previousSlugs", s.tagline, s."logoUrl", s."isVerified", s.category, s."headquartersCity",
                    s.stage::text AS stage, s."foundedYear",
-                   (SELECT SUM(COALESCE(NULLIF(r."amountUsd", 0) / 100.0, r."amountInr" / 100.0 / ${INR_PER_USD})) FROM "FundingRound" r WHERE r."startupId" = s.id) AS "raisedUsd",
+                   (SELECT SUM(COALESCE(NULLIF(r."amountUsd", 0) / 100.0, r."amountInr" / 100.0 / ${FALLBACK_INR_PER_USD})) FROM "FundingRound" r WHERE r."startupId" = s.id) AS "raisedUsd",
                    lr."roundType" AS "lastRoundType", lr."announcedAt"::text AS "lastRoundAt"
             FROM "Startup" s
             LEFT JOIN LATERAL (SELECT "roundType", "announcedAt" FROM "FundingRound" WHERE "startupId" = s.id ORDER BY "announcedAt" DESC LIMIT 1) lr ON true

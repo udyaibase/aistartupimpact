@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { getOrganizerSession, destroyOrganizerSession, verifyPassword } from '@/lib/organizer-auth';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
+import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest) {
 
     await destroyOrganizerSession();
 
+    await logOrganizerActivity(session.id, 'account_deactivated', { actor: organizerActor(session), request });
     return NextResponse.json({ success: true, message: 'Account deactivated' });
   } catch (error) {
     console.error('Organizer deactivation error:', error);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { requirePermission } from '@/lib/organizer-auth/require-permission';
 import { parseBillingProfile } from '@/lib/billing/details';
+import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,5 +13,6 @@ export async function PATCH(request: NextRequest) {
   const parsed = parseBillingProfile(await request.json().catch(() => ({})));
   if (!parsed.ok) return NextResponse.json({ success: false, error: parsed.error, field: parsed.field }, { status: 400 });
   await prisma.eventOrganizer.update({ where: { id: result.organizerId }, data: parsed.data });
+  await logOrganizerActivity(result.organizerId, 'billing_details_changed', { actor: organizerActor(result), request });
   return NextResponse.json({ success: true, details: parsed.data, warnings: parsed.warnings });
 }

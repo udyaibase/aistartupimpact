@@ -4,6 +4,7 @@ import { getEmployerSession } from '@/lib/employer-auth';
 import { can, forbidden } from '@/lib/employer/permissions';
 import { parseBillingProfile } from '@/lib/billing/details';
 import { writeLimited } from '@/lib/employer/write-limit';
+import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +23,7 @@ export async function PATCH(request: NextRequest) {
     const parsed = parseBillingProfile(body.billing);
     if (!parsed.ok) return NextResponse.json({ error: parsed.error, field: parsed.field }, { status: 400 });
     await prisma.jobBoardEmployer.update({ where: { id: session.id }, data: parsed.data });
+    await logEmployerActivity(session.id, 'billing_details_changed', { actor: employerActor(session), request });
     return NextResponse.json({ success: true, details: parsed.data, warnings: parsed.warnings });
   }
   return NextResponse.json({ error: 'Nothing to change.' }, { status: 400 });

@@ -8,6 +8,7 @@ import { uniqueJobSlug } from '@/lib/jobs/slug';
 import { can, forbidden, canSeeJob } from '@/lib/employer/permissions';
 import { refreshPaths, refreshSections } from '@/lib/revalidate';
 import { writeLimited } from '@/lib/employer/write-limit';
+import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -83,6 +84,8 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
     if (job.status !== 'DRAFT') {
       refreshSections(['jobs', 'home']);
       refreshPaths([`/jobs/${job.slug}`]);
+      // Drafts autosave constantly; only edits to a live job are worth a log entry.
+      await logEmployerActivity(session.id, 'job_updated', { actor: employerActor(session), request, metadata: { title: data.title } });
     }
     return NextResponse.json({ success: true, job: saved });
   } catch (error) {
@@ -106,5 +109,6 @@ export async function DELETE(_request: NextRequest, props: { params: Promise<{ i
   await setListingStatus(id, 'CLOSED', 'MANUAL');
   await prisma.jobBoardListing.update({ where: { id }, data: { deletedAt: new Date() } });
   refreshSections(['jobs', 'home']);
+  await logEmployerActivity(session.id, 'job_deleted', { actor: employerActor(session), request: _request, metadata: { title: job.title } });
   return NextResponse.json({ success: true });
 }

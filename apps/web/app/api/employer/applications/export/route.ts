@@ -4,6 +4,7 @@ import { prisma } from '@udyaibase/database';
 import { stageOf, PIPELINE } from '@/lib/employer/pipeline';
 import { can, forbidden } from '@/lib/employer/permissions';
 import { computeMatch } from '@/lib/jobs/match';
+import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,6 +48,8 @@ export async function GET(request: NextRequest) {
   ].map(cell).join(','); });
 
   const csv = '﻿' + [header.map(cell).join(','), ...rows].join('\r\n');
+  // Candidates' personal data left the portal: always worth a record.
+  await logEmployerActivity(session.id, 'applications_exported', { actor: employerActor(session), request, metadata: { count: String(rows.length) } });
   return new NextResponse(csv, {
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',

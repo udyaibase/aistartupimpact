@@ -3,6 +3,7 @@ import { getOrganizerSession } from '@/lib/organizer-auth';
 import { turnOffTwoFactor, twoFactorDisableCheck } from '@/lib/auth/account-two-factor';
 import { TWO_FACTOR_LOCKED_MESSAGE, clearTwoFactorFailures, isTwoFactorLocked, recordTwoFactorFailure } from '@/lib/auth/two-factor-attempts';
 import { checkRateLimit, getClientIdentifier, twoFactorRateLimit } from '@/lib/rate-limit';
+import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +28,7 @@ export async function POST(request: NextRequest) {
 
     await clearTwoFactorFailures('organizer', session.id);
     await turnOffTwoFactor(session.email);
+    await logOrganizerActivity(session.id, '2fa_disabled', { actor: organizerActor(session), request });
     return NextResponse.json({ success: true, message: '2FA disabled successfully' });
   } catch (error) {
     console.error('2FA disable error:', error instanceof Error ? error.message : 'unknown error');

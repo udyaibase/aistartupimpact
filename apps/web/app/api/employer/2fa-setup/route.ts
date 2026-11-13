@@ -7,6 +7,7 @@ import {
   hashBackupCodes, encryptSecret, verifyTOTPToken, decryptSecret,
 } from '@/lib/two-factor';
 import { writeLimited } from '@/lib/employer/write-limit';
+import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,6 +62,7 @@ export async function POST(request: NextRequest) {
         data: { twoFactorEnabled: true, twoFactorBackupCodes: hashedBackupCodes },
       });
 
+      await logEmployerActivity(session.id, '2fa_enabled', { actor: employerActor(session), request });
       return NextResponse.json({ success: true, backupCodes, message: '2FA enabled successfully' });
     }
 

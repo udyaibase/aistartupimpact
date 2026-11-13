@@ -10,6 +10,7 @@ import { setEmployerSession } from '@/lib/employer-auth';
 import { securityAlertHtml } from '@udyaibase/utils';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 import { authRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
+import { logEmployerActivity } from '@/lib/workspace-activity';
 
 
 export const dynamic = 'force-dynamic';
@@ -87,6 +88,7 @@ export async function POST(request: NextRequest) {
     const isValid = await bcrypt.compare(password, employer.passwordHash);
 
     if (!isValid) {
+      await logEmployerActivity(employer.id, 'sign_in_failed', { actor: { name: employer.companyName, email: employer.email }, request, metadata: { reason: 'wrong_password' } });
       const newAttempts = (employer.failedLoginAttempts || 0) + 1;
 
       if (newAttempts >= MAX_FAILED_ATTEMPTS) {
@@ -147,6 +149,7 @@ export async function POST(request: NextRequest) {
     // Older accounts get their OWNER row on first sign-in (the backfill does the rest).
     await ensureOwnerMember(employer.id).catch((e) => console.error('[login] owner row', e));
 
+    await logEmployerActivity(employer.id, 'signed_in', { actor: { name: employer.companyName, email: employer.email }, request, metadata: { method: 'password' } });
     // Set session cookie
     await setEmployerSession({
       id: employer.id,

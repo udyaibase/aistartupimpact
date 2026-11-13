@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { setAccountPassword } from '@/lib/auth/set-password';
 import { prisma } from "@udyaibase/database";
 import { getOrganizerSession, verifyPassword, hashPassword } from "@/lib/organizer-auth";
+import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,7 @@ export async function POST(request: NextRequest) {
   const hash = await hashPassword(newPassword);
   // Everywhere it's stored, so the old password stops working at every sign-in.
   await setAccountPassword(org.email, hash);
+  await logOrganizerActivity(session.id, 'password_changed', { actor: organizerActor(session), request });
 
   return NextResponse.json({ success: true });
 }

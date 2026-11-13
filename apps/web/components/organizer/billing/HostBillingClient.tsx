@@ -4,8 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, Sparkles, Star } from "lucide-react";
 import { payWithRazorpay } from "@/lib/billing/checkout-client";
-import BillingDetailsForm from "@/components/billing/BillingDetailsForm";
-import type { BillingProfile } from "@/lib/billing/details";
+import BillingDetailsForm, { type SaveBilling } from "@/components/billing/BillingDetailsForm";
+import BillingCheckoutDialog, { InvoiceToLine } from "@/components/billing/BillingCheckoutDialog";
+import { profileComplete, type BillingProfile } from "@/lib/billing/details";
 import { HOST_FOUNDING_DISCOUNT, HOST_FOUNDING_LIMIT, HOST_FOUNDING_LOCK_MONTHS, type HostBillingCycle, type HostPlan, type HostPlanKey } from "@/lib/events/plans";
 import InvoicesTable, { type InvoiceRow } from "@/components/billing/InvoicesTable";
 
@@ -16,7 +17,7 @@ const card = "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-
 const rupees = (p: number) => `₹${(p / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const fmt = (iso: string) => new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 
-export default function HostBillingClient({ current, expiresAt, usage, cycle: currentCycle, pro, founding, plans, boost, events, payments, highlight, paymentsReady, billing, invoices }: {
+export default function HostBillingClient({ current, expiresAt, usage, cycle: currentCycle, pro, founding, plans, boost, events, payments, highlight, paymentsReady, billing, invoices, accountName }: {
   current: HostPlanKey;
   expiresAt: string | null;
   usage: { upcoming: number; team: number; promo: { used: number; limit: number; left: number } };
@@ -31,6 +32,8 @@ export default function HostBillingClient({ current, expiresAt, usage, cycle: cu
   paymentsReady: boolean;
   billing: BillingProfile;
   invoices: boolean;
+  /** Prefills the invoice name the first time (organization, else the host's name). */
+  accountName: string;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -43,13 +46,30 @@ export default function HostBillingClient({ current, expiresAt, usage, cycle: cu
   const yearlySavePct = Math.round((1 - pro.yearly.amount / (pro.monthly.amount * 12)) * 100);
   const daysLeft = expiresAt ? Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 864e5)) : null;
 
-  async function buy(kind: "PRO" | "BOOST", eventId?: string) {
+  // Invoice details are needed once, before the first payment (GST invoices need name, address and GSTIN).
+  const [profile, setProfile] = useState(billing);
+  type Pending = { kind: "PRO" | "BOOST"; eventId?: string };
+  const [gate, setGate] = useState<Pending | "edit" | null>(null);
+  const saveBilling: SaveBilling = async (details) => {
+    const res = await fetch("/api/organizer/billing/details", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(details) }).catch(() => null);
+    if (!res) return { error: "You seem to be offline." };
+    const d = await res.json().catch(() => ({}));
+    return res.ok ? { warnings: d.warnings } : { error: d.error || "Couldn’t save.", field: d.field };
+  };
+  const pending = gate && gate !== "edit" ? gate : null;
+  const pendingOrder = !pending ? null : pending.kind === "PRO"
+    ? { label: `Pro plan · ${yearly ? "1 year" : "30 days"}`, total: rupees(proPrice.total) }
+    : { label: `Event Boost · ${events.find((e) => e.id === pending.eventId)?.title ?? "your event"}`, total: rupees(boost.price.total) };
+
+  async function buy(kind: "PRO" | "BOOST", eventId?: string, billingReady = profileComplete(profile)) {
+    if (!billingReady) { setGate({ kind, eventId }); return; }
     setBusy(eventId ?? kind);
     setError("");
     setNotice("");
     try {
       const res = await fetch("/api/organizer/billing/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, eventId, ...(kind === "PRO" ? { cycle } : {}) }) });
       const d = await res.json().catch(() => ({}));
+      if (res.status === 409 && d.code === "BILLING_REQUIRED") { setBusy(null); setGate({ kind, eventId }); return; }
       if (!res.ok) { setError(d.error || "Couldn’t start the payment."); setBusy(null); return; }
       const out = await payWithRazorpay(d, "/api/organizer/billing/verify");
       if (out.ok) { setNotice(kind === "PRO" ? "Payment received. Pro is active." : "Payment received. Your event is boosted."); router.refresh(); }
@@ -102,6 +122,8 @@ export default function HostBillingClient({ current, expiresAt, usage, cycle: cu
           </p>
         )}
       </div>
+
+      {profileComplete(profile) && paymentsReady && <InvoiceToLine profile={profile} onChange={() => setGate("edit")} />}
 
       <div className="grid gap-4 md:grid-cols-2">
         {plans.map((p) => {
@@ -192,13 +214,23 @@ export default function HostBillingClient({ current, expiresAt, usage, cycle: cu
       <section aria-labelledby="hbd-h" className={`${card} p-4 sm:p-5`}>
         <h2 id="hbd-h" className="portal-section-title">Billing details</h2>
         <p className="mt-1 mb-4 text-sm text-gray-600 dark:text-gray-400">Who your invoices are made out to and where they’re emailed.</p>
-        <BillingDetailsForm initial={billing} lookupUrl="/api/organizer/billing/gstin" save={async (details) => {
-          const res = await fetch("/api/organizer/billing/details", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(details) }).catch(() => null);
-          if (!res) return { error: "You seem to be offline." };
-          const d = await res.json().catch(() => ({}));
-          return res.ok ? { warnings: d.warnings } : { error: d.error || "Couldn’t save.", field: d.field };
-        }} />
+        <BillingDetailsForm key={JSON.stringify(profile)} initial={profile} lookupUrl="/api/organizer/billing/gstin" save={saveBilling} onSaved={setProfile} />
       </section>
+
+      <BillingCheckoutDialog
+        open={gate !== null}
+        onClose={() => setGate(null)}
+        initial={{ ...profile, billingName: profile.billingName ?? (accountName || null) }}
+        save={saveBilling}
+        lookupUrl="/api/organizer/billing/gstin"
+        order={pendingOrder}
+        onSaved={(p) => {
+          setProfile(p);
+          const next = pending;
+          setGate(null);
+          if (next) buy(next.kind, next.eventId, true);
+        }}
+      />
     </div>
   );
 }

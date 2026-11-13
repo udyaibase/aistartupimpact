@@ -678,14 +678,28 @@ model FundingDigest {
   @@index([status])
 }
 
+/// Daily USD→INR reference rate (European Central Bank via Frankfurter), loaded by the daily data job.
+/// Funding rounds are converted at the rate on their announcement date (trigger funding_round_fill_fx).
+model ExchangeRate {
+  day       DateTime @id @db.Date
+  usdInr    Float
+  source    String   @default("ECB")
+  createdAt DateTime @default(now())
+}
+
 model FundingRound {
   id            String   @id
   /// URL slug for /funding/<slug>, set by a database trigger on insert (migration 20261112100000_funding_round_slug).
   slug          String?  @unique
   startupId     String
   roundType     String
-  amountInr     BigInt
+  /// Paise. Whichever amount wasn't typed is filled by a database trigger at the announcement-date rate (ExchangeRate).
+  amountInr     BigInt?
   amountUsd     BigInt?
+  /// Which amount the trigger calculated: 'INR' or 'USD'; null when a person typed both.
+  fxDerived     String?
+  /// USD→INR rate used for the calculated amount.
+  fxUsdInr      Float?
   announcedAt   DateTime
   leadInvestors String[]
   allInvestors  String[]
@@ -2513,6 +2527,27 @@ model EventTeamAssignment {
   @@unique([teamMemberId, eventId])
   @@index([teamMemberId])
   @@index([eventId])
+}
+
+/// Activity log of an employer or event-host workspace: who did what, when and from where. Owners and admins see it
+/// in the portal (/employer/activity, /organizer/activity). No foreign keys on purpose: entries outlive deleted
+/// members and workspaces. Kept for one year (data-retention job). Never store passwords, codes or tokens.
+model WorkspaceActivityLog {
+  id          String   @id @default(dbgenerated("gen_random_uuid()"))
+  /// EMPLOYER (JobBoardEmployer) or ORGANIZER (EventOrganizer).
+  workspace   String
+  workspaceId String
+  /// Who did it: a person's name and masked email; null for the system (e.g. a payment webhook).
+  actorName   String?
+  actorEmail  String?
+  action      String
+  ipAddress   String?
+  userAgent   String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([workspace, workspaceId, createdAt])
+  @@index([createdAt])
 }
 
 model TeamActivityLog {

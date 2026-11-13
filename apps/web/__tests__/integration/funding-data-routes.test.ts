@@ -117,6 +117,21 @@ describe('paid checkout', () => {
     expect((await checkout(req('/x', body({ billing: { billingType: 'INDIVIDUAL', billingName: 'Priya', billingState: '99' } })))).status).toBe(400);
     expect((await checkout(req('/x', body({ billing: { billingType: 'GST', billingName: 'Acme', billingGstin: '29ABCDE1234F1Z0' } })))).status).toBe(400);
   });
+
+  it('needs the registered address for a GST invoice, and stores it for the invoice', async () => {
+    const gst = { billingType: 'GST', billingName: 'Acme AI Pvt Ltd', billingGstin: '29ABCDE1234F1ZW' };
+    expect((await checkout(req('/x', body({ billing: gst })))).status).toBe(400); // no address
+    expect((await checkout(req('/x', body({ billing: { ...gst, billingAddressLine1: '12 MG Road', billingCity: 'Bengaluru', billingPostalCode: '0123' } })))).status).toBe(400); // bad PIN
+    const r = await checkout(req('/x', body({ billing: { ...gst, billingAddressLine1: '12 MG Road', billingCity: 'Bengaluru', billingPostalCode: '560001' } })));
+    expect(r.status).toBe(200);
+    expect(db.fundingDataPurchase.create.mock.calls.at(-1)![0].data.billingDetails).toMatchObject({
+      billingType: 'GST', billingGstin: '29ABCDE1234F1ZW', billingState: '29', billingAddressLine1: '12 MG Road', billingCity: 'Bengaluru', billingPostalCode: '560001',
+    });
+  });
+
+  it('keeps individuals quick: name and state only', async () => {
+    expect((await checkout(req('/x', body()))).status).toBe(200);
+  });
 });
 
 describe('payment activation', () => {

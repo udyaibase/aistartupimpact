@@ -39,6 +39,8 @@ interface StartupSubmission {
     roundType: string;
     amountUsd: number;
     amountInr: number;
+    /** Which amount the database recalculates at the announcement-date rate (the one not typed). */
+    fxDerived?: 'INR' | 'USD' | null;
     announcedAt: string;
     leadInvestors: string[];
     allInvestors: string[];
@@ -217,8 +219,8 @@ export async function submitStartupAction(data: StartupSubmission) {
     if (startupId && data.fundingRounds && data.fundingRounds.length > 0) {
       for (const round of data.fundingRounds) {
         await prisma.$executeRaw`
-          INSERT INTO "FundingRound" (id, "startupId", "roundType", "amountUsd", "amountInr", "announcedAt", "leadInvestors", "allInvestors", "createdAt")
-          VALUES (gen_random_uuid(), ${startupId}, ${round.roundType}, ${round.amountUsd}, ${round.amountInr}, ${round.announcedAt}::timestamp, ${round.leadInvestors}::text[], ${round.allInvestors}::text[], NOW())
+          INSERT INTO "FundingRound" (id, "startupId", "roundType", "amountUsd", "amountInr", "fxDerived", "announcedAt", "leadInvestors", "allInvestors", "createdAt")
+          VALUES (gen_random_uuid(), ${startupId}, ${round.roundType}, ${round.amountUsd}, ${round.amountInr}, ${round.fxDerived === 'INR' || round.fxDerived === 'USD' ? round.fxDerived : null}, ${round.announcedAt}::timestamp, ${round.leadInvestors}::text[], ${round.allInvestors}::text[], NOW())
         `;
       }
     }

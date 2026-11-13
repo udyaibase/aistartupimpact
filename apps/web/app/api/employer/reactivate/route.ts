@@ -3,6 +3,7 @@ import { prisma } from '@udyaibase/database';
 import bcrypt from 'bcryptjs';
 import { setEmployerSession } from '@/lib/employer-auth';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
+import { logEmployerActivity } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,6 +46,7 @@ export async function POST(request: NextRequest) {
       where: { id: employer.id },
       data: { deactivatedAt: null, lastLoginAt: new Date() },
     });
+    await logEmployerActivity(employer.id, 'account_reactivated', { actor: { name: employer.companyName, email: employer.email }, request });
 
     await setEmployerSession({
       id: employer.id,

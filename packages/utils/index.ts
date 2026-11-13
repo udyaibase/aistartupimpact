@@ -44,6 +44,8 @@ export type { EventEmailData, DigestData } from './src/email-templates';
 
 export { actionsIn, describeActivity, describeDevice } from './src/founder-activity';
 export type { ActivityCategory, FounderActivity } from './src/founder-activity';
+export { describeWorkspaceActivity, workspaceActionsIn } from './src/workspace-activity';
+export type { EmployerActivity, OrganizerActivity, WorkspaceActivity, WorkspaceActivityCategory, WorkspaceKind } from './src/workspace-activity';
 
 export { LOGO_SIZES, sizedKey, mediaVariantKeys, ownMediaKey } from './src/media-keys';
 

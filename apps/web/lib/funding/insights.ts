@@ -5,7 +5,11 @@
  */
 import { inrLabel, roundDate, roundLabel, usdLabel } from '@/lib/funding/format';
 
-export const INR_PER_USD = 84;
+/**
+ * Only for a round stored with one amount missing (rare: the database fills the other at the announcement-date
+ * rate). Totals add up each round's stored rupee and dollar amounts, so no fixed rate is applied to them.
+ */
+export const FALLBACK_INR_PER_USD = 94;
 const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'] as const;
 
 export interface FundingRoundRow {
@@ -36,20 +40,19 @@ export type Scope = 'india' | 'global';
 export function inrPaiseOf(r: Pick<FundingRoundRow, 'amountInr' | 'amountUsd'>): number {
   const inr = Number(r.amountInr ?? 0);
   if (inr > 0) return inr;
-  return Math.round(Number(r.amountUsd ?? 0) * INR_PER_USD); // cents × 84 = paise
+  return Math.round(Number(r.amountUsd ?? 0) * FALLBACK_INR_PER_USD); // cents × rate = paise
 }
 
 /** Round size in cents: the dollar amount when recorded, otherwise converted from rupees. */
 export function usdCentsOf(r: Pick<FundingRoundRow, 'amountInr' | 'amountUsd'>): number {
   const usd = Number(r.amountUsd ?? 0);
   if (usd > 0) return usd;
-  return Math.round(Number(r.amountInr ?? 0) / INR_PER_USD);
+  return Math.round(Number(r.amountInr ?? 0) / FALLBACK_INR_PER_USD);
 }
 
 /**
- * One round's money, "₹5,724 Cr ($600M)": both figures as recorded on the round (each converted only when the other
- * is missing). Use this for a single round; moneyLabel converts a rupee total at INR_PER_USD, which can disagree
- * with the dollar amount actually announced.
+ * One round's money, "₹5,724 Cr ($600M)": both figures as stored on the round (the second one converted at the
+ * announcement-date rate by the database).
  */
 export function roundMoneyLabel(r: Pick<FundingRoundRow, 'amountInr' | 'amountUsd'>): string {
   const inr = inrLabel(inrPaiseOf(r));
@@ -57,10 +60,13 @@ export function roundMoneyLabel(r: Pick<FundingRoundRow, 'amountInr' | 'amountUs
   return inr ? (usd ? `${inr} (${usd})` : inr) : usd ?? 'undisclosed';
 }
 
-/** "₹66,297 Cr ($7.9B)" style money for a paise total. */
-export function moneyLabel(paise: number): string {
+/**
+ * "₹66,297 Cr ($7.9B)" for a total. Pass the dollar total too (the sum of each round's stored dollars, each converted
+ * at its own announcement-date rate); without it the dollars are estimated.
+ */
+export function moneyLabel(paise: number, cents?: number): string {
   const inr = inrLabel(paise);
-  const usd = usdLabel(Math.round(paise / INR_PER_USD));
+  const usd = usdLabel(cents ?? Math.round(paise / FALLBACK_INR_PER_USD));
   return inr ? (usd ? `${inr} (${usd})` : inr) : 'undisclosed';
 }
 
@@ -97,7 +103,7 @@ export const inScope = (rounds: FundingRoundRow[], scope: Scope) => (scope === '
 
 // ── Aggregates ───────────────────────────────────────────────────────────────
 
-export interface Group { name: string; slug: string; deals: number; paise: number }
+export interface Group { name: string; slug: string; deals: number; paise: number; cents: number }
 
 function groupBy(rounds: FundingRoundRow[], keys: (r: FundingRoundRow) => string[]): Group[] {
   const m = new Map<string, Group>();
@@ -105,9 +111,10 @@ function groupBy(rounds: FundingRoundRow[], keys: (r: FundingRoundRow) => string
     for (const name of new Set(keys(r).map((k) => k.trim()).filter(Boolean))) {
       const slug = slugify(name);
       if (!slug) continue;
-      const g = m.get(slug) ?? { name, slug, deals: 0, paise: 0 };
+      const g = m.get(slug) ?? { name, slug, deals: 0, paise: 0, cents: 0 };
       g.deals += 1;
       g.paise += inrPaiseOf(r);
+      g.cents += usdCentsOf(r);
       m.set(slug, g);
     }
   }
@@ -125,10 +132,11 @@ export const newestFirst = (rounds: FundingRoundRow[]) => [...rounds].sort((a, b
 export interface FundingSummary {
   deals: number;
   paise: number;
+  cents: number;
   year: number;
-  ytd: { deals: number; paise: number };
-  lastYearSamePeriod: { deals: number; paise: number };
-  thisMonth: { deals: number; paise: number; label: string };
+  ytd: { deals: number; paise: number; cents: number };
+  lastYearSamePeriod: { deals: number; paise: number; cents: number };
+  thisMonth: { deals: number; paise: number; cents: number; label: string };
   largest: FundingRoundRow | null;
   topCities: Group[];
   topInvestors: Group[];
@@ -138,7 +146,7 @@ export interface FundingSummary {
 
 export function summarize(rounds: FundingRoundRow[], now = new Date()): FundingSummary {
   const { year, month } = istParts(now.toISOString());
-  const sum = (rs: FundingRoundRow[]) => ({ deals: rs.length, paise: rs.reduce((n, r) => n + inrPaiseOf(r), 0) });
+  const sum = (rs: FundingRoundRow[]) => ({ deals: rs.length, paise: rs.reduce((n, r) => n + inrPaiseOf(r), 0), cents: rs.reduce((n, r) => n + usdCentsOf(r), 0) });
   // Same calendar window last year, for a fair year-on-year comparison.
   const dayOfYear = (iso: string) => {
     const d = new Date(new Date(iso).getTime() + 5.5 * 36e5);
@@ -193,10 +201,10 @@ const longDate = (iso: string) => roundDate(iso)?.toLocaleDateString('en-IN', { 
 export function summaryText(s: FundingSummary, scope: Scope): string {
   const where = scope === 'india' ? 'Indian AI startups' : 'AI startups worldwide';
   const parts: string[] = [];
-  parts.push(`Udyaibase tracks ${plural(s.deals, 'funding round')} raised by ${where}, worth ${moneyLabel(s.paise)} in total.`);
+  parts.push(`Udyaibase tracks ${plural(s.deals, 'funding round')} raised by ${where}, worth ${moneyLabel(s.paise, s.cents)} in total.`);
   if (s.ytd.deals > 0) {
     const change = pct(s.ytd.paise, s.lastYearSamePeriod.paise);
-    parts.push(`In ${s.year} so far, ${plural(s.ytd.deals, 'round')} ${s.ytd.deals === 1 ? 'has' : 'have'} raised ${moneyLabel(s.ytd.paise)}${change != null ? ` (${change === 0 ? 'in line with' : `${change > 0 ? 'up' : 'down'} ${Math.abs(change)}% on`} the same period last year)` : ''}.`);
+    parts.push(`In ${s.year} so far, ${plural(s.ytd.deals, 'round')} ${s.ytd.deals === 1 ? 'has' : 'have'} raised ${moneyLabel(s.ytd.paise, s.ytd.cents)}${change != null ? ` (${change === 0 ? 'in line with' : `${change > 0 ? 'up' : 'down'} ${Math.abs(change)}% on`} the same period last year)` : ''}.`);
   }
   if (s.largest) parts.push(`The largest round on record is ${s.largest.startupName.trim()}'s ${roundMoneyLabel(s.largest)} ${roundLabel(s.largest.roundType)} (${longDate(s.largest.announcedAt)}).`);
   if (s.topCities.length) parts.push(`${list(s.topCities.slice(0, 3).map((c) => c.name))} lead by number of deals.`);
@@ -214,7 +222,7 @@ export function fundingFaq(s: FundingSummary, scope: Scope, updatedOn: string): 
     {
       q: `How much funding have AI startups raised ${where} in ${s.year}?`,
       a: s.ytd.deals
-        ? `${who[0].toUpperCase()}${who.slice(1)} have raised ${moneyLabel(s.ytd.paise)} across ${plural(s.ytd.deals, 'funding round')} in ${s.year} so far, according to Udyaibase's live tracker.`
+        ? `${who[0].toUpperCase()}${who.slice(1)} have raised ${moneyLabel(s.ytd.paise, s.ytd.cents)} across ${plural(s.ytd.deals, 'funding round')} in ${s.year} so far, according to Udyaibase's live tracker.`
         : `No ${who} funding rounds have been recorded for ${s.year} yet.`,
     },
   ];
@@ -228,11 +236,11 @@ export function fundingFaq(s: FundingSummary, scope: Scope, updatedOn: string): 
   });
   if (s.topCities.length) faq.push({
     q: `Which cities have the most AI startup funding ${where}?`,
-    a: `By number of funding rounds: ${list(s.topCities.map((c) => `${c.name} (${c.deals} rounds, ${moneyLabel(c.paise)})`))}.`,
+    a: `By number of funding rounds: ${list(s.topCities.map((c) => `${c.name} (${c.deals} rounds, ${moneyLabel(c.paise, c.cents)})`))}.`,
   });
   if (s.deals) faq.push({
     q: `What is the average AI startup funding round size ${where}?`,
-    a: `The average tracked round is ${moneyLabel(Math.round(s.paise / s.deals))}, across ${plural(s.deals, 'round')}.`,
+    a: `The average tracked round is ${moneyLabel(Math.round(s.paise / s.deals), Math.round(s.cents / s.deals))}, across ${plural(s.deals, 'round')}.`,
   });
   faq.push({
     q: 'How often is this AI funding data updated?',

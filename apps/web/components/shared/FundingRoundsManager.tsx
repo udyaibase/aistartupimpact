@@ -3,7 +3,11 @@
 import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 
-const USD_INR_RATE = 95.4;
+/**
+ * A round is saved in the currency it was typed in. The other amount is only a provisional figure here: the
+ * database replaces it with a conversion at the exchange rate on the announcement date (trigger funding_round_fill_fx).
+ */
+const PROVISIONAL_USD_INR = 94;
 
 const ROUND_TYPES = [
   'Pre-Seed', 'Angle', 'Seed', 'Pre-Series A', 'Series A',
@@ -14,11 +18,11 @@ const ROUND_TYPES = [
 ];
 
 const AMOUNT_UNITS = [
-  { value: 'M_USD', label: 'M ($)', multiplier: 1_000_000 },
-  { value: 'K_USD', label: 'K ($)', multiplier: 1_000 },
-  { value: 'CR_INR', label: 'Cr (₹)', multiplier: 10_000_000 / USD_INR_RATE },
-  { value: 'L_INR', label: 'L (₹)', multiplier: 100_000 / USD_INR_RATE },
-];
+  { value: 'M_USD', label: 'M ($)', currency: 'USD', size: 1_000_000 },
+  { value: 'K_USD', label: 'K ($)', currency: 'USD', size: 1_000 },
+  { value: 'CR_INR', label: 'Cr (₹)', currency: 'INR', size: 10_000_000 },
+  { value: 'L_INR', label: 'L (₹)', currency: 'INR', size: 100_000 },
+] as const;
 
 export interface FundingRound {
   id?: string;
@@ -34,6 +38,8 @@ export interface FundingRoundForSave {
   roundType: string;
   amountUsd: number; // in cents
   amountInr: number; // in paise
+  /** The amount the database calculates (the one not typed): 'INR' when dollars were typed, 'USD' when rupees. */
+  fxDerived: 'INR' | 'USD';
   announcedAt: string;
   leadInvestors: string[];
   allInvestors: string[];
@@ -50,14 +56,16 @@ export function convertToSaveFormat(rounds: FundingRound[]): FundingRoundForSave
     .filter(r => r.roundType && r.amountValue && r.announcedAt)
     .map(r => {
       const unit = AMOUNT_UNITS.find(u => u.value === r.amountUnit) || AMOUNT_UNITS[0];
-      const amountUsdRaw = parseFloat(r.amountValue) * unit.multiplier;
-      const amountUsdCents = Math.round(amountUsdRaw * 100);
-      const amountInrPaise = Math.round(amountUsdRaw * USD_INR_RATE * 100);
+      const amount = parseFloat(r.amountValue) * unit.size;
+      const typedUsd = unit.currency === 'USD';
+      const usd = typedUsd ? amount : amount / PROVISIONAL_USD_INR;
+      const inr = typedUsd ? amount * PROVISIONAL_USD_INR : amount;
 
       return {
         roundType: r.roundType,
-        amountUsd: amountUsdCents,
-        amountInr: amountInrPaise,
+        amountUsd: Math.round(usd * 100),
+        amountInr: Math.round(inr * 100),
+        fxDerived: typedUsd ? 'INR' as const : 'USD' as const,
         announcedAt: r.announcedAt,
         leadInvestors: (r.leadInvestors || '').split(',').map(s => s.trim()).filter(Boolean),
         allInvestors: (r.allInvestors || '').split(',').map(s => s.trim()).filter(Boolean),
@@ -68,12 +76,16 @@ export function convertToSaveFormat(rounds: FundingRound[]): FundingRoundForSave
 // Convert from DB format back to display format
 export function convertFromDbFormat(dbRounds: any[]): FundingRound[] {
   return dbRounds.map(r => {
-    // amountUsd is in cents, convert back to a readable value
-    const amountUsdRaw = Number(r.amountUsd || 0) / 100;
     let amountValue = '';
-    let amountUnit = 'M_USD';
-
-    if (amountUsdRaw >= 1_000_000) {
+    let amountUnit: string = 'M_USD';
+    // Shown in the currency it was typed in: rupees when the dollar amount was the calculated one.
+    const amountInrRaw = Number(r.amountInr || 0) / 100;
+    const amountUsdRaw = Number(r.amountUsd || 0) / 100;
+    if (r.fxDerived === 'USD' && amountInrRaw > 0) {
+      const crores = amountInrRaw >= 10_000_000;
+      amountValue = String(Number((amountInrRaw / (crores ? 10_000_000 : 100_000)).toFixed(4)));
+      amountUnit = crores ? 'CR_INR' : 'L_INR';
+    } else if (amountUsdRaw >= 1_000_000) {
       amountValue = (amountUsdRaw / 1_000_000).toString();
       amountUnit = 'M_USD';
     } else if (amountUsdRaw >= 1_000) {
@@ -119,16 +131,11 @@ export default function FundingRoundsManager({ rounds, onChange, maxRounds = 10 
     onChange(updated);
   };
 
-  // Format the USD preview
+  // The other currency is filled in by the database at the rate on the announcement date (not a fixed rate).
   const getPreview = (round: FundingRound) => {
-    if (!round.amountValue) return '';
+    if (!round.amountValue || isNaN(parseFloat(round.amountValue))) return '';
     const unit = AMOUNT_UNITS.find(u => u.value === round.amountUnit) || AMOUNT_UNITS[0];
-    const usd = parseFloat(round.amountValue) * unit.multiplier;
-    if (isNaN(usd)) return '';
-    if (usd >= 1e9) return `≈ $${(usd / 1e9).toFixed(1)}B`;
-    if (usd >= 1e6) return `≈ $${(usd / 1e6).toFixed(1)}M`;
-    if (usd >= 1e3) return `≈ $${(usd / 1e3).toFixed(0)}K`;
-    return `≈ $${usd.toFixed(0)}`;
+    return unit.currency === 'USD' ? '₹ at that day’s rate' : '$ at that day’s rate';
   };
 
   return (

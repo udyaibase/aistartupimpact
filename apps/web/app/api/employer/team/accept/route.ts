@@ -3,6 +3,8 @@ import { prisma } from '@udyaibase/database';
 import { setEmployerSession } from '@/lib/employer-auth';
 import { authRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 import { hashToken } from '@/lib/employer/team';
+import { logEmployerActivity } from '@/lib/workspace-activity';
+import { maskEmail } from '@/lib/mask';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +32,7 @@ export async function POST(request: NextRequest) {
     data: { status: 'ACTIVE', name, acceptedAt: new Date(), lastActiveAt: new Date(), inviteTokenHash: null, inviteExpiresAt: null },
   });
   const e = member.Employer;
+  await logEmployerActivity(e.id, 'team_invite_accepted', { actor: { name, email: member.email }, request, metadata: { member: maskEmail(member.email) } });
   await setEmployerSession({ id: e.id, email: e.email, companyName: e.companyName, slug: e.slug, plan: e.plan, onboardingCompleted: true }, { id: member.id, email: member.email });
   return NextResponse.json({ success: true, redirect: member.role === 'INTERVIEWER' ? '/employer/applications' : '/employer/dashboard' });
 }

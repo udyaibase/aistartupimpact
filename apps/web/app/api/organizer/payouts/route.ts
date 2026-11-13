@@ -5,6 +5,7 @@ import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
 import { refreshPayoutStatus, setUpPayouts, validatePayoutInput } from "@/lib/events/payouts";
 import { RazorpayApiError } from "@/lib/billing/razorpay";
 import { ticketFeePct } from "@/lib/events/tickets";
+import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,7 @@ export async function POST(request: NextRequest) {
   if (!parsed.ok) return NextResponse.json({ success: false, error: parsed.error, field: parsed.field }, { status: 400 });
   try {
     await setUpPayouts(result.organizerId, parsed.data);
+    await logOrganizerActivity(result.organizerId, "payout_details_changed", { actor: organizerActor(result), request });
     return NextResponse.json({ success: true, payouts: await status(result.organizerId) });
   } catch (err) {
     const msg = err instanceof RazorpayApiError ? err.message : "Could not set up payouts. Try again.";
