@@ -7,6 +7,7 @@ import {
   Eye, Loader2, ChevronDown, Pencil, Trash2, MoreHorizontal,
   Send, BookOpen, ArrowRight,
 } from "lucide-react";
+import { MilestoneIcon } from '@/components/milestones/MilestoneIcon';
 
 type Tab = "all" | "updates" | "stories" | "milestones";
 
@@ -22,11 +23,6 @@ const MOD_BADGE: Record<string, { label: string; cls: string }> = {
   PENDING_REVIEW: { label: "Pending Review", cls: "text-amber-600 dark:text-amber-400" },
   REJECTED: { label: "Rejected", cls: "text-red-600 dark:text-red-400" },
   REVISION_REQUESTED: { label: "Needs Revision", cls: "text-orange-600 dark:text-orange-400" },
-};
-
-const MILESTONE_ICONS: Record<string, string> = {
-  FUNDING: "💰", LAUNCH: "🚀", PARTNERSHIP: "🤝", ACQUISITION: "🏢",
-  AWARD: "🏆", HIRING: "👥", REVENUE: "📈", USER_MILESTONE: "🎯",
 };
 
 export default function CreatePage() {
@@ -77,7 +73,6 @@ export default function CreatePage() {
   const CREATE_OPTIONS = [
     {
       icon: Megaphone,
-      emoji: "📢",
       title: "Startup Update",
       desc: "Share news, progress, or announcements. Publishes instantly.",
       href: "/founder/content/new?type=STARTUP_UPDATE",
@@ -85,7 +80,6 @@ export default function CreatePage() {
     },
     {
       icon: BookOpen,
-      emoji: "✍️",
       title: "Founder Story",
       desc: "Tell your journey. Reviewed by our editorial team before publishing.",
       href: "/founder/content/new?type=FOUNDER_STORY",
@@ -93,7 +87,6 @@ export default function CreatePage() {
     },
     {
       icon: Trophy,
-      emoji: "🏆",
       title: "Milestone",
       desc: "Record a key achievement — funding, launch, partnership, or award.",
       href: "/founder/milestones/new",
@@ -124,8 +117,8 @@ export default function CreatePage() {
                 onClick={() => router.push(opt.href)}
                 className="group text-left p-4 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl hover:border-brand/30 dark:hover:border-brand/30 hover:shadow-lg hover:shadow-brand/5 transition-all duration-200"
               >
-                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${opt.color} flex items-center justify-center text-xl mb-3 group-hover:scale-110 transition-transform`}>
-                  {opt.emoji}
+                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${opt.color} flex items-center justify-center text-white mb-3 group-hover:scale-110 transition-transform`}>
+                  <opt.icon className="w-5 h-5" aria-hidden />
                 </div>
                 <h3 className="text-sm font-sora font-bold text-gray-900 dark:text-white mb-1 flex items-center gap-1.5">
                   {opt.title}
@@ -215,7 +208,7 @@ export default function CreatePage() {
               {filtered.milestones.map(m => (
                 <div key={m.id} className="group flex items-center gap-3 px-4 py-3.5 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl hover:border-gray-200 dark:hover:border-gray-700 transition-colors">
                   <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center text-base shrink-0">
-                    {MILESTONE_ICONS[m.type] || "📌"}
+                    <MilestoneIcon type={m.type} className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">

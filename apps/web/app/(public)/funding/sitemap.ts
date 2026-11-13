@@ -2,6 +2,7 @@ import { MetadataRoute } from 'next';
 import { isBuildPhase } from '@/lib/build-fallback';
 import { getFundingRounds } from '@/lib/funding/rounds';
 import { byCity, byInvestor, HUB_MIN_ROUNDS, inScope, monthsWithRounds, newestFirst, roundsInMonth } from '@/lib/funding/insights';
+import { roundDate } from '@/lib/funding/format';
 
 export const revalidate = 3600;
 
@@ -16,10 +17,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   try {
     const all = await getFundingRounds();
     const india = inScope(all, 'india');
-    const newest = (iso: string | undefined) => (iso ? new Date(iso) : new Date());
+    // A round with an unreadable date (bad data) must not break the whole sitemap: fall back to now / omit.
+    const newest = (iso: string | undefined) => roundDate(iso) ?? new Date();
 
     const rounds = all.filter((r) => r.slug).map((r) => ({
-      url: `${SITE_URL}/funding/${r.slug}`, lastModified: new Date(r.announcedAt), changeFrequency: 'monthly' as const, priority: 0.5,
+      url: `${SITE_URL}/funding/${r.slug}`, lastModified: roundDate(r.announcedAt) ?? undefined, changeFrequency: 'monthly' as const, priority: 0.5,
     }));
     const months = monthsWithRounds(india, HUB_MIN_ROUNDS.month).map((m) => ({
       url: `${SITE_URL}/funding/india/${m.slug}`,

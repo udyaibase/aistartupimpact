@@ -8,17 +8,21 @@ export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
 export default async function OGImage() {
+  // A share image must always render: on a database error, show the card without live numbers.
   const [startupCount, fundingResult] = await Promise.all([
     sql`SELECT COUNT(*)::int as count FROM "Startup" WHERE ${hqInIndia('"Startup"')} AND "deletedAt" IS NULL AND "isApproved" = true`,
     sql`SELECT COALESCE(SUM("amountInr"), 0)::bigint as total FROM "FundingRound" fr JOIN "Startup" s ON fr."startupId" = s.id WHERE ${hqInIndia('s')} AND s."deletedAt" IS NULL`,
-  ]);
+  ]).catch((err) => {
+    console.error('[india-ai/opengraph-image] live numbers unavailable', err);
+    return [[], []] as Record<string, unknown>[][];
+  });
 
-  const startups = startupCount[0]?.count || 0;
+  const startups = Number(startupCount[0]?.count) || 0;
   const fundingPaise = Number(fundingResult[0]?.total || 0);
   const fundingCr = fundingPaise / 100 / 10000000;
-  const fundingLabel = fundingCr >= 100000
-    ? `₹${(fundingCr / 100000).toFixed(1)}L Cr`
-    : `₹${Math.round(fundingCr).toLocaleString('en-IN')} Cr`;
+  const fundingLabel = fundingPaise <= 0 ? 'Live' : fundingCr >= 100000
+    ? `Rs ${(fundingCr / 100000).toFixed(1)}L Cr`
+    : `Rs ${Math.round(fundingCr).toLocaleString('en-IN')} Cr`;
 
   return new ImageResponse(
     (
@@ -105,7 +109,7 @@ export default async function OGImage() {
           <div style={{ display: 'flex', gap: '40px' }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <div style={{ fontSize: '48px', fontWeight: 800, color: '#FF3B30' }}>
-                {startups.toLocaleString('en-IN')}+
+                {startups > 0 ? `${startups.toLocaleString('en-IN')}+` : 'Live'}
               </div>
               <div style={{ fontSize: '18px', color: '#94A3B8' }}>AI Startups</div>
             </div>
@@ -119,7 +123,7 @@ export default async function OGImage() {
 
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <div style={{ fontSize: '48px', fontWeight: 800, color: '#FF3B30' }}>
-                ₹10,372 Cr
+                Rs 10,372 Cr
               </div>
               <div style={{ fontSize: '18px', color: '#94A3B8' }}>IndiaAI Mission</div>
             </div>

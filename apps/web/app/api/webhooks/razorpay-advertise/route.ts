@@ -30,64 +30,73 @@ export async function POST(request: NextRequest) {
     const { event, payload } = body;
 
     if (event === 'payment.captured' || event === 'order.paid') {
-      const paymentEntity = payload.payment.entity;
-      const orderId = paymentEntity.order_id;
-      const paymentId = paymentEntity.id;
+      const entity = payload?.payment?.entity;
+      const orderId: string | undefined = entity?.order_id;
+      const paymentId: string | undefined = entity?.id;
+      if (!orderId || !paymentId || entity.status !== 'captured') {
+        return NextResponse.json({ status: 'ignored' }, { status: 200 });
+      }
 
-      // Idempotency: skip if already processed
-      const existingPayment = await prisma.advPayment.findFirst({
-        where: { razorpayPaymentId: paymentId },
+      const payment = await prisma.advPayment.findUnique({ where: { razorpayOrderId: orderId } });
+      if (!payment) {
+        console.warn('[razorpay-advertise] No payment record for order:', String(orderId).replace(/[\n\r]/g, ''));
+        return NextResponse.json({ status: 'no_matching_payment' }, { status: 200 });
+      }
+      if (payment.status === 'SUCCESS') {
+        return NextResponse.json({ status: 'already_processed' }, { status: 200 });
+      }
+      // The order was created on our server at this exact total; anything else is not ours to activate.
+      if (Number(entity.amount) !== payment.totalPaise || String(entity.currency ?? 'INR') !== payment.currency) {
+        console.error(`[razorpay-advertise] Amount mismatch on order ${orderId}: paid ${entity.amount} ${entity.currency}, expected ${payment.totalPaise} ${payment.currency}. Not activated; needs review.`);
+        return NextResponse.json({ status: 'amount_mismatch' }, { status: 200 });
+      }
+
+      // Claim the payment in one atomic step, so 'payment.captured' and 'order.paid' arriving together can't both
+      // activate it. FAILED is claimable too: a card can fail and then succeed on a retry of the same order.
+      const claimed = await prisma.advPayment.updateMany({
+        where: { id: payment.id, status: { in: ['PENDING', 'FAILED', 'TIMEOUT'] } },
+        data: { status: 'SUCCESS', razorpayPaymentId: paymentId, paidAt: new Date(), failedAt: null },
       });
-      if (existingPayment) {
+      if (claimed.count === 0) {
         return NextResponse.json({ status: 'already_processed' }, { status: 200 });
       }
 
-      // Find the pending payment record
-      const payment = await prisma.advPayment.findFirst({
-        where: { razorpayOrderId: orderId, status: 'PENDING' },
-      });
-      if (!payment) {
-        console.warn('[razorpay-advertise] No pending payment for order:', String(orderId).replace(/[\n\r]/g, ''));
-        return NextResponse.json({ status: 'no_matching_payment' }, { status: 200 });
-      }
-
-      // Mark payment as successful
-      await prisma.advPayment.update({
-        where: { id: payment.id },
-        data: {
-          razorpayPaymentId: paymentId,
-          status: 'SUCCESS',
-          paidAt: new Date(),
-        },
-      });
-
-      // Handle based on purpose
-      switch (payment.purpose) {
-        case 'PACKAGE_PURCHASE':
-          await handlePackagePurchase(payment);
-          break;
-        case 'PACKAGE_UPGRADE':
-          await handlePackageUpgrade(payment);
-          break;
-        case 'ZONE_EXTENSION':
-          await handleZoneExtension(payment);
-          break;
-        case 'SOCIAL_POST':
-          await handleSocialPost(payment);
-          break;
+      try {
+        switch (payment.purpose) {
+          case 'PACKAGE_PURCHASE':
+            await handlePackagePurchase(payment);
+            break;
+          case 'PACKAGE_UPGRADE':
+            await handlePackageUpgrade(payment);
+            break;
+          case 'ZONE_EXTENSION':
+            await handleZoneExtension(payment);
+            break;
+          case 'SOCIAL_POST':
+            await handleSocialPost(payment);
+            break;
+        }
+      } catch (err) {
+        // Activation failed after the claim: release it so Razorpay's automatic retry can finish the job.
+        await prisma.advPayment.update({
+          where: { id: payment.id },
+          data: { status: 'PENDING', razorpayPaymentId: null, paidAt: null },
+        }).catch((releaseErr) => console.error('[razorpay-advertise] Could not release claim', payment.id, releaseErr));
+        throw err;
       }
 
       console.log(`[razorpay-advertise] Processed ${payment.purpose} for founder ${payment.founderId}`);
     }
 
     if (event === 'payment.failed') {
-      const paymentEntity = payload.payment.entity;
-      const orderId = paymentEntity.order_id;
-
-      await prisma.advPayment.updateMany({
-        where: { razorpayOrderId: orderId, status: 'PENDING' },
-        data: { status: 'FAILED', failedAt: new Date() },
-      });
+      const orderId = payload?.payment?.entity?.order_id;
+      // Only a still-pending order is marked failed; a later successful attempt on the same order can still claim it.
+      if (orderId) {
+        await prisma.advPayment.updateMany({
+          where: { razorpayOrderId: orderId, status: 'PENDING' },
+          data: { status: 'FAILED', failedAt: new Date() },
+        });
+      }
     }
 
     return NextResponse.json({ status: 'ok' }, { status: 200 });

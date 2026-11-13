@@ -50,3 +50,13 @@ export function roundHeadline(r: { startupName: string; roundType?: string | nul
   const label = roundLabel(r.roundType);
   return amount ? `${r.startupName.trim()} raises ${amount} ${label}` : `${r.startupName.trim()} raises ${label} funding`;
 }
+
+/**
+ * A round's announcement date, or null when it can't be read or is impossibly old (a typo like year 0022).
+ * Use this wherever a date feeds a URL, a sitemap or structured data, so one bad record can't break the page.
+ */
+export function roundDate(iso: string | null | undefined): Date | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) || d.getFullYear() < 1990 ? null : d;
+}

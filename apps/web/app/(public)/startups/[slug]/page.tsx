@@ -28,6 +28,7 @@ import TrackView from '@/components/TrackView';
 import { SignedIn, SignedOut } from '@/components/auth/SignedIn';
 import { fitTitle, metaSnippet } from '@/lib/seo-text';
 import { roundLabel } from '@/lib/funding/format';
+import { MilestoneIcon } from '@/components/milestones/MilestoneIcon';
 
 export const revalidate = 3600;
 
@@ -479,7 +480,6 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
             ) : (
               <Building2 className="w-8 h-8 text-brand" />
             )}
-            {startup.isVerified && <VerifiedBadge onLogo size="md" />}
           </div>
 
           {/* Name + Tagline (flex-1 so Impact Score stays right) */}
@@ -488,7 +488,7 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h1 className="font-sora font-bold text-base sm:text-xl text-navy dark:text-white leading-tight">{startup.name}</h1>
-                  {startup.isVerified && <VerifiedBadge size="md" showText />}
+                  {startup.isVerified && <VerifiedBadge size="lg" />}
                 </div>
                 <p className="text-gray-500 dark:text-gray-400 font-jakarta text-xs sm:text-sm mt-1 line-clamp-2">{startup.tagline}</p>
               </div>
@@ -824,11 +824,10 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
                 <div className="absolute left-[19px] top-0 bottom-0 w-px bg-gray-200 dark:bg-gray-700" />
                 <div className="space-y-4">
                   {startup.startupMilestones.map((m: any) => {
-                    const icons: Record<string, string> = { FUNDING: '💰', LAUNCH: '🚀', PARTNERSHIP: '🤝', ACQUISITION: '🏢', AWARD: '🏆', HIRING: '👥', REVENUE: '📈', USER_MILESTONE: '🎯' };
                     return (
                       <div key={m.id} className="flex items-start gap-3 relative">
                         <div className="w-10 h-10 rounded-full bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 flex items-center justify-center text-lg shrink-0 z-[1]">
-                          {icons[m.type] || '📌'}
+                          <MilestoneIcon type={m.type} className="w-[18px] h-[18px]" />
                         </div>
                         <div className="pt-1.5">
                           <h3 className="font-sora font-bold text-xs text-navy dark:text-white flex items-center gap-1.5">

@@ -154,7 +154,7 @@ export default function OnboardingClient({ user, returnTo }: { user: User; retur
             <Building2 className="w-8 h-8 text-brand" />
           </div>
           <h1 className="font-sora font-bold text-3xl text-gray-900 dark:text-white mb-2">
-            Welcome to Udyaibase! 🎉
+            Welcome to Udyaibase!
           </h1>
           <p className="text-gray-500 dark:text-gray-400 font-jakarta">
             Let's complete your profile to get started

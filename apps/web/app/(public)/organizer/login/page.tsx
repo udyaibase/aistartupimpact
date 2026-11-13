@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Loader2, CalendarDays, Mail, Lock, User, Building2, CheckCircle, ArrowLeft, Shield, Users, BarChart3, Ticket, UserPlus, Globe, Zap } from "lucide-react";
+import { Loader2, CalendarDays, Mail, Lock, User, Building2, CheckCircle, ArrowLeft, Shield, Users, BarChart3, Ticket, UserPlus, Globe, Zap, AlertTriangle } from "lucide-react";
 import TurnstileWidget from "@/components/shared/TurnstileWidget";
 
 type Mode = "login" | "signup" | "forgot";
@@ -261,7 +261,7 @@ function OrganizerAuthContent() {
 
                 {error && (
                   <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-xl">
-                    <span className="text-red-500 text-sm">⚠</span>
+                    <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" aria-hidden />
                     <p className="text-sm text-red-600 dark:text-red-400 font-jakarta">{error}</p>
                   </div>
                 )}
@@ -404,7 +404,7 @@ function OrganizerAuthContent() {
 
               {error && (
                 <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-xl">
-                  <span className="text-red-500 text-sm">⚠</span>
+                  <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" aria-hidden />
                   <p className="text-sm text-red-600 dark:text-red-400 font-jakarta">{error}</p>
                 </div>
               )}

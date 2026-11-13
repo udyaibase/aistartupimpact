@@ -1,104 +1,51 @@
 'use client';
 
 import { useState } from 'react';
-import { BadgeCheck, Check } from 'lucide-react';
 
 interface VerifiedBadgeProps {
+  /** sm: cards and lists · md: section headings · lg: a startup's own page title */
   size?: 'sm' | 'md' | 'lg';
-  showText?: boolean;
-  onLogo?: boolean;
   className?: string;
-  verified?: boolean;
   tooltipText?: string;
 }
 
-export function VerifiedBadge({
-  size = 'md',
-  showText = true,
-  onLogo = false,
-  className = '',
-  verified = true,
-  tooltipText,
-}: VerifiedBadgeProps) {
-  const [showTooltip, setShowTooltip] = useState(false);
+const SIZES = { sm: 'w-3.5 h-3.5', md: 'w-4 h-4', lg: 'w-5 h-5' } as const;
 
-  const sizes = {
-    sm: { 
-      icon: 'w-3 h-3', 
-      logoIcon: 'w-2.5 h-2.5',
-      text: 'text-xs', 
-      padding: 'px-1.5 py-0.5', 
-      badgePadding: 'p-[2px]',
-    },
-    md: { 
-      icon: 'w-3.5 h-3.5', 
-      logoIcon: 'w-3 h-3',
-      text: 'text-xs', 
-      padding: 'px-2 py-0.5', 
-      badgePadding: 'p-[2.5px]',
-    },
-    lg: { 
-      icon: 'w-4 h-4', 
-      logoIcon: 'w-3.5 h-3.5',
-      text: 'text-sm', 
-      padding: 'px-2.5 py-1', 
-      badgePadding: 'p-[3px]',
-    },
-  };
+const DEFAULT_TOOLTIP = 'The owner of this company profile proved they own its website domain.';
 
-  const s = sizes[size];
-
-  const defaultTooltipText = verified
-    ? 'The owner of this company profile has verified ownership by completing domain verification.'
-    : 'This profile has not yet been verified with a company email.';
-  const displayTooltipText = tooltipText || defaultTooltipText;
-
-  // Only mounted while open, so the hidden explanation isn't part of the card's content
-  const tooltip = showTooltip && (
-    <span role="tooltip" className="absolute z-dropdown bottom-full left-0 mb-2 w-64 bg-gray-900 dark:bg-gray-800 rounded-lg rounded-bl-none shadow-xl px-3.5 py-2.5 pointer-events-none block text-left">
-      <span className="flex items-center gap-1.5 mb-1">
-        <BadgeCheck className={`w-3.5 h-3.5 ${verified ? 'text-green-400' : 'text-gray-400'}`} />
-        <span className="text-xs font-bold text-white font-jakarta">{verified ? 'Verified' : 'Not Verified'}</span>
-      </span>
-      <span className="block text-xs font-normal text-gray-300 font-jakarta leading-relaxed">
-        {displayTooltipText}
-      </span>
-      <span className="absolute top-full left-0 w-0 h-0 border-t-[8px] border-t-gray-900 dark:border-t-gray-800 border-r-[8px] border-r-transparent" />
-    </span>
-  );
-  const label = verified ? 'Verified' : 'Not verified';
-
-  if (onLogo) {
-    return (
-      <span
-        role="img"
-        aria-label={label}
-        className={`absolute bottom-[-3px] right-[-3px] ${verified ? 'bg-green-500 dark:bg-green-600' : 'bg-gray-400 dark:bg-gray-600'} rounded-full ${s.badgePadding} border-2 border-white dark:border-gray-900 shadow-sm flex items-center justify-center text-white cursor-pointer ${className}`}
-        onMouseEnter={() => setShowTooltip(true)}
-        onMouseLeave={() => setShowTooltip(false)}
-        onClick={() => setShowTooltip(!showTooltip)}
-      >
-        <Check className={`${s.logoIcon} stroke-[3.5] text-white`} />
-        {tooltip}
-      </span>
-    );
-  }
+/**
+ * The "Domain verified" tick, shown right after a startup's name everywhere it appears (cards, lists, the startup
+ * page). Blue, so it reads as "verified" rather than "online" or "success", and never on top of the logo. Place it
+ * as a sibling after a `truncate` name with `shrink-0` behaviour built in, so a long name is cut, not the tick.
+ * Hover (or tap) explains what was verified.
+ */
+export function VerifiedBadge({ size = 'sm', className = '', tooltipText }: VerifiedBadgeProps) {
+  const [open, setOpen] = useState(false);
 
   return (
     <span
-      className={`relative inline-flex items-center gap-1 ${s.padding} rounded-full ${
-        verified
-          ? 'bg-green-50 dark:bg-green-950/20 text-green-600 dark:text-green-400 border border-green-100/60 dark:border-green-900/30'
-          : 'bg-gray-100 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 border border-gray-200/60 dark:border-gray-700/30'
-      } font-medium ${s.text} cursor-pointer ${className}`}
-      aria-label={showText ? undefined : label}
-      onMouseEnter={() => setShowTooltip(true)}
-      onMouseLeave={() => setShowTooltip(false)}
-      onClick={() => setShowTooltip(!showTooltip)}
+      role="img"
+      aria-label="Domain verified"
+      className={`relative inline-flex shrink-0 items-center align-middle cursor-help ${className}`}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      // Cards are links: a tap on the tick explains it instead of opening the page.
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen((o) => !o); }}
     >
-      <BadgeCheck className={`${s.icon} ${verified ? 'text-green-500 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'}`} />
-      {showText && (verified ? 'Verified' : 'Not Verified')}
-      {tooltip}
+      <svg viewBox="0 0 24 24" className={`${SIZES[size]} text-blue-500 dark:text-blue-400`} aria-hidden="true">
+        <path
+          fill="currentColor"
+          d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"
+        />
+        <path d="m8.5 12 2.5 2.5 4.5-5" fill="none" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      {/* Only mounted while open, so the explanation isn't part of the card's text */}
+      {open && (
+        <span role="tooltip" className="absolute z-dropdown bottom-full left-1/2 -translate-x-1/2 mb-2 w-60 rounded-lg bg-gray-900 dark:bg-gray-800 px-3 py-2 text-left shadow-xl pointer-events-none">
+          <span className="block text-xs font-bold text-white font-jakarta">Domain verified</span>
+          <span className="mt-0.5 block text-xs font-normal leading-relaxed text-gray-300 font-jakarta">{tooltipText ?? DEFAULT_TOOLTIP}</span>
+        </span>
+      )}
     </span>
   );
 }

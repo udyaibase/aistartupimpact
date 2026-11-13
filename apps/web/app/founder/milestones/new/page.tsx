@@ -3,16 +3,17 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, Trophy, Send } from "lucide-react";
+import { MilestoneIcon } from '@/components/milestones/MilestoneIcon';
 
 const MILESTONE_TYPES = [
-  { value: "FUNDING", label: "Funding", icon: "💰", desc: "Raised capital" },
-  { value: "LAUNCH", label: "Launch", icon: "🚀", desc: "Product or feature" },
-  { value: "PARTNERSHIP", label: "Partnership", icon: "🤝", desc: "Strategic partner" },
-  { value: "ACQUISITION", label: "Acquisition", icon: "🏢", desc: "Acquired a company" },
-  { value: "AWARD", label: "Award", icon: "🏆", desc: "Recognition" },
-  { value: "HIRING", label: "Hiring", icon: "👥", desc: "Key hires or team growth" },
-  { value: "REVENUE", label: "Revenue", icon: "📈", desc: "Revenue milestone" },
-  { value: "USER_MILESTONE", label: "Users", icon: "🎯", desc: "User or customer goal" },
+  { value: "FUNDING", label: "Funding", desc: "Raised capital" },
+  { value: "LAUNCH", label: "Launch", desc: "Product or feature" },
+  { value: "PARTNERSHIP", label: "Partnership", desc: "Strategic partner" },
+  { value: "ACQUISITION", label: "Acquisition", desc: "Acquired a company" },
+  { value: "AWARD", label: "Award", desc: "Recognition" },
+  { value: "HIRING", label: "Hiring", desc: "Key hires or team growth" },
+  { value: "REVENUE", label: "Revenue", desc: "Revenue milestone" },
+  { value: "USER_MILESTONE", label: "Users", desc: "User or customer goal" },
 ];
 
 export default function NewMilestonePage() {
@@ -120,7 +121,7 @@ export default function NewMilestonePage() {
             <div className="grid grid-cols-4 gap-2">
               {MILESTONE_TYPES.map(t => (
                 <button key={t.value} type="button" onClick={() => setType(t.value)} className={`flex flex-col items-center gap-1 p-3 rounded-xl border text-center transition-all ${type === t.value ? "border-brand bg-brand/5 ring-2 ring-brand/20" : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"}`}>
-                  <span className="text-xl">{t.icon}</span>
+                  <MilestoneIcon type={t.value} className="w-5 h-5" />
                   <span className="text-xs font-jakarta font-medium text-gray-700 dark:text-gray-300">{t.label}</span>
                 </button>
               ))}

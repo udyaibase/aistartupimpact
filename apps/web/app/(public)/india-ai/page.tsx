@@ -13,8 +13,9 @@ import {
 } from 'lucide-react';
 import { buildFallback } from '@/lib/build-fallback';
 import { sql } from '@/lib/db';
-import { hqInIndia } from '@/lib/india-hq';
+import { hqInIndia, MIN_CITY_STARTUPS } from '@/lib/india-hq';
 import { getMapData } from '@/lib/india-ai/map-data';
+import Link from 'next/link';
 import FundingTracker from '@/components/india-ai/FundingTracker';
 import NewsletterCapture from '@/components/india-ai/NewsletterCapture';
 import GovernmentSchemes from '@/components/india-ai/GovernmentSchemes';
@@ -87,15 +88,16 @@ export const metadata: Metadata = {
     'AI research India'
   ],
   openGraph: {
-    title: 'India AI Startups - Live Ecosystem Map',
+    title: 'India AI Startups — Live Ecosystem Map',
     description: 'Explore India\'s AI revolution with real-time data on startups, funding, IndiaAI Mission tracker, policy updates, and talent insights.',
     type: 'website',
     url: 'https://udyaibase.com/india-ai',
-    images: [{ url: '/og-image.webp', width: 2250, height: 1181 }],
+    siteName: 'Udyaibase',
+    locale: 'en_IN',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'India AI Startups - Live Ecosystem Map',
+    title: 'India AI Startups — Live Ecosystem Map',
     description: 'Real-time intelligence on India\'s AI revolution — startups, funding, policy, and IndiaAI Mission tracker.',
   },
   alternates: {
@@ -277,7 +279,7 @@ const iconMap: Record<string, typeof Rocket> = {
 export default async function IndiaAIPage() {
   const [{ stats, mission, missionDisbursement, recentFunding }, mapData] = await Promise.all([
     getIndiaAIData(),
-    getMapData().catch((e) => { console.error('[india-ai] map data', e); return { cities: [], startups: [], jobsByCity: [], eventPlaces: [], rounds: [] }; }),
+    getMapData(),
   ]);
 
   // Extract computed startup count for dynamic subtitle
@@ -295,30 +297,44 @@ export default async function IndiaAIPage() {
   const fy27Stat = missionDisbursement.find((s) => s.metricKey === 'mission_fy27_be');
 
   // JSON-LD Schema Markup for SEO
-  const organizationSchema = {
+  const pageSchema = {
     '@context': 'https://schema.org',
-    '@type': 'Organization',
-    name: 'Udyaibase - India AI Ecosystem',
+    '@type': 'CollectionPage',
+    name: 'India AI Startups: Live Ecosystem Map, Funding & IndiaAI Mission',
     url: 'https://udyaibase.com/india-ai',
-    logo: 'https://udyaibase.com/logo.png',
-    description: 'Comprehensive database and intelligence platform for India\'s AI startup ecosystem',
-    sameAs: [
-      'https://twitter.com/udyaibase',
-      'https://linkedin.com/company/udyaibase',
+    description: `Live map and data on ${startupCount} AI startups in India: funding rounds, top AI cities, the IndiaAI Mission and government schemes.`,
+    inLanguage: 'en-IN',
+    isPartOf: { '@type': 'WebSite', name: 'Udyaibase', url: 'https://udyaibase.com' },
+    about: { '@type': 'Thing', name: 'Artificial intelligence startups in India' },
+  };
+  const breadcrumbSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://udyaibase.com' },
+      { '@type': 'ListItem', position: 2, name: 'India AI', item: 'https://udyaibase.com/india-ai' },
     ],
   };
+  // Cities with enough startups to have an indexable page, biggest first: crawlable links next to the (client-side) map.
+  const topCityLinks = [...mapData.cities]
+    .filter((c) => c.totalStartups >= MIN_CITY_STARTUPS && c.slug)
+    .sort((a, b) => b.totalStartups - a.totalStartups)
+    .slice(0, 12);
 
   const datasetSchema = {
     '@context': 'https://schema.org',
     '@type': 'Dataset',
-    name: 'India AI Startups Database 2026',
+    name: `India AI Startups Database ${new Date().getFullYear()}`,
     description: `Comprehensive database of ${startupCount} AI startups in India with funding data, city-wise distribution, and ecosystem insights`,
     url: 'https://udyaibase.com/india-ai',
     keywords: 'India AI startups, AI funding India, Indian AI companies, AI ecosystem',
     creator: {
       '@type': 'Organization',
       name: 'Udyaibase',
+      url: 'https://udyaibase.com',
     },
+    isAccessibleForFree: true,
+    spatialCoverage: { '@type': 'Place', name: 'India' },
     distribution: {
       '@type': 'DataDownload',
       encodingFormat: 'application/json',
@@ -331,11 +347,15 @@ export default async function IndiaAIPage() {
       {/* JSON-LD Schema */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: jsonLd(organizationSchema) }}
+        dangerouslySetInnerHTML={{ __html: jsonLd(pageSchema) }}
       />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLd(datasetSchema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbSchema) }}
       />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-10">
@@ -347,7 +367,7 @@ export default async function IndiaAIPage() {
             <Flag className="w-3 h-3" /> India AI Ecosystem — Live
           </div>
           <h1 className="font-sora font-extrabold text-lg sm:text-xl md:text-2xl lg:text-3xl text-navy dark:text-white max-w-4xl mx-auto px-2">
-            India&apos;s AI Revolution — Live
+            India AI Startups — Live Ecosystem Map &amp; Tracker
           </h1>
           <p className="text-gray-600 dark:text-gray-300 font-jakarta text-xs sm:text-xs lg:text-sm mt-2 sm:mt-3 max-w-2xl mx-auto px-4 leading-relaxed">
             Real-time intelligence on <strong>{startupCount} AI startups</strong>, funding, policy, and talent shaping India&apos;s AI future
@@ -393,6 +413,24 @@ export default async function IndiaAIPage() {
 
           {/* Interactive Map Component */}
           <RealIndiaMap data={mapData} />
+
+          {topCityLinks.length > 0 && (
+            <nav aria-label="Top AI cities in India" className="mt-6 sm:mt-8">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h3 className="font-sora font-bold text-base sm:text-lg text-navy dark:text-white">Top AI startup cities in India</h3>
+                <Link href="/india-ai/top-cities" className="shrink-0 text-sm font-semibold text-brand hover:underline">Full rankings →</Link>
+              </div>
+              <ul className="flex flex-wrap gap-2">
+                {topCityLinks.map((c) => (
+                  <li key={c.id}>
+                    <Link href={`/india-ai/cities/${c.slug}`} className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-1.5 text-sm font-jakarta text-gray-700 dark:text-gray-200 hover:border-brand/40 hover:text-brand transition-colors">
+                      AI startups in {c.cityName} <span className="text-gray-400">{c.totalStartups}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          )}
         </section>
 
         {/* ============================================

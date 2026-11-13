@@ -6,8 +6,8 @@ import Image from 'next/image';
 import { cache } from 'react';
 import { ChevronRight, IndianRupee, Calendar, Users, Building2, ExternalLink, TrendingUp } from 'lucide-react';
 import { getFundingRoundBySlugDirect, getStartupRoundsDirect } from '@/lib/db';
-import { inrLabel, roundAmount, roundHeadline, roundLabel, usdLabel } from '@/lib/funding/format';
-import { fitTitle, metaSnippet } from '@/lib/seo-text';
+import { inrLabel, roundAmount, roundDate, roundHeadline, roundLabel, usdLabel } from '@/lib/funding/format';
+import { fitTitle, metaSnippet, taglineClause } from '@/lib/seo-text';
 import SignInGate from '@/components/SignInGate';
 import { SignedIn, SignedOut } from '@/components/auth/SignedIn';
 
@@ -20,7 +20,7 @@ export async function generateStaticParams() {
 
 const getRound = cache((slug: string) => getFundingRoundBySlugDirect(slug));
 
-const longDate = (d: string) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' });
+const longDate = (d: string) => roundDate(d)?.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }) ?? null;
 
 /** One public paragraph Google can read (the detailed card stays behind sign-in). */
 function summary(round: any): string {
@@ -30,7 +30,7 @@ function summary(round: any): string {
   const others = ((round.allInvestors as string[] | null) ?? []).filter((i) => i && !lead.includes(i));
   const where = round.headquartersCity ? `${String(round.headquartersCity).split(',')[0].trim()}-based ` : '';
   const parts = [
-    `${where}${round.startupName}${round.startupTagline ? `, ${String(round.startupTagline).replace(/\.$/, '').replace(/^./, (c: string) => c.toLowerCase())},` : ''} raised ${amount ? `${amount}${inr ? ` (about ${inr})` : ''} in` : 'a'} ${roundLabel(round.roundType)} round announced on ${longDate(round.announcedAt)}.`,
+    `${where}${round.startupName}${round.startupTagline ? `, ${taglineClause(String(round.startupTagline))},` : ''} raised ${amount ? `${amount}${inr ? ` (about ${inr})` : ''} in` : 'a'} ${roundLabel(round.roundType)} round${longDate(round.announcedAt) ? ` announced on ${longDate(round.announcedAt)}` : ''}.`,
     lead.length ? `The round was led by ${lead.join(', ')}${others.length ? `, with participation from ${others.slice(0, 4).join(', ')}${others.length > 4 ? ' and others' : ''}` : ''}.` : others.length ? `Investors include ${others.slice(0, 5).join(', ')}.` : '',
   ];
   return parts.filter(Boolean).join(' ');
@@ -41,13 +41,13 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
   const round = await getRound(params.slug);
   if (!round) return { title: 'Funding Round Not Found', robots: { index: false } };
 
-  const year = new Date(round.announcedAt).getFullYear();
+  const year = roundDate(round.announcedAt)?.getFullYear();
   const headline = roundHeadline(round as any);
-  const title = fitTitle([
+  const title = fitTitle(year ? [
     `${headline} (${year}) — Investors & Details`,
     `${headline} (${year})`,
     headline,
-  ]);
+  ] : [`${headline} — Investors & Details`, headline]);
   const description = metaSnippet(summary(round));
   const url = `https://udyaibase.com/funding/${params.slug}`;
 
@@ -61,7 +61,7 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
       type: 'article',
       url,
       siteName: 'Udyaibase',
-      publishedTime: round.announcedAt,
+      publishedTime: roundDate(round.announcedAt)?.toISOString(),
       images: [{ url: 'https://udyaibase.com/og-image.webp', width: 2250, height: 1181 }],
     },
     twitter: { card: 'summary_large_image', title: headline, description, images: ['https://udyaibase.com/og-image.webp'] },
@@ -90,7 +90,7 @@ export default async function FundingRoundPage(props: { params: Promise<{ slug: 
         "description": text,
         "url": pageUrl,
         "mainEntityOfPage": pageUrl,
-        "datePublished": round.announcedAt,
+        "datePublished": roundDate(round.announcedAt)?.toISOString(),
         "image": ["https://udyaibase.com/og-image.webp"],
         "author": { "@type": "Organization", "name": "Udyaibase", "url": "https://udyaibase.com" },
         "publisher": { "@type": "Organization", "@id": "https://udyaibase.com/#organization", "name": "Udyaibase" },
@@ -170,7 +170,7 @@ export default async function FundingRoundPage(props: { params: Promise<{ slug: 
                   <Calendar className="w-4 h-4" />
                   <span>Announced Date</span>
                 </div>
-                <p className="font-sora font-bold text-lg text-navy dark:text-white">{longDate(round.announcedAt)}</p>
+                <p className="font-sora font-bold text-lg text-navy dark:text-white">{longDate(round.announcedAt) ?? '—'}</p>
               </div>
 
               {round.headquartersCity && (
@@ -246,7 +246,7 @@ export default async function FundingRoundPage(props: { params: Promise<{ slug: 
                   ) : (
                     <span className="font-semibold text-navy dark:text-white">{label}</span>
                   )}
-                  <span className="text-gray-500 dark:text-gray-400 shrink-0">{longDate(r.announcedAt)}</span>
+                  <span className="text-gray-500 dark:text-gray-400 shrink-0">{longDate(r.announcedAt) ?? '—'}</span>
                 </li>
               );
             })}

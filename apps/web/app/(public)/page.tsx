@@ -48,6 +48,7 @@ import {
 // Dynamic imports for heavy client components — reduces initial JS bundle
 import { FeaturedPartnerRotator, SponsorStrip, HeroCarousel } from '@/components/ClientOnly';
 import ForYouSection from '@/components/ForYouSection';
+import { MilestoneIcon } from '@/components/milestones/MilestoneIcon';
 
 const formatDate = (isoString: string) =>
   new Date(isoString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -613,7 +614,7 @@ export default async function HomePage() {
             {/* Dark Header */}
             <div className="bg-gray-900 dark:bg-gray-800 px-4 sm:px-6 py-4 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                <span className="text-xl sm:text-2xl shrink-0">🇮🇳</span>
+                <svg viewBox="0 0 30 20" className="w-7 h-[19px] sm:w-8 sm:h-[21px] shrink-0 rounded-[2px] ring-1 ring-white/20" role="img" aria-label="India"><rect width="30" height="20" fill="#fff" /><rect width="30" height="6.67" fill="#FF9933" /><rect y="13.33" width="30" height="6.67" fill="#138808" /><circle cx="15" cy="10" r="2.6" fill="none" stroke="#000080" strokeWidth="0.7" /><circle cx="15" cy="10" r="0.6" fill="#000080" /></svg>
                 <div className="min-w-0">
                   <span className="text-red-500 font-bold text-xs sm:text-sm uppercase tracking-wider">MADE IN</span>
                   <span className="text-white font-bold text-xs sm:text-sm uppercase tracking-wider ml-1">INDIA</span>
@@ -935,11 +936,10 @@ export default async function HomePage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {fetchedMilestones.map((m: any) => {
-              const icons: Record<string, string> = { FUNDING: '💰', LAUNCH: '🚀', PARTNERSHIP: '🤝', ACQUISITION: '🏢', AWARD: '🏆', HIRING: '👥', REVENUE: '📈', USER_MILESTONE: '🎯' };
               return (
                 <Link key={m.id} href={`/startups/${m.startupSlug}`} className="card p-4 hover:border-brand/20 transition-colors group">
                   <div className="flex items-start gap-3">
-                    <span className="text-2xl">{icons[m.type] || '📌'}</span>
+                    <span className="w-9 h-9 rounded-lg bg-gray-50 dark:bg-gray-800 flex items-center justify-center shrink-0"><MilestoneIcon type={m.type} className="w-[18px] h-[18px]" /></span>
                     <div className="flex-1 min-w-0">
                       <p className="font-sora font-bold text-sm text-navy dark:text-white group-hover:text-brand transition-colors truncate">{m.title}</p>
                       <p className="text-xs text-brand font-jakarta font-medium mt-0.5">{m.startupName}</p>

@@ -436,13 +436,13 @@ export default function ProfileForm({ founder }: ProfileFormProps) {
           <div>
             <p className="text-gray-500 dark:text-gray-400">Account Status</p>
             <p className="text-gray-900 dark:text-white font-medium mt-1">
-              {founder.status === 'ACTIVE' ? '✅ Active' : founder.status}
+              {founder.status === 'ACTIVE' ? 'Active' : founder.status}
             </p>
           </div>
           <div>
             <p className="text-gray-500 dark:text-gray-400">Email Verified</p>
             <p className="text-gray-900 dark:text-white font-medium mt-1">
-              {founder.emailVerified ? '✅ Verified' : '❌ Not Verified'}
+              {founder.emailVerified ? 'Verified' : 'Not verified'}
             </p>
           </div>
           <div>

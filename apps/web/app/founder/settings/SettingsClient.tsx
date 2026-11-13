@@ -57,7 +57,7 @@ export default function SettingsClient() {
       if (data.success) {
         setToast({
           type: 'success',
-          message: '✅ Settings updated successfully'
+          message: 'Settings updated successfully'
         });
       } else {
         // Revert on error

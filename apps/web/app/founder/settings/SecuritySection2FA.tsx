@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Shield, X, Copy, Check, Download } from 'lucide-react';
+import { Shield, X, Copy, Check, Download, AlertTriangle } from 'lucide-react';
 import Image from 'next/image';
 
 interface TwoFactorSetupProps {
@@ -318,8 +318,8 @@ export default function TwoFactorSetup({ isEnabled, onClose, onSuccess, onError 
             </div>
 
             <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-4">
-              <p className="text-sm text-yellow-800 dark:text-yellow-300 font-semibold">
-                ⚠️ Important: Save these codes now!
+              <p className="text-sm text-yellow-800 dark:text-yellow-300 font-semibold flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden /> Important: Save these codes now!
               </p>
               <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
                 You won't be able to see them again. Use them if you lose access to your authenticator app.

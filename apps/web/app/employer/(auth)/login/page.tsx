@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Briefcase, Mail, Lock, ArrowRight, Eye, EyeOff, Shield, Users, BarChart3, Building2, Globe, Zap, UserPlus } from 'lucide-react';
+import { Briefcase, Mail, Lock, ArrowRight, Eye, EyeOff, Shield, Users, BarChart3, Building2, Globe, Zap, UserPlus, AlertTriangle } from 'lucide-react';
 import TurnstileWidget from '@/components/shared/TurnstileWidget';
 import TeamCodeSignIn from '@/components/employer/team/TeamCodeSignIn';
 import { PASSWORD_SIGNIN_UNTIL, passwordSignInOpen } from '@/lib/employer/sign-in-policy';
@@ -212,7 +212,7 @@ export default function EmployerLoginPage() {
 
                 {error && (
                   <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-xl">
-                    <span className="text-red-500 text-sm">⚠</span>
+                    <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" aria-hidden />
                     <p className="text-sm text-red-600 dark:text-red-400 font-jakarta">{error}</p>
                   </div>
                 )}
@@ -311,7 +311,7 @@ export default function EmployerLoginPage() {
 
                       {error && (
                         <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-xl">
-                          <span className="text-red-500 text-sm">⚠</span>
+                          <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" aria-hidden />
                           <p className="text-sm text-red-600 dark:text-red-400 font-jakarta">{error}</p>
                         </div>
                       )}

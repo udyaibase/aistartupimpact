@@ -214,8 +214,8 @@ export default function SlugEditor({
       {!isAdmin && (
         <div className={clsx('text-xs font-jakarta', daysLeft > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400')}>
           {daysLeft > 0
-            ? `⚠️ URL can be changed again in ${daysLeft} day${daysLeft !== 1 ? 's' : ''} (${nextChangeDate?.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' })})`
-            : '⏱ You can change this URL once every 45 days'}
+            ? `URL can be changed again in ${daysLeft} day${daysLeft !== 1 ? 's' : ''} (${nextChangeDate?.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' })})`
+            : 'You can change this URL once every 45 days'}
         </div>
       )}
     </div>
