@@ -20,7 +20,7 @@ export default async function BillingPage() {
       select: { id: true, plan: true, cycle: true, amountPaise: true, gstPaise: true, totalPaise: true, status: true, paidAt: true, createdAt: true, periodStart: true, periodEnd: true, invoiceNumber: true, invoiceEmailedAt: true, refundAmountPaise: true, creditNoteNumber: true },
     }),
     prisma.jobBoardListing.count({ where: { employerId: session.id, status: 'OPEN', deletedAt: null } }),
-    prisma.jobBoardEmployer.findUnique({ where: { id: session.id }, select: { ...BILLING_SELECT, email: true, foundingMemberAt: true, foundingLostAt: true } }),
+    prisma.jobBoardEmployer.findUnique({ where: { id: session.id }, select: { ...BILLING_SELECT, email: true, companyName: true, foundingMemberAt: true, foundingLostAt: true } }),
     prisma.jobBoardTeamMember.count({ where: { employerId: session.id, status: { in: ['PENDING', 'ACTIVE'] } } }),
     prisma.jobBoardEmployer.count({ where: { foundingMemberAt: { not: null } } }),
   ]);
@@ -50,6 +50,7 @@ export default async function BillingPage() {
         invoiceNumber: p.invoiceNumber, emailedAt: p.invoiceEmailedAt?.toISOString() ?? null, creditNoteNumber: p.creditNoteNumber,
       }))}
       billing={profileFromRow(billing, billing?.email ?? session.email)}
+      companyName={billing?.companyName ?? ''}
       invoices={invoicesEnabled()}
       paymentsReady={!!process.env.RAZORPAY_KEY_ID && !!process.env.RAZORPAY_KEY_SECRET}
     />

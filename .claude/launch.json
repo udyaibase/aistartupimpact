@@ -3,21 +3,19 @@
   "configurations": [
     {
       "name": "web-dev",
-      "runtimeExecutable": "npm",
+      "runtimeExecutable": "bash",
       "runtimeArgs": [
-        "run",
-        "dev",
-        "--workspace=apps/web"
+        "-c",
+        "source \"$HOME/.nvm/nvm.sh\" && nvm use --silent default && npm run dev --workspace=apps/web"
       ],
       "port": 3000
     },
     {
       "name": "admin-dev",
-      "runtimeExecutable": "npm",
+      "runtimeExecutable": "bash",
       "runtimeArgs": [
-        "run",
-        "dev",
-        "--workspace=apps/admin"
+        "-c",
+        "source \"$HOME/.nvm/nvm.sh\" && nvm use --silent default && npm run dev --workspace=apps/admin"
       ],
       "port": 3001,
       "autoPort": false

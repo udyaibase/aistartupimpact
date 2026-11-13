@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import { changeEmailSchema, validateInput } from '@/lib/validation';
 import { can, forbidden } from '@/lib/employer/permissions';
 import { writeLimited } from '@/lib/employer/write-limit';
+import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,6 +67,7 @@ export async function POST(request: NextRequest) {
 <p>This link expires in 24 hours. If you didn't request this, ignore this email.</p>`,
     });
 
+    await logEmployerActivity(session.id, 'email_change_requested', { actor: employerActor(session), request });
     return NextResponse.json({ success: true, message: 'Verification email sent to ' + emailLower });
   } catch (error) {
     console.error('Change email error:', error);

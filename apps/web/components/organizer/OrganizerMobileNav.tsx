@@ -3,10 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CreditCard,
-  LayoutDashboard, CalendarDays, Users, BarChart3, Settings, QrCode, Send, CodeXml,
-  HelpCircle, MoreHorizontal, X, Building2, UserCog, Plus,
-} from "lucide-react";
+import { CreditCard, LayoutDashboard, CalendarDays, Users, BarChart3, Settings, QrCode, Send, CodeXml, HelpCircle, MoreHorizontal, X, Building2, UserCog, Plus, History } from "lucide-react";
 
 const TABS = [
   { href: "/organizer", icon: LayoutDashboard, label: "Home", exact: true },
@@ -23,6 +20,7 @@ const MORE = [
   { href: "/organizer/organization", icon: Building2, label: "Organization", desc: "Public organizer profile" },
   { href: "/organizer/billing", icon: CreditCard, label: "Plans & billing", desc: "Plan, boosts and payments" },
   { href: "/organizer/settings", icon: Settings, label: "Settings", desc: "Account, notifications, security" },
+  { href: "/organizer/activity", icon: History, label: "Activity log", desc: "Sign-ins and changes, with who made them" },
   { href: "/organizer/support", icon: HelpCircle, label: "Help & support", desc: "Guides and contact" },
 ];
 

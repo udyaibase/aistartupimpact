@@ -5,6 +5,7 @@ import { button, esc, shell } from '@/lib/jobs/apply-emails';
 import { calendarMonthStart, cycleDays, effectivePlan, GRACE_DAYS, periodStart, planDef, planFeaturedUntil, planKeyOf, planPhase, PLANS, TRIAL_AI_SCREENS, TRIAL_PLAN } from '@/lib/employer/plans';
 import { emailInvoice } from '@/lib/billing/invoice';
 import { setListingStatus } from '@/lib/jobs/listing-status';
+import { logEmployerActivity, paiseLabel } from '@/lib/workspace-activity';
 
 /**
  * Plan in force plus AI usage for the current period. During the grace days after a paid plan ends, everything
@@ -46,6 +47,8 @@ export { checkoutSignatureValid, webhookSignatureValid } from '@/lib/billing/raz
  */
 export async function activatePayment(orderId: string, paymentId: string): Promise<'activated' | 'already' | 'unknown'> {
   let paidId: string | null = null;
+  type Paid = { employerId: string; plan: string; cycle: string; totalPaise: number; by: string | null };
+  let paid: Paid | null = null;
   const result = await prisma.$transaction(async (tx) => {
     const pay = await tx.jobBoardPayment.findUnique({ where: { razorpayOrderId: orderId } });
     if (!pay) return 'unknown';
@@ -80,8 +83,14 @@ export async function activatePayment(orderId: string, paymentId: string): Promi
       });
     }
     paidId = pay.id;
+    paid = { employerId: pay.employerId, plan: `${def.name} plan${pay.cycle === 'ANNUAL' ? ' (1 year)' : ' (30 days)'}`, cycle: pay.cycle, totalPaise: pay.totalPaise, by: pay.paidByEmail };
     return 'activated' as const;
   });
+  // Recorded once, after the payment is committed (checkout callback or webhook, whichever is first).
+  const p = paid as Paid | null;
+  if (result === 'activated' && p) {
+    await logEmployerActivity(p.employerId, 'plan_purchased', { actor: p.by ? { email: p.by } : null, metadata: { plan: p.plan, amount: paiseLabel(p.totalPaise) } });
+  }
   // Invoice (number, frozen bill-to, email) after the payment is committed; a failure here never undoes it,
   // and the daily cron retries anything not yet emailed.
   const id = paidId as string | null;

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  byCity, byInvestor, fundingFaq, inrPaiseOf, inScope, monthSlugOf, monthsWithRounds, parseMonthSlug, roundsInCity,
+  byCity, byInvestor, FALLBACK_INR_PER_USD, fundingFaq, inrPaiseOf, moneyLabel, inScope, monthSlugOf, monthsWithRounds, parseMonthSlug, roundsInCity,
   roundsWithInvestor, slugify, summarize, summaryText, usdCentsOf, type FundingRoundRow,
 } from '@/lib/funding/insights';
 
@@ -11,10 +11,16 @@ const round = (over: Partial<FundingRoundRow>): FundingRoundRow => ({
 });
 
 describe('units', () => {
-  it('uses rupees when recorded, else converts dollars (cents × 84 = paise)', () => {
+  it('uses each stored amount; converts only when one is missing (fallback rate, normally filled by the database)', () => {
     expect(inrPaiseOf({ amountInr: '5000000000', amountUsd: '6000000' })).toBe(5_000_000_000);
-    expect(inrPaiseOf({ amountInr: null, amountUsd: 100_000_000 })).toBe(8_400_000_000); // $1M → ₹8.4 Cr
-    expect(usdCentsOf({ amountInr: 8_400_000_000, amountUsd: null })).toBe(100_000_000);
+    expect(usdCentsOf({ amountInr: '5000000000', amountUsd: '6000000' })).toBe(6_000_000); // stored dollars win
+    expect(inrPaiseOf({ amountInr: null, amountUsd: 100_000_000 })).toBe(100_000_000 * FALLBACK_INR_PER_USD);
+    expect(usdCentsOf({ amountInr: 100_000_000 * FALLBACK_INR_PER_USD, amountUsd: null })).toBe(100_000_000);
+  });
+
+  it('labels totals with the sum of stored dollars, not a fixed-rate conversion', () => {
+    // ₹5,724 Cr stored with $600M (announced at ~₹95.4/$): the label shows the recorded $600M.
+    expect(moneyLabel(5_724_00_00_000_00, 600_000_000_00)).toBe('₹5,724 Cr ($600M)');
   });
 });
 
@@ -62,8 +68,9 @@ describe('aggregates', () => {
 
   it('compares year-to-date with the same period last year', () => {
     const s = summarize(inScope(rounds, 'india'), new Date('2026-03-15T00:00:00Z'));
-    expect(s.ytd).toEqual({ deals: 1, paise: 1_000_000_000 });
-    expect(s.lastYearSamePeriod).toEqual({ deals: 1, paise: 3_000_000_000 }); // Feb 2025 is before 15 Mar
+    expect(s.ytd).toMatchObject({ deals: 1, paise: 1_000_000_000 });
+    expect(s.lastYearSamePeriod).toMatchObject({ deals: 1, paise: 3_000_000_000 }); // Feb 2025 is before 15 Mar
+    expect(s.ytd.cents).toBeGreaterThan(0); // dollar total carried alongside
     expect(s.largest?.amountInr).toBe(3_000_000_000);
     expect(summaryText(s, 'india')).toContain('down 67%');
   });

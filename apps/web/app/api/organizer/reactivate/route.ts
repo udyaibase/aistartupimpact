@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { createOrganizerSession, verifyPassword } from '@/lib/organizer-auth';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
+import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest) {
       where: { id: organizer.id },
       data: { deactivatedAt: null, lastLoginAt: new Date() },
     });
+    await logOrganizerActivity(organizer.id, 'account_reactivated', { actor: { name: organizer.name, email: organizer.email }, request });
 
     await createOrganizerSession(organizer.id);
 

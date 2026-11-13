@@ -7,6 +7,8 @@ import { canAssignRole } from "@/lib/organizer-auth/permissions";
 import { teamInviteHtml } from "@udyaibase/utils";
 import { sendEmailFireAndForget } from "@/lib/email/send";
 import crypto from "crypto";
+import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
+import { maskEmail } from '@/lib/mask';
 
 export const dynamic = "force-dynamic";
 
@@ -96,5 +98,6 @@ export async function POST(request: NextRequest) {
     type: "team_invite",
   });
 
+  await logOrganizerActivity(session.organizerId, 'team_member_invited', { actor: organizerActor(session), request, metadata: { member: maskEmail(String(email)), role: String(assignedRole) } });
   return NextResponse.json({ success: true, member });
 }

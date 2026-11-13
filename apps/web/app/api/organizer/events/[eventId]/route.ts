@@ -11,6 +11,7 @@ import { refundEventTickets } from "@/lib/events/tickets";
 import { refreshPaths, refreshSections } from '@/lib/revalidate';
 import { applyFirstEventBoost } from "@/lib/events/free-boost";
 import { canTagStartup, publishDecision } from "@/lib/events/trust";
+import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
 
 class TierError extends Error {}
 
@@ -43,6 +44,7 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ ev
   });
 
   await prisma.event.update({ where: { id: params.eventId }, data: { deletedAt: new Date() } });
+  await logOrganizerActivity(session.organizerId, "event_deleted", { actor: organizerActor(session), request, metadata: { title: event.title ?? "" } });
   // Paid tickets are refunded in full (the host's share is reversed too).
   after(() => refundEventTickets(params.eventId).then((r) => { if (r.paid) console.log(`[event delete] refunded ${r.refunded}/${r.paid} tickets`); }));
 
@@ -278,6 +280,11 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ event
   // Lists and the homepage's upcoming events, plus this event's page.
   refreshSections(["events", "home"]);
   refreshPaths([`/events/${event.slug}`]);
+
+  const cancelled = data.status === "CANCELLED" && event.status !== "CANCELLED";
+  await logOrganizerActivity(session.organizerId, cancelled ? "event_cancelled" : goingLive ? "event_published" : "event_updated", {
+    actor: organizerActor(session), request, metadata: { title: String(data.title || event.title || "") },
+  });
 
   return NextResponse.json({
     success: true,

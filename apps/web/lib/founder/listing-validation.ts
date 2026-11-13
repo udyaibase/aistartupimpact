@@ -68,6 +68,7 @@ const fundingRounds = z.array(z.object({
   roundType: z.string().trim().max(100, 'Funding round types must be 100 characters or fewer'),
   amountUsd: amount('Funding amount').optional().nullable(),
   amountInr: amount('Funding amount').optional().nullable(),
+  fxDerived: z.enum(['INR', 'USD']).optional().nullable(),
   leadInvestors: shortList('lead investors', 50, 200).optional(),
   allInvestors: shortList('investors', 200, 200).optional(),
 }).passthrough()).max(100, 'You can add up to 100 funding rounds').optional();

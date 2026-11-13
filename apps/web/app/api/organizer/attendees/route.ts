@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
 import { requirePermission } from "@/lib/organizer-auth/require-permission";
+import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,8 @@ export async function GET() {
   ]);
 
   const csv = [headers.join(","), ...rows.map(row => row.map(v => `"${(v || "").replace(/"/g, '""')}"`).join(","))].join("\n");
+  // Attendees' personal data left the portal: always on record.
+  await logOrganizerActivity(session.organizerId, "attendees_exported", { actor: organizerActor(session) });
 
   return new NextResponse(csv, {
     headers: {

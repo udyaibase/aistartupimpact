@@ -6,6 +6,7 @@ import { changePasswordSchema, validateInput } from '@/lib/validation';
 import { can, forbidden } from '@/lib/employer/permissions';
 import { passwordSignInOpen } from '@/lib/employer/sign-in-policy';
 import { writeLimited } from '@/lib/employer/write-limit';
+import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest) {
     // Signs out every other device; this one continues on a fresh session.
     await setEmployerSession(employer, session.memberId ? { id: session.memberId, email: session.email } : undefined);
 
+    await logEmployerActivity(session.id, 'password_changed', { actor: employerActor(session), request });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Employer change password error:', error);

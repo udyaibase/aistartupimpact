@@ -3,9 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { UserCheck, CreditCard,
-  Home, Briefcase, Users, Plus, MoreHorizontal, X, Globe, BarChart3, Building2, Settings, HelpCircle, UserPlus,
-} from 'lucide-react';
+import { UserCheck, CreditCard, Home, Briefcase, Users, Plus, MoreHorizontal, X, Globe, BarChart3, Building2, Settings, HelpCircle, UserPlus, History } from 'lucide-react';
 import { can, type Permission, WORKSPACE_WIDE_PAGES } from '@/lib/employer/roles';
 import type { EmployerShell } from '@/lib/employer/portal';
 import { CompanyAvatar, VerificationLine } from './EmployerSidebar';
@@ -25,6 +23,7 @@ const ALL_MORE: { href: string; icon: typeof Home; label: string; desc: string; 
   { href: '/employer/team', icon: UserPlus, label: 'Team', desc: 'Invite recruiters and interviewers' },
   { href: '/employer/billing', icon: CreditCard, label: 'Plans & billing', desc: 'Plan, AI reviews and payments', perm: 'account.manage' },
   { href: '/employer/settings', icon: Settings, label: 'Settings', desc: 'Account, notifications, security', perm: 'account.manage' },
+  { href: '/employer/activity', icon: History, label: 'Activity log', desc: 'Sign-ins and changes, with who made them', perm: 'account.manage' },
   { href: '/employer/support', icon: HelpCircle, label: 'Help', desc: 'Guides and contact' },
 ];
 

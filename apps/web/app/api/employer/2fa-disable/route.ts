@@ -5,6 +5,7 @@ import { verifyTOTPToken, decryptSecret } from '@/lib/two-factor';
 import { can, forbidden } from '@/lib/employer/permissions';
 import { TWO_FACTOR_LOCKED_MESSAGE, clearTwoFactorFailures, isTwoFactorLocked, recordTwoFactorFailure } from '@/lib/auth/two-factor-attempts';
 import { twoFactorRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
+import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest) {
       data: { twoFactorEnabled: false, twoFactorSecret: null, twoFactorBackupCodes: [] },
     });
 
+    await logEmployerActivity(session.id, '2fa_disabled', { actor: employerActor(session), request });
     return NextResponse.json({ success: true, message: '2FA disabled successfully' });
   } catch (error) {
     console.error('Employer 2FA disable error:', error);

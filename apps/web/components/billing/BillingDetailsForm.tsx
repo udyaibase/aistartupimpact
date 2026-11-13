@@ -33,10 +33,20 @@ export type SaveBilling = (p: BillingProfile) => Promise<{ error?: string; field
  * validates again. Changes only affect future invoices. With `lookupUrl`, a new GSTIN fills in the legal name and
  * registered address from the GST register (the user can still edit or undo).
  */
-export default function BillingDetailsForm({ initial, save, lookupUrl }: { initial: BillingProfile; save: SaveBilling; lookupUrl?: string }) {
+export default function BillingDetailsForm({ initial, save, lookupUrl, submitLabel, onSaved, inDialog = false }: {
+  initial: BillingProfile;
+  save: SaveBilling;
+  lookupUrl?: string;
+  /** Button text, e.g. "Continue to payment · ₹2,359" when the form is a step before checkout. */
+  submitLabel?: string;
+  /** Called with the saved profile (after the server accepted it). */
+  onSaved?: (p: BillingProfile) => void;
+  /** Used inside the pre-payment dialog: always editable, no summary or footnote. */
+  inDialog?: boolean;
+}) {
   const [p, setP] = useState(initial);
   const [savedProfile, setSavedProfile] = useState(initial);
-  const [editing, setEditing] = useState(!profileComplete(initial));
+  const [editing, setEditing] = useState(inDialog || !profileComplete(initial));
   const [ccText, setCcText] = useState(initial.billingCcEmails.join(', '));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ message: string; field?: string } | null>(null);
@@ -103,7 +113,8 @@ export default function BillingDetailsForm({ initial, save, lookupUrl }: { initi
     setP(next);
     setSavedProfile(next);
     setSaved(true);
-    setEditing(false);
+    if (!inDialog) setEditing(false);
+    onSaved?.(next);
   }
 
   if (!editing) {
@@ -254,12 +265,12 @@ export default function BillingDetailsForm({ initial, save, lookupUrl }: { initi
       {error && !error.field && <p role="alert" className="text-sm text-red-700 dark:text-red-400">{error.message}</p>}
       <div className="flex flex-wrap items-center gap-3">
         <button type="submit" disabled={busy || !p.billingType} className="inline-flex items-center gap-2 min-h-[44px] px-4 rounded-[10px] bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-semibold disabled:opacity-50">
-          {busy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} Save billing details
+          {busy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} {submitLabel ?? 'Save billing details'}
         </button>
-        {profileComplete(savedProfile) && (
+        {!inDialog && profileComplete(savedProfile) && (
           <button type="button" onClick={() => { setP(savedProfile); setCcText(savedProfile.billingCcEmails.join(', ')); setError(null); setEditing(false); }} className="min-h-[44px] px-3 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:underline">Cancel</button>
         )}
-        <span className="text-[13px] text-gray-500">Changes apply to future invoices. Need a past invoice corrected? <a href="mailto:billing@udyaibase.com" className="underline">Contact us</a>.</span>
+        {!inDialog && <span className="text-[13px] text-gray-500">Changes apply to future invoices. Need a past invoice corrected? <a href="mailto:billing@udyaibase.com" className="underline">Contact us</a>.</span>}
       </div>
     </form>
   );

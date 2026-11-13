@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
 import { getOrganizerSession } from "@/lib/organizer-auth";
+import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,7 @@ export async function PUT(request: NextRequest) {
     where: { id: session.id },
     data: { name: name.slice(0, 100), company: company?.slice(0, 100) || null, bio: bio?.slice(0, 500) || null, website: website?.slice(0, 500) || null, linkedin: linkedin?.slice(0, 500) || null, phone: phone?.slice(0, 20) || null, ...(avatar !== undefined ? { avatar: avatar || null } : {}) },
   });
+  await logOrganizerActivity(session.id, 'profile_updated', { actor: organizerActor(session), request, metadata: { what: 'organizer profile' } });
 
   return NextResponse.json({ success: true });
 }

@@ -5,6 +5,7 @@ import { setEmployerSession } from '@/lib/employer-auth';
 import { verifyTOTPToken, decryptSecret, verifyBackupCode } from '@/lib/two-factor';
 import { TWO_FACTOR_LOCKED_MESSAGE, clearTwoFactorFailures, isTwoFactorLocked, recordTwoFactorFailure } from '@/lib/auth/two-factor-attempts';
 import { twoFactorRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
+import { logEmployerActivity } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,6 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!isValid) {
+      await logEmployerActivity(employer.id, 'sign_in_failed', { actor: { name: employer.companyName, email: employer.email }, request, metadata: { reason: 'wrong_2fa_code' } });
       const locked = await recordTwoFactorFailure('employer', userId);
       return locked
         ? NextResponse.json({ error: TWO_FACTOR_LOCKED_MESSAGE }, { status: 429 })
@@ -80,6 +82,7 @@ export async function POST(request: NextRequest) {
 
     await clearTwoFactorFailures('employer', userId);
     await sql`UPDATE "JobBoardEmployer" SET "lastLoginAt" = NOW() WHERE id = ${userId}`;
+    await logEmployerActivity(employer.id, 'signed_in', { actor: { name: employer.companyName, email: employer.email }, request, metadata: { method: 'password_2fa' } });
 
     await setEmployerSession({
       id: employer.id,

@@ -7,6 +7,7 @@ import { sanitizeUserHtml, htmlToPlainText } from "@/lib/sanitize";
 import { refreshPaths, refreshSections } from '@/lib/revalidate';
 import { applyFirstEventBoost } from "@/lib/events/free-boost";
 import { canTagStartup, publishDecision } from "@/lib/events/trust";
+import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
 
 export const dynamic = "force-dynamic";
 
@@ -131,6 +132,7 @@ export async function POST(request: NextRequest) {
       await applyFirstEventBoost(session.organizerId, event.id).catch((e) => console.error('[free boost]', e));
       refreshSections(['events', 'home']);
     }
+    await logOrganizerActivity(session.organizerId, published ? 'event_published' : 'event_created', { actor: organizerActor(session), request, metadata: { title: String(title ?? '') } });
     return NextResponse.json({
       success: true,
       data: { id: event.id, slug: event.slug, shortCode: event.shortCode, status: decision },

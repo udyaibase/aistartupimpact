@@ -12,6 +12,7 @@ import { can, forbidden } from '@/lib/employer/permissions';
 import { refreshPaths, refreshSections } from '@/lib/revalidate';
 import { maybeStartTrial } from '@/lib/employer/trial';
 import { writeLimited } from '@/lib/employer/write-limit';
+import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -152,5 +153,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   }
 
   const updated = await prisma.jobBoardListing.findUnique({ where: { id }, select: { status: true, expiresAt: true } });
+  if (action !== 'renew') {
+    await logEmployerActivity(session.id, action === 'publish' && !listing.publishedAt ? 'job_posted' : 'job_status_changed', {
+      actor: employerActor(session), request, metadata: { title: listing.title, status: updated?.status ?? '' },
+    });
+  }
   return NextResponse.json({ success: true, status: updated?.status, expiresAt: updated?.expiresAt });
 }

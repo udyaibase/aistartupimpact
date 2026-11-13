@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { getOrganizerSession } from '@/lib/organizer-auth';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
+import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,6 +73,7 @@ export async function GET(request: NextRequest) {
       emailsReceived: emailLogs,
     };
 
+    await logOrganizerActivity(session.id, 'data_exported', { actor: organizerActor(session), request });
     return new NextResponse(JSON.stringify(exportData, null, 2), {
       status: 200,
       headers: {

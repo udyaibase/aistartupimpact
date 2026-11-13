@@ -12,6 +12,9 @@ import { trackCronRoute } from '@/lib/ops/cron';
 import { sizePendingLogos } from '@/lib/media/logo-sizes';
 import { refreshPaths, refreshSections } from '@/lib/revalidate';
 import { sendPendingCreditNotes, sendPendingInvoices } from '@/lib/billing/invoice';
+import { refreshExchangeRates } from '@/lib/fx';
+import { invalidateCache } from '@/lib/cache';
+import { FUNDING_ROUNDS_KEY } from '@/lib/funding/rounds';
 
 export const dynamic = 'force-dynamic';
 
@@ -155,6 +158,14 @@ async function runCleanup(request: NextRequest) {
     Object.assign(results, await expireTicketHolds(now));
     // Hosts waiting on Razorpay KYC review: re-check (fallback if the account webhook was missed).
     try { results.payoutsActivated = await refreshPendingPayouts(); } catch (err) { console.error('[data-retention] payouts', err); }
+    // USD→INR: today's published rate (the full history on the first run), then funding rounds converted at their
+    // announcement-date rate. A failure here never stops the rest of the job.
+    try {
+      const fx = await refreshExchangeRates();
+      results.exchangeRatesAdded = fx.ratesAdded;
+      results.fundingRoundsConverted = fx.roundsUpdated;
+      if (fx.roundsUpdated > 0) await invalidateCache(FUNDING_ROUNDS_KEY).catch(() => {});
+    } catch (err) { console.error('[data-retention] exchange rates', err); }
 
     // Audit logs older than 1 year
     const auditCutoff = new Date(now);
@@ -166,6 +177,10 @@ async function runCleanup(request: NextRequest) {
 
     // Founder security logs and domain-verification logs (they hold IP addresses): one year.
     results.founderActivityLogsDeleted = (await prisma.founderActivityLog.deleteMany({ where: { createdAt: { lt: auditCutoff } } })).count;
+    // Employer and event-host workspace activity logs (IP addresses, masked emails): one year. Never block the rest
+    // of the job (e.g. before the table's migration has run).
+    results.workspaceActivityLogsDeleted = await prisma.workspaceActivityLog.deleteMany({ where: { createdAt: { lt: auditCutoff } } })
+      .then((r) => r.count).catch((e) => { console.error('[data-retention] workspace activity', e); return 0; });
     // Past listing versions and closed review requests: one year, as the privacy policy says.
     results.listingVersionsDeleted = (await prisma.listingVersion.deleteMany({ where: { createdAt: { lt: auditCutoff } } })).count;
     results.closedEditsDeleted = (await prisma.listingPendingEdit.deleteMany({ where: { status: { not: 'PENDING' }, createdAt: { lt: auditCutoff } } })).count;

@@ -4,6 +4,7 @@ import { getEmployerSession } from '@/lib/employer-auth';
 import { can, forbidden } from '@/lib/employer/permissions';
 import { apiRateLimit, checkRateLimit } from '@/lib/rate-limit';
 import { foundingEligible, isBillingCycle, isPaidPlan, planPrice, PLANS } from '@/lib/employer/plans';
+import { BILLING_SELECT, profileComplete, profileFromRow } from '@/lib/billing/details';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,8 +30,12 @@ export async function POST(request: NextRequest) {
   const keySecret = process.env.RAZORPAY_KEY_SECRET;
   if (!keyId || !keySecret) return NextResponse.json({ error: 'Payments aren’t set up yet. Please contact us.' }, { status: 503 });
 
-  const employer = await prisma.jobBoardEmployer.findUnique({ where: { id: session.id }, select: { companyName: true, email: true, emailVerified: true, foundingMemberAt: true, foundingLostAt: true } });
+  const employer = await prisma.jobBoardEmployer.findUnique({ where: { id: session.id }, select: { ...BILLING_SELECT, companyName: true, email: true, emailVerified: true, foundingMemberAt: true, foundingLostAt: true } });
   if (!employer?.emailVerified) return NextResponse.json({ error: 'Verify your email before upgrading.' }, { status: 403 });
+  // GST invoices need the buyer's name, address and (for businesses) GSTIN: collected once, before the first payment.
+  if (!profileComplete(profileFromRow(employer, employer.email))) {
+    return NextResponse.json({ error: 'Add your invoice details to continue.', code: 'BILLING_REQUIRED' }, { status: 409 });
+  }
 
   const founding = cycle === 'ANNUAL'
     && foundingEligible(employer, employer.foundingMemberAt ? 0 : await prisma.jobBoardEmployer.count({ where: { foundingMemberAt: { not: null } } }));

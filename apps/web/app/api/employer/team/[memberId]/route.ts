@@ -6,6 +6,8 @@ import { INVITE_TTL_DAYS, cleanJobIds, hashToken, listTeam, newInviteToken, send
 import { effectivePlan } from '@/lib/employer/plans';
 import { ownerChangeProblem } from '@/lib/employer/owners';
 import { writeLimited } from '@/lib/employer/write-limit';
+import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
+import { maskEmail } from '@/lib/mask';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,6 +43,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ mem
       return NextResponse.json({ error: `The ${plan.name} plan includes ${plan.maxSeats} seats, including you. Remove someone or upgrade to approve this request.`, code: 'seat_limit' }, { status: 403 });
     }
     await prisma.jobBoardTeamMember.update({ where: { id: member.id }, data: { status: 'ACTIVE', role: 'RECRUITER', acceptedAt: new Date(), invitedByEmail: session.email } });
+    await logEmployerActivity(session.id, 'team_invite_accepted', { actor: employerActor(session), request, metadata: { member: maskEmail(member.email) } });
     sendJoinApprovedEmail(member.email, e?.companyName ?? 'your company');
     return NextResponse.json({ success: true, team: await listTeam(session.id) });
   }
@@ -70,6 +73,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ mem
   }
   // Job limits only apply to interviewers; other roles always see every job.
   await prisma.jobBoardTeamMember.update({ where: { id: member.id }, data: { role: b.role, ...(b.role !== 'INTERVIEWER' ? { jobIds: [] } : {}) } });
+  await logEmployerActivity(session.id, 'team_role_changed', { actor: employerActor(session), request, metadata: { member: maskEmail(member.email), role: String(b.role) } });
   return NextResponse.json({ success: true, team: await listTeam(session.id) });
 }
 
@@ -87,6 +91,7 @@ export async function DELETE(_request: NextRequest, props: { params: Promise<{ m
   const problem = await ownerChangeProblem(session.id, member.id, 'remove');
   if (problem) return NextResponse.json({ error: problem }, { status: 409 });
   await prisma.jobBoardTeamMember.update({ where: { id: member.id }, data: { status: 'REMOVED', inviteTokenHash: null, inviteExpiresAt: null } });
+  await logEmployerActivity(session.id, 'team_member_removed', { actor: employerActor(session), request: _request, metadata: { member: maskEmail(member.email) } });
   // Hiring and the founder portal are separate teams; say so if they still have founder-portal access.
   const w = await prisma.jobBoardEmployer.findUnique({ where: { id: session.id }, select: { founderUserId: true } });
   const founderAccessRemains = !!w?.founderUserId && !!(await prisma.founderTeamMember.findFirst({

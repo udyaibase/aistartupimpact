@@ -22,7 +22,7 @@ export default function FundingExplore({ cities, months, investors }: {
     <section aria-labelledby="explore-heading" className="card p-4 sm:p-6">
       <h2 id="explore-heading" className="font-sora font-bold text-base sm:text-xl text-navy dark:text-white mb-4">Explore AI startup funding in India</h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {col('By city', cities.map((c) => ({ href: `/funding/india/${c.slug}`, label: `AI funding in ${c.name}`, meta: `${c.deals} rounds · ${moneyLabel(c.paise).split(' (')[0]}` })))}
+        {col('By city', cities.map((c) => ({ href: `/funding/india/${c.slug}`, label: `AI funding in ${c.name}`, meta: `${c.deals} rounds · ${moneyLabel(c.paise, c.cents).split(' (')[0]}` })))}
         {col('Monthly reports', months.map((m) => ({ href: `/funding/india/${m.slug}`, label: `${monthTitle(m.year, m.month)}`, meta: `${m.deals} rounds` })))}
         {col('Top investors', investors.map((i) => ({ href: `/funding/investors/${i.slug}`, label: i.name, meta: `${i.deals} deals` })))}
       </div>

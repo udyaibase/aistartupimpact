@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { IndianRupee, MapPin, Building2, Calendar, TrendingUp, Users, Map as MapIcon, Lock } from 'lucide-react';
+import { IndianRupee, MapPin, Building2, Calendar, TrendingUp, Users, Map as MapIcon, Lock, Download, ArrowRight } from 'lucide-react';
 import { useUser } from '@/components/UserProvider';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 
 import { standardizeCityName } from '@udyaibase/utils/src/cities';
 import FundingDownloads from './FundingDownloads';
 import { roundDate, roundLabel } from '@/lib/funding/format';
+import { inrPaiseOf } from '@/lib/funding/insights';
 
 interface FundingRound {
   id: string;
@@ -89,11 +90,8 @@ export default function FundingDashboard({ data: allRounds }: { data: FundingRou
     return 'Undisclosed';
   };
 
-  // For sorting/highlighting — use USD cents or INR paise
-  const getAmountForSort = (row: FundingRound) => {
-    if (row.amountUsd) return Number(row.amountUsd) * 83; // rough paise equiv
-    return Number(row.amountInr || 0);
-  };
+  // For sorting/highlighting: the round's rupee amount (stored for every round, converted at its announcement-date rate).
+  const getAmountForSort = (row: FundingRound) => inrPaiseOf(row);
 
   // Determine if row should be featured (top 3-4 deals only)
   const topDeals = useMemo(() => {
@@ -347,7 +345,12 @@ export default function FundingDashboard({ data: allRounds }: { data: FundingRou
         </p>
       </div>
 
-      <FundingDownloads />
+      {/* Slim pointer; the full downloads block sits below the rounds table. */}
+      <a href="#funding-data" className="group -mt-2 sm:-mt-4 inline-flex items-center gap-1.5 text-xs sm:text-sm font-jakarta text-gray-600 dark:text-gray-300 hover:text-brand">
+        <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-brand" aria-hidden />
+        Get the data: <span className="font-semibold text-brand">free PDF snapshot or full Excel dataset</span>
+        <ArrowRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-brand transition-transform group-hover:translate-x-0.5" aria-hidden />
+      </a>
 
       {/* Top Stats Cards - Redesigned with Trend Deltas */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
@@ -777,6 +780,9 @@ export default function FundingDashboard({ data: allRounds }: { data: FundingRou
           </button>
         )}
       </div>
+
+      {/* Downloads after the data: people want the file once they've seen what's in it. */}
+      <FundingDownloads />
 
       {/* Most Active Investors in Indian AI */}
       {topInvestors.length > 0 && (

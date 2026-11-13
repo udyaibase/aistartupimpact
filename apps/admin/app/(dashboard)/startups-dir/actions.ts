@@ -40,7 +40,7 @@ export async function getStartupFundingRoundsAction(startupId: string) {
   try {
     const fundingRounds = await sql`
       SELECT 
-        id, "startupId", "roundType", "amountUsd", "amountInr", "announcedAt", "leadInvestors", "allInvestors", "createdAt"
+        id, "startupId", "roundType", "amountUsd", "amountInr", to_jsonb("FundingRound") ->> 'fxDerived' AS "fxDerived", "announcedAt", "leadInvestors", "allInvestors", "createdAt"
       FROM "FundingRound"
       WHERE "startupId" = ${startupId}
       ORDER BY "announcedAt" DESC
@@ -91,6 +91,8 @@ export async function createStartupAction(data: {
     roundType: string;
     amountUsd: number;
     amountInr: number;
+    /** Which amount the database recalculates at the announcement-date rate (the one not typed). */
+    fxDerived?: 'INR' | 'USD' | null;
     announcedAt: string;
     leadInvestors: string[];
     allInvestors: string[];
@@ -197,13 +199,11 @@ export async function createStartupAction(data: {
     }
 
     // Insert Funding Rounds if provided
-    let totalFundingInr = BigInt(0);
     if (startupId && data.fundingRounds && data.fundingRounds.length > 0) {
       for (const round of data.fundingRounds) {
-        totalFundingInr += BigInt(round.amountInr || 0);
         await sql`
-          INSERT INTO "FundingRound" (id, "startupId", "roundType", "amountUsd", "amountInr", "announcedAt", "leadInvestors", "allInvestors", "createdAt")
-          VALUES (gen_random_uuid(), ${startupId}, ${round.roundType}, ${round.amountUsd}, ${round.amountInr}, ${round.announcedAt}::timestamp, ${round.leadInvestors}::text[], ${round.allInvestors}::text[], NOW())
+          INSERT INTO "FundingRound" (id, "startupId", "roundType", "amountUsd", "amountInr", "fxDerived", "announcedAt", "leadInvestors", "allInvestors", "createdAt")
+          VALUES (gen_random_uuid(), ${startupId}, ${round.roundType}, ${round.amountUsd}, ${round.amountInr}, ${round.fxDerived === 'INR' || round.fxDerived === 'USD' ? round.fxDerived : null}, ${round.announcedAt}::timestamp, ${round.leadInvestors}::text[], ${round.allInvestors}::text[], NOW())
         `;
       }
     }
@@ -211,7 +211,7 @@ export async function createStartupAction(data: {
     if (startupId) {
       await sql`
         UPDATE "Startup"
-        SET "totalFundingInr" = ${totalFundingInr.toString()}::bigint
+        SET "totalFundingInr" = (SELECT COALESCE(SUM("amountInr"), 0) FROM "FundingRound" WHERE "startupId" = ${startupId})
         WHERE id = ${startupId}
       `;
     }
@@ -254,6 +254,8 @@ export async function updateStartupAction(id: string, data: {
     roundType: string;
     amountUsd: number;
     amountInr: number;
+    /** Which amount the database recalculates at the announcement-date rate (the one not typed). */
+    fxDerived?: 'INR' | 'USD' | null;
     announcedAt: string;
     leadInvestors: string[];
     allInvestors: string[];
@@ -362,20 +364,18 @@ export async function updateStartupAction(id: string, data: {
       await sql`DELETE FROM "FundingRound" WHERE "startupId" = ${id}`;
       
       // Insert new rounds
-      let totalFundingInr = BigInt(0);
       if (data.fundingRounds.length > 0) {
         for (const round of data.fundingRounds) {
-          totalFundingInr += BigInt(round.amountInr || 0);
           await sql`
-            INSERT INTO "FundingRound" (id, "startupId", "roundType", "amountUsd", "amountInr", "announcedAt", "leadInvestors", "allInvestors", "createdAt")
-            VALUES (gen_random_uuid(), ${id}, ${round.roundType}, ${round.amountUsd}, ${round.amountInr}, ${round.announcedAt}::timestamp, ${round.leadInvestors}::text[], ${round.allInvestors}::text[], NOW())
+            INSERT INTO "FundingRound" (id, "startupId", "roundType", "amountUsd", "amountInr", "fxDerived", "announcedAt", "leadInvestors", "allInvestors", "createdAt")
+            VALUES (gen_random_uuid(), ${id}, ${round.roundType}, ${round.amountUsd}, ${round.amountInr}, ${round.fxDerived === 'INR' || round.fxDerived === 'USD' ? round.fxDerived : null}, ${round.announcedAt}::timestamp, ${round.leadInvestors}::text[], ${round.allInvestors}::text[], NOW())
           `;
         }
       }
 
       await sql`
         UPDATE "Startup"
-        SET "totalFundingInr" = ${totalFundingInr.toString()}::bigint
+        SET "totalFundingInr" = (SELECT COALESCE(SUM("amountInr"), 0) FROM "FundingRound" WHERE "startupId" = ${id})
         WHERE id = ${id}
       `;
     }

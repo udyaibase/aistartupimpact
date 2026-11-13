@@ -48,10 +48,10 @@ function overview(h: Hub): string {
   if (h.kind === 'month') {
     const before = total(h.previous);
     const change = before > 0 ? Math.round(((s.paise - before) / before) * 100) : null;
-    parts.push(`In ${h.label}, Indian AI startups raised ${moneyLabel(s.paise)} across ${s.deals} funding round${s.deals === 1 ? '' : 's'}${change != null ? `, ${change === 0 ? 'in line with' : `${change > 0 ? 'up' : 'down'} ${Math.abs(change)}% on`} the previous month (${moneyLabel(before)} across ${h.previous.length})` : ''}.`);
+    parts.push(`In ${h.label}, Indian AI startups raised ${moneyLabel(s.paise, s.cents)} across ${s.deals} funding round${s.deals === 1 ? '' : 's'}${change != null ? `, ${change === 0 ? 'in line with' : `${change > 0 ? 'up' : 'down'} ${Math.abs(change)}% on`} the previous month (${moneyLabel(before)} across ${h.previous.length})` : ''}.`);
   } else {
-    parts.push(`AI startups headquartered in ${h.label} have raised ${moneyLabel(s.paise)} across ${s.deals} funding round${s.deals === 1 ? '' : 's'} tracked by Udyaibase.`);
-    if (s.ytd.deals) parts.push(`${s.ytd.deals} of those rounds (${moneyLabel(s.ytd.paise)}) came in ${s.year}.`);
+    parts.push(`AI startups headquartered in ${h.label} have raised ${moneyLabel(s.paise, s.cents)} across ${s.deals} funding round${s.deals === 1 ? '' : 's'} tracked by Udyaibase.`);
+    if (s.ytd.deals) parts.push(`${s.ytd.deals} of those rounds (${moneyLabel(s.ytd.paise, s.ytd.cents)}) came in ${s.year}.`);
   }
   if (largest) parts.push(`The largest was ${largest.startupName.trim()}'s ${roundMoneyLabel(largest)} ${roundLabel(largest.roundType)}.`);
   const stages = byStage(h.rounds);
@@ -73,7 +73,7 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
   if (!h) return { title: 'Not Found', robots: { index: false } };
   const s = summarize(h.rounds);
   const title = h.kind === 'month'
-    ? fitTitle([`AI Startup Funding India ${h.label}: ${s.deals} Deals, ${moneyLabel(s.paise).split(' (')[0]}`, `AI Startup Funding India — ${h.label}`])
+    ? fitTitle([`AI Startup Funding India ${h.label}: ${s.deals} Deals, ${moneyLabel(s.paise, s.cents).split(' (')[0]}`, `AI Startup Funding India — ${h.label}`])
     : fitTitle([`AI Startup Funding in ${h.label} (${s.year}): Deals & Investors`, `AI Startup Funding in ${h.label}`]);
   const url = `https://udyaibase.com/funding/india/${slug}`;
   const thin = h.rounds.length < (h.kind === 'month' ? HUB_MIN_ROUNDS.month : HUB_MIN_ROUNDS.city);
@@ -134,7 +134,7 @@ export default async function FundingHubPage(props: { params: Promise<{ slug: st
         {gs.map((g) => (
           <li key={g.slug} className="flex items-baseline justify-between gap-3">
             {link ? <Link href={link(g)} className="text-gray-700 dark:text-gray-300 hover:text-brand truncate">{g.name}</Link> : <span className="text-gray-700 dark:text-gray-300 truncate">{g.name}</span>}
-            <span className="text-xs text-gray-400 shrink-0">{g.deals} · {moneyLabel(g.paise).split(' (')[0]}</span>
+            <span className="text-xs text-gray-400 shrink-0">{g.deals} · {moneyLabel(g.paise, g.cents).split(' (')[0]}</span>
           </li>
         ))}
       </ul>

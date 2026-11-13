@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
 import { createOrganizerSession } from "@/lib/organizer-auth";
 import { OAuth2Client } from "google-auth-library";
+import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
 
 export const dynamic = "force-dynamic";
 
@@ -94,6 +95,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL("/organizer/login?error=suspended", request.url));
     }
 
+    await logOrganizerActivity(organizer.id, 'signed_in', { actor: { name: organizer.name, email: organizer.email }, request, metadata: { method: 'google' } });
     // Create session
     await createOrganizerSession(organizer.id);
 

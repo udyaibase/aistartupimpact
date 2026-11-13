@@ -5,6 +5,7 @@ import { sql } from "@/lib/db";
 import { hashPassword, createOrganizerSession } from "@/lib/organizer-auth";
 import { checkRateLimit, getClientIdentifier } from "@/lib/rate-limit";
 import { authRateLimit } from "@/lib/rate-limit";
+import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
 
 export const dynamic = "force-dynamic";
 
@@ -82,6 +83,7 @@ export async function POST(request: NextRequest) {
     // Invalidate all existing sessions before creating a new one
     await sql`DELETE FROM "EventOrganizerSession" WHERE "organizerId" = ${organizer.id}`;
 
+    await logOrganizerActivity(organizer.id, 'password_reset', { actor: { name: organizer.name, email: organizer.email }, request });
     // Auto-login after password reset
     await createOrganizerSession(organizer.id);
 

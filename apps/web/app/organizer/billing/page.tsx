@@ -38,7 +38,7 @@ export default async function HostBillingPage(props: { searchParams: Promise<{ b
       take: 24,
       select: { id: true, kind: true, cycle: true, eventId: true, amountPaise: true, gstPaise: true, totalPaise: true, status: true, paidAt: true, createdAt: true, periodStart: true, periodEnd: true, invoiceNumber: true, invoiceEmailedAt: true, refundAmountPaise: true, creditNoteNumber: true },
     }),
-    prisma.eventOrganizer.findUnique({ where: { id: session.organizerId }, select: { ...BILLING_SELECT, email: true, foundingMemberAt: true, foundingLostAt: true } }),
+    prisma.eventOrganizer.findUnique({ where: { id: session.organizerId }, select: { ...BILLING_SELECT, email: true, name: true, company: true, foundingMemberAt: true, foundingLostAt: true } }),
     prisma.eventOrganizer.count({ where: { foundingMemberAt: { not: null } } }),
   ]);
   const founding = billing ? hostFoundingEligible(billing, billing.foundingMemberAt ? 0 : foundingHosts) : false;
@@ -72,6 +72,7 @@ export default async function HostBillingPage(props: { searchParams: Promise<{ b
         invoiceNumber: p.invoiceNumber, emailedAt: p.invoiceEmailedAt?.toISOString() ?? null, creditNoteNumber: p.creditNoteNumber,
       }))}
       billing={profileFromRow(billing, billing?.email ?? '')}
+      accountName={billing?.company || billing?.name || ''}
       invoices={invoicesEnabled()}
       highlight={sp.boost ?? null}
       paymentsReady={!!razorpayKeys()}

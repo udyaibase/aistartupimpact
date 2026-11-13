@@ -3,6 +3,7 @@ import { prisma } from "@udyaibase/database";
 import { requirePermission } from "@/lib/organizer-auth/require-permission";
 import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
 import { createRazorpayOrder, razorpayKeys, withGst } from "@/lib/billing/razorpay";
+import { BILLING_SELECT, profileComplete, profileFromRow } from "@/lib/billing/details";
 import { EVENT_BOOST, HOST_PLANS, hostFoundingEligible, hostProPricePaise, isHostBillingCycle } from "@/lib/events/plans";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,12 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const kind = body.kind === "BOOST" ? "BOOST" : body.kind === "PRO" ? "PRO" : null;
   if (!kind) return NextResponse.json({ success: false, error: "Choose Pro or an Event Boost." }, { status: 400 });
+
+  // GST invoices need the buyer's name, address and (for businesses) GSTIN: collected once, before the first payment.
+  const host = await prisma.eventOrganizer.findUnique({ where: { id: session.organizerId }, select: { ...BILLING_SELECT, email: true } });
+  if (!host || !profileComplete(profileFromRow(host, host.email))) {
+    return NextResponse.json({ success: false, error: "Add your invoice details to continue.", code: "BILLING_REQUIRED" }, { status: 409 });
+  }
 
   const cycle = body.cycle === undefined ? "MONTHLY" : body.cycle;
   if (kind === "PRO" && !isHostBillingCycle(cycle)) return NextResponse.json({ success: false, error: "Choose monthly or yearly billing." }, { status: 400 });

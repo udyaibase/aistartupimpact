@@ -13,7 +13,7 @@ const ago = (days: number) => new Date(Date.now() - days * DAY);
 
 function round(startupId: string, daysAgo: number, inr: number, extra: Partial<DataRound> = {}): DataRound {
   return {
-    id: `${startupId}-${daysAgo}`, startupId, roundType: 'Seed', announcedAt: ago(daysAgo), inr, usd: Math.round(inr / 84), disclosed: inr > 0,
+    id: `${startupId}-${daysAgo}`, startupId, roundType: 'Seed', announcedAt: ago(daysAgo), inr, usd: Math.round(inr / 84), disclosed: inr > 0, usdInr: 84,
     leadInvestors: ['Peak XV'], allInvestors: ['Peak XV', 'Angel A'], valuationInr: null, sourceUrl: 'https://news.example/x', ...extra,
   };
 }
@@ -21,7 +21,7 @@ function startup(id: string, o: Partial<DataStartup> = {}): DataStartup {
   return {
     id, name: id.toUpperCase(), slug: id, sector: 'Fintech', city: 'Bengaluru', stage: 'SEED', foundedYear: 2021,
     websiteUrl: `https://${id}.in`, linkedinUrl: null, founders: ['A Founder'], employeeCount: 12, profileUrl: `https://udyaibase.com/startups/${id}`,
-    listedTotalInr: 0, rounds: [], ...o,
+    listedTotalInr: 0, listedTotalUsd: 0, rounds: [], ...o,
   };
 }
 

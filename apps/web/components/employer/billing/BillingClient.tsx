@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { Check, Loader2, Sparkles } from 'lucide-react';
 import { FOUNDING_DISCOUNT, FOUNDING_LIMIT, FOUNDING_LOCK_MONTHS, rupees, type BillingCycle, type PlanDef, type PlanKey } from '@/lib/employer/plans';
 import { payWithRazorpay } from '@/lib/billing/checkout-client';
-import BillingDetailsForm from '@/components/billing/BillingDetailsForm';
-import type { BillingProfile } from '@/lib/billing/details';
+import BillingDetailsForm, { type SaveBilling } from '@/components/billing/BillingDetailsForm';
+import BillingCheckoutDialog, { InvoiceToLine } from '@/components/billing/BillingCheckoutDialog';
+import { profileComplete, type BillingProfile } from '@/lib/billing/details';
 import InvoicesTable, { type InvoiceRow } from '@/components/billing/InvoicesTable';
 
 type Price = { amount: number; gst: number; total: number };
@@ -16,7 +17,7 @@ type PlanCard = PlanDef & { monthly: Price; annual: Price; annualFounding: Price
 const card = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px]';
 const fmt = (iso: string) => new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
-export default function BillingClient({ current, expiresAt, ai, aiAutoScreen, openJobs, seatsUsed, cycle: currentCycle, founding, plans, payments, paymentsReady, billing, invoices }: {
+export default function BillingClient({ current, expiresAt, ai, aiAutoScreen, openJobs, seatsUsed, cycle: currentCycle, founding, plans, payments, paymentsReady, billing, invoices, companyName }: {
   current: PlanKey;
   expiresAt: string | null;
   ai: { used: number; limit: number; left: number };
@@ -30,6 +31,8 @@ export default function BillingClient({ current, expiresAt, ai, aiAutoScreen, op
   paymentsReady: boolean;
   billing: BillingProfile;
   invoices: boolean;
+  /** Prefills the invoice name the first time. */
+  companyName: string;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<PlanKey | null>(null);
@@ -40,13 +43,30 @@ export default function BillingClient({ current, expiresAt, ai, aiAutoScreen, op
   const plan = plans.find((p) => p.key === current)!;
   const daysLeft = expiresAt ? Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 864e5)) : null;
 
-  async function buy(key: PlanKey) {
+  // Invoice details are needed once, before the first payment (GST invoices need name, address and GSTIN).
+  const [profile, setProfile] = useState(billing);
+  const [gate, setGate] = useState<PlanKey | 'edit' | null>(null);
+  const saveBilling: SaveBilling = async (details) => {
+    const res = await fetch('/api/employer/billing/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ billing: details }) }).catch(() => null);
+    if (!res) return { error: 'You seem to be offline.' };
+    const d = await res.json().catch(() => ({}));
+    return res.ok ? { warnings: d.warnings } : { error: d.error || 'Couldn’t save.', field: d.field };
+  };
+  const priceFor = (key: PlanKey) => {
+    const p = plans.find((x) => x.key === key)!;
+    return cycle === 'ANNUAL' ? (founding.eligible ? p.annualFounding : p.annual) : p.monthly;
+  };
+  const gatePlan = gate && gate !== 'edit' ? plans.find((x) => x.key === gate) : null;
+
+  async function buy(key: PlanKey, billingReady = profileComplete(profile)) {
+    if (!billingReady) { setGate(key); return; }
     setBusy(key);
     setError('');
     setNotice('');
     try {
       const res = await fetch('/api/employer/billing/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: key, cycle }) });
       const d = await res.json().catch(() => ({}));
+      if (res.status === 409 && d.code === 'BILLING_REQUIRED') { setBusy(null); setGate(key); return; }
       if (!res.ok) { setError(d.error || 'Couldn’t start the payment.'); setBusy(null); return; }
       const out = await payWithRazorpay(d, '/api/employer/billing/verify');
       if (out.ok) { setNotice('Payment received. Your plan is active.'); router.refresh(); }
@@ -133,6 +153,8 @@ export default function BillingClient({ current, expiresAt, ai, aiAutoScreen, op
         )}
       </div>
 
+      {profileComplete(profile) && paymentsReady && <InvoiceToLine profile={profile} onChange={() => setGate('edit')} />}
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {plans.map((p) => {
           const isCurrent = p.key === current;
@@ -186,13 +208,23 @@ export default function BillingClient({ current, expiresAt, ai, aiAutoScreen, op
       <section aria-labelledby="bd-h" className={`${card} p-4 sm:p-5`}>
         <h2 id="bd-h" className="portal-section-title">Billing details</h2>
         <p className="mt-1 mb-4 text-sm text-gray-600 dark:text-gray-400">Who your invoices are made out to and where they’re emailed.</p>
-        <BillingDetailsForm initial={billing} lookupUrl="/api/employer/billing/gstin" save={async (details) => {
-          const res = await fetch('/api/employer/billing/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ billing: details }) }).catch(() => null);
-          if (!res) return { error: 'You seem to be offline.' };
-          const d = await res.json().catch(() => ({}));
-          return res.ok ? { warnings: d.warnings } : { error: d.error || 'Couldn’t save.', field: d.field };
-        }} />
+        <BillingDetailsForm key={JSON.stringify(profile)} initial={profile} lookupUrl="/api/employer/billing/gstin" save={saveBilling} onSaved={setProfile} />
       </section>
+
+      <BillingCheckoutDialog
+        open={gate !== null}
+        onClose={() => setGate(null)}
+        initial={{ ...profile, billingName: profile.billingName ?? companyName }}
+        save={saveBilling}
+        lookupUrl="/api/employer/billing/gstin"
+        order={gatePlan ? { label: `${gatePlan.name} plan · ${cycle === 'ANNUAL' ? '1 year' : '30 days'}`, total: rupees(priceFor(gatePlan.key).total) } : null}
+        onSaved={(p) => {
+          setProfile(p);
+          const next = gate;
+          setGate(null);
+          if (next && next !== 'edit') buy(next, true);
+        }}
+      />
     </div>
   );
 }
