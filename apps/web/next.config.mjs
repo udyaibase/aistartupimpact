@@ -64,9 +64,21 @@ const nextConfig = {
         ],
       },
       {
-        // Pages that frame the events widget or Razorpay checkout (billing, paid event tickets) can't require COEP: those frames don't send it.
-        source: '/((?!embed|events|organizer/embed|organizer/billing|employer/careers|employer/billing).*)',
+        // Pages that frame the events widget or Razorpay checkout (billing, paid event tickets, funding data packs) can't
+        // require COEP: those frames don't send it.
+        source: '/((?!embed|events|organizer/embed|organizer/billing|employer/careers|employer/billing|funding).*)',
         headers: [{ key: 'Cross-Origin-Embedder-Policy', value: 'credentialless' }],
+      },
+      {
+        // Pages that open Razorpay Checkout (lib/billing/checkout-client.ts and the ticket modal). Razorpay opens popups
+        // for netbanking and 3-D Secure that report back to this window, so the opener must survive
+        // (same-origin-allow-popups, not same-origin), and its frames may use the Payment Request API (Google Pay).
+        // Declared after the site-wide block so these values replace it on these paths only.
+        source: '/((?:funding|events/[^/]+|employer/billing|organizer/billing)(?:/.*)?)',
+        headers: [
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin-allow-popups' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(self "https://api.razorpay.com" "https://checkout.razorpay.com"), usb=(), bluetooth=()' },
+        ],
       },
       {
         // Candidate status links carry a private token in the URL: never send it as a Referer.
