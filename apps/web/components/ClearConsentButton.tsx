@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Cookie } from 'lucide-react';
 import Link from 'next/link';
 
 export default function ClearConsentButton() {
@@ -33,8 +34,9 @@ export default function ClearConsentButton() {
         onClick={() => setShow(!show)}
         className="fixed bottom-20 lg:bottom-4 right-4 z-toast w-12 h-12 bg-orange-500 hover:bg-orange-600 text-white rounded-full shadow-lg flex items-center justify-center transition-all"
         title="Cookie Consent Tools"
+        aria-label="Cookie consent tools"
       >
-        🍪
+        <Cookie className="w-5 h-5" aria-hidden />
       </button>
 
       {/* Popup menu */}

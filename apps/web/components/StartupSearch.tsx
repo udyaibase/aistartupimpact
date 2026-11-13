@@ -913,13 +913,13 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
                       <div className="flex items-center justify-center w-full h-full"><Building2 className="w-5 h-5 text-brand" /></div>
                     )}
                   </div>
-                  {s.isVerified && <VerifiedBadge onLogo size="sm" />}
                 </div>
 
                 {/* Name & Tagline — takes remaining space */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <h3 className="font-sora font-semibold sm:font-bold text-[15px] sm:text-sm text-navy dark:text-white group-hover:text-brand transition-colors truncate">{s.name}</h3>
+                    {s.isVerified && <VerifiedBadge size="sm" />}
                     {isNewStartup(s.foundedYear) && (
                       <span className="shrink-0 text-[9px] font-bold font-jakarta bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded uppercase tracking-wide leading-none">New</span>
                     )}
@@ -988,12 +988,12 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
                         <div className="flex items-center justify-center w-full h-full"><Building2 className="w-5 h-5 sm:w-6 sm:h-6 text-brand" /></div>
                       )}
                     </div>
-                    {s.isVerified && <VerifiedBadge onLogo size="sm" />}
                   </div>
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <h3 className="font-sora font-semibold sm:font-extrabold text-[15px] sm:text-base text-navy dark:text-white group-hover:text-brand transition-colors truncate">{s.name}</h3>
+                      {s.isVerified && <VerifiedBadge size="sm" />}
                       {isNewStartup(s.foundedYear) && (
                         <span className="shrink-0 text-[9px] font-bold font-jakarta bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded uppercase tracking-wide leading-none">New</span>
                       )}

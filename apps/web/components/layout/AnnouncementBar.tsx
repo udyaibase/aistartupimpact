@@ -7,15 +7,16 @@ interface Announcement {
   text: string;
   mobileText?: string;
   link: string;
-  emoji: string;
+  /** Still sent by the announcements API (admin field); not shown, the bar is text-only. */
+  emoji?: string;
   badge?: string;
 }
 
 const FALLBACK_ANNOUNCEMENTS: Announcement[] = [
-  { emoji: '🚀', text: 'Submit your AI startup — Get discovered by VCs & buyers', mobileText: 'Submit your AI startup', link: '/submit-startup', badge: 'NEW' },
-  { emoji: '🛠️', text: 'List your AI tool — Reach 5,000+ professionals', mobileText: 'List your AI tool', link: '/submit-tool', badge: 'HOT' },
-  { emoji: '📢', text: 'Post a job — Hire top AI talent in India', mobileText: 'Post a job — Hire AI talent', link: '/employer/signup' },
-  { emoji: '🎯', text: 'Upcoming AI events — Register now', mobileText: 'AI events — Register now', link: '/events' },
+  { text: 'Submit your AI startup — Get discovered by VCs & buyers', mobileText: 'Submit your AI startup', link: '/submit-startup', badge: 'NEW' },
+  { text: 'List your AI tool — Reach 5,000+ professionals', mobileText: 'List your AI tool', link: '/submit-tool', badge: 'HOT' },
+  { text: 'Post a job — Hire top AI talent in India', mobileText: 'Post a job — Hire AI talent', link: '/employer/signup' },
+  { text: 'Upcoming AI events — Register now', mobileText: 'AI events — Register now', link: '/events' },
 ];
 
 export default function AnnouncementBar() {
@@ -91,8 +92,6 @@ export default function AnnouncementBar() {
               : 'opacity-0 -translate-y-3'
           }`}
         >
-          <span className="text-sm text-white" aria-hidden="true">{current.emoji}</span>
-
           {current.badge && (
             <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-white/15 text-white border border-white/20 backdrop-blur-sm">
               {current.badge}

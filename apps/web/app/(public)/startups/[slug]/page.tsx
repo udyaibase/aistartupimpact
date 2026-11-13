@@ -479,7 +479,6 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
             ) : (
               <Building2 className="w-8 h-8 text-brand" />
             )}
-            {startup.isVerified && <VerifiedBadge onLogo size="md" />}
           </div>
 
           {/* Name + Tagline (flex-1 so Impact Score stays right) */}
@@ -488,7 +487,7 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h1 className="font-sora font-bold text-base sm:text-xl text-navy dark:text-white leading-tight">{startup.name}</h1>
-                  {startup.isVerified && <VerifiedBadge size="md" showText />}
+                  {startup.isVerified && <VerifiedBadge size="lg" />}
                 </div>
                 <p className="text-gray-500 dark:text-gray-400 font-jakarta text-xs sm:text-sm mt-1 line-clamp-2">{startup.tagline}</p>
               </div>

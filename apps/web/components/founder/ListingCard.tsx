@@ -83,7 +83,6 @@ export default function ListingCard({ id, slug, name, tagline, logoUrl, status, 
               {name.charAt(0)}
             </span>
           )}
-          {isVerified && <VerifiedBadge onLogo size="sm" />}
         </div>
 
         {/* Content */}
@@ -93,7 +92,7 @@ export default function ListingCard({ id, slug, name, tagline, logoUrl, status, 
               <h3 className="text-sm font-medium text-gray-900 dark:text-white truncate">
                 {name}
               </h3>
-              {isVerified && <VerifiedBadge size="sm" showText={false} />}
+              {isVerified && <VerifiedBadge size="sm" />}
             </div>
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${config.color} shrink-0`}>
               <StatusIcon className="w-3 h-3" />

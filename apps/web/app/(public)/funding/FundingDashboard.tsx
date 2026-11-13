@@ -330,7 +330,7 @@ export default function FundingDashboard({ data: allRounds }: { data: FundingRou
       {/* India / Global switch */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div role="tablist" aria-label="Funding data scope" className="inline-flex self-start rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-1 shadow-sm">
-          {([['india', `🇮🇳 India · ${indiaCount}`], ['global', `🌍 Global · ${allRounds.length}`]] as const).map(([key, label]) => (
+          {([['india', `India · ${indiaCount}`], ['global', `Global · ${allRounds.length}`]] as const).map(([key, label]) => (
             <button
               key={key}
               role="tab"
