@@ -1,3 +1,4 @@
+import { jwtSecret } from '@/lib/jwt-secret';
 import bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
@@ -57,7 +58,7 @@ export async function founderFromCookies() {
   const userToken = store.get('user-token')?.value;
   if (userToken) {
     try {
-      const { payload } = await jwtVerify(userToken, new TextEncoder().encode(process.env.USER_JWT_SECRET!));
+      const { payload } = await jwtVerify(userToken, jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET'));
       const email = typeof payload.email === 'string' ? payload.email.toLowerCase() : null;
       if (email) return prisma.founderUser.findUnique({ where: { email }, select });
     } catch { /* expired or invalid: not signed in */ }

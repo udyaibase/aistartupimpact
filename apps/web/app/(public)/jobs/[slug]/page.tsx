@@ -12,6 +12,7 @@ import SubscribeForm from '@/components/SubscribeForm';
 import ReportJobButton from '@/components/jobs/ReportJobButton';
 import { isClaimVerified } from '@/lib/jobs/trust';
 import { jobPostingSalary } from '@/lib/jobs/public';
+import { categoryText } from '@/lib/jobs/composer';
 import { fitTitle, metaSnippet } from '@/lib/seo-text';
 
 function listingIsOpen(job: { status?: string; expiresAt?: string | null; moderationHold?: boolean }): boolean {
@@ -84,7 +85,7 @@ export async function generateMetadata(props: PageProps): Promise<Metadata> {
            jl.city, jl."workType", jl."employmentType", jl."experienceMin", jl."experienceMax", jl.skills, e."companyName"
     FROM "JobBoardListing" jl
     JOIN "JobBoardEmployer" e ON e.id = jl."employerId"
-    WHERE jl.slug = ${params.slug} AND jl."deletedAt" IS NULL
+    WHERE jl.slug = ${params.slug} AND jl."deletedAt" IS NULL AND jl."isGeneral" = false
     LIMIT 1
   `;
   if (jobs.length === 0 || (jobs[0] as any).status === 'DRAFT') return { title: 'Job Not Found' };
@@ -102,10 +103,10 @@ export default async function JobDetailPage(props: PageProps) {
   const jobs = await sql`
     SELECT jl.*, e."companyName", e.slug AS "companySlug", e."logoUrl",
            e."websiteUrl", e.description AS "companyDescription",
-           e."companySize", e.industry, e."linkedinUrl", e."startupId", e."isVerified", e."startupClaimMethod"
+           e."companySize", e.industry, e."linkedinUrl", e."startupId", e."isVerified", e."startupClaimMethod", e.perks AS "companyPerks"
     FROM "JobBoardListing" jl
     JOIN "JobBoardEmployer" e ON e.id = jl."employerId"
-    WHERE jl.slug = ${params.slug} AND jl."deletedAt" IS NULL
+    WHERE jl.slug = ${params.slug} AND jl."deletedAt" IS NULL AND jl."isGeneral" = false
     LIMIT 1
   `;
 
@@ -123,7 +124,7 @@ export default async function JobDetailPage(props: PageProps) {
   try {
     const [otherRows, relatedRows] = await Promise.all([
       sql`
-        SELECT id, slug, title, "workType", category
+        SELECT id, slug, title, "workType", category, "categoryLabel"
         FROM "JobBoardListing"
         WHERE "employerId" = ${job.employerId} AND id != ${job.id}
           AND status = 'OPEN' AND "moderationHold" = false AND "deletedAt" IS NULL
@@ -132,7 +133,7 @@ export default async function JobDetailPage(props: PageProps) {
         LIMIT 5
       `,
       sql`
-        SELECT jl.id, jl.slug, jl.title, jl."workType", jl.category,
+        SELECT jl.id, jl.slug, jl.title, jl."workType", jl.category, jl."categoryLabel",
                jl.city, jl.country, jl."salaryMin", jl."salaryMax",
                jl."salaryCurrency", jl."showSalary", jl."publishedAt"::text,
                e."companyName", e."logoUrl"
@@ -170,6 +171,7 @@ export default async function JobDetailPage(props: PageProps) {
     },
   };
 
+  if (Number(job.positions) > 1) jobSchema.totalJobOpenings = Number(job.positions);
   if (job.publishedAt) {
     jobSchema.datePosted = new Date(job.publishedAt + 'Z').toISOString().split('T')[0];
   }
@@ -199,7 +201,7 @@ export default async function JobDetailPage(props: PageProps) {
     jobSchema.skills = job.skills.join(', ');
   }
   if (job.category) {
-    jobSchema.occupationalCategory = job.category.replace(/_/g, ' ');
+    jobSchema.occupationalCategory = categoryText(job.category, job.categoryLabel);
   }
   if (job.experienceMin != null) {
     jobSchema.experienceRequirements = `${job.experienceMin}-${job.experienceMax || '10+'} years`;
@@ -278,7 +280,7 @@ export default async function JobDetailPage(props: PageProps) {
                   <p className="font-sora font-bold text-lg sm:text-xl text-navy dark:text-white">
                     {formatSalaryRange(job.salaryMin, job.salaryMax, job.salaryCurrency)}
                   </p>
-                  <p className="text-[10px] text-gray-400 font-jakarta uppercase tracking-wider">per year</p>
+                  <p className="text-[10px] text-gray-400 font-jakarta uppercase tracking-wider">per annum</p>
                 </div>
               )}
               <div>
@@ -303,6 +305,12 @@ export default async function JobDetailPage(props: PageProps) {
                   <p className="text-[10px] text-gray-400 font-jakarta uppercase tracking-wider">type</p>
                 </div>
               )}
+              {Number(job.positions) > 1 && (
+                <div>
+                  <p className="font-sora font-bold text-sm text-navy dark:text-white tabular-nums">{Number(job.positions)}</p>
+                  <p className="text-[10px] text-gray-400 font-jakarta uppercase tracking-wider">openings</p>
+                </div>
+              )}
             </div>
 
             {/* Meta badges */}
@@ -312,7 +320,7 @@ export default async function JobDetailPage(props: PageProps) {
                 {job.workType === 'REMOTE' ? 'Remote' : `${job.city || ''} ${job.country || ''}`.trim() || job.workType}
               </span>
               <span className="text-xs font-jakarta bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2.5 py-1 rounded-md">
-                {job.category?.replace(/_/g, ' ')}
+                {categoryText(job.category, job.categoryLabel)}
               </span>
               {job.visaSponsorship && (
                 <span className="text-xs font-jakarta bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 px-2.5 py-1 rounded-md">
@@ -336,6 +344,20 @@ export default async function JobDetailPage(props: PageProps) {
             )}
             <JobDescription content={job.description || ''} />
           </div>
+
+          {/* Perks (company-wide, set by the employer) */}
+          {Array.isArray(job.companyPerks) && job.companyPerks.length > 0 && (
+            <div className="card p-5 sm:p-6">
+              <h2 className="font-sora font-bold text-base text-navy dark:text-white mb-3">Perks &amp; Benefits</h2>
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+                {(job.companyPerks as string[]).map((perk) => (
+                  <li key={perk} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300 font-jakarta">
+                    <CheckCircle2 className="w-4 h-4 mt-0.5 text-green-600 shrink-0" aria-hidden /> {perk}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Skills */}
           {job.skills?.length > 0 && (
@@ -470,7 +492,7 @@ export default async function JobDetailPage(props: PageProps) {
                         </span>
                         <span className="text-[10px] font-jakarta text-gray-300 dark:text-gray-600">•</span>
                         <span className="text-[10px] font-jakarta text-gray-400 dark:text-gray-500">
-                          {other.category?.replace(/_/g, ' ')}
+                          {categoryText(other.category, other.categoryLabel)}
                         </span>
                       </div>
                     </div>
@@ -485,7 +507,7 @@ export default async function JobDetailPage(props: PageProps) {
           <div className="card p-5">
             <h3 className="font-sora font-bold text-sm text-navy dark:text-white mb-3">Job Info</h3>
             <div className="space-y-2 text-xs text-gray-500 font-jakarta">
-              <p><strong>Category:</strong> {job.category?.replace(/_/g, ' ')}</p>
+              <p><strong>Category:</strong> {categoryText(job.category, job.categoryLabel)}</p>
               {job.department && <p><strong>Department:</strong> {job.department}</p>}
               <p><strong>Posted:</strong> {job.publishedAt ? new Date(job.publishedAt + 'Z').toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' }) : 'Recently'}</p>
               <p><strong>Views:</strong> {job.viewsCount}</p>
@@ -516,7 +538,7 @@ export default async function JobDetailPage(props: PageProps) {
               Related AI Jobs
             </h2>
             <Link href={`/jobs?category=${job.category}`} className="text-xs text-brand font-semibold font-jakarta hover:underline">
-              View all {job.category?.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase())} jobs →
+              View all {categoryText(job.category)} jobs →
             </Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">

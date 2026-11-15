@@ -59,6 +59,7 @@ export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [tabBarHidden, setTabBarHidden] = useState(false);
   const [signInModalOpen, setSignInModalOpen] = useState(false);
 
   const { user, loading, likelySignedIn, refreshSession } = useUser();
@@ -101,6 +102,42 @@ export default function Navbar() {
     window.addEventListener('scroll', handler, { passive: true });
     return () => window.removeEventListener('scroll', handler);
   }, []);
+
+  // Phones and tablets: the bottom tab bar slides away while scrolling down and comes back on scroll up, near the
+  // top, or at the end of the page. A direction needs a deliberate 24px before it counts, so jitter can't flicker it.
+  useEffect(() => {
+    const wide = window.matchMedia('(min-width: 1024px)');
+    let prevY = window.scrollY;
+    let dir = 0;
+    let travelled = 0;
+    let frame = 0;
+    const onScroll = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const y = window.scrollY;
+        const step = y - prevY;
+        prevY = y;
+        const nearTop = y < 120;
+        const nearEnd = y + window.innerHeight >= document.documentElement.scrollHeight - 80;
+        if (wide.matches || nearTop || nearEnd) { setTabBarHidden(false); dir = 0; travelled = 0; return; }
+        if (step === 0) return;
+        const d = step > 0 ? 1 : -1;
+        if (d !== dir) { dir = d; travelled = 0; }
+        travelled += Math.abs(step);
+        if (travelled >= 24) setTabBarHidden(dir > 0);
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => { window.removeEventListener('scroll', onScroll); cancelAnimationFrame(frame); };
+  }, []);
+  const hideTabBar = tabBarHidden && !mobileOpen && !searchOpen;
+
+  // Things that sit just above the tab bar follow it down (see --bottom-nav-h in globals.css).
+  useEffect(() => {
+    document.documentElement.style.setProperty('--bottom-nav-h', hideTabBar ? '0px' : 'calc(4rem + env(safe-area-inset-bottom))');
+  }, [hideTabBar]);
+  useEffect(() => { setTabBarHidden(false); }, [pathname]);
 
   // Close menus on route change
   useEffect(() => {
@@ -383,7 +420,11 @@ export default function Navbar() {
       </aside>
 
       {/* ─── Mobile Bottom Tab Bar ──────────────────── */}
-      <nav className="fixed bottom-0 left-0 right-0 z-sticky bg-white/95 dark:bg-gray-950/95 backdrop-blur-md border-t border-gray-100 dark:border-gray-800 lg:hidden pb-[env(safe-area-inset-bottom)]">
+      <nav
+        aria-hidden={hideTabBar || undefined}
+        inert={hideTabBar || undefined}
+        style={{ transform: hideTabBar ? 'translate3d(0, 100%, 0)' : 'translate3d(0, 0, 0)', transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)' }}
+        className="fixed bottom-0 left-0 right-0 z-sticky bg-white/95 dark:bg-gray-950/95 backdrop-blur-md border-t border-gray-100 dark:border-gray-800 lg:hidden pb-[env(safe-area-inset-bottom)] will-change-transform motion-reduce:!transition-none">
         <div className="flex items-stretch justify-around h-16">
           {mobileNav.map((item) => {
             const isActive = item.href === '/' ? pathname === '/' : pathname?.startsWith(item.href);

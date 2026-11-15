@@ -11,6 +11,14 @@ export default async function TalentPage() {
   const session = await requirePagePermission('candidates.view');
   // The talent pool spans every job; interviewers limited to some jobs don't get it.
   if (session.jobIds) redirect('/employer/applications');
-  const [people, jobs] = await Promise.all([loadTalentPool(session.id), openJobsFor(session.id)]);
-  return <TalentPool people={people} jobs={jobs} canInvite={can(session.role, 'candidates.move')} />;
+  const [pool, jobs] = await Promise.all([loadTalentPool(session.id), openJobsFor(session.id)]);
+  return (
+    <TalentPool
+      people={pool.people}
+      hiredHidden={pool.hiredHidden}
+      jobs={jobs}
+      canInvite={can(session.role, 'candidates.move')}
+      canNote={can(session.role, 'candidates.note')}
+    />
+  );
 }

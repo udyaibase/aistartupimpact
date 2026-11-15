@@ -285,6 +285,8 @@ model Article {
   RelatedArticle_RelatedArticle_fromIdToArticle RelatedArticle[]        @relation("RelatedArticle_fromIdToArticle")
   RelatedArticle_RelatedArticle_toIdToArticle   RelatedArticle[]        @relation("RelatedArticle_toIdToArticle")
 
+  savedBy SavedArticle[]
+
   @@index([authorId])
   @@index([categoryId])
   @@index([isFeatured, status])
@@ -1258,11 +1260,11 @@ model Sponsor {
 }
 
 model Startup {
-  id                                         String                   @id
+  id                                         String                     @id
   name                                       String
-  slug                                       String                   @unique
+  slug                                       String                     @unique
   slugChangedAt                              DateTime?
-  previousSlugs                              String[]                 @default([])
+  previousSlugs                              String[]                   @default([])
   tagline                                    String
   description                                String
   logoUrl                                    String?
@@ -1272,37 +1274,53 @@ model Startup {
   foundedYear                                Int?
   headquartersCity                           String?
   cityId                                     String?
-  stage                                      StartupStage             @default(SEED)
-  totalFundingInr                            BigInt                   @default(0)
+  stage                                      StartupStage               @default(SEED)
+  totalFundingInr                            BigInt                     @default(0)
   employeeCount                              Int?
-  isIndian                                   Boolean                  @default(true)
-  isFeatured                                 Boolean                  @default(false)
+  isIndian                                   Boolean                    @default(true)
+  isFeatured                                 Boolean                    @default(false)
   featuredUntil                              DateTime?
   statValue                                  String?
   statLabel                                  String?
-  impactScore                                Int                      @default(0)
-  createdAt                                  DateTime                 @default(now())
+  impactScore                                Int                        @default(0)
+  createdAt                                  DateTime                   @default(now())
   updatedAt                                  DateTime
   deletedAt                                  DateTime?
-  founders                                   String[]                 @default([])
+  founders                                   String[]                   @default([])
   foundersData                               Json?
   socialLinks                                Json?
-  claimStatus                                ClaimStatus              @default(UNCLAIMED)
+  claimStatus                                ClaimStatus                @default(UNCLAIMED)
   claimedAt                                  DateTime?
   ownerId                                    String?
   submittedBy                                String?
-  isVerified                                 Boolean                  @default(false)
-  isApproved                                 Boolean                  @default(false)
-  contentReviewed                            Boolean                  @default(false)
+  isVerified                                 Boolean                    @default(false)
+  isApproved                                 Boolean                    @default(false)
+  contentReviewed                            Boolean                    @default(false)
   approvedAt                                 DateTime?
   verifiedAt                                 DateTime?
-  verificationToken                          String?                  @unique
+  verificationToken                          String?                    @unique
   verifiedDomain                             String?
+  /// Private contact email for the startup (admin and platform emails only, never shown publicly).
+  contactEmail                               String?
+  /// When the founder proved they receive mail at contactEmail (6-digit code, or it is their own verified sign-in email).
+  contactEmailVerifiedAt                     DateTime?
+  /// How ownership was last proven: DNS or EMAIL. DNS is the stronger proof and can take over an EMAIL verification.
+  verificationMethod                         String?
+  /// The work email used when verificationMethod is EMAIL (private, for audits and disputes).
+  verifiedEmail                              String?
+  /// Verification lapses at this time unless renewed (DNS records are re-checked and renew automatically).
+  verificationExpiresAt                      DateTime?
+  /// Last automatic DNS re-check.
+  verificationCheckedAt                      DateTime?
+  /// Last expiry reminder sent to the owner (30 and 7 days before).
+  verificationRemindedAt                     DateTime?
+  /// Weekly DNS re-checks in a row that didn't find the record (lookups fail now and then; acted on at 3).
+  verificationDnsMisses                      Int                        @default(0)
   claimedBy                                  String?
   searchVector                               Unsupported("tsvector")?
-  category                                   String?                  @db.VarChar(100)
+  category                                   String?                    @db.VarChar(100)
   businessType                               String?
-  status                                     CompanyStatus            @default(ACTIVE)
+  status                                     CompanyStatus              @default(ACTIVE)
   Event                                      Event[]
   AiTool                                     AiTool[]
   Article                                    Article[]
@@ -1312,10 +1330,11 @@ model Startup {
   StartupReview                              StartupReview[]
   SavedStartup                               SavedStartup[]
   StartupFAQ                                 StartupFAQ[]
-  FounderUser_Startup_claimedByToFounderUser FounderUser?             @relation("Startup_claimedByToFounderUser", fields: [claimedBy], references: [id], onDelete: SetNull)
-  FounderUser_Startup_ownerIdToFounderUser   FounderUser?             @relation("Startup_ownerIdToFounderUser", fields: [ownerId], references: [id], onDelete: Cascade)
-  City                                       City?                    @relation(fields: [cityId], references: [id])
+  FounderUser_Startup_claimedByToFounderUser FounderUser?               @relation("Startup_claimedByToFounderUser", fields: [claimedBy], references: [id], onDelete: SetNull)
+  FounderUser_Startup_ownerIdToFounderUser   FounderUser?               @relation("Startup_ownerIdToFounderUser", fields: [ownerId], references: [id], onDelete: Cascade)
+  City                                       City?                      @relation(fields: [cityId], references: [id])
   StartupVerificationLog                     StartupVerificationLog[]
+  ownershipTransfers                         StartupOwnershipTransfer[]
   FeaturedCampaign                           FeaturedCampaign[]
   JobBoardEmployer                           JobBoardEmployer?
   JobBoardListings                           JobBoardListing[]
@@ -1390,6 +1409,8 @@ model StartupVerificationLog {
   dnsRecord    String?
   success      Boolean     @default(false)
   errorMessage String?
+  /// Work email used for EMAIL verification, or the other party in a transfer/takeover.
+  email        String?
   ipAddress    String?
   userAgent    String?
   createdAt    DateTime    @default(now())
@@ -1399,6 +1420,26 @@ model StartupVerificationLog {
   @@index([action])
   @@index([startupId, createdAt])
   @@index([userId])
+}
+
+/// The owner hands a startup to another founder account. The recipient accepts with a single-use link.
+model StartupOwnershipTransfer {
+  id          String    @id @default(cuid())
+  startupId   String
+  fromUserId  String
+  toEmail     String
+  /// SHA-256 of the link token; the token itself is only in the email.
+  tokenHash   String    @unique
+  /// PENDING, ACCEPTED, DECLINED, CANCELLED, EXPIRED
+  status      String    @default("PENDING")
+  expiresAt   DateTime
+  respondedAt DateTime?
+  toUserId    String?
+  createdAt   DateTime  @default(now())
+  Startup     Startup   @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  @@index([startupId, status])
+  @@index([toEmail])
 }
 
 model Tag {
@@ -1633,6 +1674,8 @@ model WebUser {
   SavedTool      SavedTool[]
   SavedStartup   SavedStartup[]
   JobBoardSaved  JobBoardSaved[]
+  SavedEvent     SavedEvent[]
+  SavedArticle   SavedArticle[]
   ToolUpvote     ToolUpvote[]
   interests      WebUserInterest[]
   interactions   WebUserInteraction[]
@@ -1667,6 +1710,34 @@ model SavedStartup {
   @@index([userId])
   @@index([startupSlug])
   @@index([createdAt])
+}
+
+/// A signed-in reader saved an event to their profile.
+model SavedEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  eventId   String
+  createdAt DateTime @default(now())
+  WebUser   WebUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  Event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
+  @@index([userId])
+  @@index([eventId])
+}
+
+/// A signed-in reader saved a story (article) to their profile.
+model SavedArticle {
+  id        String   @id @default(cuid())
+  userId    String
+  articleId String
+  createdAt DateTime @default(now())
+  WebUser   WebUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  Article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, articleId])
+  @@index([userId])
+  @@index([articleId])
 }
 
 model ToolUpvote {
@@ -2836,6 +2907,7 @@ model Event {
   teamAssignments EventTeamAssignment[]
 
   siteAnnouncements SiteAnnouncement[]
+  savedBy           SavedEvent[]
 
   @@index([status, visibility])
   @@index([startAt])
@@ -3275,6 +3347,31 @@ enum JobBoardCategory {
   COMPUTER_VISION
   NLP_ENGINEER
   AI_INFRASTRUCTURE
+  // Engineering
+  SOFTWARE_ENGINEER
+  FRONTEND_ENGINEER
+  BACKEND_ENGINEER
+  FULL_STACK_ENGINEER
+  MOBILE_ENGINEER
+  DEVOPS_ENGINEER
+  QA_ENGINEER
+  SECURITY_ENGINEER
+  ENGINEERING_MANAGER
+  // Data
+  DATA_ANALYST
+  BUSINESS_ANALYST
+  // Product
+  PROJECT_MANAGER
+  // Business and operations
+  BUSINESS_DEVELOPMENT
+  CUSTOMER_SUCCESS
+  CUSTOMER_SUPPORT
+  OPERATIONS
+  FINANCE
+  HR_RECRUITING
+  CONTENT_WRITING
+  LEGAL
+  FOUNDERS_OFFICE
   OTHER
 }
 
@@ -3444,19 +3541,23 @@ model JobBoardEmployer {
   verifiedCompanyDomain  String?
 
   // Careers page / profile
-  brandColor          String?
-  tagline             String?
-  stage               String?
-  teamSize            String?
-  perks               String[]  @default([])
-  officePhotos        String[]  @default([])
-  techStack           String[]  @default([])
-  careersHeadline     String?
-  firstJobPublishedAt DateTime?
+  brandColor                String?
+  tagline                   String?
+  stage                     String?
+  teamSize                  String?
+  perks                     String[]  @default([])
+  officePhotos              String[]  @default([])
+  techStack                 String[]  @default([])
+  careersHeadline           String?
+  firstJobPublishedAt       DateTime?
   /// Calendly / Cal.com / Google Calendar link offered in interview emails.
-  interviewBookingUrl String?
+  interviewBookingUrl       String?
   /// Which application fields are shown and required, plus the form's wording (lib/jobs/apply-form.ts). Null = defaults.
-  applyFormConfig     Json?
+  applyFormConfig           Json?
+  /// "Life at {company}" sections in order (lib/jobs/careers-content.ts). Null = none yet.
+  careersContent            Json?
+  /// Show "Apply generally" on the careers page and widget when no roles are open.
+  acceptGeneralApplications Boolean   @default(false)
 
   // Sessions issued before this moment are no longer valid (set when a password changes)
   sessionsValidAfter DateTime?
@@ -3465,13 +3566,14 @@ model JobBoardEmployer {
   deactivatedAt DateTime?
   deletedAt     DateTime?
 
-  Listings       JobBoardListing[]
-  CareersWidgets JobBoardCareersWidget[]
-  TeamMembers    JobBoardTeamMember[]
-  Payments       JobBoardPayment[]
-  AiScreenings   JobBoardAiScreening[]
-  Startup        Startup?                @relation(fields: [startupId], references: [id], onDelete: SetNull)
-  FounderUser    FounderUser?            @relation(fields: [founderUserId], references: [id], onDelete: SetNull)
+  Listings           JobBoardListing[]
+  CareersWidgets     JobBoardCareersWidget[]
+  CareersSubscribers JobBoardCareersSubscriber[]
+  TeamMembers        JobBoardTeamMember[]
+  Payments           JobBoardPayment[]
+  AiScreenings       JobBoardAiScreening[]
+  Startup            Startup?                    @relation(fields: [startupId], references: [id], onDelete: SetNull)
+  FounderUser        FounderUser?                @relation(fields: [founderUserId], references: [id], onDelete: SetNull)
 
   @@index([founderUserId])
   @@index([startupId])
@@ -3499,6 +3601,8 @@ model JobBoardListing {
   showSalary           Boolean                  @default(true)
   equity               String?
   category             JobBoardCategory         @default(AI_ENGINEER)
+  /// The employer's own category name when none of the standard ones fit (category is then OTHER).
+  categoryLabel        String?
   experienceMin        Int?
   experienceMax        Int?
   skills               String[]                 @default([])
@@ -3520,6 +3624,8 @@ model JobBoardListing {
   showOnJobsPage       Boolean                  @default(true)
   showOnProfile        Boolean                  @default(true)
   showOnCareers        Boolean                  @default(true)
+  /// The workspace's hidden "General application" listing: never public, collects applications when no roles are open.
+  isGeneral            Boolean                  @default(false)
   hiringManagerName    String?
   draftSavedAt         DateTime?
   /// A recruiter asked an owner to publish this draft (approval mode).
@@ -3529,6 +3635,8 @@ model JobBoardListing {
   mustHaveSkills       String[]                 @default([])
   /// "Prefer people who can join within N days"; null = no preference.
   maxNoticeDays        Int?
+  /// How many people this role is hiring ("openings"). Never limits applications; tracked against hires.
+  positions            Int                      @default(1)
   /// Hidden from every public surface while reports are reviewed by an admin.
   moderationHold       Boolean                  @default(false)
   moderationHoldAt     DateTime?
@@ -3574,45 +3682,49 @@ model JobBoardListing {
 }
 
 model JobBoardApplication {
-  id               String                    @id @default(cuid())
-  listingId        String
-  fullName         String
-  email            String
-  phone            String?
-  linkedinUrl      String?
-  portfolioUrl     String?
-  githubUrl        String?
-  resumeUrl        String?
-  resumeKey        String?
-  coverLetter      String?
-  source           JobBoardApplicationSource @default(JOBS_PAGE)
-  widgetId         String?
-  referrerUrl      String?
-  utmSource        String?
-  utmMedium        String?
-  utmCampaign      String?
-  experienceYears  Int?
-  noticePeriodDays Int?
-  currentCompany   String?
-  currentTitle     String?
-  expectedCtcLakh  Float?
-  city             String?
-  screeningAnswers Json?
-  confirmedSkills  String[]                  @default([])
-  matchedSkills    String[]                  @default([])
-  consentAt        DateTime?
-  consentText      String?
-  withdrawnAt      DateTime?
-  statusTokenHash  String?
-  firstResponseAt  DateTime?
+  id                   String                    @id @default(cuid())
+  listingId            String
+  fullName             String
+  email                String
+  phone                String?
+  linkedinUrl          String?
+  portfolioUrl         String?
+  githubUrl            String?
+  resumeUrl            String?
+  resumeKey            String?
+  coverLetter          String?
+  source               JobBoardApplicationSource @default(JOBS_PAGE)
+  widgetId             String?
+  referrerUrl          String?
+  utmSource            String?
+  utmMedium            String?
+  utmCampaign          String?
+  experienceYears      Int?
+  noticePeriodDays     Int?
+  currentCompany       String?
+  currentTitle         String?
+  expectedCtcLakh      Float?
+  city                 String?
+  screeningAnswers     Json?
+  confirmedSkills      String[]                  @default([])
+  matchedSkills        String[]                  @default([])
+  consentAt            DateTime?
+  consentText          String?
+  withdrawnAt          DateTime?
+  statusTokenHash      String?
+  firstResponseAt      DateTime?
   /// Candidate opted in to be contacted about other roles at this company until this date.
-  talentPoolUntil  DateTime?
-  status           JobBoardAppStatus         @default(APPLIED)
-  notes            String?
-  rating           Int?
-  appliedAt        DateTime                  @default(now())
-  reviewedAt       DateTime?
-  statusChangedAt  DateTime?
+  talentPoolUntil      DateTime?
+  /// Private team tags in the talent pool (e.g. "backend", "next quarter"). Never shown to the candidate.
+  talentTags           String[]                  @default([])
+  /// When the "your talent pool membership ends in 30 days" email was sent for the current period.
+  talentPoolReminderAt DateTime?
+  status               JobBoardAppStatus         @default(APPLIED)
+  notes                String?
+  rating               Int?
+  appliedAt            DateTime                  @default(now())
+  reviewedAt           DateTime?
+  statusChangedAt      DateTime?
 
   Listing       JobBoardListing            @relation(fields: [listingId], references: [id], onDelete: Cascade)
   Notes         JobBoardApplicationNote[]
@@ -3627,6 +3739,7 @@ model JobBoardApplication {
   @@index([email])
   @@index([appliedAt])
   @@index([status])
+  @@index([talentPoolUntil])
 }
 
 model JobBoardSaved {
@@ -4289,4 +4402,27 @@ model OpsAlert {
   key        String   @id
   lastSentAt DateTime
   count      Int      @default(1)
+}
+
+/// Candidates who asked to hear when a company opens a role (careers widget / company page). Double opt-in.
+model JobBoardCareersSubscriber {
+  id             String    @id @default(cuid())
+  employerId     String
+  email          String
+  /// Where they signed up: WIDGET or CAREERS_PAGE.
+  source         String    @default("CAREERS_PAGE")
+  consentAt      DateTime  @default(now())
+  consentText    String
+  /// Set when they click the link in the confirmation email; only confirmed subscribers are emailed.
+  confirmedAt    DateTime?
+  /// sha256 of the token in the confirm and unsubscribe links.
+  tokenHash      String    @unique
+  unsubscribedAt DateTime?
+  lastNotifiedAt DateTime?
+  createdAt      DateTime  @default(now())
+
+  Employer JobBoardEmployer @relation(fields: [employerId], references: [id], onDelete: Cascade)
+
+  @@unique([employerId, email])
+  @@index([employerId, confirmedAt])
 }

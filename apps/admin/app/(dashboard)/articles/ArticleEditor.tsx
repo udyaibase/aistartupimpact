@@ -666,7 +666,7 @@ export default function ArticleEditor({ articleId }: { articleId?: string }) {
             </div>
 
             <div className="mt-8">
-              <SEOScorePanel title={title} seoTitle={seoTitle} metaDescription={metaDesc} focusKeyword={focusKeyword} content={bodyHtml} slug={slug} />
+              <SEOScorePanel title={title} seoTitle={seoTitle} metaDescription={metaDesc} focusKeyword={focusKeyword} content={bodyHtml} slug={slug} subtitle={subtitle} coverImage={coverImage} />
             </div>
             <div className="mt-8">
               <ImageAltTextManager content={bodyHtml} focusKeyword={focusKeyword} onUpdateImage={handleUpdateImageAlt} />

@@ -13,6 +13,7 @@ function UnsubscribeContent() {
 
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [emailed, setEmailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reason, setReason] = useState('');
   const [feedback, setFeedback] = useState('');
@@ -35,7 +36,9 @@ function UnsubscribeContent() {
 
       const data = await response.json();
 
-      if (data.success) {
+      if (data.success && data.emailed) {
+        setEmailed(true);
+      } else if (data.success) {
         setSuccess(true);
       } else {
         setError(data.error || 'Failed to unsubscribe');
@@ -47,7 +50,21 @@ function UnsubscribeContent() {
     }
   };
 
-  if (!email) {
+  if (emailed) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-8 max-w-md w-full text-center">
+          <Mail className="w-12 h-12 text-brand mx-auto mb-4" />
+          <h1 className="font-sora font-bold text-xl text-navy dark:text-white mb-2">Check your inbox</h1>
+          <p className="text-gray-600 dark:text-gray-400 text-sm font-jakarta">
+            If {email} is subscribed, we’ve sent it a link to confirm. Open that email and choose Unsubscribe to finish.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!email && !token) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4">
         <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-8 max-w-md w-full text-center">

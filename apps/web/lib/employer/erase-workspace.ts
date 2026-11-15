@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '@udyaibase/database';
 import { deleteResume } from '@/lib/jobs/resume-storage';
 
@@ -28,6 +29,7 @@ export async function eraseWorkspace(employerId: string, accountEmail: string): 
     }
     await tx.jobBoardListing.deleteMany({ where: { employerId } });
     await tx.jobBoardCareersWidget.deleteMany({ where: { employerId } });
+    await tx.jobBoardCareersSubscriber.deleteMany({ where: { employerId } });
     await tx.jobBoardTeamMember.deleteMany({ where: { employerId } });
     await tx.jobBoardAiScreening.deleteMany({ where: { employerId } });
     await tx.jobBoardPayment.deleteMany({ where: { employerId, invoiceNumber: null, NOT: { status: 'SUCCESS' } } });
@@ -42,7 +44,7 @@ export async function eraseWorkspace(employerId: string, accountEmail: string): 
         startupId: null, founderUserId: null,
         logoUrl: null, websiteUrl: null, description: null, tagline: null, careersHeadline: null, location: null,
         linkedinUrl: null, twitterUrl: null, brandColor: null, stage: null, teamSize: null, interviewBookingUrl: null,
-        perks: [], officePhotos: [], techStack: [],
+        perks: [], officePhotos: [], techStack: [], careersContent: Prisma.DbNull, acceptGeneralApplications: false,
         billingName: null, billingGstin: null, billingAddress: null, billingState: null, billingType: null,
         billingAddressLine1: null, billingAddressLine2: null, billingCity: null, billingPostalCode: null,
         billingPoNumber: null, billingEmail: null, billingCcEmails: [],

@@ -5,7 +5,7 @@ import {
   getEntitlements,
   SOCIAL_POST_PRICES,
   calculateTotal,
-  type SocialPostType,
+  type SocialPostType, selfServeAdsEnabled, SELF_SERVE_ADS_OFF,
 } from '@/lib/advertise';
 
 export const dynamic = 'force-dynamic';
@@ -37,6 +37,7 @@ export async function GET() {
 
 // POST — order a social post (creates Razorpay order)
 export async function POST(request: NextRequest) {
+  if (!selfServeAdsEnabled()) return NextResponse.json(SELF_SERVE_ADS_OFF, { status: 503 });
   try {
     const session = await getFounderSession();
     if (!session) return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });

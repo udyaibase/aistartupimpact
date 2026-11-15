@@ -1,3 +1,4 @@
+import { jwtSecret } from '@/lib/jwt-secret';
 import { SignJWT } from 'jose';
 import { prisma } from '@udyaibase/database';
 
@@ -9,7 +10,7 @@ import { prisma } from '@udyaibase/database';
 
 export { PASSWORD_SIGNIN_UNTIL, passwordSignInOpen } from '@/lib/employer/sign-in-policy';
 
-const CHALLENGE_SECRET = new TextEncoder().encode(process.env.EMPLOYER_JWT_SECRET || process.env.USER_JWT_SECRET!);
+const CHALLENGE_SECRET = jwtSecret(process.env.EMPLOYER_JWT_SECRET || process.env.USER_JWT_SECRET, 'EMPLOYER_JWT_SECRET');
 
 /** Short-lived token for the two-step step after a correct password or email code (checked by verify-2fa). */
 export function twoFactorChallenge(employerId: string) {

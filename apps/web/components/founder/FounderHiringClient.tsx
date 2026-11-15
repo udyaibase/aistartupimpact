@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { formatCountdown, maskEmail } from '@/lib/ui/code-entry';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -158,33 +159,50 @@ export function EmailVerify({ startupId, startupName, domain, suggestedEmail, on
     }
   }
 
+  // One check at a time: auto-submit on the 6th digit and Enter can't both spend the code.
+  const checking = useRef(false);
+  const submitCode = async (value: string) => {
+    if (value.length !== 6 || checking.current) return;
+    checking.current = true;
+    const d = await call({ step: 'verify', email, code: value });
+    checking.current = false;
+    if (d) onDone(); else setCode('');
+  };
+
   return step === 'email' ? (
     <form onSubmit={async (e) => { e.preventDefault(); const d = await call({ step: 'send', email }); if (d) { setStep('code'); setCooldown(d.cooldown ?? 60); } }} noValidate>
       <label htmlFor={`ve-${startupId}`} className="block text-sm font-semibold text-gray-900 dark:text-white mb-1.5">Your work email at {domain}</label>
       <div className="flex flex-col sm:flex-row gap-2">
         <input id={`ve-${startupId}`} type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={`you@${domain}`} className={inputCls} />
         <button type="submit" disabled={busy || !email.trim() || cooldown > 0} className="btn-brand gap-2 shrink-0 disabled:opacity-50">
-          {busy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} {cooldown > 0 ? `Wait ${cooldown}s` : 'Send code'}
+          {busy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} {cooldown > 0 ? `Wait ${formatCountdown(cooldown)}` : 'Send code'}
         </button>
       </div>
       <p className="mt-1.5 text-[13px] text-gray-500 dark:text-gray-400">We send a 6-digit code to prove you work at {startupName}. Personal emails like Gmail aren&apos;t accepted.</p>
       {error && <p role="alert" className="mt-2 text-sm text-red-700 dark:text-red-400">{error}</p>}
     </form>
   ) : (
-    <form onSubmit={async (e) => { e.preventDefault(); const d = await call({ step: 'verify', email, code }); if (d) onDone(); else setCode(''); }} noValidate>
-      <label htmlFor={`vc-${startupId}`} className="block text-sm font-semibold text-gray-900 dark:text-white mb-1.5">Enter the 6-digit code sent to {email}</label>
+    <form onSubmit={async (e) => { e.preventDefault(); await submitCode(code); }} noValidate>
+      <label htmlFor={`vc-${startupId}`} className="block text-sm font-semibold text-gray-900 dark:text-white mb-1.5">Enter the 6-digit code sent to {maskEmail(email)}</label>
       <div className="flex flex-col sm:flex-row gap-2">
         <input ref={codeRef} id={`vc-${startupId}`} inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]*" maxLength={6} value={code}
-          onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} className={`${inputCls} sm:w-44 text-center tracking-[0.3em] font-semibold text-base`} />
+          onChange={(e) => {
+            const next = e.target.value.replace(/\D/g, '').slice(0, 6);
+            setCode(next);
+            // Submit as soon as the 6th digit lands (typed, pasted or autofilled).
+            if (next.length === 6 && !busy) submitCode(next);
+          }}
+          className={`${inputCls} sm:w-44 text-center tracking-[0.3em] font-semibold text-base`} aria-describedby={`vh-${startupId}`} />
         <button type="submit" disabled={busy || code.length !== 6} className="btn-brand gap-2 disabled:opacity-50">
           {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <ShieldCheck className="w-4 h-4" aria-hidden />} Verify
         </button>
         <button type="button" onClick={() => call({ step: 'send', email }).then((d) => d && setCooldown(d.cooldown ?? 60))} disabled={busy || cooldown > 0}
           className="min-h-[44px] px-3 rounded-[10px] text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-60">
-          {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend code'}
+          {cooldown > 0 ? `Resend in ${formatCountdown(cooldown)}` : 'Resend code'}
         </button>
       </div>
-      <button type="button" onClick={() => { setStep('email'); setError(''); }} className="mt-2 min-h-[40px] text-sm text-gray-600 hover:underline">Use a different email</button>
+      <p id={`vh-${startupId}`} className="mt-1.5 text-[13px] text-gray-500 dark:text-gray-400">Not there? Check your spam or promotions folder. Codes expire in 10 minutes.</p>
+      <button type="button" onClick={() => { setStep('email'); setCode(''); setError(''); }} className="mt-1 min-h-[40px] text-sm text-gray-600 dark:text-gray-400 hover:underline">Change email</button>
       {error && <p role="alert" className="mt-2 text-sm text-red-700 dark:text-red-400">{error}</p>}
     </form>
   );

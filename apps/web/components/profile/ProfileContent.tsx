@@ -4,7 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Loader2, Camera, Check, Eye, EyeOff, Shield, Monitor, Smartphone, Globe, X } from 'lucide-react';
+import { Loader2, Camera, Check, Shield, Monitor, Smartphone, Globe, X } from 'lucide-react';
+import PasswordField from '@/components/ui/PasswordField';
+import { passwordProblem } from '@/lib/password-rules';
 import { maskEmail } from '@/lib/mask';
 import SavedItems from '@/components/profile/SavedItems';
 import TwoFactorSetup from '@/components/TwoFactorSetup';
@@ -197,8 +199,6 @@ function SecurityTab() {
   const router = useRouter();
   const [changingPassword, setChangingPassword] = useState(false);
   const [passwords, setPasswords] = useState({ current: '', newPass: '', confirm: '' });
-  const [showCurrent, setShowCurrent] = useState(false);
-  const [showNew, setShowNew] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -232,8 +232,8 @@ function SecurityTab() {
 
   const handleChangePassword = async () => {
     setError(''); setSuccess('');
-    if (passwords.newPass.length < 8) { setError('Min 8 characters'); return; }
-    if (passwords.newPass !== passwords.confirm) { setError('Passwords do not match'); return; }
+    const pwProblem = passwordProblem(passwords.newPass);
+    if (pwProblem) { setError(pwProblem); return; }
     setSaving(true);
     try {
       const res = await fetch('/api/user/profile/password', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPassword: passwords.current, newPassword: passwords.newPass }) });
@@ -255,9 +255,8 @@ function SecurityTab() {
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="relative"><input type={showCurrent ? 'text' : 'password'} autoComplete="current-password" value={passwords.current} onChange={(e) => setPasswords({ ...passwords, current: e.target.value })} placeholder="Current password" className="w-full px-3 py-2 pr-10 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white" /><button type="button" onClick={() => setShowCurrent(!showCurrent)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">{showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}</button></div>
-            <div className="relative"><input type={showNew ? 'text' : 'password'} autoComplete="new-password" value={passwords.newPass} onChange={(e) => setPasswords({ ...passwords, newPass: e.target.value })} placeholder="New password (min 8)" className="w-full px-3 py-2 pr-10 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white" /><button type="button" onClick={() => setShowNew(!showNew)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">{showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}</button></div>
-            <input type="password" autoComplete="new-password" value={passwords.confirm} onChange={(e) => setPasswords({ ...passwords, confirm: e.target.value })} placeholder="Confirm new password" className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+            <PasswordField label="Current password" hideLabel placeholder="Current password" autoComplete="current-password" value={passwords.current} onChange={(v) => setPasswords({ ...passwords, current: v })} />
+            <PasswordField label="New password" hideLabel placeholder="New password" autoComplete="new-password" value={passwords.newPass} onChange={(v) => setPasswords({ ...passwords, newPass: v })} showRules={passwords.newPass.length > 0} />
             <div className="flex gap-2">
               <button onClick={handleChangePassword} disabled={saving} className="px-4 py-2 text-xs font-semibold bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg disabled:opacity-50">{saving ? 'Updating...' : 'Update'}</button>
               <button onClick={() => { setChangingPassword(false); setPasswords({ current: '', newPass: '', confirm: '' }); setError(''); }} className="px-4 py-2 text-xs font-medium text-gray-500 hover:text-gray-700">Cancel</button>

@@ -1,11 +1,12 @@
 'use server';
 
+import { jwtSecret } from '@/lib/jwt-secret';
 import { sql } from '@/lib/db';
 import { getUserSession, refreshUserToken } from '@/lib/user-session';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 
-const JWT_SECRET = new TextEncoder().encode(process.env.USER_JWT_SECRET!);
+const JWT_SECRET = jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET');
 
 const VALID_INTENTS = ['exploring_tools', 'following_startups', 'looking_for_jobs', 'founder_builder', 'learning_ai', 'investor_vc'];
 

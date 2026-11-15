@@ -1,10 +1,11 @@
+import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 import { sql } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
-const JWT_SECRET = new TextEncoder().encode(process.env.USER_JWT_SECRET!);
+const JWT_SECRET = jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET');
 
 async function getSessionUserId(request: NextRequest): Promise<{ userId: string; sessionId: string } | null> {
   const cookieStore = await cookies();

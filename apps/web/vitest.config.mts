@@ -9,7 +9,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: ['./setupTests.ts'],
-    include: ['__tests__/unit/**/*.test.ts', '__tests__/integration/**/*.test.ts'],
+    include: ['__tests__/unit/**/*.test.ts', '__tests__/unit/**/*.test.tsx', '__tests__/integration/**/*.test.ts'],
     exclude: ['__tests__/e2e/**', '__tests__/smoke/**', 'node_modules'],
     coverage: {
       provider: 'v8',

@@ -73,13 +73,10 @@ function Section({ title, badge, badgeColor, children }: { title: string; badge:
     const el = scrollRef.current;
     if (el) el.addEventListener('scroll', checkScroll, { passive: true });
     window.addEventListener('resize', checkScroll);
-    const wheelHandler = (e: WheelEvent) => {
-      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-        el!.scrollLeft += e.deltaY;
-        e.preventDefault();
-      }
-    };
-    if (el) el.addEventListener('wheel', wheelHandler, { passive: false });
+    // Start at the first card (#1 must be visible), even if the browser restored a scroll position.
+    // The mouse wheel is left alone: turning page scrolling into sideways scrolling moved the row instead of the page.
+    // Trackpads and Shift+wheel still scroll sideways natively, and the arrows and dragging work as before.
+    if (el) el.scrollLeft = 0;
 
     let isDown = false;
     let startX = 0;
@@ -97,7 +94,6 @@ function Section({ title, badge, badgeColor, children }: { title: string; badge:
 
     return () => {
       el?.removeEventListener('scroll', checkScroll);
-      el?.removeEventListener('wheel', wheelHandler);
       el?.removeEventListener('mousedown', onDown);
       el?.removeEventListener('mousemove', onMove);
       el?.removeEventListener('mouseup', onUp);

@@ -1,3 +1,4 @@
+import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from 'next/server';
 import { isTwoFactorOn, verifyAccountCode } from '@/lib/auth/account-two-factor';
 import { TWO_FACTOR_LOCKED_MESSAGE, clearTwoFactorFailures, isTwoFactorLocked, recordTwoFactorFailure } from '@/lib/auth/two-factor-attempts';
@@ -11,8 +12,8 @@ import { randomBytes } from 'crypto';
 
 export const dynamic = 'force-dynamic';
 
-const CHALLENGE_SECRET = new TextEncoder().encode(process.env.USER_JWT_SECRET!);
-const JWT_SECRET = new TextEncoder().encode(process.env.USER_JWT_SECRET!);
+const CHALLENGE_SECRET = jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET');
+const JWT_SECRET = jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET');
 
 function generateId(): string {
   return randomBytes(16).toString('hex');

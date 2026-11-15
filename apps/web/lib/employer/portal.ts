@@ -115,7 +115,7 @@ export async function getEmployerHome(employerId: string): Promise<EmployerHome>
       },
     }),
     prisma.jobBoardCareersWidget.count({ where: { employerId, OR: [{ codeCopiedAt: { not: null } }, { markedInstalledAt: { not: null } }, { firstSeenAt: { not: null } }] } }),
-    prisma.jobBoardListing.count({ where: { employerId, deletedAt: null } }),
+    prisma.jobBoardListing.count({ where: { employerId, deletedAt: null, isGeneral: false } }),
     prisma.jobBoardApplication.count({ where: { ...appsOf, appliedAt: { gte: new Date(now - 30 * DAY) } } }),
     prisma.jobBoardApplication.count({ where: newCandidatesWhere(employerId) }),
     prisma.jobBoardApplication.count({ where: { ...newCandidatesWhere(employerId), appliedAt: { lt: new Date(now - 5 * DAY) } } }),
@@ -189,7 +189,7 @@ export async function getEmployerHome(employerId: string): Promise<EmployerHome>
 /** Company context for the job composer: who the preview shows, and previous jobs to copy. */
 /** `role` decides approval mode: recruiters' new jobs wait for an owner when the workspace turned that on. */
 export async function getComposerContext(employerId: string, role: 'OWNER' | 'RECRUITER' | 'INTERVIEWER' = 'OWNER') {
-  const [shell, employer, previous] = await Promise.all([
+  const [shell, employer, previous, used] = await Promise.all([
     getEmployerShell(employerId),
     prisma.jobBoardEmployer.findUnique({ where: { id: employerId }, select: { perks: true, requireJobApproval: true } }),
     prisma.jobBoardListing.findMany({
@@ -198,16 +198,29 @@ export async function getComposerContext(employerId: string, role: 'OWNER' | 'RE
       take: 20,
       select: { id: true, title: true },
     }),
+    // Teams and custom categories this workspace has used before, offered in the dropdowns.
+    prisma.jobBoardListing.findMany({
+      where: { employerId, deletedAt: null, OR: [{ department: { not: null } }, { categoryLabel: { not: null } }] },
+      orderBy: { updatedAt: 'desc' },
+      take: 200,
+      select: { department: true, categoryLabel: true },
+    }),
   ]);
+  const uniq = (xs: (string | null)[]) => Array.from(new Map(xs.filter((x): x is string => !!x?.trim()).map((x) => [x.trim().toLowerCase(), x.trim()])).values()).slice(0, 30);
   return {
     company: {
       name: shell?.companyName ?? '',
       logoUrl: shell?.logoUrl ?? null,
       verified: !!shell?.claimVerified,
       hasPerks: (employer?.perks?.length ?? 0) > 0,
+      perks: employer?.perks ?? [],
+      /** Perks are company-wide, so only owners can change them. */
+      canEditPerks: role === 'OWNER',
     },
     emailVerified: shell?.emailVerified ?? false,
     previousJobs: previous,
+    savedTeams: uniq(used.map((u) => u.department)),
+    savedCategories: uniq(used.map((u) => u.categoryLabel)),
     approval: { required: !!employer?.requireJobApproval && role === 'RECRUITER', canDecide: role === 'OWNER' },
   };
 }

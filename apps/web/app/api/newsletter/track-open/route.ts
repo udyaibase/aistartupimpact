@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { clientIp } from '@/lib/client-ip';
 import { prisma } from "@udyaibase/database";
 import crypto from "crypto";
+import { newsletterLinkValid } from "@/lib/newsletter-link";
 
 function hashIp(ip: string): string {
   return crypto.createHash('sha256').update(ip).digest('hex').substring(0, 16);
@@ -20,7 +21,8 @@ export async function GET(request: NextRequest) {
   const campaignId = searchParams.get("c");
   const email = searchParams.get("e");
 
-  if (!campaignId || !email) {
+  // Only pixels we signed when sending the campaign are counted; the image is returned either way.
+  if (!campaignId || !email || !newsletterLinkValid(campaignId, email, "open", searchParams.get("s"))) {
     return new NextResponse(PIXEL, {
       status: 200,
       headers: {
@@ -33,7 +35,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const decodedEmail = decodeURIComponent(email);
+    const decodedEmail = email; // searchParams values are already decoded
     const rawIp = clientIp(request);
     const ipHashed = hashIp(rawIp);
     const userAgent = request.headers.get("user-agent") || "unknown";

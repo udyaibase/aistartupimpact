@@ -5,8 +5,9 @@ import IntentLink from '@/components/IntentLink';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useListRestore } from '@/hooks/useListRestore';
-import { Star, Zap, ArrowRight, CheckSquare, Square, X, BarChart, Search, Grid3X3, List, Loader2, SlidersHorizontal, ChevronDown, ChevronRight, SearchX } from 'lucide-react';
+import { Star, Zap, ArrowRight, Check, Plus, X, BarChart, Search, Grid3X3, List, Loader2, SlidersHorizontal, ChevronDown, ChevronRight, SearchX } from 'lucide-react';
 import BookmarkButton from './BookmarkButton';
+import { TOOLS_CATEGORY_EVENT } from './tools/CategoryTileLink';
 import UpvoteButton from './tools/UpvoteButton';
 import { useHeadroomBar } from '@/hooks/useHeadroomBar';
 import BottomSheet from './ui/BottomSheet';
@@ -563,6 +564,74 @@ export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: 
     }),
   ];
   const scrollToResults = bar.scrollToResults;
+
+  // Category tiles above the list filter it here, then bring the results into view (see CategoryTileLink).
+  const categoryChangeRef = useRef(handleCategoryChange);
+  categoryChangeRef.current = handleCategoryChange;
+  useEffect(() => {
+    if (scopeCategory) return;
+    const onTile = (e: Event) => {
+      const slug = (e as CustomEvent<string>).detail;
+      if (!parentCategories.some((c) => c.slug === slug)) return; // unknown here: let the link open the category page
+      e.preventDefault();
+      categoryChangeRef.current(slug);
+      const anchor = barAnchorRef.current;
+      if (anchor) window.scrollTo({ top: anchor.getBoundingClientRect().top + window.scrollY - bar.headerOffset, behavior: 'smooth' });
+    };
+    window.addEventListener(TOOLS_CATEGORY_EVENT, onTile);
+    return () => window.removeEventListener(TOOLS_CATEGORY_EVENT, onTile);
+  }, [scopeCategory, parentCategories, bar.headerOffset]);
+
+  // Desktop: once the bar is stuck, it folds to one row (search, Filters, Sort) while scrolling down, and opens up
+  // again on a deliberate scroll up. Phones and tablets already hide the whole bar on the way down.
+  //
+  // The fold changes no sizes: the bar keeps its height, the category pills and count row fade out, the search and
+  // Filters rows slide up into one line, and the background is clipped to that line. Only transform, opacity and
+  // clip-path animate, so nothing on the page moves and the browser never has to correct the scroll (which, when the
+  // bar resized itself, made it shake).
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const on = () => setIsDesktop(mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  const compact = isDesktop && bar.stuck && !bar.scrollingUp && !showMoreFilters && !searchOpen;
+
+  const barRef = useRef<HTMLDivElement>(null);
+  const pillsRef = useRef<HTMLDivElement>(null);
+  const searchRowRef = useRef<HTMLDivElement>(null);
+  const filtersRowRef = useRef<HTMLDivElement>(null);
+  const [fold, setFold] = useState<{ lift: number; dx: number; dy: number; filtersW: number; clip: number } | null>(null);
+  const compactRef = useRef(compact);
+  compactRef.current = compact;
+  useEffect(() => {
+    const barEl = barRef.current;
+    if (!barEl) return;
+    // Measured in the open layout (transforms don't change these sizes), so the folded positions are exact.
+    const measure = () => {
+      if (compactRef.current) return;
+      const s = searchRowRef.current?.getBoundingClientRect();
+      const f = filtersRowRef.current?.getBoundingClientRect();
+      const bRect = barEl.getBoundingClientRect();
+      if (!s || !f || !f.width) return;
+      const p = pillsRef.current?.getBoundingClientRect();
+      const top = p && p.height ? p.top + 12 : s.top; // where the single row sits: the pills' first line
+      const lift = s.top - top;
+      const dy = top + (s.height - f.height) / 2 - f.top;
+      const dx = s.right - f.width - f.left;
+      const clip = Math.max(0, bRect.bottom - (top + s.height + 10));
+      setFold({ lift, dx, dy, filtersW: f.width, clip });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(barEl);
+    return () => ro.disconnect();
+  }, []);
+  const folded = compact && !!fold;
+  // An even ease: a front-loaded curve covers most of the distance in the first frame, which reads as a jump.
+  const FOLD = '320ms cubic-bezier(0.4, 0, 0.2, 1)';
   const filterKey = [searchQuery, selectedCategory, selectedSubcategory, selectedPricing, sortBy, freeTrialOnly, selectedTagIds.join(',')].join('|');
   const prevFilterKey = useRef(filterKey);
   useEffect(() => {
@@ -583,16 +652,18 @@ export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: 
       {/* ── Search & filter bar: sticks under the site header (hides on scroll down on small screens) ── */}
       <div ref={barAnchorRef} aria-hidden className="h-0" />
       <div
+        ref={barRef}
         style={{
           top: bar.headerOffset,
           transform: bar.hidden ? `translate3d(0, calc(-100% - ${bar.headerOffset}px), 0)` : 'translate3d(0, 0, 0)',
           transition: 'transform 360ms cubic-bezier(0.32, 0.72, 0, 1)',
         }}
-        className="sticky z-40 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 py-2 sm:pt-0 sm:pb-3 mb-0 sm:mb-5 flex flex-col gap-2 sm:block will-change-transform motion-reduce:!transition-none"
+        className={`sticky z-40 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 py-2 sm:pt-0 sm:pb-3 mb-0 sm:mb-5 flex flex-col gap-2 sm:block will-change-transform motion-reduce:!transition-none ${folded ? 'pointer-events-none' : ''}`}
       >
       {/* Full-bleed backdrop: runs edge to edge of the window while the controls stay aligned with the content */}
       <div
         aria-hidden
+        style={{ clipPath: `inset(0 0 ${folded ? fold!.clip : 0}px 0)`, transition: `clip-path ${FOLD}` }}
         className={`absolute inset-y-0 -left-[100vw] -right-[100vw] -z-10 bg-gray-50 dark:bg-gray-950 sm:bg-gray-50/95 sm:dark:bg-gray-950/95 sm:backdrop-blur-md transition-shadow duration-300 ${
           bar.stuck ? 'shadow-[0_8px_16px_-12px_rgba(0,0,0,0.25)] border-b border-gray-200/70 dark:border-gray-800' : ''
         }`}
@@ -600,7 +671,8 @@ export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: 
 
       {/* ── Category Pills ── */}
       {(!scopeCategory || subcategories.length > 1) && (
-      <div className="order-2 sm:order-none min-w-0 sm:pt-3">
+      <div ref={pillsRef} className="order-2 sm:order-none min-w-0 sm:transition-opacity sm:duration-200 motion-reduce:transition-none" style={folded ? { opacity: 0 } : undefined} inert={folded ? true : undefined}>
+      <div className="min-w-0 sm:pt-3">
         {/* Parent category pills */}
         {!scopeCategory && (
         <div className="relative">
@@ -662,12 +734,21 @@ export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: 
           </div>
         )}
       </div>
+      </div>
       )}
 
       {/* ── Search + Filters + Sort + View Toggle ── */}
       <div className="order-1 sm:order-none sm:pt-3 sm:space-y-3">
         {/* Search Bar, with the phone filter button beside it */}
-        <div className="flex items-start gap-2 sm:block">
+        <div
+          ref={searchRowRef}
+          className="flex items-start gap-2 sm:block pointer-events-auto motion-reduce:!transition-none"
+          style={isDesktop ? {
+            transform: folded ? `translate3d(0, ${-fold!.lift}px, 0)` : 'translate3d(0, 0, 0)',
+            width: folded ? `calc(100% - ${fold!.filtersW + 12}px)` : '100%',
+            transition: `transform ${FOLD}, width ${FOLD}`,
+          } : undefined}
+        >
         <div className="flex-1 min-w-0">
         <SmartSearchBox
           value={searchQuery}
@@ -687,7 +768,7 @@ export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: 
           onClick={() => setSheetOpen(true)}
           aria-haspopup="dialog"
           aria-label={filterCount > 0 ? `Filters, ${filterCount} on` : 'Filters'}
-          className={`sm:hidden relative shrink-0 w-10 h-10 flex items-center justify-center rounded-xl border transition-colors duration-200 active:scale-95 motion-reduce:active:scale-100 ${
+          className={`sm:hidden relative shrink-0 w-10 h-10 flex items-center justify-center rounded-md border transition-colors duration-200 active:scale-95 motion-reduce:active:scale-100 ${
             filterCount > 0 || (sortBy !== 'rating' && sortBy !== 'relevance')
               ? 'border-brand bg-brand/5 text-brand'
               : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300'
@@ -699,7 +780,14 @@ export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: 
         </div>
 
         {/* Filters + Sort Row (phones use the sheet) */}
-        <div className="hidden sm:flex items-center gap-2">
+        <div
+          ref={filtersRowRef}
+          className="hidden sm:flex w-max items-center gap-2 pointer-events-auto motion-reduce:!transition-none"
+          style={isDesktop ? {
+            transform: folded ? `translate3d(${fold!.dx}px, ${fold!.dy}px, 0)` : 'translate3d(0, 0, 0)',
+            transition: `transform ${FOLD}`,
+          } : undefined}
+        >
           {/* Filters Button */}
           <button
             onClick={() => setShowMoreFilters(!showMoreFilters)}
@@ -751,12 +839,14 @@ export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: 
           )}
         </div>
 
-        <div className="hidden sm:block">{resultsRow}</div>
+        <div className="hidden sm:block transition-opacity duration-200 motion-reduce:transition-none" style={folded ? { opacity: 0 } : undefined} inert={folded ? true : undefined}>
+          {resultsRow}
+        </div>
       </div>
 
       {/* ── FILTERS PANEL ── */}
       {tagGroups.length > 0 && (showMoreFilters || selectedTagIds.length > 0 || selectedPricing !== 'all' || freeTrialOnly) && (
-        <div className="order-3 sm:order-none min-w-0 sm:pt-3">
+        <div className="order-3 sm:order-none min-w-0 sm:pt-3 transition-opacity duration-200 motion-reduce:transition-none" style={folded ? { opacity: 0 } : undefined} inert={folded ? true : undefined}>
           {/* Active filter chips */}
           {(selectedTagIds.length > 0 || selectedPricing !== 'all' || freeTrialOnly) && (
             <div className="flex flex-wrap items-center gap-1.5 mb-3">
@@ -955,29 +1045,13 @@ export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: 
               >
                 <div className="p-4 sm:p-5 flex flex-col gap-2.5 relative h-full bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl">
 
-                  {/* Top Actions */}
-                  <div className="absolute top-3 right-3 flex items-center gap-2 z-10">
-                    <BookmarkButton type="tool" itemId={tool.slug} itemName={tool.name} size="md" />
-                    <div className="relative group/compare">
-                      <button
-                        onClick={(e) => toggleTool(tool, e)}
-                        aria-label={`Compare ${tool.name}`}
-                        aria-pressed={isSelected}
-                        className={`btn-icon ${isSelected ? 'btn-icon-active' : ''} ${isDisabledForCompare ? 'opacity-30 cursor-not-allowed' : ''}`}
-                      >
-                        {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
-                      </button>
-                      <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover/compare:flex flex-col items-center z-dropdown">
-                        <div className="w-2.5 h-2.5 bg-black dark:bg-gray-800 rotate-45 -mb-1.5" />
-                        <div className="bg-black dark:bg-gray-800 text-white text-xs px-3 py-1.5 rounded-lg whitespace-nowrap shadow-lg font-jakarta">
-                          {isSelected ? 'Selected' : isDisabledForCompare ? 'Different category' : 'Compare'}
-                        </div>
-                      </div>
-                    </div>
+                  {/* Top Actions: save */}
+                  <div className="absolute top-3 right-3 z-10">
+                    <BookmarkButton type="tool" itemId={tool.slug} itemName={tool.name} variant="icon" size="md" />
                   </div>
 
                   {/* Logo & Title */}
-                  <div className="flex items-center gap-3 pr-20">
+                  <div className="flex items-center gap-3 pr-12">
                     <div className="w-11 h-11 sm:w-10 sm:h-10 rounded-xl bg-white dark:bg-gray-800 shrink-0 overflow-hidden shadow-sm border border-gray-100 dark:border-gray-700/50">
                       <Image src={iconUrl} alt={tool.name} className="w-full h-full object-cover" width={44} height={44} unoptimized />
                     </div>
@@ -1018,6 +1092,23 @@ export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: 
                         <span className="text-xs font-bold text-gray-700 dark:text-gray-300">{tool.rating}</span>
                       </div>
                       <UpvoteButton toolSlug={tool.slug} size="sm" />
+                      {/* A labelled Compare chip, so the feature can be seen */}
+                      <button
+                        type="button"
+                        onClick={(e) => toggleTool(tool, e)}
+                        aria-pressed={isSelected}
+                        aria-label={isSelected ? `Remove ${tool.name} from comparison` : `Add ${tool.name} to comparison`}
+                        title={isDisabledForCompare ? 'You can compare tools from the same category' : undefined}
+                        className={`inline-flex items-center gap-1 h-8 px-2.5 rounded-full border text-xs font-semibold font-jakarta whitespace-nowrap transition-colors ${
+                          isSelected
+                            ? 'border-brand bg-brand text-white'
+                            : isDisabledForCompare
+                            ? 'border-gray-200 dark:border-gray-700 text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                            : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:border-brand/40 hover:text-brand'
+                        }`}
+                      >
+                        {isSelected ? <><Check className="w-3.5 h-3.5" aria-hidden /> Comparing</> : <><Plus className="w-3.5 h-3.5" aria-hidden /> Compare</>}
+                      </button>
                     </div>
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-full uppercase ${
                       tool.pricing === 'FREE' || tool.pricing === 'Free'
@@ -1117,11 +1208,18 @@ export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: 
 
                 {/* Compare checkbox - hidden on mobile */}
                 <button
+                  type="button"
                   onClick={(e) => toggleTool(tool, e)}
-                  className={`hidden sm:block shrink-0 p-1 transition-colors ${isSelected ? 'text-brand' : isDisabledForCompare ? 'text-gray-200 dark:text-gray-700 cursor-not-allowed' : 'text-gray-300 hover:text-brand'}`}
-                  title={isDisabledForCompare ? 'Different category' : 'Select for comparison'}
+                  aria-pressed={isSelected}
+                  aria-label={isSelected ? `Remove ${tool.name} from comparison` : `Add ${tool.name} to comparison`}
+                  className={`hidden sm:inline-flex items-center gap-1 shrink-0 h-8 px-2.5 rounded-full border text-xs font-semibold font-jakarta whitespace-nowrap transition-colors ${isSelected
+                    ? 'border-brand bg-brand text-white'
+                    : isDisabledForCompare
+                    ? 'border-gray-200 dark:border-gray-700 text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                    : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-brand/40 hover:text-brand'}`}
+                  title={isDisabledForCompare ? 'You can compare tools from the same category' : undefined}
                 >
-                  {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                  {isSelected ? <><Check className="w-3.5 h-3.5" aria-hidden /> Comparing</> : <><Plus className="w-3.5 h-3.5" aria-hidden /> Compare</>}
                 </button>
               </IntentLink>
             );
@@ -1179,7 +1277,7 @@ export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: 
 
       {/* ── Comparison Footer Bar ── */}
       {selectedTools.length > 0 && (
-        <div className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 bg-navy text-white px-4 sm:px-6 py-3 sm:py-4 rounded-2xl sm:rounded-full shadow-2xl flex items-center gap-4 sm:gap-6 z-sticky animate-fade-in-up border border-indigo-500/30 max-w-[calc(100vw-2rem)]">
+        <div className="fixed bottom-[calc(var(--bottom-nav-h)+1rem)] lg:bottom-6 left-1/2 -translate-x-1/2 transition-[bottom] duration-300 bg-navy text-white px-4 sm:px-6 py-3 sm:py-4 rounded-2xl sm:rounded-full shadow-2xl flex items-center gap-4 sm:gap-6 z-sticky animate-fade-in-up border border-indigo-500/30 max-w-[calc(100vw-2rem)]">
           <div className="flex -space-x-2">
             <div className="font-sora font-bold text-sm mr-4 flex items-center gap-2"><BarChart className="w-4 h-4 text-brand" /> {selectedTools.length}/3 Selected</div>
           </div>

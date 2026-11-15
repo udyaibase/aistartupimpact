@@ -1,3 +1,4 @@
+import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from 'next/server';
 import { logFounderSignIn } from '@/lib/founder/activity';
 import { secondFactorChallenge } from '@/lib/auth/second-factor';
@@ -5,14 +6,13 @@ import { clientIp } from '@/lib/client-ip';
 import { sql } from '@/lib/db';
 import { SignJWT } from 'jose';
 import { randomBytes } from 'crypto';
+import { safeReturnPath } from '@/lib/safe-return';
 
 export const dynamic = 'force-dynamic';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI_USER || 'http://localhost:3000/api/user/auth/google/callback';
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.USER_JWT_SECRET!
-);
+const JWT_SECRET = jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET');
 
 function generateId(): string {
   return randomBytes(16).toString('hex');
@@ -119,7 +119,7 @@ export async function GET(request: NextRequest) {
     // fragment, so it never reaches server logs or another site's Referer.
     const challenge = await secondFactorChallenge(user.email);
     if (challenge) {
-      const back = typeof state === 'string' && state.startsWith('/') && !state.startsWith('//') ? state : '/profile';
+      const back = safeReturnPath(state);
       return NextResponse.redirect(new URL(`/auth/login?returnTo=${encodeURIComponent(back)}#twofa=${challenge.challengeToken}&type=${challenge.userType}`, request.url));
     }
 
@@ -158,10 +158,7 @@ export async function GET(request: NextRequest) {
       WHERE id = ${user.id}
     `;
 
-    let redirectPath = '/profile';
-    if (typeof state === 'string' && state.startsWith('/') && !state.startsWith('//')) {
-      redirectPath = state;
-    }
+    const redirectPath = safeReturnPath(state);
     await logFounderSignIn(googleUser.email, request, 'google');
     const response = NextResponse.redirect(new URL(redirectPath, request.url));
     response.cookies.set('user-token', token, {

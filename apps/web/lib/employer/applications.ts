@@ -3,6 +3,9 @@ import { isClaimVerified } from '@/lib/jobs/trust';
 import { computeMatch, type MatchResult } from '@/lib/jobs/match';
 import { jobHashOf, type AiRecommendation, type AiScreenResult } from '@/lib/jobs/ai-screen';
 
+/** What HR sees for the hidden listing that holds applications sent without a specific role. */
+export const GENERAL_LABEL = 'General applications';
+
 const MATCH_JOB = {
   skills: true, mustHaveSkills: true, experienceMin: true, experienceMax: true, workType: true, city: true,
   salaryMax: true, salaryCurrency: true, maxNoticeDays: true, screeningQuestions: true,
@@ -28,6 +31,10 @@ export interface BoardCard {
   appliedAt: string;
   withdrawn: boolean;
   noteCount: number;
+  /** Other roles at this company the same person applied to. */
+  otherRoles: number;
+  /** Applied without a specific role (the hidden "General application" listing). */
+  isGeneral: boolean;
   match: { score: number; band: MatchResult['band']; knockedOut: boolean };
   /** AI screening (paid plans); null when not screened. */
   ai: { status: 'PENDING' | 'DONE' | 'FAILED'; fitScore: number | null; recommendation: AiRecommendation | null } | null;
@@ -58,16 +65,28 @@ export async function loadBoard(employerId: string, listingId?: string, jobIds: 
     select: {
       id: true, listingId: true, fullName: true, currentTitle: true, currentCompany: true, city: true, experienceYears: true,
       noticePeriodDays: true, expectedCtcLakh: true, status: true, source: true, matchedSkills: true, confirmedSkills: true,
-      appliedAt: true, withdrawnAt: true, screeningAnswers: true,
-      Listing: { select: { title: true, ...MATCH_JOB } },
+      appliedAt: true, withdrawnAt: true, screeningAnswers: true, email: true,
+      Listing: { select: { title: true, isGeneral: true, ...MATCH_JOB } },
       _count: { select: { Notes: true } },
       AiScreening: { select: { status: true, fitScore: true, recommendation: true } },
     },
   });
+  // How many other roles at this company each person applied to (shown as "+2 roles" on the card).
+  const emails = Array.from(new Set(apps.map((a) => a.email)));
+  const perEmail = emails.length
+    ? await prisma.jobBoardApplication.groupBy({
+        by: ['email'],
+        where: { email: { in: emails }, Listing: { employerId, deletedAt: null, ...(jobIds ? { id: { in: jobIds } } : {}) } },
+        _count: { _all: true },
+      })
+    : [];
+  const roleCount = new Map(perEmail.map((g) => [g.email, g._count._all]));
   return apps.map((a) => ({
+    otherRoles: Math.max(0, (roleCount.get(a.email) ?? 1) - 1),
+    isGeneral: a.Listing.isGeneral,
     ai: a.AiScreening ? { status: a.AiScreening.status, fitScore: a.AiScreening.fitScore, recommendation: a.AiScreening.recommendation as AiRecommendation | null } : null,
     match: (({ score, band, knockedOut }) => ({ score, band, knockedOut }))(computeMatch(a.Listing, a)),
-    id: a.id, listingId: a.listingId, jobTitle: a.Listing.title, fullName: a.fullName, currentTitle: a.currentTitle,
+    id: a.id, listingId: a.listingId, jobTitle: a.Listing.isGeneral ? GENERAL_LABEL : a.Listing.title, fullName: a.fullName, currentTitle: a.currentTitle,
     currentCompany: a.currentCompany, city: a.city, experienceYears: a.experienceYears, noticePeriodDays: a.noticePeriodDays,
     expectedCtcLakh: a.expectedCtcLakh, status: a.status, source: a.source, matched: a.matchedSkills.length,
     jobSkills: a.Listing.skills.length, confirmedSkills: a.confirmedSkills, appliedAt: a.appliedAt.toISOString(),
@@ -79,13 +98,24 @@ export async function loadDetail(employerId: string, id: string, jobIds: string[
   const a = await prisma.jobBoardApplication.findFirst({
     where: { id, Listing: { employerId, ...(jobIds ? { id: { in: jobIds } } : {}) } },
     include: {
-      Listing: { select: { id: true, title: true, slug: true, description: true, experienceBand: true, ...MATCH_JOB } },
+      Listing: { select: { id: true, title: true, slug: true, description: true, experienceBand: true, isGeneral: true, ...MATCH_JOB } },
       AiScreening: true,
       Notes: { orderBy: { createdAt: 'asc' } },
       Events: { orderBy: { createdAt: 'desc' }, take: 50 },
     },
   });
   if (!a) return null;
+  // The same person's other applications to this company (matched by email), so the team answers them once.
+  const others = await prisma.jobBoardApplication.findMany({
+    where: {
+      id: { not: a.id },
+      email: { equals: a.email, mode: 'insensitive' },
+      Listing: { employerId, deletedAt: null, ...(jobIds ? { id: { in: jobIds } } : {}) },
+    },
+    orderBy: { appliedAt: 'desc' },
+    take: 20,
+    select: { id: true, status: true, withdrawnAt: true, appliedAt: true, Listing: { select: { id: true, title: true, isGeneral: true } } },
+  });
   return {
     id: a.id,
     fullName: a.fullName,
@@ -95,6 +125,8 @@ export async function loadDetail(employerId: string, id: string, jobIds: string[
     githubUrl: a.githubUrl,
     portfolioUrl: a.portfolioUrl,
     hasResume: !!(a.resumeKey || a.resumeUrl),
+    /** pdf: shown in the page; docx: download only (browsers can't show Word files); link: an older external link. */
+    resumeType: (a.resumeKey ? (a.resumeKey.toLowerCase().endsWith('.docx') ? 'docx' : 'pdf') : a.resumeUrl ? 'link' : null) as 'pdf' | 'docx' | 'link' | null,
     coverLetter: a.coverLetter,
     currentTitle: a.currentTitle,
     currentCompany: a.currentCompany,
@@ -111,7 +143,11 @@ export async function loadDetail(employerId: string, id: string, jobIds: string[
     screeningAnswers: (Array.isArray(a.screeningAnswers) ? a.screeningAnswers : []) as { id: string; question: string; type: string; answer: string }[],
     confirmedSkills: a.confirmedSkills,
     matchedSkills: a.matchedSkills,
-    job: { id: a.Listing.id, title: a.Listing.title, slug: a.Listing.slug, skills: a.Listing.skills, mustHaveSkills: a.Listing.mustHaveSkills },
+    job: { id: a.Listing.id, title: a.Listing.title, slug: a.Listing.slug, skills: a.Listing.skills, mustHaveSkills: a.Listing.mustHaveSkills, isGeneral: a.Listing.isGeneral },
+    otherApplications: others.map((o) => ({
+      id: o.id, jobId: o.Listing.id, jobTitle: o.Listing.isGeneral ? GENERAL_LABEL : o.Listing.title, isGeneral: o.Listing.isGeneral,
+      status: o.status, withdrawn: !!o.withdrawnAt, appliedAt: o.appliedAt.toISOString(),
+    })),
     match: computeMatch(a.Listing, a),
     ai: a.AiScreening ? {
       status: a.AiScreening.status,

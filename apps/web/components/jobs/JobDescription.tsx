@@ -81,6 +81,13 @@ interface JobDescriptionProps {
 export default function JobDescription({ content }: JobDescriptionProps) {
   if (!content) return null;
 
+  // Descriptions written in the job editor mark headings explicitly (## …). Then only those are headings and no
+  // lists are guessed, so an ordinary sentence starting with "We…" or "About…" stays a sentence. Older plain-text
+  // descriptions (no ## anywhere) keep the guessing below.
+  const structured = /^#{1,3}\s/m.test(content);
+  const headingTest = structured ? (l: string) => !!isMarkdownHeading(l) : isHeading;
+  const isNumbered = (l: string) => /^\s*\d+[.)]\s/.test(l);
+
   const blocks = content.split(/\n\n+/);
   const elements: React.ReactNode[] = [];
   let keyCounter = 0;
@@ -94,7 +101,7 @@ export default function JobDescription({ content }: JobDescriptionProps) {
       const line = lines[0].trim();
       if (isHorizontalRule(line)) {
         elements.push(<hr key={keyCounter++} className={HR_CLASS} />);
-      } else if (isHeading(line)) {
+      } else if (headingTest(line)) {
         elements.push(renderHeading(line, keyCounter++));
       } else if (isBullet(line)) {
         elements.push(
@@ -109,12 +116,12 @@ export default function JobDescription({ content }: JobDescriptionProps) {
     }
 
     const firstLine = lines[0].trim();
-    const firstIsHeading = isHeading(firstLine);
+    const firstIsHeading = headingTest(firstLine);
     const hasBulletMarkers = lines.some(l => isBullet(l));
     const avgLen = lines.reduce((sum, l) => sum + l.trim().length, 0) / lines.length;
 
     // Pattern: heading followed by list items (implicit or explicit bullets)
-    if (firstIsHeading && lines.length >= 3) {
+    if (!structured && firstIsHeading && lines.length >= 3) {
       elements.push(renderHeading(firstLine, keyCounter++));
       const items = lines.slice(1).filter(l => !isHorizontalRule(l.trim())).map((l, j) => {
         const text = isBullet(l) ? stripBulletMarker(l) : l.trim();
@@ -125,7 +132,7 @@ export default function JobDescription({ content }: JobDescriptionProps) {
     }
 
     // Pattern: all lines are short and no heading — implicit bullet list
-    if (!firstIsHeading && lines.length >= 3 && avgLen < 100 && !hasBulletMarkers) {
+    if (!structured && !firstIsHeading && lines.length >= 3 && avgLen < 100 && !hasBulletMarkers) {
       const items = lines.filter(l => !isHorizontalRule(l.trim())).map((l, j) => (
         <li key={j} className={LI_CLASS}>{parseInline(l.trim())}</li>
       ));
@@ -144,19 +151,23 @@ export default function JobDescription({ content }: JobDescriptionProps) {
         continue;
       }
 
-      if (isHeading(line)) {
+      if (headingTest(line)) {
         elements.push(renderHeading(line, keyCounter++));
         i++;
         continue;
       }
 
       if (isBullet(line)) {
+        // Numbered lists stay numbered in editor-written descriptions.
+        const ordered = structured && isNumbered(line);
         const items: React.ReactNode[] = [];
-        while (i < lines.length && isBullet(lines[i].trim())) {
+        while (i < lines.length && isBullet(lines[i].trim()) && (!structured || isNumbered(lines[i]) === ordered)) {
           items.push(<li key={items.length} className={LI_CLASS}>{parseInline(stripBulletMarker(lines[i].trim()))}</li>);
           i++;
         }
-        elements.push(<ul key={keyCounter++} className={UL_CLASS}>{items}</ul>);
+        elements.push(ordered
+          ? <ol key={keyCounter++} className="list-decimal list-outside pl-5 marker:text-gray-500">{items}</ol>
+          : <ul key={keyCounter++} className={UL_CLASS}>{items}</ul>);
         continue;
       }
 

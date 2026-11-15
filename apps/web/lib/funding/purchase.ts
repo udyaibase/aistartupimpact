@@ -3,7 +3,7 @@ import { sendEmailFireAndForget } from '@/lib/email/send';
 import { button, esc, shell } from '@/lib/jobs/apply-emails';
 import { emailInvoice } from '@/lib/billing/invoice';
 import { purchaseToken, subscribeWithConsent } from '@/lib/funding/access';
-import { isPackKey, PACKS, rupees } from '@/lib/funding/packs';
+import { CONSENT_TEXT, isPackKey, PACKS, rupees } from '@/lib/funding/packs';
 
 const SITE = () => (process.env.NEXT_PUBLIC_SITE_URL || 'https://udyaibase.com').replace(/\/$/, '');
 const DAY = 864e5;
@@ -12,8 +12,8 @@ export const downloadUrl = (purchaseId: string) => `/api/funding-data/download?t
 
 /**
  * Mark a funding-data order paid. Idempotent: the checkout callback and the Razorpay webhook may both arrive;
- * only the first flips PENDING → SUCCESS, starts the access window, subscribes the buyer (they ticked the
- * consent box at checkout) and sends the download link and GST invoice.
+ * only the first flips PENDING → SUCCESS, starts the access window, subscribes the buyer if they chose the
+ * newsletter at checkout, and sends the download link and GST invoice.
  */
 export async function activateFundingPurchase(orderId: string, paymentId: string): Promise<'activated' | 'already' | 'unknown'> {
   const p = await prisma.fundingDataPurchase.findUnique({ where: { razorpayOrderId: orderId } });
@@ -26,7 +26,8 @@ export async function activateFundingPurchase(orderId: string, paymentId: string
   });
   if (!flipped.count) return 'already';
 
-  await subscribeWithConsent(p.email, 'funding_paid', p.consentAt).catch((e) => console.error('[funding-data] subscribe', e instanceof Error ? e.message : e));
+  // Only buyers who ticked the optional newsletter box at checkout are subscribed.
+  if (p.consentText === CONSENT_TEXT) await subscribeWithConsent(p.email, 'funding_paid', p.consentAt).catch((e) => console.error('[funding-data] subscribe', e instanceof Error ? e.message : e));
   sendPurchaseEmail(p.id, p.email, p.pack, p.totalPaise, new Date(now.getTime() + days * DAY));
   await emailInvoice('funding', p.id).catch((e) => console.error('[invoice] funding', e));
   return 'activated';

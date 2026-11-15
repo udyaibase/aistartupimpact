@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Check, MoreHorizontal, Pause, Play, Plus, SlidersHorizontal, X, PartyPopper,
+  Check, MoreHorizontal, Pause, Play, Plus, SlidersHorizontal, X, PartyPopper, List, LayoutTemplate, ArrowRight,
 } from "lucide-react";
 import type { JobsPortalWidget } from "@/lib/jobs/careers";
 import { getPlatform, type PlatformId } from "@/lib/embed/platforms";
@@ -50,6 +50,7 @@ export default function JobsWidgetSetup({ widget: initial, stats, referrers, ori
   const pending = useRef<Partial<JobsPortalWidget>>({});
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevStatus = useRef(initial.status);
+  const shownRef = useRef<"roles" | "page">(initial.design.show ?? "roles");
   const [screen, setScreen] = useState<"list" | "form-upload" | "form-details">("list");
   const showScreen = (s: typeof screen) => { setScreen(s); previewRef.current?.pushConfig({ previewScreen: s }); };
 
@@ -104,7 +105,10 @@ export default function JobsWidgetSetup({ widget: initial, stats, referrers, ori
     setSaveState("saved");
     setSaveError("");
     if (d.data) mergeDetection(d.data);
-    if (RELOAD_KEYS.some((k) => k in patch)) previewRef.current?.reload();
+    // The server decides between the roles list and the full careers page, so reload the preview after switching.
+    const showChanged = "design" in patch && (patch.design?.show ?? "roles") !== shownRef.current;
+    if (showChanged) shownRef.current = patch.design?.show ?? "roles";
+    if (RELOAD_KEYS.some((k) => k in patch) || showChanged) previewRef.current?.reload();
   }, [mergeDetection]);
 
   const update = useCallback((patch: Partial<JobsPortalWidget>) => {
@@ -211,6 +215,13 @@ export default function JobsWidgetSetup({ widget: initial, stats, referrers, ori
         </div>
       )}
 
+      <ShowChoice show={widget.design.show ?? "roles"} onChange={(show) => {
+        const { show: _old, ...rest } = widget.design;
+        update({ design: show === "page" ? { ...rest, show } : rest });
+        if (show === "page") showScreen("list");
+      }} />
+
+      {widget.design.show !== "page" && (
       <div role="radiogroup" aria-label="What to preview" className="flex flex-wrap gap-2 mb-3">
         {([["list", "Job list"], ["form-upload", "Apply: resume step"], ["form-details", "Apply: details step"]] as const).map(([v, l]) => (
           <button key={v} type="button" role="radio" aria-checked={screen === v} onClick={() => showScreen(v)}
@@ -221,6 +232,7 @@ export default function JobsWidgetSetup({ widget: initial, stats, referrers, ori
           </button>
         ))}
       </div>
+      )}
 
       <WidgetPreview
         ref={previewRef}
@@ -299,6 +311,46 @@ export default function JobsWidgetSetup({ widget: initial, stats, referrers, ori
         />
       )}
     </div>
+  );
+}
+
+/** The one choice that matters first: just the roles, or the whole careers page. Same code snippet either way. */
+function ShowChoice({ show, onChange }: { show: "roles" | "page"; onChange: (s: "roles" | "page") => void }) {
+  const options = [
+    { value: "roles" as const, icon: List, title: "Open roles", desc: "Just your jobs. Best when your site already tells your story." },
+    { value: "page" as const, icon: LayoutTemplate, title: "Full careers page", desc: "Your careers page template with the roles inside. Best for an empty Careers page." },
+  ];
+  return (
+    <section aria-labelledby="show-h" className={`${card} p-5 sm:p-6 mb-6`}>
+      <h2 id="show-h" className="portal-section-title">What should the widget show?</h2>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5 mb-4">You can switch any time. The code on your site stays the same.</p>
+      <div role="radiogroup" aria-labelledby="show-h" className="grid gap-3 sm:grid-cols-2">
+        {options.map((o) => {
+          const on = show === o.value;
+          return (
+            <button key={o.value} type="button" role="radio" aria-checked={on} onClick={() => onChange(o.value)}
+              className={`flex items-start gap-3 text-left rounded-[12px] border p-4 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#A50F15] ${
+                on ? "border-[#A50F15] ring-1 ring-[#A50F15] bg-[#A50F15]/[0.03]" : "border-gray-200 dark:border-gray-800 hover:border-gray-400"
+              }`}>
+              <o.icon className={`w-5 h-5 mt-0.5 shrink-0 ${on ? "text-[#A50F15]" : "text-gray-500"}`} aria-hidden />
+              <span className="flex-1">
+                <span className="block font-semibold text-gray-900 dark:text-white">{o.title}</span>
+                <span className="block text-sm text-gray-600 dark:text-gray-400 mt-0.5">{o.desc}</span>
+              </span>
+              <span aria-hidden className={`mt-1 w-4 h-4 rounded-full border-2 shrink-0 ${on ? "border-[#A50F15] bg-[#A50F15] shadow-[inset_0_0_0_2px_white]" : "border-gray-300 dark:border-gray-600"}`} />
+            </button>
+          );
+        })}
+      </div>
+      {show === "page" && (
+        <p className="mt-4 text-sm text-gray-700 dark:text-gray-300 flex flex-wrap items-center gap-x-2 gap-y-1">
+          The template, brand colour and text come from your careers page.
+          <Link href="/employer/careers-page" className="inline-flex items-center gap-1 font-semibold text-[#A50F15] hover:underline">
+            Edit careers page <ArrowRight className="w-4 h-4" aria-hidden />
+          </Link>
+        </p>
+      )}
+    </section>
   );
 }
 

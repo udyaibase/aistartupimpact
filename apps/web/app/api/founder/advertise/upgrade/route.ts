@@ -6,13 +6,14 @@ import {
   isValidUpgrade,
   getUpgradePrice,
   calculateTotal,
-  type PackageTier,
+  type PackageTier, selfServeAdsEnabled, SELF_SERVE_ADS_OFF,
 } from '@/lib/advertise';
 
 export const dynamic = 'force-dynamic';
 
 // POST — upgrade current package to a higher tier
 export async function POST(request: NextRequest) {
+  if (!selfServeAdsEnabled()) return NextResponse.json(SELF_SERVE_ADS_OFF, { status: 503 });
   try {
     const session = await getFounderSession();
     if (!session) return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });

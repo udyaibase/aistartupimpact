@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getOrganizerSession, type OrganizerSession } from "./index";
 import { hasPermission, type Permission } from "./permissions";
-import { prisma } from "@udyaibase/database";
+import { activeMembership } from "./workspace";
 
 export interface AuthorizedSession extends OrganizerSession {
   role: string;
@@ -25,19 +25,10 @@ export async function requirePermission(
     return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 });
   }
 
-  // Check if this user is a team member on any org (not just their own)
-  const teamMember = await prisma.eventTeamMember.findFirst({
-    where: {
-      email: session.email,
-      status: "ACTIVE",
-      organizerId: { not: session.id },
-    },
-    include: {
-      assignments: { select: { eventId: true } },
-    },
-  });
+  // Their own workspace, or a team they chose to work in (see ./workspace.ts).
+  const { active: teamMember } = await activeMembership(session.id, session.email);
 
-  // If no team member record on another org → they ARE the owner of their own org
+  // Working in their own workspace → they are its owner
   if (!teamMember) {
     return {
       ...session,
@@ -58,10 +49,8 @@ export async function requirePermission(
     ...session,
     role: teamMember.role,
     organizerId: teamMember.organizerId,
-    teamMemberId: teamMember.id,
-    assignedEventIds: teamMember.assignments.length > 0
-      ? teamMember.assignments.map(a => a.eventId)
-      : undefined,
+    teamMemberId: teamMember.teamMemberId,
+    assignedEventIds: teamMember.assignedEventIds,
   };
 }
 
@@ -72,4 +61,14 @@ export function canAccessEvent(session: AuthorizedSession, eventId: string): boo
   if (session.role === "OWNER" || session.role === "ADMIN") return true;
   if (!session.assignedEventIds) return true;
   return session.assignedEventIds.includes(eventId);
+}
+
+/**
+ * Prisma filter for the events this session may see: the active workspace's events, narrowed to the assigned ones
+ * for teammates limited to specific events. Server pages and API routes use the same filter, so a page never
+ * shows one workspace while its buttons act on another.
+ */
+export function eventScope(session: AuthorizedSession): { organizerId: string; id?: { in: string[] } } {
+  const limited = session.role !== "OWNER" && session.role !== "ADMIN" && session.assignedEventIds;
+  return limited ? { organizerId: session.organizerId, id: { in: limited } } : { organizerId: session.organizerId };
 }

@@ -1,3 +1,4 @@
+import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { jwtVerify } from 'jose';
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const secret = new TextEncoder().encode(process.env.NEXTAUTH_SECRET!);
+    const secret = jwtSecret(process.env.NEXTAUTH_SECRET, 'NEXTAUTH_SECRET');
     let email: string;
 
     try {

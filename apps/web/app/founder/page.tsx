@@ -1,3 +1,4 @@
+import { jwtSecret } from '@/lib/jwt-secret';
 import { redirect } from 'next/navigation';
 import { getFounderSession } from '@/lib/founder-auth';
 import { getUnifiedSession } from '@/lib/unified-auth';
@@ -5,9 +6,7 @@ import { prisma } from '@udyaibase/database';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 
-const USER_JWT_SECRET = new TextEncoder().encode(
-  process.env.USER_JWT_SECRET!
-);
+const USER_JWT_SECRET = jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET');
 
 export default async function FounderRootPage() {
   let founderId: string | null = null;

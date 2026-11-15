@@ -3,7 +3,8 @@ import { prisma } from '@udyaibase/database';
 import { webhookSignatureValid } from '@/lib/billing/razorpay';
 import { activatePayment } from '@/lib/employer/billing';
 import { activateOrganizerPayment } from '@/lib/events/billing';
-import { confirmTicketPayment, markTicketPaymentFailed } from '@/lib/events/tickets';
+import { confirmTicketPayment, markTicketPaymentFailed, recoverSupersededTicketOrder } from '@/lib/events/tickets';
+import { opsAlert } from '@/lib/ops/alert';
 import { activateFundingPurchase, markFundingPurchaseFailed } from '@/lib/funding/purchase';
 import { refreshPayoutByAccount } from '@/lib/events/payouts';
 
@@ -45,8 +46,20 @@ export async function POST(request: NextRequest) {
   // Activate only on captured money for exactly the amount we charged (the signed payload carries both).
   const paidEvent = body.event === 'payment.captured' || body.event === 'order.paid';
   if (paidEvent) {
-    const expected = await expectedTotal(purpose!, entity.order_id);
-    if (expected == null) return NextResponse.json({ status: 'unknown' });
+    let expected = await expectedTotal(purpose!, entity.order_id);
+    if (expected == null && isTicket && entity.status === 'captured' && entity.id) {
+      // Paid on an older checkout window whose order was replaced: recover the ticket, or refund the payment.
+      const recovered = await recoverSupersededTicketOrder(entity.order_id, String(entity.id));
+      if (recovered === 'refunded') return NextResponse.json({ status: 'refunded_superseded_order' });
+      if (recovered === 'adopted') expected = await expectedTotal(purpose!, entity.order_id);
+    }
+    if (expected == null) {
+      // Money was captured for an order we have no record of: someone has to look at it.
+      if (entity.status === 'captured') {
+        await opsAlert('payment-unknown-order', 'A captured payment has no matching order', [`Product: ${purpose}`, `Order ${entity.order_id}`, `Payment ${entity.id ?? ''}`, 'Check it in the Razorpay dashboard and refund or activate by hand.'], 1).catch(() => {});
+      }
+      return NextResponse.json({ status: 'unknown' });
+    }
     if (entity.status !== 'captured' || entity.currency !== 'INR' || entity.amount !== expected) {
       console.error('[razorpay-billing] not activating', entity.order_id, entity.status, entity.amount, expected);
       return NextResponse.json({ status: 'not_captured_or_mismatch' });

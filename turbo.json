@@ -21,6 +21,7 @@
         "REFRESH_SECRET",
         "FOUNDER_JWT_SECRET",
         "USER_JWT_SECRET",
+        "EMPLOYER_JWT_SECRET",
         "UPSTASH_REDIS_REST_URL",
         "UPSTASH_REDIS_REST_TOKEN",
         "MEILI_URL",

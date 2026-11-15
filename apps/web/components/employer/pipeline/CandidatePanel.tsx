@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  ArrowLeft, ArrowRight, Check, ChevronDown, ExternalLink, FileText, Github, Globe, Linkedin, Loader2, Mail, Phone, Send, X, Minus, CircleHelp, Flag,
+  ArrowLeft, ArrowRight, Check, ChevronDown, Download, ExternalLink, FileText, Github, Globe, Linkedin, Loader2, Mail, Phone, Send, X, Minus, CircleHelp, Flag,
 } from 'lucide-react';
 import type { ApplicationDetail } from '@/lib/employer/applications';
 import AiReview, { type AiAccess } from '@/components/employer/pipeline/AiReview';
+import ResumeViewer from '@/components/employer/pipeline/ResumeViewer';
 
 const SOURCE: Record<string, string> = {
   JOBS_PAGE: 'Udyaibase AI Jobs', STARTUP_PROFILE: 'Startup profile', GOOGLE: 'Google', WIDGET: 'Your website',
@@ -34,7 +35,13 @@ const fmtTime = (iso: string) => new Date(iso).toLocaleString('en-IN', { day: 'n
 
 export default function CandidatePanel({
   id, onClose, onPrev, onNext, onMove, onSeen, onNoteAdded, refreshKey, teammates = [], aiAccess, onAiChanged,
+  onOpenOther, moveTargets = [], onMovedToJob,
 }: {
+  /** Open one of this person's other applications. */
+  onOpenOther?: (id: string) => void;
+  /** Roles a general application can be moved into; empty for people who can't move candidates. */
+  moveTargets?: { id: string; title: string }[];
+  onMovedToJob?: (id: string, job: { id: string; title: string }) => void;
   id: string;
   onClose: () => void;
   onPrev?: () => void;
@@ -57,6 +64,36 @@ export default function CandidatePanel({
   const [mentions, setMentions] = useState<string[]>([]);
   const [mentionOpen, setMentionOpen] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
+  // Resume beside the panel. Stays open while moving to the next candidate; remembered on this device.
+  const [resumeOpen, setResumeOpen] = useState(false);
+  useEffect(() => {
+    let pref: string | null = null;
+    try { pref = localStorage.getItem('udy:resume-viewer'); } catch {}
+    // Default: open on wide screens, where it sits beside the panel; closed on phones, where it would cover it.
+    setResumeOpen(pref ? pref === 'open' : window.matchMedia('(min-width: 1024px)').matches);
+  }, []);
+  const toggleResume = (open: boolean) => {
+    setResumeOpen(open);
+    try { localStorage.setItem('udy:resume-viewer', open ? 'open' : 'closed'); } catch {}
+  };
+  const [targetJob, setTargetJob] = useState('');
+  const [movingJob, setMovingJob] = useState(false);
+  const [jobMsg, setJobMsg] = useState('');
+
+  async function moveToJob() {
+    if (!targetJob || !data) return;
+    setMovingJob(true); setJobMsg('');
+    try {
+      const res = await fetch(`/api/employer/applications/${id}/job`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ listingId: targetJob }) });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setTargetJob('');
+        onMovedToJob?.(id, d.job);
+        setReload((r) => r + 1);
+      } else setJobMsg(d.error || 'Couldn’t move this candidate.');
+    } catch { setJobMsg('You seem to be offline.'); }
+    setMovingJob(false);
+  }
 
   useEffect(() => {
     let alive = true;
@@ -79,7 +116,7 @@ export default function CandidatePanel({
     const onKey = (e: KeyboardEvent) => {
       const t = e.target instanceof Element ? e.target : null;
       if (t?.closest('input, textarea, select, [contenteditable="true"]')) return;
-      if (document.querySelector('[aria-labelledby="move-title"]')) return;
+      if (document.querySelector('[aria-labelledby="move-title"], [aria-labelledby="filled-title"]')) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === 'Escape') { onClose(); return; }
       if ((e.key === 'ArrowRight' || e.key === 'j') && onNext) { e.preventDefault(); onNext(); return; }
@@ -162,12 +199,62 @@ export default function CandidatePanel({
                 </div>
               )}
 
+              {data.job.isGeneral && onMovedToJob && !data.withdrawnAt && (
+                <section aria-label="Move to a role" className="rounded-[12px] border border-gray-200 dark:border-gray-800 p-3 space-y-2">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Move to a role</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">They applied without picking a role. Move them into an opening to review them with that role’s candidates.</p>
+                  {moveTargets.length === 0 ? (
+                    <p className="text-xs text-gray-500">No open roles yet. Post a job first.</p>
+                  ) : (
+                    <div className="flex flex-col min-[420px]:flex-row gap-2">
+                      <label htmlFor="move-job" className="sr-only">Role</label>
+                      <select id="move-job" value={targetJob} onChange={(e) => setTargetJob(e.target.value)}
+                        className="flex-1 min-w-0 min-h-[40px] px-3 rounded-[10px] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-sm">
+                        <option value="">Choose a role</option>
+                        {moveTargets.map((j) => <option key={j.id} value={j.id}>{j.title}</option>)}
+                      </select>
+                      <button type="button" onClick={moveToJob} disabled={!targetJob || movingJob}
+                        className="inline-flex items-center justify-center gap-1.5 min-h-[40px] px-4 rounded-[10px] bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-semibold disabled:opacity-50">
+                        {movingJob && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} Move
+                      </button>
+                    </div>
+                  )}
+                  {jobMsg && <p role="alert" className="text-xs text-red-700 dark:text-red-400">{jobMsg}</p>}
+                </section>
+              )}
+
+              {data.otherApplications.length > 0 && (
+                <section aria-label="Also applied to" className="rounded-[12px] border border-amber-200 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-900/10 p-3">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Also applied to {data.otherApplications.length} other role{data.otherApplications.length === 1 ? '' : 's'}</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Agree on one answer with your team so they don’t hear different things.</p>
+                  <ul className="space-y-1">
+                    {data.otherApplications.map((o) => (
+                      <li key={o.id}>
+                        <button type="button" onClick={() => onOpenOther?.(o.id)} disabled={!onOpenOther}
+                          className="w-full flex items-center justify-between gap-2 min-h-[40px] px-2.5 rounded-[8px] text-left hover:bg-white dark:hover:bg-gray-900">
+                          <span className="min-w-0 truncate text-sm font-medium text-gray-800 dark:text-gray-200">{o.jobTitle}</span>
+                          <span className="shrink-0 text-xs text-gray-600 dark:text-gray-400">{o.withdrawn ? 'Withdrawn' : STATUS[o.status]} · {fmtDate(o.appliedAt)}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
               <section aria-label="Contact and resume" className="grid grid-cols-1 gap-1.5 text-sm">
-                {data.hasResume && (
-                  <a href={`/api/employer/applications/${data.id}/resume`} target="_blank" rel="noopener"
-                    className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 rounded-[10px] bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-semibold mb-1">
-                    <FileText className="w-4 h-4" aria-hidden /> Open resume <ExternalLink className="w-3.5 h-3.5" aria-hidden />
-                  </a>
+                {data.resumeType && (
+                  <div className="flex gap-2 mb-1">
+                    <button type="button" onClick={() => toggleResume(!resumeOpen)} aria-pressed={resumeOpen}
+                      className="flex-1 inline-flex items-center justify-center gap-2 min-h-[44px] px-4 rounded-[10px] bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-semibold">
+                      <FileText className="w-4 h-4" aria-hidden /> {resumeOpen ? 'Hide resume' : 'View resume'}
+                    </button>
+                    <a href={`/api/employer/applications/${data.id}/resume`} {...(data.resumeType === 'link' ? { target: '_blank', rel: 'noopener noreferrer' } : { download: true })}
+                      aria-label="Download resume" title="Download resume"
+                      className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-3.5 rounded-[10px] border border-gray-300 dark:border-gray-700 font-semibold text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800">
+                      {data.resumeType === 'link' ? <ExternalLink className="w-4 h-4" aria-hidden /> : <Download className="w-4 h-4" aria-hidden />}
+                      <span className="hidden min-[420px]:inline">{data.resumeType === 'link' ? 'Open' : 'Download'}</span>
+                    </a>
+                  </div>
                 )}
                 <a href={`mailto:${data.email}`} className="inline-flex items-center gap-2 min-h-[36px] text-gray-800 dark:text-gray-200 hover:text-[#A50F15] break-all"><Mail className="w-4 h-4 text-gray-400 shrink-0" aria-hidden /> {data.email}</a>
                 {data.phone && <a href={`tel:${data.phone}`} className="inline-flex items-center gap-2 min-h-[36px] text-gray-800 dark:text-gray-200 hover:text-[#A50F15]"><Phone className="w-4 h-4 text-gray-400 shrink-0" aria-hidden /> {data.phone}</a>}
@@ -340,6 +427,9 @@ export default function CandidatePanel({
           )}
         </div>
       </aside>
+      {resumeOpen && data?.resumeType && data.id === id && (
+        <ResumeViewer applicationId={data.id} name={data.fullName} type={data.resumeType} onClose={() => toggleResume(false)} />
+      )}
     </>
   );
 }

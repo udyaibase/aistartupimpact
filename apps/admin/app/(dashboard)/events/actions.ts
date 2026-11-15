@@ -327,6 +327,8 @@ export async function deleteEventAction(eventId: string) {
 // ─────────────────────────────────────────────────────────
 
 export async function getEventTagsAction() {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     const tags = await prisma.eventTag.findMany({
       orderBy: [{ category: "asc" }, { name: "asc" }],
@@ -342,6 +344,8 @@ export async function getEventTagsAction() {
 // ─────────────────────────────────────────────────────────
 
 export async function checkSlugAction(slug: string, excludeId?: string) {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { available: false };
   try {
     const existing = await prisma.event.findUnique({
       where: { slug },

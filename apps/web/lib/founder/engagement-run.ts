@@ -1,3 +1,4 @@
+import { jwtSecret } from '@/lib/jwt-secret';
 import { randomUUID } from 'crypto';
 import { SignJWT, jwtVerify } from 'jose';
 import { prisma } from '@udyaibase/database';
@@ -8,7 +9,7 @@ import { engagementContent, pickEngagementEmail, type EngagementEmail, type Foun
 
 const DAY = 86_400_000;
 const MAX_PER_RUN = 200;
-const secret = () => new TextEncoder().encode(process.env.FOUNDER_JWT_SECRET!);
+const secret = () => jwtSecret(process.env.FOUNDER_JWT_SECRET, 'FOUNDER_JWT_SECRET');
 const site = () => process.env.NEXT_PUBLIC_WEB_URL || 'https://udyaibase.com';
 
 /** Off until FOUNDER_ENGAGEMENT_EMAILS is set to "on". While off, a run only reports what it would send. */

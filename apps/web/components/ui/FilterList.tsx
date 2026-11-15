@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
 
 type Option = { value: string; label: string };
@@ -40,9 +40,42 @@ export default function FilterList({ rows, sheetOpen }: { rows: FilterRow[]; she
   const open = (key: string) => { setShownKey(key); setOpenKey(key); };
   const detail = rows.find(r => r.key === shownKey);
 
+  // The sheet is as tall as what it shows, up to 56% of the screen (scrolling beyond that): a short list leaves no
+  // empty space, and the height eases between the list and a longer set of options.
+  const listRef = useRef<HTMLUListElement>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const cap = Math.min(window.innerHeight * 0.56, 460);
+      // The bottom edge of the last row: a scroll box reports its own height when its content is shorter.
+      const contentHeight = (el: Element | null | undefined) => {
+        const last = el?.lastElementChild as HTMLElement | null | undefined;
+        return last ? last.offsetTop + last.offsetHeight : 0;
+      };
+      const list = contentHeight(listRef.current);
+      // Options: from the top of the pane (the Back row) to the bottom of the last option, scrolled or not.
+      const pane = detailRef.current;
+      const group = pane?.lastElementChild as HTMLElement | null;
+      const lastOption = group?.lastElementChild as HTMLElement | null;
+      const options = pane && group && lastOption && pane.childElementCount > 1
+        ? lastOption.getBoundingClientRect().bottom - pane.getBoundingClientRect().top + group.scrollTop
+        : 0;
+      setHeight(Math.min(cap, openKey ? Math.max(options, 1) : list));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (listRef.current) ro.observe(listRef.current);
+    window.addEventListener('resize', measure);
+    return () => { ro.disconnect(); window.removeEventListener('resize', measure); };
+  }, [openKey, shownKey, rows]);
+
   return (
-    <div className="relative h-[min(56dvh,460px)] overflow-hidden font-jakarta">
-      <ul inert={!!openKey} className="absolute inset-0 overflow-y-auto overscroll-contain motion-reduce:!transition-none" style={{ transform: openKey ? 'translate3d(-28%, 0, 0)' : 'translate3d(0, 0, 0)', transition: SLIDE }}>
+    <div
+      className="relative overflow-hidden font-jakarta motion-reduce:!transition-none"
+      style={{ height: height ?? 'min(56dvh, 460px)', transition: 'height 300ms cubic-bezier(0.4, 0, 0.2, 1)' }}
+    >
+      <ul ref={listRef} inert={!!openKey} className="absolute inset-0 overflow-y-auto overscroll-contain motion-reduce:!transition-none" style={{ transform: openKey ? 'translate3d(-28%, 0, 0)' : 'translate3d(0, 0, 0)', transition: SLIDE }}>
         {rows.map(row => (
           <li key={row.key} className="border-b border-gray-100 dark:border-gray-800 last:border-b-0">
             {row.kind === 'toggle' ? (
@@ -66,7 +99,7 @@ export default function FilterList({ rows, sheetOpen }: { rows: FilterRow[]; she
         ))}
       </ul>
 
-      <div inert={!openKey} onTransitionEnd={(e) => { if (!openKey && e.target === e.currentTarget) setShownKey(null); }}
+      <div ref={detailRef} inert={!openKey} onTransitionEnd={(e) => { if (!openKey && e.target === e.currentTarget && e.propertyName === 'transform') setShownKey(null); }}
         className="absolute inset-0 flex flex-col bg-white dark:bg-gray-900 motion-reduce:!transition-none"
         style={{ transform: openKey ? 'translate3d(0, 0, 0)' : 'translate3d(100%, 0, 0)', transition: SLIDE }}>
         {detail && detail.kind !== 'toggle' && (

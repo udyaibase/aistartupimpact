@@ -17,6 +17,8 @@ export interface WidgetDesign {
   emptyText?: string;
   /** On the employer's real site, use the colours, font and corners read from that page (public/embed/loader.js). */
   matchSite?: boolean;
+  /** What the widget shows: just the open roles (default), or the whole careers page template with the roles inside. */
+  show?: 'roles' | 'page';
 }
 
 /** What the loader read from the host page. Arrives in the iframe's address, so it's validated like anything else. */
@@ -49,6 +51,7 @@ export function parseWidgetDesign(raw: unknown): WidgetDesign {
   const maxWidth = Number(r.maxWidth);
   if (Number.isFinite(maxWidth) && maxWidth >= 480 && maxWidth <= 1600) d.maxWidth = Math.round(maxWidth);
   if (typeof r.emptyText === 'string' && r.emptyText.trim()) d.emptyText = r.emptyText.trim().slice(0, 160);
+  if (r.show === 'page') d.show = 'page';
   return d;
 }
 

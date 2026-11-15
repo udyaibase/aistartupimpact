@@ -16,6 +16,8 @@ export async function GET(request: NextRequest) {
     const toolIds = searchParams.get('toolIds')?.split(',').filter(Boolean) || [];
     const startupIds = searchParams.get('startupIds')?.split(',').filter(Boolean) || [];
     const jobSlugs = searchParams.get('jobSlugs')?.split(',').filter(Boolean) || [];
+    const eventSlugs = searchParams.get('eventSlugs')?.split(',').filter(Boolean).slice(0, 100) || [];
+    const storySlugs = searchParams.get('storySlugs')?.split(',').filter(Boolean).slice(0, 100) || [];
 
     const saved: Record<string, boolean> = {};
 
@@ -53,6 +55,32 @@ export async function GET(request: NextRequest) {
       `;
       savedJobs.forEach((row: any) => {
         saved[`job-${row.slug}`] = true;
+      });
+    }
+
+    // Check saved events
+    if (eventSlugs.length > 0) {
+      const savedEvents = await sql`
+        SELECT e.slug FROM "SavedEvent" se
+        INNER JOIN "Event" e ON e.id = se."eventId"
+        WHERE se."userId" = ${session.id}
+          AND e.slug = ANY(${eventSlugs})
+      `;
+      savedEvents.forEach((row: any) => {
+        saved[`event-${row.slug}`] = true;
+      });
+    }
+
+    // Check saved stories (articles)
+    if (storySlugs.length > 0) {
+      const savedStories = await sql`
+        SELECT a.slug FROM "SavedArticle" sa
+        INNER JOIN "Article" a ON a.id = sa."articleId"
+        WHERE sa."userId" = ${session.id}
+          AND a.slug = ANY(${storySlugs})
+      `;
+      savedStories.forEach((row: any) => {
+        saved[`story-${row.slug}`] = true;
       });
     }
 

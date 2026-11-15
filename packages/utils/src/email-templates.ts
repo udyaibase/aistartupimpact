@@ -485,11 +485,11 @@ export function registrationApprovedHtml(name: string, eventTitle: string, event
   return eventsWrapper(`
   <p style="color: #374151; font-size: 16px; line-height: 1.6;">Hi ${name},</p>
   <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-    Great news! Your registration for <strong>"${eventTitle}"</strong> on <strong>${eventDate}</strong> has been <strong>approved</strong>.
+    Your registration for <strong>"${eventTitle}"</strong> on <strong>${eventDate}</strong> has been <strong>approved</strong>.
   </p>
 
   <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
-    <p style="color: #166534; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">✓ Registration Confirmed</p>
+    <p style="color: #166534; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">Registration confirmed</p>
     <p style="color: #374151; font-size: 14px; line-height: 1.5; margin: 0;">
       You're all set. We'll send you a confirmation email with your QR ticket closer to the event date.
     </p>
@@ -525,13 +525,13 @@ export function waitlistPromotedHtml(name: string, eventTitle: string, eventDate
   return eventsWrapper(`
   <p style="color: #374151; font-size: 16px; line-height: 1.6;">Hi ${name},</p>
   <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-    A spot has opened up! You've been moved off the waitlist for <strong>"${eventTitle}"</strong> on <strong>${eventDate}</strong> and your registration is now <strong>confirmed</strong>.
+    A spot has opened up. You've been moved off the waitlist for <strong>"${eventTitle}"</strong> on <strong>${eventDate}</strong> and your registration is now <strong>confirmed</strong>.
   </p>
 
   <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
-    <p style="color: #166534; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">✓ You're In!</p>
+    <p style="color: #166534; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">You're registered</p>
     <p style="color: #374151; font-size: 14px; line-height: 1.5; margin: 0;">
-      Your waitlist registration has been promoted to confirmed. See you at the event!
+      Your waitlist registration is now confirmed. We look forward to seeing you there.
     </p>
   </div>
 

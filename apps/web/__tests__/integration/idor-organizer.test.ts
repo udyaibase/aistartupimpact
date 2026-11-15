@@ -6,7 +6,7 @@ const mockSql = vi.fn();
 const mockPrisma = {
   event: { findUnique: vi.fn(), findMany: vi.fn(async () => []) },
   // requirePermission: no team membership elsewhere means the session owns its own workspace.
-  eventTeamMember: { findFirst: vi.fn(async () => null) },
+  eventTeamMember: { findFirst: vi.fn(async () => null), findMany: vi.fn(async () => []) },
   eventRegistration: { findMany: vi.fn() },
   eventOrganizer: { findUnique: vi.fn() },
   $queryRaw: vi.fn(() => Promise.resolve([])),

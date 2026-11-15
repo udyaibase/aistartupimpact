@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { UserCheck, CreditCard, Home, Briefcase, Users, Globe, BarChart3, Building2, Settings, HelpCircle, Plus, BadgeCheck, AlertTriangle, UserPlus, History } from 'lucide-react';
+import { UserCheck, CreditCard, Home, Briefcase, Users, Globe, BarChart3, Building2, Settings, HelpCircle, Plus, BadgeCheck, AlertTriangle, UserPlus, History, LayoutTemplate } from 'lucide-react';
 import { can, WORKSPACE_WIDE_PAGES, type Permission } from '@/lib/employer/roles';
 import type { EmployerRole } from '@/lib/employer-auth';
 import CollapsibleSidebar from '@/components/ui/CollapsibleSidebar';
@@ -17,6 +17,7 @@ export function employerNav(newCandidates: number, role: EmployerRole = 'OWNER',
     { label: 'Jobs', href: '/employer/jobs', icon: Briefcase, perm: 'jobs.view' },
     { label: 'Candidates', href: '/employer/applications', icon: Users, badge: newCandidates > 0 ? `${newCandidates} new` : undefined, perm: 'candidates.view' },
     { label: 'Talent pool', href: '/employer/talent', icon: UserCheck, perm: 'candidates.view' },
+    { label: 'Careers page', href: '/employer/careers-page', icon: LayoutTemplate, perm: 'company.manage' },
     { label: 'Website widget', href: '/employer/careers', icon: Globe, perm: 'widget.manage' },
     { label: 'Insights', href: '/employer/analytics', icon: BarChart3, perm: 'insights.view' },
     { type: 'divider', label: 'Company' },

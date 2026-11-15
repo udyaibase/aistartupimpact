@@ -423,6 +423,45 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
   const bar = useHeadroomBar(barAnchorRef, showAdvanced || searchOpen || sheetOpen);
   const scrollToResults = bar.scrollToResults;
 
+  // Desktop (1024px+): once the bar is stuck it folds to the search row while scrolling down, and opens again on a
+  // deliberate scroll up, like /tools. The bar never changes size: the sector pills and the count row fade out, the
+  // search row slides up into their place, and the background is clipped to that row. Only transform, opacity and
+  // clip-path animate, so the page never moves and the bar can't shake. Phones and tablets hide the whole bar instead.
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const on = () => setIsDesktop(mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  const compact = isDesktop && bar.stuck && !bar.scrollingUp && !showAdvanced && !searchOpen;
+  const barRef = useRef<HTMLDivElement>(null);
+  const pillsRef = useRef<HTMLDivElement>(null);
+  const searchRowRef = useRef<HTMLDivElement>(null);
+  const [fold, setFold] = useState<{ lift: number; clip: number } | null>(null);
+  const compactRef = useRef(compact);
+  compactRef.current = compact;
+  useEffect(() => {
+    const barEl = barRef.current;
+    if (!barEl) return;
+    // Measured in the open layout (transforms don't change sizes), so the folded position is exact.
+    const measure = () => {
+      if (compactRef.current) return;
+      const p = pillsRef.current?.getBoundingClientRect();
+      const s = searchRowRef.current?.getBoundingClientRect();
+      if (!p || !s || !s.height) return;
+      const b = barEl.getBoundingClientRect();
+      setFold({ lift: s.top - p.top, clip: Math.max(0, b.bottom - (p.top + s.height + 12)) });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(barEl);
+    return () => ro.disconnect();
+  }, []);
+  const folded = compact && !!fold;
+  const FOLD = '320ms cubic-bezier(0.4, 0, 0.2, 1)';
+
   // A new search while the bar is stuck: bring the top of the fresh results under the bar instead of leaving the user mid-page.
   const prevFilterParams = useRef(filterParams);
   useEffect(() => {
@@ -562,22 +601,24 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
       {/* ── Search & filter bar: sticks under the site header, hides while scrolling down, returns on scroll up ── */}
       <div ref={barAnchorRef} aria-hidden className="h-0 !mt-0" />
       <div
+        ref={barRef}
         style={{
           top: bar.headerOffset,
           transform: bar.hidden ? `translate3d(0, calc(-100% - ${bar.headerOffset}px), 0)` : 'translate3d(0, 0, 0)',
           transition: 'transform 360ms cubic-bezier(0.32, 0.72, 0, 1)',
         }}
-        className="sticky z-30 !mt-0 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 py-2 sm:py-3 flex flex-col gap-2 sm:gap-3 will-change-transform motion-reduce:!transition-none"
+        className={`sticky z-30 !mt-0 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 py-2 sm:py-3 flex flex-col gap-2 sm:gap-3 will-change-transform motion-reduce:!transition-none ${folded ? 'pointer-events-none' : ''}`}
       >
       {/* Full-bleed backdrop: runs edge to edge of the window while the controls stay aligned with the content */}
       <div
         aria-hidden
+        style={{ clipPath: `inset(0 0 ${folded ? fold!.clip : 0}px 0)`, transition: `clip-path ${FOLD}` }}
         className={`absolute inset-y-0 -left-[100vw] -right-[100vw] -z-10 bg-gray-50 dark:bg-gray-950 sm:bg-gray-50/95 sm:dark:bg-gray-950/95 sm:backdrop-blur-md transition-shadow duration-300 ${
           bar.stuck ? 'shadow-[0_8px_16px_-12px_rgba(0,0,0,0.25)] border-b border-gray-200/70 dark:border-gray-800' : ''
         }`}
       />
       {/* ── Category Pills ── */}
-      <div className="order-2 sm:order-1 min-w-0">
+      <div ref={pillsRef} className="order-2 sm:order-1 min-w-0 transition-opacity duration-200 motion-reduce:transition-none" style={folded ? { opacity: 0 } : undefined} inert={folded ? true : undefined}>
         <div className="relative">
           <div
             ref={categoryScrollerRef}
@@ -649,7 +690,11 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
       {/* ── Search + Toggle Row ── */}
       <div className="order-1 sm:order-2 space-y-3">
         {/* Main Search Row */}
-        <div className="flex items-start gap-2 sm:gap-3">
+        <div
+          ref={searchRowRef}
+          className="flex items-start gap-2 sm:gap-3 pointer-events-auto motion-reduce:!transition-none"
+          style={isDesktop ? { transform: folded ? `translate3d(0, ${-fold!.lift}px, 0)` : 'translate3d(0, 0, 0)', transition: `transform ${FOLD}` } : undefined}
+        >
           <div className="flex-1 min-w-0">
             <SmartSearchBox
               value={query}
@@ -678,7 +723,7 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
             }}
             aria-label={activeFiltersCount > 0 ? `Filters, ${activeFiltersCount} on` : 'Filters'}
             aria-haspopup="dialog"
-            className={`relative flex items-center justify-center gap-2 w-10 h-10 sm:w-auto sm:px-4 sm:py-2.5 rounded-xl border font-jakarta text-sm font-semibold transition-colors duration-200 select-none sm:h-12 active:scale-95 motion-reduce:active:scale-100 ${
+            className={`relative flex items-center justify-center gap-2 w-10 h-10 sm:w-auto sm:px-4 sm:py-2.5 rounded-md sm:rounded-xl border font-jakarta text-sm font-semibold transition-colors duration-200 select-none sm:h-12 active:scale-95 motion-reduce:active:scale-100 ${
               showAdvanced || activeFiltersCount > 0 || !!sort
                 ? 'border-brand bg-brand/5 text-brand shadow-sm'
                 : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -803,7 +848,7 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
         )}
 
         {/* On phones this row scrolls away with the page, so the sticky bar stays small. */}
-        <div className="hidden sm:block">{resultsRow}</div>
+        <div className="hidden sm:block transition-opacity duration-200 motion-reduce:transition-none" style={folded ? { opacity: 0 } : undefined} inert={folded ? true : undefined}>{resultsRow}</div>
       </div>
       </div>
 

@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
+import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
+  // Suggestions wait for an admin to approve them: a few per visitor an hour is plenty.
+  const { success: allowed } = await checkRateLimit(strictRateLimit, `custom-city:${getClientIdentifier(req)}`);
+  if (!allowed) return NextResponse.json({ success: false, error: 'Too many suggestions. Please try again later.' }, { status: 429 });
   try {
     const { cityName } = await req.json();
 

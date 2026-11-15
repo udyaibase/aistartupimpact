@@ -383,14 +383,6 @@ export default async function AdvertisePage() {
                   </li>
                 ))}
               </ul>
-              {/* Buy button temporarily hidden
-              <Link
-                href="/client-portal"
-                className={`block text-center mt-5 py-2.5 rounded-xl text-sm font-bold transition-colors ${pkg.ctaStyle}`}
-              >
-                {pkg.cta}
-              </Link>
-              */}
             </div>
           ))}
         </div>
@@ -797,11 +789,6 @@ export default async function AdvertisePage() {
           Post AI jobs and events free for the entire first year. Buy a placement package when you need visibility. Extend by the day. No subscriptions, no recurring billing.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-5">
-          {/* Buy button temporarily hidden
-          <Link href="/client-portal" className="btn-brand text-sm">
-            Get Started <ArrowRight className="w-4 h-4 ml-1 inline" />
-          </Link>
-          */}
           <span className="text-xs text-gray-400 font-jakarta">Email ads@udyaibase.com</span>
         </div>
       </section>

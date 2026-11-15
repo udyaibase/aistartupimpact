@@ -59,6 +59,12 @@ export default function JobsCustomizePanel({ widget, departments, canHideBrandin
         </header>
 
         <div className="flex-1 overflow-y-auto">
+          {widget.design.show === "page" && (
+            <p className="mx-4 sm:mx-5 mt-4 rounded-[10px] bg-gray-50 dark:bg-gray-900 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300">
+              Showing your full careers page. Its look comes from <Link href="/employer/careers-page" className="font-semibold text-[#A50F15] hover:underline">Careers page</Link>. Here you choose which teams’ roles show, the light or dark theme (under Appearance), allowed domains and the application form.
+            </p>
+          )}
+          {widget.design.show !== "page" && <>
           <Group id="match" title="Match my website" summary={widget.design.matchSite ? "Automatic match on" : "Automatic match, or start from a style"} open={open} setOpen={setOpen}>
             <MatchWebsiteSection widget={widget} onChange={onChange} />
           </Group>
@@ -68,6 +74,8 @@ export default function JobsCustomizePanel({ widget, departments, canHideBrandin
               suggestions={TITLE_SUGGESTIONS} titlePlaceholder="Open roles"
               descPlaceholder="We're a small team building AI for India. Join us." />
           </Group>
+
+          </>}
 
           <Group id="jobs" title="Jobs" summary={`${jobsSummary} · up to ${widget.maxJobs}`} open={open} setOpen={setOpen}>
             <Field label="Teams" info="Show every open job, or only some teams, for example only Engineering on your engineering blog.">
@@ -103,6 +111,7 @@ export default function JobsCustomizePanel({ widget, departments, canHideBrandin
             <p className="mt-2 text-xs text-gray-500">Only open jobs with “Your website (careers widget)” ticked appear here.</p>
           </Group>
 
+          {widget.design.show !== "page" && <>
           <Group id="layout" title="Layout"
             summary={`${layoutLabel} · ${OPT.spacing[widget.spacing as keyof typeof OPT.spacing] ?? "Comfortable"} spacing · ${OPT.cardStyle[widget.cardStyle as keyof typeof OPT.cardStyle] ?? "Bordered"} cards`}
             open={open} setOpen={setOpen}>
@@ -152,6 +161,8 @@ export default function JobsCustomizePanel({ widget, departments, canHideBrandin
             </Field>
           </Group>
 
+          </>}
+
           <Group id="appearance" title="Appearance"
             summary={`${OPT.theme[widget.darkMode as keyof typeof OPT.theme] ?? "Auto"} theme · ${widget.accentColor.toUpperCase()} · ${getEmbedFont(widget.fontFamily).label}`}
             open={open} setOpen={setOpen}>
@@ -159,12 +170,15 @@ export default function JobsCustomizePanel({ widget, departments, canHideBrandin
             <OwnLookSection widget={widget} onChange={onChange} />
           </Group>
 
+          {widget.design.show !== "page" && (
           <Group id="button" title="Button"
             summary={`“${widget.buttonText}” · ${OPT.buttonSize[widget.buttonSize as keyof typeof OPT.buttonSize] ?? "Medium"} · ${OPT.buttonStyle[widget.buttonStyle as keyof typeof OPT.buttonStyle] ?? "Filled"}`}
             open={open} setOpen={setOpen}>
             <ButtonSection widget={widget} disabled={false} onChange={onChange} labels={BUTTON_LABELS} defaultLabel="View role"
               hint="Opens the full job inside the widget, where candidates apply without leaving your site." />
           </Group>
+
+          )}
 
           <Group id="sites" title="Allowed domains" summary={widget.allowedDomains.length ? widget.allowedDomains.join(", ") : "All domains"} open={open} setOpen={setOpen}>
             <DomainsSection domains={widget.allowedDomains} disabled={false} noun="jobs" onChange={(d) => onChange({ allowedDomains: d })} />

@@ -101,6 +101,7 @@ export default function PrivacyPage() {
           <li><strong>Payment records:</strong> Retained as required by applicable Indian tax and accounting regulations.</li>
           <li><strong>Expired sessions:</strong> Automatically purged after 30 days.</li>
           <li><strong>Founder security and verification logs:</strong> Retained for 12 months, including after you delete your account, then automatically deleted. Only authorised staff can open them, to investigate a security issue, and each access is recorded.</li>
+          <li><strong>Startup ownership records:</strong> When a founder verifies a startup&apos;s domain (by DNS record or a code to a work email), takes it over or transfers it, we record who did it, how, the work email used, the time, and the IP address and device. The IP address and device are cleared after 12 months. The rest is kept while the listing and that founder account exist, so ownership disputes can be checked and reversed. Only authorised staff can see it.</li>
           <li><strong>Listing change history:</strong> Earlier versions of a listing and who changed them are retained for 12 months, then automatically deleted.</li>
           <li><strong>Company listings:</strong> When a founder deletes their account, listings they submitted are deleted. Listings that were already in our directory stay public as company information, without the founder linked to them.</li>
         </ul>

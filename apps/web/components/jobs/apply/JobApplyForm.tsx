@@ -57,13 +57,15 @@ const fieldStyle = { background: 'var(--af-surface)', color: 'var(--af-text)', b
  * skills and screening answers. Used on the job page and inside the website widget.
  */
 export default function JobApplyForm({
-  job, attribution, variant = 'page', style, onBack, onDone, preview,
+  job, attribution, variant = 'page', style, onBack, onDone, preview, showBackLink = true,
 }: {
   job: ApplyJob;
   attribution: ApplyAttribution;
   variant?: 'page' | 'embed';
   style?: React.CSSProperties;
   onBack?: () => void;
+  /** The top "Back to jobs" link (default on). The widget turns it off: its tabs and "All jobs" link do that job. */
+  showBackLink?: boolean;
   onDone?: () => void;
   /** The employer's live preview: shows this step and never touches the server. */
   preview?: 'upload' | 'details' | 'done';
@@ -210,7 +212,7 @@ export default function JobApplyForm({
 
   return (
     <div ref={topRef} className={`font-[inherit] scroll-mt-4 ${variant === 'page' ? PAGE_VARS : ''}`} style={{ color: 'var(--af-text)', ...style }}>
-      {onBack && step !== 'done' && (
+      {onBack && showBackLink && step !== 'done' && (
         <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 min-h-[40px] -ml-1 px-1 text-sm font-semibold mb-2" style={{ color: 'var(--af-muted)' }}>
           <ArrowLeft className="w-4 h-4" aria-hidden /> Back to jobs
         </button>

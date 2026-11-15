@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { passwordProblem } from "@/lib/password-rules";
 import { consumeVerifiedOtp } from '@/lib/otp';
 import { verifyTurnstileToken } from '@/lib/turnstile';
 import { sql } from '@/lib/db';
@@ -73,6 +74,7 @@ export async function POST(request: NextRequest) {
     if (password.length < 8) {
       return NextResponse.json({ error: 'Password must be at least 8 characters long' }, { status: 400 });
     }
+    const pwProblem = passwordProblem(password, email, 'mixed', name); if (pwProblem) return NextResponse.json({ error: pwProblem }, { status: 400 });
     if (!/[A-Z]/.test(password)) {
       return NextResponse.json({ error: 'Password must contain an uppercase letter' }, { status: 400 });
     }

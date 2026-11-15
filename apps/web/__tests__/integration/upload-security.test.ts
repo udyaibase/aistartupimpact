@@ -41,7 +41,7 @@ vi.mock('@aws-sdk/client-s3', () => {
 
 // requirePermission looks up team membership; none means the session owns its workspace.
 vi.mock('@udyaibase/database', () => ({
-  prisma: { eventTeamMember: { findFirst: vi.fn(async () => null) } },
+  prisma: { eventTeamMember: { findFirst: vi.fn(async () => null), findMany: vi.fn(async () => []) } },
 }));
 
 vi.mock('@neondatabase/serverless', () => ({

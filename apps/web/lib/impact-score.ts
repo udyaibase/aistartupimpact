@@ -14,7 +14,7 @@ export interface ImpactScoreBreakdown {
   age: { score: number; max: number; label: string };
 }
 
-// Stage score map
+// Stage score map. Every StartupStage value needs an entry: a missing one scores 0 (tested).
 const STAGE_SCORES: Record<string, number> = {
   BOOTSTRAPPED: 4,
   IDEA: 1,
@@ -22,8 +22,17 @@ const STAGE_SCORES: Record<string, number> = {
   SEED: 6,
   PRE_SERIES_A: 8,
   SERIES_A: 9,
+  PRE_SERIES_B: 10,
   SERIES_B: 12,
+  PRE_SERIES_C: 12,
   SERIES_C: 13,
+  PRE_SERIES_D: 13,
+  SERIES_D: 14,
+  SERIES_E: 14,
+  SERIES_F: 14,
+  SERIES_G: 14,
+  SERIES_I: 14,
+  SERIES_J: 14,
   GROWTH: 14,
   PUBLIC: 15,
 };

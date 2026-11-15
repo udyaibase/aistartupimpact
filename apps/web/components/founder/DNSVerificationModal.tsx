@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { X, ShieldAlert, CheckCircle, ExternalLink, ShieldCheck } from 'lucide-react';
 
 interface Startup {
@@ -17,9 +17,12 @@ interface DNSVerificationModalProps {
 export default function DNSVerificationModal({ unverifiedStartups }: DNSVerificationModalProps) {
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
+  // The add-startup flow and the claim page already show verification; don't cover them with this reminder.
+  const onVerifyScreen = pathname === '/founder/startups/new' || pathname.startsWith('/founder/claim/');
 
   useEffect(() => {
-    if (unverifiedStartups.length === 0) return;
+    if (unverifiedStartups.length === 0 || onVerifyScreen) { setIsOpen(false); return; }
     
     // Check if dismissed in this session
     const isDismissed = sessionStorage.getItem('dns_verify_popup_dismissed');
@@ -30,7 +33,7 @@ export default function DNSVerificationModal({ unverifiedStartups }: DNSVerifica
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [unverifiedStartups]);
+  }, [unverifiedStartups, onVerifyScreen]);
 
   const handleClose = () => {
     sessionStorage.setItem('dns_verify_popup_dismissed', 'true');

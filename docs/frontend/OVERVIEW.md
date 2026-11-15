@@ -21,7 +21,6 @@ The web application (`apps/web`) is a Next.js 14 App Router application serving 
 | Group | Path | Auth | Purpose |
 |-------|------|------|---------|
 | `(public)` | `/tools`, `/startups`, `/events`, etc. | None | Public-facing pages |
-| `(client)` | `/my-analytics` | user-token | Authenticated user features |
 | `founder` | `/founder/*` | founder-token | Founder self-service dashboard |
 | `organizer` | `/organizer/*` | organizer_session | Event organizer dashboard |
 | `api` | `/api/*` | Varies | REST API endpoints |

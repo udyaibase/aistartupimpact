@@ -5,9 +5,12 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Check, Loader2, Plus, Trash2, Info, Eye, AlertTriangle, BadgeCheck } from 'lucide-react';
 import {
-  CURRENCIES, EMPLOYMENT_TYPES, EXPERIENCE_BANDS, JOB_CATEGORIES, MAX_OPEN_DAYS, MAX_SCREENING_QUESTIONS, MAX_QUESTION_OPTIONS, MAX_SKILLS,
-  WORK_TYPES, publishProblems, salaryUnit, type JobDraft, type ScreeningQuestion,
+  APPLY_VIA, CURRENCIES, CUSTOM_EXPERIENCE, EMPLOYMENT_TYPES, EXPERIENCE_BANDS, MAX_EXPERIENCE_YEARS, MAX_OPEN_DAYS, MAX_POSITIONS, MAX_SCREENING_QUESTIONS, MAX_QUESTION_OPTIONS, MAX_SKILLS,
+  WORK_TYPES, publishProblems, salaryUnit, type ApplyVia, type JobDraft, type ScreeningQuestion,
 } from '@/lib/jobs/composer';
+import DescriptionEditor from './DescriptionEditor';
+import { CategorySelect, TeamSelect } from './CustomSelects';
+import PerksPicker from './PerksPicker';
 import { Card, Field, Segmented, TagInput, Toggle, inputCls } from './fields';
 import { CityPicker, CountryPicker } from '@udyaibase/utils/src/LocationPickers';
 import { useExtraCities } from '@/components/shared/useExtraCities';
@@ -40,6 +43,7 @@ const STATUS_LABEL: Record<Status, string> = { NEW: 'New job', DRAFT: 'Draft', O
 export default function JobComposer({
   jobId: initialId, initialDraft, initialStatus, initialSlug, initialSavedAt, company, previousJobs, emailVerified,
   approval = { required: false, canDecide: false }, everPublished = false, approvalRequest = null,
+  savedTeams = [], savedCategories = [],
 }: {
   jobId?: string;
   initialDraft: JobDraft;
@@ -53,6 +57,9 @@ export default function JobComposer({
   approval?: { required: boolean; canDecide: boolean };
   everPublished?: boolean;
   approvalRequest?: { at: string; by: string | null } | null;
+  /** Teams and custom categories this workspace used on earlier jobs (offered in the dropdowns). */
+  savedTeams?: string[];
+  savedCategories?: string[];
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState<JobDraft>(initialDraft);
@@ -71,6 +78,9 @@ export default function JobComposer({
   const [request, setRequest] = useState(approvalRequest);
   const [declineNote, setDeclineNote] = useState<string | null>(null);
   const needsApproval = approval.required && !everPublished;
+  // Company perks (edited here, saved to the company) so the preview and strength meter update as you tick.
+  const [perks, setPerks] = useState<string[]>(company.perks ?? []);
+  const liveCompany = { ...company, perks, hasPerks: perks.length > 0 };
   const [, tick] = useState(0);
 
   const draftRef = useRef(draft);
@@ -354,17 +364,49 @@ export default function JobComposer({
                 placeholder="e.g. Founding ML Engineer" className={inputCls} {...aria('title', true)} />
             </Field>
             <div className="grid sm:grid-cols-2 gap-4">
-              <Field label="Category" htmlFor="job-category">
-                <select id="job-category" value={draft.category} onChange={(e) => update('category', e.target.value)} className={inputCls}>
-                  {JOB_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-                </select>
+              <Field label="Category" htmlFor="job-category" error={err('categoryLabel')}>
+                <CategorySelect id="job-category" category={draft.category} categoryLabel={draft.categoryLabel} saved={savedCategories}
+                  onChange={(c, label) => { update('category', c); update('categoryLabel', label); }} />
               </Field>
               <Field label="Team" htmlFor="job-department" optional>
-                <input id="job-department" value={draft.department} onChange={(e) => update('department', e.target.value)} placeholder="e.g. Engineering" className={inputCls} />
+                <TeamSelect id="job-department" value={draft.department} saved={savedTeams} onChange={(t) => update('department', t)} />
               </Field>
             </div>
             <Segmented label="Employment type" value={draft.employmentType} options={EMPLOYMENT_TYPES} onChange={(v) => update('employmentType', v)} />
-            <Segmented label="Experience" value={draft.experienceBand} options={[{ value: '', label: 'Any' }, ...EXPERIENCE_BANDS]} onChange={(v) => update('experienceBand', v)} />
+            <div>
+              <Segmented label="Experience" value={draft.experienceBand}
+                options={[{ value: '', label: 'Any' }, ...EXPERIENCE_BANDS, { value: CUSTOM_EXPERIENCE, label: 'Custom' }]}
+                onChange={(v) => update('experienceBand', v)} />
+              {draft.experienceBand === CUSTOM_EXPERIENCE && (
+                <div className="mt-3 grid grid-cols-2 gap-3 sm:max-w-[360px]">
+                  {(['experienceMin', 'experienceMax'] as const).map((k) => (
+                    <Field key={k} label={k === 'experienceMin' ? 'Minimum years' : 'Maximum years'} htmlFor={`job-${k}`} optional={k === 'experienceMax'}>
+                      <div className="relative">
+                        <input id={`job-${k}`} inputMode="numeric" value={draft[k]} maxLength={2}
+                          onChange={(e) => update(k, e.target.value.replace(/\D/g, '').slice(0, 2))}
+                          className={`${inputCls} pr-14`} {...aria(k)} />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500" aria-hidden>years</span>
+                      </div>
+                    </Field>
+                  ))}
+                  {(err('experienceMin') || err('experienceMax')) && (
+                    <p className="col-span-2 -mt-1 text-[13px] text-red-700 dark:text-red-400">{err('experienceMin') || err('experienceMax')}</p>
+                  )}
+                  {!err('experienceMin') && !err('experienceMax') && (
+                    <p className="col-span-2 -mt-1 text-[13px] text-gray-500 dark:text-gray-400">Whole years, up to {MAX_EXPERIENCE_YEARS}. Leave maximum empty for “{draft.experienceMin || 'N'}+ years”.</p>
+                  )}
+                </div>
+              )}
+            </div>
+            <Field label="Openings" htmlFor="job-positions" hint="How many people you want to hire for this role. Shown on the job; it never limits how many can apply.">
+              <div className="relative sm:max-w-[220px]">
+                <input id="job-positions" inputMode="numeric" value={draft.positions} maxLength={3}
+                  onChange={(e) => update('positions', e.target.value.replace(/\D/g, '').slice(0, 3))}
+                  onBlur={() => update('positions', String(Math.min(Math.max(parseInt(draft.positions, 10) || 1, 1), MAX_POSITIONS)))}
+                  className={`${inputCls} pr-20`} aria-describedby="job-positions-hint" />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500" aria-hidden>{draft.positions === '1' ? 'person' : 'people'}</span>
+              </div>
+            </Field>
             <Field label="Hiring manager" htmlFor="job-hiringManagerName" optional hint="Shown on the job as the person this role reports to.">
               <input id="job-hiringManagerName" value={draft.hiringManagerName} onChange={(e) => update('hiringManagerName', e.target.value)} placeholder="e.g. Priya Sharma, CTO" className={inputCls} {...aria('hiringManagerName', true)} />
             </Field>
@@ -411,15 +453,18 @@ export default function JobComposer({
             <Toggle id="job-hasEsops" label="ESOPs or equity offered" checked={draft.hasEsops} onChange={(v) => update('hasEsops', v)} />
           </Card>
 
+          <Card id="perks" title="Perks & benefits" hint="Tick what your company offers. Jobs that list perks get more applicants.">
+            <PerksPicker initial={company.perks ?? []} canEdit={company.canEditPerks ?? false} onChange={setPerks} />
+          </Card>
+
           <Card id="about" title="About the role">
             <Field label="One-line summary" htmlFor="job-shortDescription" optional hint="Shown on job cards and in search results.">
               <input id="job-shortDescription" value={draft.shortDescription} onChange={(e) => update('shortDescription', e.target.value)} maxLength={200}
                 placeholder="e.g. Build the retrieval layer behind our AI copilot." className={inputCls} {...aria('shortDescription', true)} />
             </Field>
-            <Field label="Description" htmlFor="job-description" error={err('description')} hint="Use “## Heading” for sections and “- ” for bullets.">
-              <textarea id="job-description" value={draft.description} onChange={(e) => update('description', e.target.value)} rows={12}
-                placeholder={'## About the role\n…\n\n## What you’ll do\n- …\n\n## What we’re looking for\n- …'}
-                className={`${inputCls} py-2.5 resize-y font-[inherit] leading-relaxed`} {...aria('description', true)} />
+            <Field label="Description" htmlFor="job-description" error={err('description')} hint="Select text and use the toolbar to format it. The preview shows how candidates will see it.">
+              <DescriptionEditor id="job-description" value={draft.description} onChange={(v) => update('description', v)}
+                invalid={!!err('description')} describedBy={err('description') ? 'job-description-error' : 'job-description-hint'} />
             </Field>
             <div>
               <label htmlFor="job-skills" className="block text-sm font-semibold text-gray-900 dark:text-white mb-1.5">Skills</label>
@@ -526,22 +571,23 @@ export default function JobComposer({
           </Card>
 
           <Card id="apply" title="Applications">
-            <Segmented label="How people apply" value={draft.applicationType}
-              options={[{ value: 'INTERNAL', label: 'On Udyaibase (recommended)' }, { value: 'EXTERNAL', label: 'On my own site or email' }] as const}
-              onChange={(v) => update('applicationType', v)} />
-            {draft.applicationType === 'INTERNAL' ? (
-              <p className="text-[13px] text-gray-600 dark:text-gray-400">Candidates apply with their resume and appear in your pipeline, where you can shortlist, email and track them.</p>
-            ) : (
-              <div className="grid sm:grid-cols-2 gap-4">
-                <Field label="Application link" htmlFor="job-applicationUrl" error={err('applicationUrl')}>
-                  <input id="job-applicationUrl" type="url" inputMode="url" value={draft.applicationUrl} onChange={(e) => update('applicationUrl', e.target.value)}
-                    placeholder="https://…" className={inputCls} {...aria('applicationUrl')} />
-                </Field>
-                <Field label="Or email" htmlFor="job-applicationEmail" error={err('applicationEmail')}>
-                  <input id="job-applicationEmail" type="email" inputMode="email" value={draft.applicationEmail} onChange={(e) => update('applicationEmail', e.target.value)}
-                    placeholder="jobs@yourcompany.com" className={inputCls} {...aria('applicationEmail')} />
-                </Field>
-              </div>
+            <Segmented label="How people apply" value={draft.applyVia} options={APPLY_VIA}
+              onChange={(v: ApplyVia) => { update('applyVia', v); update('applicationType', v === 'udyaibase' ? 'INTERNAL' : 'EXTERNAL'); }} />
+            {draft.applyVia === 'udyaibase' && (
+              <p className="text-[13px] text-gray-600 dark:text-gray-400">Recommended. Candidates apply with their resume and appear in your pipeline, where you can shortlist, email and track them.</p>
+            )}
+            {(draft.applyVia === 'website' || draft.applyVia === 'google_form') && (
+              <Field label={draft.applyVia === 'google_form' ? 'Google Form link' : 'Application link'} htmlFor="job-applicationUrl" error={err('applicationUrl')}
+                hint={draft.applyVia === 'google_form' ? 'In your form, click Send, then the link icon, and copy the link.' : 'Your careers page or the job’s page on your ATS.'}>
+                <input id="job-applicationUrl" type="url" inputMode="url" value={draft.applicationUrl} onChange={(e) => update('applicationUrl', e.target.value)}
+                  placeholder={draft.applyVia === 'google_form' ? 'https://forms.gle/…' : 'https://'} className={inputCls} {...aria('applicationUrl', true)} />
+              </Field>
+            )}
+            {draft.applyVia === 'email' && (
+              <Field label="Application email" htmlFor="job-applicationEmail" error={err('applicationEmail')} hint="Candidates email their resume here. You won’t see them in your Udyaibase pipeline.">
+                <input id="job-applicationEmail" type="email" inputMode="email" value={draft.applicationEmail} onChange={(e) => update('applicationEmail', e.target.value)}
+                  placeholder="jobs@yourcompany.com" className={inputCls} {...aria('applicationEmail', true)} />
+              </Field>
             )}
             <Field label="Prefer people who can join within" htmlFor="job-maxNoticeDays" optional hint="Used in the match score. Candidates with longer notice still apply.">
               <select id="job-maxNoticeDays" value={draft.maxNoticeDays} onChange={(e) => update('maxNoticeDays', e.target.value)} className={`${inputCls} sm:max-w-[220px]`} aria-describedby="job-maxNoticeDays-hint">
@@ -576,8 +622,8 @@ export default function JobComposer({
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-0" id="job-preview" aria-label="Preview">
-          <ListingStrength draft={draft} company={company} />
-          <JobPreview draft={draft} company={company} />
+          <ListingStrength draft={draft} company={liveCompany} />
+          <JobPreview draft={draft} company={liveCompany} />
         </aside>
       </div>
 

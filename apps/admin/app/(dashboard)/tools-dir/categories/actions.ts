@@ -10,6 +10,8 @@ const sql = neon(process.env.DATABASE_URL!);
 // ─── Read Operations ────────────────────────────────────────────────────────
 
 export async function getCategoryTreeAction() {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     const parents = await sql`
       SELECT id, name, slug, icon, description, "toolCount", "sortOrder", "isActive"
@@ -49,6 +51,8 @@ export async function createParentCategoryAction(data: {
   description?: string;
   icon?: string;
 }) {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     const slug = data.name
       .toLowerCase()
@@ -88,6 +92,8 @@ export async function updateParentCategoryAction(id: string, data: {
   isActive?: boolean;
   sortOrder?: number;
 }) {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     if (data.name !== undefined) {
       await sql`UPDATE "ToolCategory" SET name = ${data.name} WHERE id = ${id}`;
@@ -120,6 +126,8 @@ export async function createSubcategoryAction(data: {
   parentId: string;
   description?: string;
 }) {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     const slug = data.name
       .toLowerCase()
@@ -167,6 +175,8 @@ export async function updateSubcategoryAction(id: string, data: {
   isActive?: boolean;
   sortOrder?: number;
 }) {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     if (data.name !== undefined) {
       await sql`UPDATE "ToolCategory" SET name = ${data.name} WHERE id = ${id}`;
@@ -193,6 +203,8 @@ export async function updateSubcategoryAction(id: string, data: {
 }
 
 export async function deleteSubcategoryAction(id: string) {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     // Check if any tools use this category
     const tools = await sql`
@@ -213,6 +225,8 @@ export async function deleteSubcategoryAction(id: string) {
 }
 
 export async function deleteParentCategoryAction(id: string) {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     // Check if any subcategories exist
     const subs = await sql`
@@ -235,6 +249,8 @@ export async function deleteParentCategoryAction(id: string) {
 // ─── Utility ────────────────────────────────────────────────────────────────
 
 export async function refreshCategoryCountsAction() {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     // Update subcategory counts
     await sql`

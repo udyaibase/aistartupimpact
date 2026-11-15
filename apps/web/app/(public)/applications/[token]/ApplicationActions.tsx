@@ -7,7 +7,7 @@ import { Loader2 } from 'lucide-react';
 
 type Confirm = null | 'withdraw' | 'delete';
 
-export default function ApplicationActions({ token, withdrawn, jobSlug }: { token: string; withdrawn: boolean; jobSlug: string }) {
+export default function ApplicationActions({ token, withdrawn, jobHref, jobLabel }: { token: string; withdrawn: boolean; jobHref: string; jobLabel: string }) {
   const router = useRouter();
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [busy, setBusy] = useState(false);
@@ -50,7 +50,7 @@ export default function ApplicationActions({ token, withdrawn, jobSlug }: { toke
   return (
     <section aria-label="Manage your application" className="mt-6 space-y-3">
       <div className="flex flex-col sm:flex-row gap-2">
-        <Link href={`/jobs/${jobSlug}`} className={`${btn} border border-gray-300 dark:border-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800`}>View job</Link>
+        <Link href={jobHref} className={`${btn} border border-gray-300 dark:border-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800`}>{jobLabel}</Link>
         {!withdrawn && (
           <button type="button" onClick={() => setConfirm('withdraw')} className={`${btn} border border-gray-300 dark:border-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800`}>
             Withdraw application

@@ -7,6 +7,7 @@ import { Resend } from "resend";
 import { generateNewsletterHtml } from "@/lib/newsletter-templates";
 import { logAuditEvent, canDelete } from '@/lib/audit-log';
 import { signEventUnsubscribeToken } from "@udyaibase/utils/event-campaigns";
+import { createHmac } from 'crypto';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -213,16 +214,24 @@ export async function sendCampaignAction(id: string) {
           if (url.includes('/api/newsletter/track-click') || url.includes('/unsubscribe')) {
             return match;
           }
-          const trackingUrl = `${SITE_URL}/api/newsletter/track-click?c=${encodeURIComponent(campaignId)}&e=${encodeURIComponent(email)}&url=${encodeURIComponent(url)}&label=${encodeURIComponent(text)}`;
+          // Signed so the website follows and counts only links we sent (apps/web/lib/newsletter-link.ts checks it).
+          // Without the shared secret the link is left as it is: it still works, it just isn't tracked.
+          const secret = process.env.INTERNAL_API_SECRET;
+          if (!secret) return match;
+          const sig = createHmac('sha256', `${secret}:newsletter-link`).update(`${campaignId}\n${email}\n${url}`).digest('base64url');
+          const trackingUrl = `${SITE_URL}/api/newsletter/track-click?c=${encodeURIComponent(campaignId)}&e=${encodeURIComponent(email)}&url=${encodeURIComponent(url)}&label=${encodeURIComponent(text)}&s=${sig}`;
           return `<a ${attrs.replace(/href=["'][^"']+["']/, `href="${trackingUrl}"`)}>${text}</a>`;
         }
       );
     };
 
     // Build final HTML using the same template as preview
-    const buildHtml = (email: string, campaignId: string) => {
+    const buildHtml = (email: string, campaignId: string, unsubToken: string) => {
       const trackedBody = wrapLinksWithTracking(htmlBody, email, campaignId);
-      const trackingPixel = `${SITE_URL}/api/newsletter/track-open?c=${encodeURIComponent(campaignId)}&e=${encodeURIComponent(email)}`;
+      // Signed like the click links, so only opens of emails we sent are counted.
+      const openSecret = process.env.INTERNAL_API_SECRET;
+      const openSig = openSecret ? createHmac('sha256', `${openSecret}:newsletter-link`).update(`${campaignId}\n${email}\nopen`).digest('base64url') : '';
+      const trackingPixel = `${SITE_URL}/api/newsletter/track-open?c=${encodeURIComponent(campaignId)}&e=${encodeURIComponent(email)}&s=${openSig}`;
       
       // Use the same template system as the live preview
       const fullHtml = generateNewsletterHtml(templateId, campaign.subject, trackedBody);
@@ -234,8 +243,9 @@ export async function sendCampaignAction(id: string) {
       return fullHtml
         .replace('</body>', `${pixel}</body>`)
         .replace(/<body([^>]*)>/, `<body$1>${previewDiv}`)
-        // Replace unsubscribe placeholder with actual email
-        .replace(/\{\{email\}\}/g, encodeURIComponent(email));
+        // The footer's Unsubscribe link: the address (shown on the page) and a signed token that proves the link is ours.
+        .replace(/\{\{email\}\}/g, encodeURIComponent(email))
+        .replace(/\{\{unsubToken\}\}/g, encodeURIComponent(unsubToken));
     };
 
     // Send in batches of 100 (Resend limit)
@@ -248,7 +258,7 @@ export async function sendCampaignAction(id: string) {
         replyTo: REPLY_TO,
         to: [sub.email],
         subject: campaign.subject,
-        html: buildHtml(sub.email, id),
+        html: buildHtml(sub.email, id, signEventUnsubscribeToken(sub.id, sub.email)),
         headers: {
           'List-Unsubscribe': `<${SITE_URL}/api/newsletter/unsubscribe?token=${signEventUnsubscribeToken(sub.id, sub.email)}>`,
           'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
@@ -298,7 +308,8 @@ export async function sendTestEmailAction(id: string, testEmail: string) {
 
     // Use the SAME template system as the live preview — no separate HTML
     const fullHtml = generateNewsletterHtml(templateId, campaign.subject, htmlBody)
-      .replace(/\{\{email\}\}/g, encodeURIComponent(testEmail));
+      .replace(/\{\{email\}\}/g, encodeURIComponent(testEmail))
+      .replace(/\{\{unsubToken\}\}/g, encodeURIComponent(signEventUnsubscribeToken('test', testEmail)));
 
     await resend.emails.send({
       from: `${FROM_NAME} <${FROM_EMAIL}>`,

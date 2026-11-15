@@ -1,3 +1,4 @@
+import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from "next/server";
 import { clientIp } from '@/lib/client-ip';
 import { cookies } from "next/headers";
@@ -9,9 +10,7 @@ import { checkRateLimit, getClientIdentifier, authRateLimit } from "@/lib/rate-l
 
 export const dynamic = "force-dynamic";
 
-const USER_JWT_SECRET = new TextEncoder().encode(
-  process.env.USER_JWT_SECRET!
-);
+const USER_JWT_SECRET = jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET');
 
 /**
  * Get the UnifiedUser ID from either the unified session or legacy user-token.

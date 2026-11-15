@@ -48,6 +48,17 @@ async function runCleanup(request: NextRequest) {
     // Monitoring history: job runs 90 days, AI call records 180 days (cost trends).
     results.cronRunsDeleted = (await prisma.opsCronRun.deleteMany({ where: { startedAt: { lt: new Date(now.getTime() - 90 * 864e5) } } })).count;
     results.aiCallsDeleted = (await prisma.opsAiCall.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 180 * 864e5) } } })).count;
+    // Startup verification log (DPDP): IP address and device are kept 12 months (privacy policy §5), then cleared. The rest of the row
+    // (who verified, how, with which work email, when) stays as the ownership record for audits and disputes.
+    results.verificationLogIpsCleared = (await prisma.startupVerificationLog.updateMany({
+      where: { createdAt: { lt: new Date(now.getTime() - 365 * 864e5) }, OR: [{ ipAddress: { not: null } }, { userAgent: { not: null } }] },
+      data: { ipAddress: null, userAgent: null },
+    })).count;
+    // Closed transfer links aren't needed after two years; the transfer itself is in the verification log.
+    results.oldTransfersDeleted = (await prisma.startupOwnershipTransfer.deleteMany({
+      where: { status: { not: 'PENDING' }, createdAt: { lt: new Date(now.getTime() - 730 * 864e5) } },
+    })).count;
+    await prisma.startupOwnershipTransfer.updateMany({ where: { status: 'PENDING', expiresAt: { lt: now } }, data: { status: 'EXPIRED' } });
 
     // Cached pages show jobs and events as of when they were built: drop expired jobs and past events daily.
     refreshSections(['jobs', 'events', 'home']);
@@ -181,6 +192,13 @@ async function runCleanup(request: NextRequest) {
     // of the job (e.g. before the table's migration has run).
     results.workspaceActivityLogsDeleted = await prisma.workspaceActivityLog.deleteMany({ where: { createdAt: { lt: auditCutoff } } })
       .then((r) => r.count).catch((e) => { console.error('[data-retention] workspace activity', e); return 0; });
+    // "Get notified" sign-ups: unconfirmed ones after 30 days, unsubscribed ones after a year.
+    results.careersSubscribersDeleted = await prisma.jobBoardCareersSubscriber.deleteMany({
+      where: { OR: [
+        { confirmedAt: null, consentAt: { lt: new Date(Date.now() - 30 * 86_400_000) } },
+        { unsubscribedAt: { lt: auditCutoff } },
+      ] },
+    }).then((r) => r.count).catch((e) => { console.error('[data-retention] careers subscribers', e); return 0; });
     // Past listing versions and closed review requests: one year, as the privacy policy says.
     results.listingVersionsDeleted = (await prisma.listingVersion.deleteMany({ where: { createdAt: { lt: auditCutoff } } })).count;
     results.closedEditsDeleted = (await prisma.listingPendingEdit.deleteMany({ where: { status: { not: 'PENDING' }, createdAt: { lt: auditCutoff } } })).count;

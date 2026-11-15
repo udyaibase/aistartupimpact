@@ -73,10 +73,13 @@ const fundingRounds = z.array(z.object({
   allInvestors: shortList('investors', 200, 200).optional(),
 }).passthrough()).max(100, 'You can add up to 100 funding rounds').optional();
 
+/** Startup descriptions are capped at 1,000 characters everywhere (founder portal and admin). */
+export const STARTUP_DESCRIPTION_MAX = 1000;
+
 export const startupSubmissionSchema = z.object({
   name: text('Startup name', 2, 120),
   tagline: text('Tagline', 1, 500),
-  description: text('Description', 1, 20000),
+  description: text('Description', 1, STARTUP_DESCRIPTION_MAX),
   websiteUrl: webUrl('Website'),
   linkedinUrl: optionalWebUrl('LinkedIn'),
   twitterUrl: optionalWebUrl('Twitter'),

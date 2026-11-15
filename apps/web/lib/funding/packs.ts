@@ -146,3 +146,5 @@ export function suggestedPack(options: Pick<PackOption, 'key' | 'available'>[]):
 /** Shown next to the required checkbox and stored with each consent. */
 export const CONSENT_TEXT = 'I agree to the Terms and Privacy Policy and to receive the Udyaibase newsletter. I can unsubscribe at any time.';
 export const CONSENT_VERSION = 2;
+/** Paid checkout: agreeing to the terms is required; the newsletter is a separate, optional box. */
+export const TERMS_TEXT = 'I agree to the Terms and Privacy Policy.';

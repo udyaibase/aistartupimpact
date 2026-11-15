@@ -10,6 +10,7 @@ import { Star, ExternalLink, ChevronRight, Check, X as XIcon, ThumbsUp, ThumbsDo
 import { generateToolSchema } from '@/lib/seo';
 import { sql } from '@/lib/db';
 import EmbedBadge from '@/components/EmbedBadge';
+import ToolStickyCta from '@/components/tools/ToolStickyCta';
 import WriteReviewClient from '@/components/WriteReviewClient';
 import ReviewHelpfulButton from '@/components/ReviewHelpfulButton';
 import ScreenshotGallery from '@/components/ScreenshotGallery';
@@ -22,7 +23,6 @@ import { notFound } from 'next/navigation';
 import { ToolSchema, FAQSchema } from '@/components/seo';
 import { generateToolFAQs } from '@/lib/seo-utils';
 import FAQSection from '@/components/FAQSection';
-import SimilarTools from '@/components/tools/SimilarTools';
 import SimilarToolsCarousel from '@/components/tools/SimilarToolsCarousel';
 import TrackView from '@/components/TrackView';
 import ShareMenu from '@/components/shared/ShareMenu';
@@ -172,6 +172,14 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
     getReviewResponsesDirect(tool.id),
   ]);
 
+  // One "similar tools" list, leaving out anything already shown under Alternatives.
+  const alternativeIds = new Set((toolAlternatives as any[]).map((a) => a.id));
+  const moreTools = (similarTools as any[]).filter((t) => !alternativeIds.has(t.id));
+
+  // Prices are stored in US cents; most readers think in rupees, so rupees come first.
+  const startingUsd = tool.startingPrice ? tool.startingPrice / 100 : null;
+  const startingInr = startingUsd != null ? Math.round(startingUsd * usdInr) : null;
+
   const toolPros = (prosConsData.pros as any[]) || [];
   const toolCons = (prosConsData.cons as any[]) || [];
 
@@ -188,13 +196,15 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
     pricing: tool.pricingModel || '',
   });
 
+  const QUIET_BADGE = 'inline-flex items-center gap-1 h-7 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2.5 rounded-full';
+
   const pricingLabel: Record<string, string> = {
     FREE: 'Free', FREEMIUM: 'Freemium', PAID: 'Paid',
     OPEN_SOURCE: 'Open Source', ENTERPRISE: 'Enterprise', SUBSCRIPTION: 'Subscription',
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-24 sm:py-10">
       <ToolSchema tool={tool} />
       <TrackView entityType="tool" entityId={tool.id} categoryId={tool.categoryId} />
 
@@ -214,76 +224,52 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
       </nav>
 
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6 sm:mb-8">
         <div className="flex flex-row items-center gap-3 sm:gap-6">
-          <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl bg-white dark:bg-gray-800 shrink-0 overflow-hidden shadow-md ring-2 ring-white dark:ring-gray-700 border border-gray-100 dark:border-gray-700/50">
-            <Image
-              src={tool.logoUrl || `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tool.websiteUrl}&size=128`}
-              alt={tool.name}
-              width={80}
-              height={80}
-              sizes="80px"
-              className="w-full h-full object-cover"
-            />
+          <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-lg bg-white dark:bg-gray-800 shrink-0 overflow-hidden shadow-md ring-2 ring-white dark:ring-gray-700 border border-gray-100 dark:border-gray-700/50">
+            {tool.logoUrl ? (
+              <Image src={tool.logoUrl} alt={tool.name} width={80} height={80} sizes="80px" className="w-full h-full object-cover" />
+            ) : (
+              <span className="w-full h-full flex items-center justify-center font-sora font-bold text-xl sm:text-3xl text-brand">{tool.name.charAt(0).toUpperCase()}</span>
+            )}
           </div>
           <div className="flex-1 min-w-0">
-            <h1 className="font-sora font-extrabold text-xl sm:text-3xl text-navy dark:text-white">{tool.name}</h1>
-            <p className="text-gray-500 dark:text-gray-400 font-jakarta text-xs sm:text-base mt-0.5 sm:mt-1">{tool.tagline}</p>
+            <h1 className="font-sora font-bold sm:font-extrabold text-[22px] sm:text-3xl leading-tight text-navy dark:text-white">{tool.name}</h1>
+            <p className="text-gray-500 dark:text-gray-400 font-jakarta text-sm sm:text-base leading-snug mt-0.5 sm:mt-1">{tool.tagline}</p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-3">
-          {tool.avgRating != null && (
-            <div className="flex items-center gap-1 bg-yellow-50 dark:bg-yellow-900/30 px-2.5 py-1 rounded-full">
-              <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-3">
+          {Number(tool.avgRating) > 0 && (
+            <span className="inline-flex items-center gap-1 h-7 bg-yellow-50 dark:bg-yellow-900/30 px-2.5 rounded-full text-xs">
+              <Star className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500" aria-hidden />
               <span className="font-bold text-yellow-700 dark:text-yellow-400">{Number(tool.avgRating).toFixed(1)}</span>
-              {userReviews.length > 0 && <span className="text-xs text-gray-400 ml-1">({userReviews.length} reviews)</span>}
-            </div>
-          )}
-          {(tool.upvoteCount || 0) >= 5 && (
-            <span className="text-xs font-bold bg-brand/10 text-brand px-2.5 py-1 rounded-full">
-              {tool.upvoteCount} upvotes
+              {userReviews.length > 0 && <span className="text-gray-500 dark:text-gray-400">({userReviews.length})</span>}
             </span>
           )}
-          {tool.categoryName && <span className="badge-category">{tool.categoryName}</span>}
           {tool.pricingModel && (
-            <span className="text-xs font-bold bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400 px-2.5 py-1 rounded-full uppercase">
+            <span className="inline-flex items-center h-7 text-xs font-semibold bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400 px-2.5 rounded-full">
               {pricingLabel[tool.pricingModel] || tool.pricingModel}
             </span>
           )}
-          {tool.hasApi && (
-            <span className="flex items-center gap-1 text-xs font-bold bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 px-2.5 py-1 rounded-full">
-              <Cpu className="w-3 h-3" /> API
-            </span>
-          )}
-          {tool.hasMobileApp && (
-            <span className="flex items-center gap-1 text-xs font-bold bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 px-2.5 py-1 rounded-full">
-              <Smartphone className="w-3 h-3" /> Mobile App
-            </span>
-          )}
-          {tool.freeTrialDays && tool.freeTrialDays > 0 && (
-            <span className="text-xs font-bold bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-400 px-2.5 py-1 rounded-full">
-              {tool.freeTrialDays}-Day Free Trial
-            </span>
-          )}
-          {tool.isUrlVerified && (
-            <span className="flex items-center gap-1 text-xs font-bold bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 px-2.5 py-1 rounded-full">
-              <Check className="w-3 h-3" /> Verified
-            </span>
-          )}
+          {tool.categoryName && <span className={QUIET_BADGE}>{tool.categoryName}</span>}
+          {tool.freeTrialDays && tool.freeTrialDays > 0 && <span className={QUIET_BADGE}>{tool.freeTrialDays}-day free trial</span>}
+          {tool.hasApi && <span className={QUIET_BADGE}><Cpu className="w-3 h-3" aria-hidden /> API</span>}
+          {tool.hasMobileApp && <span className={QUIET_BADGE}><Smartphone className="w-3 h-3" aria-hidden /> Mobile app</span>}
+          {tool.isUrlVerified && <span className={QUIET_BADGE}><Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" aria-hidden /> Verified</span>}
         </div>
-        <div className="flex items-center gap-2 sm:gap-3 mt-4">
+        <div id="tool-actions" className="flex flex-wrap items-center gap-2 sm:gap-3 mt-4">
           <ToolCTAButton
             toolId={tool.id}
             toolName={tool.name}
             source="TOOL_DETAIL"
             variant="primary"
-            className="text-xs sm:text-sm !px-3 sm:!px-4 h-9 sm:h-auto"
+            className="text-sm !px-4 h-10 sm:h-auto whitespace-nowrap"
           >
-            Visit Site
+            Visit site
           </ToolCTAButton>
           {tool.pricingUrl && (
-            <a href={tool.pricingUrl} target="_blank" rel="noopener noreferrer" className="btn-outline text-xs sm:text-sm !px-2.5 sm:!px-4 !py-0 sm:!py-2.5 h-9 sm:h-auto !min-h-0 sm:!min-h-[44px] !rounded-lg sm:!rounded-xl">
-              Pricing <ExternalLink className="w-3 sm:w-3.5 h-3 sm:h-3.5 ml-0.5 sm:ml-1" />
+            <a href={tool.pricingUrl} target="_blank" rel="noopener noreferrer" className="btn-outline whitespace-nowrap text-sm !px-3 sm:!px-4 !py-0 sm:!py-2.5 h-10 sm:h-auto !min-h-0 sm:!min-h-[44px] !rounded-lg">
+              Pricing <ExternalLink className="w-3.5 h-3.5 ml-1" aria-hidden />
             </a>
           )}
           {/* Mobile: icon-only, Desktop: full button */}
@@ -307,7 +293,10 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
             entityType="TOOL"
             entityId={tool.id}
           />
-          <ReportButton entityType="TOOL" entityId={tool.id} entityName={tool.name} entitySlug={tool.slug} />
+          {/* On phones the row is full, so Report moves below it */}
+          <span className="hidden sm:inline-flex">
+            <ReportButton entityType="TOOL" entityId={tool.id} entityName={tool.name} entitySlug={tool.slug} />
+          </span>
         </div>
         {(tool.twitterUrl || tool.linkedinUrl || (Array.isArray(tool.socialLinks) && tool.socialLinks.length > 0)) && (
           <div className="flex items-center gap-2 mt-3 flex-wrap">
@@ -420,17 +409,20 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
             })}
           </div>
         )}
+        <div className="sm:hidden mt-3">
+          <ReportButton entityType="TOOL" entityId={tool.id} entityName={tool.name} entitySlug={tool.slug} />
+        </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-8">
+      <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
         {/* Main Content */}
-        <div className="flex-1 space-y-8 min-w-0">
+        <div className="flex-1 space-y-5 sm:space-y-8 min-w-0">
 
           {/* Overview */}
-          <div className="card p-5 sm:p-6">
-            <h2 className="section-title mb-4">Overview</h2>
-            <p className="text-gray-600 dark:text-gray-300 font-jakarta text-sm sm:text-base leading-relaxed whitespace-pre-line">{tool.description}</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-100 dark:border-gray-800">
+          <div className="card p-4 sm:p-6">
+            <h2 className="section-title !text-base sm:!text-lg mb-3 sm:mb-4">Overview</h2>
+            <p className="text-gray-600 dark:text-gray-300 font-jakarta text-[15px] sm:text-base leading-relaxed whitespace-pre-line">{tool.description}</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-5 sm:mt-6 pt-5 sm:pt-6 border-t border-gray-100 dark:border-gray-800">
               {(tool.headquartersCity || tool.headquartersCountry) && (
                 <div><span className="text-xs text-gray-400 font-jakarta block">HQ</span><span className="font-sora font-bold text-sm text-navy dark:text-white">{formatPlace(tool.headquartersCity, tool.headquartersCountry)}</span></div>
               )}
@@ -438,8 +430,12 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
                 <div><span className="text-xs text-gray-400 font-jakarta block">Founders</span><span className="font-sora font-bold text-sm text-navy dark:text-white">{tool.founderNames.join(', ')}</span></div>
               )}
               {/* Website link hidden — redundant with Visit Site button above */}
-              {tool.startingPrice && (
-                <div><span className="text-xs text-gray-400 font-jakarta block">Starting Price</span><span className="font-sora font-bold text-sm text-navy dark:text-white">${(tool.startingPrice / 100).toFixed(tool.startingPrice % 100 === 0 ? 0 : 2)}/mo</span></div>
+              {startingUsd != null && startingInr != null && (
+                <div>
+                  <span className="text-xs text-gray-400 font-jakarta block">Starting price</span>
+                  <span className="font-sora font-bold text-sm text-navy dark:text-white">≈ ₹{startingInr.toLocaleString('en-IN')}/mo</span>
+                  <span className="block text-xs text-gray-500 dark:text-gray-400 font-jakarta">${startingUsd.toFixed(Number.isInteger(startingUsd) ? 0 : 2)}/mo, converted at today&apos;s rate</span>
+                </div>
               )}
             </div>
           </div>
@@ -476,7 +472,7 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
           {(tool.idealUseCase || tool.notAFitFor) && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {tool.idealUseCase && (
-                <div className="card p-5">
+                <div className="card p-4 sm:p-5">
                   <h3 className="font-sora font-bold text-sm text-green-700 dark:text-green-400 mb-3 flex items-center gap-2">
                     <ThumbsUp className="w-4 h-4" /> Ideal For
                   </h3>
@@ -484,7 +480,7 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
                 </div>
               )}
               {tool.notAFitFor && (
-                <div className="card p-5">
+                <div className="card p-4 sm:p-5">
                   <h3 className="font-sora font-bold text-sm text-red-600 dark:text-red-400 mb-3 flex items-center gap-2">
                     <ThumbsDown className="w-4 h-4" /> Not a Fit For
                   </h3>
@@ -496,8 +492,8 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
 
           {/* Tags & Capabilities */}
           {toolTags.length > 0 && (
-            <div className="card p-5 sm:p-6">
-              <h2 className="section-title mb-4">Tags & Capabilities</h2>
+            <div className="card p-4 sm:p-6">
+              <h2 className="section-title !text-base sm:!text-lg mb-3 sm:mb-4">Tags & Capabilities</h2>
               <div className="space-y-4">
                 {toolTags.map((group: any) => (
                   <div key={group.id}>
@@ -507,7 +503,7 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
                         <Link
                           key={tag.id}
                           href={`/tools?tag=${tag.slug}`}
-                          className="inline-flex items-center px-2.5 py-1 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-jakarta text-gray-600 dark:text-gray-400 hover:border-brand/30 hover:text-brand hover:bg-brand/5 transition-colors"
+                          className="inline-flex items-center h-8 sm:h-auto px-2.5 sm:py-1 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md text-[13px] sm:text-xs font-jakarta text-gray-600 dark:text-gray-400 hover:border-brand/30 hover:text-brand hover:bg-brand/5 transition-colors"
                         >
                           {tag.name}
                         </Link>
@@ -521,8 +517,8 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
 
           {/* Alternatives */}
           {toolAlternatives.length > 0 && (
-            <div className="card p-5 sm:p-6">
-              <h2 className="section-title mb-4">Alternatives to {tool.name}</h2>
+            <div className="card p-4 sm:p-6">
+              <h2 className="section-title !text-base sm:!text-lg mb-3 sm:mb-4">Alternatives to {tool.name}</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {toolAlternatives.map((alt: any) => (
                   <Link
@@ -555,13 +551,13 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
 
           {/* User Reviews */}
           <div>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="section-title mb-0">User Reviews</h2>
+            <div className="flex items-center justify-between gap-3 mb-4 sm:mb-6">
+              <h2 className="section-title !text-base sm:!text-lg mb-0">User reviews</h2>
               <WriteReviewClient toolSlug={tool.slug} toolName={tool.name} />
             </div>
             <div className="space-y-4">
               {userReviews.length > 0 ? userReviews.map((rev: any) => (
-                <div key={rev.id} className="card p-5">
+                <div key={rev.id} className="card p-4 sm:p-5">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full bg-brand/10 flex items-center justify-center text-sm text-brand font-bold">
@@ -596,9 +592,9 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
                   )}
                 </div>
               )) : (
-                <div className="card p-8 text-center text-gray-500 text-sm font-jakarta">
-                  No verified reviews yet. Be the first to review {tool.name}!
-                </div>
+                <p className="rounded-lg border border-dashed border-gray-200 dark:border-gray-800 px-4 py-3 text-sm text-gray-500 dark:text-gray-400 font-jakarta">
+                  No reviews yet. Used {tool.name}? Your review helps others decide.
+                </p>
               )}
             </div>
           </div>
@@ -609,14 +605,13 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
 
         {/* Sidebar */}
         <aside className="w-full lg:w-72 xl:w-80 shrink-0 space-y-6">
-          {/* <EmbedBadge urlSlug={tool.slug} type="tools" /> */}
 
           {/* Built by Startup */}
           {tool.startupId && tool.startupName && (
             <Link href={`/startups/${tool.startupSlug || tool.startupId}`} className="card p-5 block hover:border-brand/30 transition-colors group">
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider font-jakarta mb-3">Built by</p>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0 overflow-hidden border border-gray-200 dark:border-gray-700">
+                <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0 overflow-hidden border border-gray-200 dark:border-gray-700">
                   {tool.startupLogoUrl ? (
                     <Image src={tool.startupLogoUrl} alt={tool.startupName} width={40} height={40} sizes="40px" className="w-full h-full object-cover" />
                   ) : (
@@ -633,15 +628,6 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
                 </div>
               </div>
             </Link>
-          )}
-
-          {/* Similar Tools in Same Category */}
-          {similarTools.length > 0 && (
-            <SimilarTools
-              tools={similarTools}
-              categoryName={tool.categoryName || 'this category'}
-              categorySlug={tool.categorySlug}
-            />
           )}
 
           {/* Articles linked to or tagging this tool */}
@@ -662,12 +648,16 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
             </div>
           )}
 
+          {/* Founder "Featured on Udyaibase" badge: temporarily hidden, like on startup pages. */}
+          {/* <EmbedBadge urlSlug={tool.slug} type="tools" /> */}
         </aside>
       </div>
 
       {/* Similar Tools Carousel — full width below main content */}
+      <ToolStickyCta toolId={tool.id} name={tool.name} logoUrl={tool.logoUrl || null} rating={tool.avgRating != null ? Number(tool.avgRating) : null} anchorId="tool-actions" />
+
       <SimilarToolsCarousel
-        tools={similarTools as any[]}
+        tools={moreTools}
         categoryName={tool.categoryName || undefined}
         categorySlug={tool.categorySlug || undefined}
       />

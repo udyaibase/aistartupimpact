@@ -1,3 +1,4 @@
+import { jwtSecret } from '@/lib/jwt-secret';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
@@ -5,13 +6,9 @@ import { neon } from '@neondatabase/serverless';
 import { Redis } from '@upstash/redis';
 import { canonicalCompareSlug } from '@/lib/tools/compare-slug';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.FOUNDER_JWT_SECRET!
-);
+const JWT_SECRET = jwtSecret(process.env.FOUNDER_JWT_SECRET, 'FOUNDER_JWT_SECRET');
 
-const USER_JWT_SECRET = new TextEncoder().encode(
-  process.env.USER_JWT_SECRET!
-);
+const USER_JWT_SECRET = jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET');
 
 let _sql: ReturnType<typeof neon> | undefined;
 function getSql() {

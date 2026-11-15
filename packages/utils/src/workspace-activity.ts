@@ -17,7 +17,7 @@ export type EmployerActivity = Common
 
 export type OrganizerActivity = Common
   | 'boost_purchased' | 'event_created' | 'event_updated' | 'event_published' | 'event_cancelled' | 'event_deleted'
-  | 'ticket_refunded' | 'payout_details_changed' | 'attendees_exported';
+  | 'ticket_refunded' | 'payout_details_changed' | 'attendees_exported' | 'team_events_changed';
 
 export type WorkspaceActivity = EmployerActivity | OrganizerActivity;
 export type WorkspaceActivityCategory = 'security' | 'team' | 'billing' | 'work';
@@ -67,6 +67,7 @@ const EMPLOYER: Record<EmployerActivity, Display> = {
 
 const ORGANIZER: Record<OrganizerActivity, Display> = {
   ...COMMON,
+  team_events_changed: { category: 'team', title: (m) => `Changed which events ${text(m, 'member') || 'a team member'} can work on${text(m, 'events') === 'all' ? ' (all events)' : text(m, 'events') ? ` (${text(m, 'events')})` : ''}` },
   boost_purchased: { category: 'billing', title: (m) => `Boosted ${quoted(m, 'event', 'an event')}${text(m, 'amount') ? ` (${text(m, 'amount')})` : ''}` },
   event_created: { category: 'work', title: (m) => `Created the event ${quoted(m, 'title', '')}`.trim() },
   event_updated: { category: 'work', title: (m) => `Edited the event ${quoted(m, 'title', '')}`.trim() },

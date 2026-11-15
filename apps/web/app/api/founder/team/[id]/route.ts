@@ -37,7 +37,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (!otpToken || !otpCode) {
       return NextResponse.json({ success: false, error: "Verification code required" }, { status: 403 });
     }
-    const otpResult = verifyOTP(otpToken, otpCode);
+    const otpResult = verifyOTP(otpToken, otpCode, session.userId, 'role_change');
     if (!otpResult.valid) {
       return NextResponse.json({ success: false, error: otpResult.error }, { status: 403 });
     }
@@ -103,7 +103,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     if (!otpToken || !otpCode) {
       return NextResponse.json({ success: false, error: "Verification code required" }, { status: 403 });
     }
-    const otpResult = verifyOTP(otpToken, otpCode);
+    const otpResult = verifyOTP(otpToken, otpCode, session.userId, 'revoke');
     if (!otpResult.valid) {
       return NextResponse.json({ success: false, error: otpResult.error }, { status: 403 });
     }

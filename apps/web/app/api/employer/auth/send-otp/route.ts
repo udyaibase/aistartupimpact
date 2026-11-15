@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { hashOtp } from '@/lib/otp';
 import { sql } from '@/lib/db';
 import crypto from 'crypto';
 import { otpEmailHtml } from '@udyaibase/utils';
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
     }
 
     const code = crypto.randomInt(100000, 1000000).toString();
-    const hashedCode = crypto.createHash('sha256').update(code).digest('hex');
+    const hashedCode = hashOtp(code);
     const expiresAt = new Date(Date.now() + CODE_TTL_MINUTES * 60 * 1000);
 
     await sql`DELETE FROM "EmailOtp" WHERE email = ${email} AND purpose = 'employer_signup'`;

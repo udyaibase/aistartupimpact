@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import PasswordField from "@/components/ui/PasswordField";
+import { passwordProblem } from "@/lib/password-rules";
 import { Loader2, CalendarDays, Mail, Lock, User, Building2, CheckCircle, ArrowLeft, Shield, Users, BarChart3, Ticket, UserPlus, Globe, Zap, AlertTriangle } from "lucide-react";
 import TurnstileWidget from "@/components/shared/TurnstileWidget";
 
@@ -51,7 +53,8 @@ function OrganizerAuthContent() {
   const [successMsg, setSuccessMsg] = useState("");
 
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  // Prefilled when arriving from an accepted team invitation (?email=).
+  const [email, setEmail] = useState(() => (searchParams.get("email") ?? "").slice(0, 254));
   const [password, setPassword] = useState("");
   const [company, setCompany] = useState("");
 
@@ -73,6 +76,11 @@ function OrganizerAuthContent() {
     e.preventDefault();
     setError("");
     setSuccessMsg("");
+
+    if (mode === "signup") {
+      const problem = passwordProblem(password, email, "mixed", name);
+      if (problem) { setError(problem); return; }
+    }
 
     if (!turnstileToken.current) {
       setError("Please complete the CAPTCHA verification before continuing.");
@@ -375,7 +383,7 @@ function OrganizerAuthContent() {
               {mode !== "forgot" && (
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 font-jakarta">Password</label>
+                    <label htmlFor="organizer-password" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 font-jakarta">Password</label>
                     {mode === "login" && (
                       <button
                         type="button"
@@ -386,19 +394,19 @@ function OrganizerAuthContent() {
                       </button>
                     )}
                   </div>
-                  <div className="relative">
-                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="password"
-                      required
-                      minLength={8}
-                      autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder={mode === "signup" ? "Min 8 characters" : "Enter your password"}
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-jakarta focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand focus:bg-white dark:focus:bg-gray-800 placeholder-gray-400 transition-colors"
-                    />
-                  </div>
+                  <PasswordField
+                    id="organizer-password"
+                    label="Password"
+                    hideLabel
+                    required
+                    autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                    value={password}
+                    onChange={setPassword}
+                    email={email}
+                    personName={name}
+                    showRules={mode === "signup" && password.length > 0}
+                    placeholder={mode === "signup" ? "At least 8 characters" : "Enter your password"}
+                  />
                 </div>
               )}
 

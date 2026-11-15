@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import PasswordField from '@/components/ui/PasswordField';
+import { passwordProblem } from '@/lib/password-rules';
 import { useRouter } from 'next/navigation';
 import { Settings, Download, Loader2, Shield } from 'lucide-react';
 import TwoFactorSetup from '@/components/TwoFactorSetup';
@@ -40,8 +42,8 @@ export default function EmployerSettingsPage() {
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault(); setError('');
-    if (passwords.newPass.length < 8) { setError('Password must be at least 8 characters'); return; }
-    if (passwords.newPass !== passwords.confirm) { setError('Passwords do not match'); return; }
+    const pwProblem = passwordProblem(passwords.newPass);
+    if (pwProblem) { setError(pwProblem); return; }
     setChangingPassword(true);
     try {
       const res = await fetch('/api/employer/change-password', {
@@ -251,18 +253,22 @@ export default function EmployerSettingsPage() {
               <p className="text-gray-600 dark:text-gray-400 text-sm">Enter your current password and choose a new one</p>
             </div>
             <form onSubmit={handleChangePassword} className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Current Password</label>
-                <input type="password" autoComplete="current-password" value={passwords.current} onChange={(e) => setPasswords({ ...passwords, current: e.target.value })} required className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand/20 focus:border-brand font-jakarta" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">New Password</label>
-                <input type="password" autoComplete="new-password" value={passwords.newPass} onChange={(e) => setPasswords({ ...passwords, newPass: e.target.value })} required minLength={8} className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand/20 focus:border-brand font-jakarta" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Confirm New Password</label>
-                <input type="password" autoComplete="new-password" value={passwords.confirm} onChange={(e) => setPasswords({ ...passwords, confirm: e.target.value })} required minLength={8} className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand/20 focus:border-brand font-jakarta" />
-              </div>
+              <PasswordField
+                label="Current password"
+                autoComplete="current-password"
+                value={passwords.current}
+                onChange={(v) => setPasswords({ ...passwords, current: v })}
+                required
+              />
+              <PasswordField
+                label="New password"
+                autoComplete="new-password"
+                value={passwords.newPass}
+                onChange={(v) => setPasswords({ ...passwords, newPass: v })}
+                showRules={passwords.newPass.length > 0}
+                hint={passwords.newPass.length === 0 ? 'At least 8 characters, with upper and lower case letters and a number.' : undefined}
+                required
+              />
               <button type="submit" disabled={changingPassword} className="w-full px-4 py-2 bg-gray-900 dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-100 text-white dark:text-gray-900 text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                 {changingPassword ? 'Changing Password...' : 'Change Password'}
               </button>

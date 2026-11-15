@@ -1,3 +1,4 @@
+import { jwtSecret } from '@/lib/jwt-secret';
 import { SignJWT } from 'jose';
 import { sendEmail, sendEmailWithRetry, sendEmailFireAndForget } from './email/send';
 import {
@@ -11,7 +12,7 @@ import {
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 
 export async function generateNewsletterUnsubscribeToken(email: string): Promise<string> {
-  const secret = new TextEncoder().encode(process.env.NEXTAUTH_SECRET!);
+  const secret = jwtSecret(process.env.NEXTAUTH_SECRET, 'NEXTAUTH_SECRET');
   return new SignJWT({ email })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()

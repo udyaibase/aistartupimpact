@@ -1,74 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { apiRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
+import { checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
+import { resumeUploadRateLimit } from '@/lib/event-rate-limit';
+import { putResume, resumeStorageReady } from '@/lib/jobs/resume-storage';
+import { sniffResume } from '@/lib/jobs/resume-text';
 
 export const dynamic = 'force-dynamic';
 
 const MAX_SIZE = 500 * 1024; // 500KB strict limit
 
-const s3Client = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
-  },
-});
-
+/**
+ * Resume for an application to a role at Udyaibase. A resume is personal data, so it goes to the private
+ * resumes bucket (never the public media bucket) and the response carries a reference ("private:careers/<id>.pdf"),
+ * not a public link. Staff open it through the admin app, signed in.
+ */
 export async function POST(req: NextRequest) {
   try {
-    const identifier = getClientIdentifier(req);
-    const { success: allowed } = await checkRateLimit(apiRateLimit, identifier);
+    const { success: allowed } = await checkRateLimit(resumeUploadRateLimit, `careers:${getClientIdentifier(req)}`);
     if (!allowed) {
-      return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
+      return NextResponse.json({ error: 'Too many uploads. Please try again later.' }, { status: 429 });
+    }
+    if (!resumeStorageReady()) {
+      return NextResponse.json({ error: 'Resume upload isn’t available right now. Paste a link to your resume instead.' }, { status: 503 });
     }
 
     const formData = await req.formData();
-    const file = formData.get('resume') as File;
-
-    if (!file) {
+    const file = formData.get('resume');
+    if (!(file instanceof File)) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
-
-    if (file.type !== 'application/pdf') {
-      return NextResponse.json({ error: 'Only PDF files are allowed' }, { status: 400 });
-    }
-
     if (file.size > MAX_SIZE) {
       return NextResponse.json({
         error: `File size must be less than 500KB (current: ${Math.round(file.size / 1024)}KB). Please compress your resume.`,
       }, { status: 400 });
     }
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    // The real type, from the file's own bytes: the browser's "application/pdf" proves nothing.
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (sniffResume(bytes)?.ext !== 'pdf') {
+      return NextResponse.json({ error: 'Only PDF files are allowed' }, { status: 400 });
+    }
 
-    const uniqueId = crypto.randomUUID();
-    const cleanName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const key = `resumes/${uniqueId}-${cleanName}`;
-
-    await s3Client.send(
-      new PutObjectCommand({
-        Bucket: process.env.R2_BUCKET_NAME!,
-        Key: key,
-        ContentType: 'application/pdf',
-        Body: buffer,
-      })
-    );
-
-    const publicUrl = process.env.R2_PUBLIC_URL?.replace(/\/$/, '');
-    const url = `${publicUrl}/${key}`;
+    const key = `careers/${crypto.randomUUID()}.pdf`;
+    await putResume(key, bytes, 'application/pdf');
 
     return NextResponse.json({
       success: true,
-      url,
-      filename: file.name,
+      url: `private:${key}`,
+      filename: file.name.replace(/[^\w.\- ]/g, '_').slice(0, 120),
       sizeBytes: file.size,
     });
-  } catch (error: any) {
-    console.error('Resume upload error:', error);
-    return NextResponse.json({
-      error: 'Failed to upload resume. Please try again.',
-    }, { status: 500 });
+  } catch (error) {
+    console.error('Resume upload error:', error instanceof Error ? error.message : error);
+    return NextResponse.json({ error: 'Failed to upload resume. Please try again.' }, { status: 500 });
   }
 }

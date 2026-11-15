@@ -129,6 +129,13 @@ describe('paid checkout', () => {
     });
   });
 
+  it('records which wording the buyer agreed to at checkout', async () => {
+    await checkout(req('/x', body()));
+    expect(db.fundingDataPurchase.create.mock.calls.at(-1)![0].data.consentText).toBe('I agree to the Terms and Privacy Policy.');
+    await checkout(req('/x', body({ newsletter: true })));
+    expect(db.fundingDataPurchase.create.mock.calls.at(-1)![0].data.consentText).toMatch(/newsletter/);
+  });
+
   it('keeps individuals quick: name and state only', async () => {
     expect((await checkout(req('/x', body()))).status).toBe(200);
   });
@@ -136,7 +143,8 @@ describe('paid checkout', () => {
 
 describe('payment activation', () => {
   it('is idempotent and subscribes the buyer once', async () => {
-    db.fundingDataPurchase.findUnique.mockResolvedValue({ id: 'p1', email: 'buyer@example.com', pack: 'STARTER', totalPaise: 19900, consentAt: new Date() });
+    // This buyer ticked the optional newsletter box at checkout.
+    db.fundingDataPurchase.findUnique.mockResolvedValue({ id: 'p1', email: 'buyer@example.com', pack: 'STARTER', totalPaise: 19900, consentAt: new Date(), consentText: 'I agree to the Terms and Privacy Policy and to receive the Udyaibase newsletter. I can unsubscribe at any time.' });
     db.fundingDataPurchase.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
     expect(await activateFundingPurchase('order_1', 'pay_1')).toBe('activated');
     expect(await activateFundingPurchase('order_1', 'pay_1')).toBe('already');
@@ -145,6 +153,16 @@ describe('payment activation', () => {
     expect(invoice.emailInvoice).toHaveBeenCalledWith('funding', 'p1');
     const window = db.fundingDataPurchase.updateMany.mock.calls[0][0].data.accessExpiresAt.getTime() - Date.now();
     expect(Math.round(window / 864e5)).toBe(7);
+  });
+});
+
+describe('newsletter is optional when buying', () => {
+  it('does not subscribe a buyer who agreed to the terms only', async () => {
+    db.newsletterSubscriber.upsert.mockClear();
+    db.fundingDataPurchase.findUnique.mockResolvedValue({ id: 'p2', email: 'quiet@example.com', pack: 'STARTER', totalPaise: 19900, consentAt: new Date(), consentText: 'I agree to the Terms and Privacy Policy.' });
+    db.fundingDataPurchase.updateMany.mockResolvedValueOnce({ count: 1 });
+    expect(await activateFundingPurchase('order_2', 'pay_2')).toBe('activated');
+    expect(db.newsletterSubscriber.upsert).not.toHaveBeenCalled();
   });
 });
 

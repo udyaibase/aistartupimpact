@@ -3,6 +3,7 @@ import { logFounderSignIn } from '@/lib/founder/activity';
 import { secondFactorChallenge } from '@/lib/auth/second-factor';
 import { prisma } from "@udyaibase/database";
 import { createUnifiedSession } from "@/lib/unified-auth";
+import { safeReturnPath } from "@/lib/safe-return";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const code = searchParams.get("code");
-    const state = searchParams.get("state") || "/profile";
+    const state = safeReturnPath(searchParams.get("state")); // a path on this site only
     const error = searchParams.get("error");
 
     if (error || !code) {

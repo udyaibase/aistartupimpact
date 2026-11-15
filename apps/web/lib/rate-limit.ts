@@ -80,6 +80,22 @@ export const emailCodeRateLimit = redis ? new Ratelimit({
   prefix: "ratelimit:emailcode",
 }) : null;
 
+/** Codes one account may send in an hour, whatever addresses it tries (stops one account spraying many inboxes). */
+export const accountCodeRateLimit = redis ? new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(10, "1 h"),
+  analytics: false,
+  prefix: "ratelimit:acctcode",
+}) : null;
+
+/** Codes any one inbox may receive in an hour, from every account and purpose combined (stops inbox flooding). */
+export const recipientCodeRateLimit = redis ? new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(5, "1 h"),
+  analytics: false,
+  prefix: "ratelimit:rcptcode",
+}) : null;
+
 /** False when this email already received EMAIL_CODE limit codes for this purpose in the last 15 minutes. */
 export async function emailCodeAllowed(email: string, purpose: string): Promise<boolean> {
   const { success } = await checkRateLimit(emailCodeRateLimit, `${purpose}:${email.trim().toLowerCase()}`);
@@ -114,4 +130,26 @@ export async function checkRateLimit(
     }
     return { success: true, limit: 999, remaining: 999, reset: 0 };
   }
+}
+
+/**
+ * What to tell someone who hit a limit, from the limiter's reset time (ms since epoch):
+ * "Too many attempts. Please try again in 12 minutes." Falls back to a general line when the time isn't known.
+ */
+export function rateLimitMessage(reset: number | null | undefined, now = Date.now()): string {
+  const ms = (reset ?? 0) - now;
+  if (!reset || !Number.isFinite(ms) || ms <= 0) return 'Too many attempts. Please wait a little and try again.';
+  const minutes = Math.ceil(ms / 60_000);
+  if (minutes <= 1) return 'Too many attempts. Please try again in a minute.';
+  if (minutes < 60) return `Too many attempts. Please try again in ${minutes} minutes.`;
+  const hours = Math.round(minutes / 60);
+  if (hours <= 1) return 'Too many attempts. Please try again in about an hour.';
+  if (hours < 24) return `Too many attempts. Please try again in about ${hours} hours.`;
+  return 'Too many attempts. Please try again tomorrow.';
+}
+
+/** Retry-After header (seconds) for a 429, so clients and browsers know when to retry. */
+export function retryAfterHeaders(reset: number | null | undefined, now = Date.now()): Record<string, string> {
+  const seconds = Math.max(1, Math.ceil(((reset ?? 0) - now) / 1000));
+  return reset && reset > now ? { 'Retry-After': String(seconds) } : {};
 }

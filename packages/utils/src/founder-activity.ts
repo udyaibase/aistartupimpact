@@ -5,6 +5,7 @@ export type FounderActivity =
   | 'data_exported' | 'account_deactivated' | 'account_reactivated' | 'account_deleted'
   | 'public_profile_changed' | 'startup_claim_verified' | 'verification_removed' | 'engagement_email' | 'email_tips_changed' | 'edit_submitted' | 'edit_approved' | 'edit_rejected' | 'team_invite_accepted' | 'team_invite_declined'
   | 'startup_submitted' | 'startup_updated' | 'tool_submitted' | 'tool_updated'
+  | 'startup_transfer_started' | 'startup_transfer_accepted'
   | 'team_member_invited' | 'team_role_changed' | 'team_member_removed';
 
 export type ActivityCategory = 'security' | 'listings' | 'team';
@@ -32,6 +33,8 @@ const DISPLAY: Record<FounderActivity, { category: ActivityCategory; title: (m: 
   account_reactivated: { category: 'security', title: () => 'Reactivated your account' },
   account_deleted: { category: 'security', title: () => 'Deleted your account' },
   public_profile_changed: { category: 'security', title: (m) => (m?.visible === false ? 'Hid you from your startup’s profile' : 'Showed you on your startup’s profile') },
+  startup_transfer_started: { category: 'listings', title: () => 'Sent a link to transfer ownership of your startup' },
+  startup_transfer_accepted: { category: 'listings', title: () => 'Became the owner of a startup by transfer' },
   startup_claim_verified: { category: 'listings', title: (m) => `Proved ownership of your startup${text(m, 'method') === 'email' ? ' by work email' : text(m, 'method') === 'dns' ? ' by DNS record' : ''}` },
   verification_removed: { category: 'listings', title: (m) => `Verified badge removed from ${text(m, 'name') || 'your listing'} because its website changed` },
   engagement_email: { category: 'security', title: () => 'We emailed you a tip about your listing' },

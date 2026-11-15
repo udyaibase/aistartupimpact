@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    const [reviews, savedJobs, newsletterSubscription, emailLogs] = await Promise.all([
+    const [reviews, savedJobs, newsletterSubscription, emailLogs, savedTools, savedStartups, savedEvents, savedStories] = await Promise.all([
       prisma.startupReview.findMany({
         where: { userId: user.id },
         select: { id: true, rating: true, title: true, body: true, createdAt: true },
@@ -52,6 +52,26 @@ export async function GET(request: NextRequest) {
         orderBy: { sentAt: 'desc' },
         take: 200,
       }),
+      prisma.savedTool.findMany({
+        where: { userId: user.id },
+        select: { toolSlug: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.savedStartup.findMany({
+        where: { userId: user.id },
+        select: { startupSlug: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.savedEvent.findMany({
+        where: { userId: user.id },
+        select: { createdAt: true, Event: { select: { slug: true, title: true } } },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.savedArticle.findMany({
+        where: { userId: user.id },
+        select: { createdAt: true, Article: { select: { slug: true, title: true } } },
+        orderBy: { createdAt: 'desc' },
+      }),
     ]);
 
     const exportData = {
@@ -59,6 +79,10 @@ export async function GET(request: NextRequest) {
       profile: user,
       reviews,
       savedJobs,
+      savedTools,
+      savedStartups,
+      savedEvents: savedEvents.map((s) => ({ slug: s.Event.slug, title: s.Event.title, savedAt: s.createdAt })),
+      savedStories: savedStories.map((s) => ({ slug: s.Article.slug, title: s.Article.title, savedAt: s.createdAt })),
       newsletterSubscription,
       emailsReceived: emailLogs,
     };

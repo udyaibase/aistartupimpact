@@ -6,6 +6,7 @@ import {
 } from '@/lib/jobs/careers';
 import { siteOrigin } from '@/lib/embed/platforms';
 import JobsWidgetSetup from '@/components/employer/careers/JobsWidgetSetup';
+import CareersSubscribersCard from '@/components/employer/careers/CareersSubscribersCard';
 import { effectivePlan } from '@/lib/employer/plans';
 
 export const dynamic = 'force-dynamic';
@@ -33,8 +34,9 @@ export default async function EmployerCareersPage() {
   ]);
 
   return (
+    <>
     <JobsWidgetSetup
-      widget={toJobsPortalWidget(widget, company.applyForm)}
+      widget={toJobsPortalWidget(widget, company)}
       stats={stats}
       referrers={referrers}
       origin={siteOrigin()}
@@ -42,5 +44,7 @@ export default async function EmployerCareersPage() {
       canHideBranding={!!employer && effectivePlan(employer).customBranding}
       departments={Array.from(new Set([...teams.map((t) => t.department!), ...widget.departments])).sort()}
     />
+    <CareersSubscribersCard employerId={session.id} />
+    </>
   );
 }

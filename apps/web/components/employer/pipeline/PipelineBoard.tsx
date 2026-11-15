@@ -3,10 +3,11 @@
 import { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, Download, Flag, Loader2, Sparkles, LayoutGrid, List, MessageSquare, Search, SlidersHorizontal, Users, X, Plus } from 'lucide-react';
+import { ChevronRight, Download, Flag, Inbox, Loader2, Sparkles, LayoutGrid, List, MessageSquare, Search, SlidersHorizontal, Users, X, Plus } from 'lucide-react';
 import type { BoardCard } from '@/lib/employer/applications';
 import CandidatePanel from './CandidatePanel';
 import MoveDialog, { type MoveRequest, type Template } from './MoveDialog';
+import FilledPrompt, { type FilledJob } from './FilledPrompt';
 
 const COLUMNS = [
   { key: 'new', label: 'New', statuses: ['APPLIED', 'REVIEWED'], target: 'REVIEWED' },
@@ -28,7 +29,29 @@ function ago(iso: string) {
   return d <= 0 ? 'today' : d === 1 ? '1 day ago' : `${d} days ago`;
 }
 
-interface Job { id: string; title: string; status: string; count: number }
+interface Job { id: string; title: string; status: string; count: number; unseen?: number; isGeneral?: boolean }
+
+/** Cards shown per column (and rows in the list) before "Show more": keeps big boards fast, especially on phones. */
+const PAGE = 50;
+
+// A steady colour per role, so "All roles" view is scannable at a glance.
+const ROLE_TONES = [
+  'bg-sky-50 text-sky-800 dark:bg-sky-900/30 dark:text-sky-200',
+  'bg-emerald-50 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200',
+  'bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200',
+  'bg-violet-50 text-violet-800 dark:bg-violet-900/30 dark:text-violet-200',
+  'bg-rose-50 text-rose-800 dark:bg-rose-900/30 dark:text-rose-200',
+  'bg-teal-50 text-teal-800 dark:bg-teal-900/30 dark:text-teal-200',
+  'bg-orange-50 text-orange-800 dark:bg-orange-900/30 dark:text-orange-200',
+  'bg-indigo-50 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-200',
+];
+const GENERAL_TONE = 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
+function roleTone(id: string) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return ROLE_TONES[h % ROLE_TONES.length];
+}
+const STATUS_NOTE: Record<string, string> = { PAUSED: 'paused', CLOSED: 'closed' };
 
 export default function PipelineBoard({
   jobs, jobId, cards: initial, templates, bookingUrl, initialStage, initialCandidate = null, canMove = true, canExport = true, teammates = [],
@@ -66,9 +89,15 @@ export default function PipelineBoard({
   const [openId, setOpenId] = useState<string | null>(initialCandidate);
   const [move, setMove] = useState<MoveRequest | null>(null);
   const [toast, setToast] = useState('');
+  const [filled, setFilled] = useState<FilledJob[]>([]);
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [panelKey, setPanelKey] = useState(0);
   const [booking, setBooking] = useState(bookingUrl);
+  const [shown, setShown] = useState<Record<string, number>>({});
+  const limitOf = (key: string) => shown[key] ?? PAGE;
+  const showMore = (key: string) => setShown((m) => ({ ...m, [key]: (m[key] ?? PAGE) + PAGE }));
+  const currentJob = jobs.find((j) => j.id === jobId) ?? null;
+  const moveTargets = useMemo(() => jobs.filter((j) => !j.isGeneral && j.status !== 'CLOSED').map((j) => ({ id: j.id, title: j.title })), [jobs]);
 
   const skills = useMemo(() => Array.from(new Set(cards.flatMap((c) => c.confirmedSkills))).sort(), [cards]);
 
@@ -125,6 +154,7 @@ export default function PipelineBoard({
         ].filter(Boolean).join(' · '));
         setSelected(new Set());
         setPanelKey((k) => k + 1);
+        if (Array.isArray(r.filledJobs) && r.filledJobs.length) setFilled(r.filledJobs);
       }
     } catch {
       setCards(before);
@@ -179,7 +209,12 @@ export default function PipelineBoard({
           {(c.currentTitle || c.currentCompany) && (
             <span className="block text-[12.5px] text-gray-600 dark:text-gray-400 truncate">{[c.currentTitle, c.currentCompany].filter(Boolean).join(' at ')}</span>
           )}
-          {!jobId && <span className="block text-[12px] text-gray-500 truncate">{c.jobTitle}</span>}
+          {(!jobId || c.otherRoles > 0) && (
+            <span className="flex flex-wrap items-center gap-1 mt-1">
+              {!jobId && <span className={`max-w-full truncate text-[11.5px] font-semibold px-1.5 py-0.5 rounded ${c.isGeneral ? GENERAL_TONE : roleTone(c.listingId)}`}>{c.jobTitle}</span>}
+              {c.otherRoles > 0 && <span className="text-[11.5px] font-semibold px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300" title="Applied to other roles at your company too">+{c.otherRoles} role{c.otherRoles === 1 ? '' : 's'}</span>}
+            </span>
+          )}
           <span className="flex flex-wrap gap-1 mt-2">
             <MatchBadge m={c.match} />
             <AiBadge a={c.ai} />
@@ -223,7 +258,13 @@ export default function PipelineBoard({
         <div className="flex-1 px-2 pb-2 space-y-2 min-h-[120px] overflow-y-auto max-h-[calc(100dvh-300px)]">
           {list.length === 0 ? (
             <p className="px-2 py-6 text-center text-xs text-gray-500">{col.key === 'new' ? 'No new candidates' : 'Drag candidates here'}</p>
-          ) : list.map(renderCard)}
+          ) : list.slice(0, limitOf(col.key)).map(renderCard)}
+          {list.length > limitOf(col.key) && (
+            <button type="button" onClick={() => showMore(col.key)}
+              className="w-full min-h-[40px] rounded-[10px] border border-dashed border-gray-300 dark:border-gray-700 text-[13px] font-semibold text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-900">
+              Show {Math.min(PAGE, list.length - limitOf(col.key))} more · {list.length - limitOf(col.key)} left
+            </button>
+          )}
         </div>
       </section>
     );
@@ -235,17 +276,12 @@ export default function PipelineBoard({
     <div className="font-jakarta">
       <div className="flex flex-col lg:flex-row lg:items-end gap-3 mb-4">
         <div className="flex-1 min-w-0">
-          <h1 className="portal-title">Candidates</h1>
+          <h1 className="portal-title">{currentJob ? currentJob.title : 'Candidates'}</h1>
           <p className="portal-subtitle">{canMove
             ? 'Drag candidates between stages, or open one to review. Shortcuts: S shortlist, I interview, R reject, ←/→ next.'
             : 'Open a candidate to read their resume and answers, and leave notes for your team.'}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <label htmlFor="job-pick" className="sr-only">Job</label>
-          <select id="job-pick" value={jobId ?? ''} onChange={(e) => router.push(`/employer/applications${e.target.value ? `?job=${e.target.value}` : ''}`)} className={`${input} max-w-[260px]`}>
-            <option value="">All jobs ({jobs.reduce((n, j) => n + j.count, 0)})</option>
-            {jobs.map((j) => <option key={j.id} value={j.id}>{j.title} ({j.count}){j.status !== 'OPEN' ? ` · ${j.status.toLowerCase()}` : ''}</option>)}
-          </select>
           <div role="radiogroup" aria-label="View" className="inline-flex p-1 rounded-[10px] bg-gray-100 dark:bg-gray-800">
             {([['board', LayoutGrid, 'Board'], ['list', List, 'List']] as const).map(([v, Icon, l]) => (
               <button key={v} role="radio" aria-checked={view === v} onClick={() => setView(v)}
@@ -261,6 +297,29 @@ export default function PipelineBoard({
           )}
         </div>
       </div>
+
+      <nav aria-label="Roles" className="-mx-4 px-4 md:mx-0 md:px-0 mb-4 flex gap-2 overflow-x-auto snap-x [scrollbar-width:thin] pb-1">
+        {[{ id: '', title: 'All roles', status: 'OPEN', count: jobs.reduce((n, j) => n + j.count, 0), unseen: jobs.reduce((n, j) => n + (j.unseen ?? 0), 0), isGeneral: false }, ...jobs].map((j) => {
+          const on = (jobId ?? '') === j.id;
+          return (
+            <Link key={j.id || 'all'} href={`/employer/applications${j.id ? `?job=${j.id}` : ''}`} aria-current={on ? 'page' : undefined} scroll={false}
+              className={`snap-start shrink-0 inline-flex items-center gap-1.5 min-h-[40px] px-3.5 rounded-full border text-sm font-semibold whitespace-nowrap transition-colors ${on
+                ? 'bg-gray-900 border-gray-900 text-white dark:bg-white dark:border-white dark:text-gray-900'
+                : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-800 dark:text-gray-200 hover:border-gray-400'}`}>
+              {j.isGeneral && <Inbox className="w-3.5 h-3.5" aria-hidden />}
+              <span className="max-w-[220px] truncate">{j.title}</span>
+              <span className={`tabular-nums ${on ? 'opacity-80' : 'text-gray-500'}`}>{j.count.toLocaleString('en-IN')}</span>
+              {(j.unseen ?? 0) > 0 && <span className={`text-[11px] font-bold px-1.5 rounded-full ${on ? 'bg-white/20' : 'bg-[#A50F15]/10 text-[#A50F15]'}`}>{j.unseen} new</span>}
+              {STATUS_NOTE[j.status] && <span className={`text-[11px] font-medium ${on ? 'opacity-70' : 'text-gray-400'}`}>{STATUS_NOTE[j.status]}</span>}
+            </Link>
+          );
+        })}
+      </nav>
+      {currentJob?.isGeneral && (
+        <p className="mb-4 -mt-1 text-sm text-gray-600 dark:text-gray-400">
+          People who applied without picking a role. Open one and use <span className="font-semibold text-gray-800 dark:text-gray-200">Move to a role</span> when you have a fitting opening.
+        </p>
+      )}
 
       {ai.enabled ? (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3 px-3 py-2 rounded-[12px] bg-violet-50/60 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900/50 text-sm">
@@ -372,7 +431,7 @@ export default function PipelineBoard({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {ordered.map((c) => (
+              {ordered.slice(0, limitOf('list')).map((c) => (
                 <tr key={c.id} className={c.withdrawn ? 'opacity-60' : ''}>
                   <td className="pl-4 py-2.5">{selectable && <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} aria-label={`Select ${c.fullName}`} className="w-4 h-4 accent-[#A50F15]" />}</td>
                   <td className="px-3 py-2.5">
@@ -381,7 +440,7 @@ export default function PipelineBoard({
                     </button>
                     <span className="block text-xs text-gray-500">{[c.currentTitle, c.currentCompany].filter(Boolean).join(' at ')}</span>
                   </td>
-                  <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{c.jobTitle}</td>
+                  <td className="px-3 py-2.5"><span className={`text-[12px] font-semibold px-1.5 py-0.5 rounded ${c.isGeneral ? GENERAL_TONE : roleTone(c.listingId)}`}>{c.jobTitle}</span>{c.otherRoles > 0 && <span className="ml-1 text-[11.5px] text-gray-500">+{c.otherRoles}</span>}</td>
                   <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{c.withdrawn ? 'Withdrawn' : [...COLUMNS, REJECTED].find((col) => (col.statuses as readonly string[]).includes(c.status))?.label}</td>
                   <td className="px-3 py-2.5"><MatchBadge m={c.match} /></td>
                   {ai.enabled && <td className="px-3 py-2.5"><AiBadge a={c.ai} /></td>}
@@ -394,6 +453,13 @@ export default function PipelineBoard({
               ))}
             </tbody>
           </table>
+          {ordered.length > limitOf('list') && (
+            <div className="p-3 border-t border-gray-100 dark:border-gray-800 text-center">
+              <button type="button" onClick={() => showMore('list')} className="min-h-[40px] px-4 rounded-[10px] border border-gray-300 dark:border-gray-700 text-sm font-semibold text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800">
+                Show {Math.min(PAGE, ordered.length - limitOf('list'))} more · {ordered.length - limitOf('list')} left
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -419,6 +485,11 @@ export default function PipelineBoard({
         </div>
       )}
 
+      {filled.length > 0 && (
+        <FilledPrompt key={filled.map((f) => f.id).join()} jobs={filled}
+          onDone={(m) => { setFilled([]); if (m) { setToast(m); router.refresh(); } }} />
+      )}
+
       {openId && (
         <CandidatePanel
           id={openId}
@@ -432,6 +503,17 @@ export default function PipelineBoard({
           onAiChanged={(id, a) => setCards((cs) => cs.map((c) => (c.id === id ? { ...c, ai: a ? { status: a.status, fitScore: a.fitScore, recommendation: a.recommendation } : null } : c)))}
           onSeen={(id) => setCards((cs) => cs.map((c) => (c.id === id && c.status === 'APPLIED' ? { ...c, status: 'REVIEWED' } : c)))}
           onNoteAdded={(id) => setCards((cs) => cs.map((c) => (c.id === id ? { ...c, noteCount: c.noteCount + 1 } : c)))}
+          onOpenOther={(other) => (cards.some((c) => c.id === other) ? setOpenId(other) : router.push(`/employer/applications?candidate=${other}`))}
+          moveTargets={canMove ? moveTargets : []}
+          onMovedToJob={canMove ? (id, job) => {
+            setToast(`Moved to ${job.title}.`);
+            // On the General applications tab they leave this list; elsewhere the card just shows its new role.
+            setCards((cs) => (currentJob?.isGeneral
+              ? cs.filter((c) => c.id !== id)
+              : cs.map((c) => (c.id === id ? { ...c, listingId: job.id, jobTitle: job.title, isGeneral: false } : c))));
+            if (currentJob?.isGeneral) setOpenId(null);
+            router.refresh();
+          } : undefined}
         />
       )}
 

@@ -56,7 +56,7 @@ export async function searchJobs(filters: JobSearchFilters, { limit = 15, offset
                jl."salaryMin", jl."salaryMax", jl."salaryCurrency", jl."showSalary",
                jl."experienceMin", jl."experienceMax", jl.skills,
                jl."isFeatured", jl."listingTier", jl."visaSponsorship",
-               jl."publishedAt"::text, jl."viewsCount", jl."employmentType",
+               jl."publishedAt"::text, jl."viewsCount", jl."employmentType", jl.positions,
                e."companyName", e.slug AS "companySlug", e."logoUrl",
                ROW_NUMBER() OVER (
                  PARTITION BY jl."employerId"
@@ -72,7 +72,7 @@ export async function searchJobs(filters: JobSearchFilters, { limit = 15, offset
              "salaryMin", "salaryMax", "salaryCurrency", "showSalary",
              "experienceMin", "experienceMax", skills,
              "isFeatured", "listingTier", "visaSponsorship",
-             "publishedAt", "viewsCount", "employmentType",
+             "publishedAt", "viewsCount", "employmentType", positions,
              "companyName", "companySlug", "logoUrl"
       FROM ranked
       ORDER BY "isFeatured" DESC, company_rank,

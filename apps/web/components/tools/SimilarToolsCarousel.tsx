@@ -46,7 +46,7 @@ export default function SimilarToolsCarousel({ tools, categoryName, categorySlug
     <div className="mt-12 pt-8 border-t border-gray-200 dark:border-gray-800">
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h2 className="font-sora font-bold text-xl text-navy dark:text-white">Similar Tools</h2>
+          <h2 className="font-sora font-bold text-base sm:text-xl text-navy dark:text-white">Similar tools</h2>
           <p className="text-xs text-gray-400 font-jakarta mt-0.5">
             {categoryName ? `More ${categoryName} tools you might like` : 'Top-rated tools you might like'}
           </p>
@@ -72,8 +72,7 @@ export default function SimilarToolsCarousel({ tools, categoryName, categorySlug
         style={{ scrollSnapType: 'x mandatory' }}
       >
         {tools.map((tool) => {
-          const logo = tool.logoUrl ||
-            `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${tool.websiteUrl}&size=64`;
+          const logo = tool.logoUrl;
           const rating = tool.avgRating ? parseFloat(tool.avgRating) : null;
           const pricingColor = PRICING_COLORS[tool.pricingModel?.toUpperCase()] || PRICING_COLORS.PAID;
 
@@ -87,7 +86,9 @@ export default function SimilarToolsCarousel({ tools, categoryName, categorySlug
               {/* Logo + rating row */}
               <div className="flex items-start justify-between gap-2 mb-3">
                 <div className="w-11 h-11 rounded-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 overflow-hidden shadow-sm shrink-0">
-                  <Image src={logo} alt={tool.name} className="w-full h-full object-cover" width={44} height={44} sizes="44px" />
+                  {logo
+                    ? <Image src={logo} alt={tool.name} className="w-full h-full object-cover" width={44} height={44} sizes="44px" />
+                    : <span className="w-full h-full flex items-center justify-center text-sm font-bold text-brand">{tool.name.charAt(0).toUpperCase()}</span>}
                 </div>
                 {rating && rating > 0 && (
                   <span className="flex items-center gap-0.5 shrink-0">

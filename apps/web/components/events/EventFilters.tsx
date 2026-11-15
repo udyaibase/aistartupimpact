@@ -1,9 +1,19 @@
 'use client';
 
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import { useState, useCallback } from 'react';
-import { clsx } from 'clsx';
-import { SlidersHorizontal, X, ChevronDown } from 'lucide-react';
+import { useState, useCallback, useEffect, useTransition } from 'react';
+import { X, ChevronDown, Loader2 } from 'lucide-react';
+import BottomSheet from '@/components/ui/BottomSheet';
+import FilterList, { type FilterRow } from '@/components/ui/FilterList';
+
+/** The filter button sits in the sticky search bar (EventSearchBar) and opens this sheet. */
+export const EVENTS_OPEN_FILTERS = 'events:open-filters';
+
+const SORTS = [
+  { value: 'soonest', label: 'Soonest first' },
+  { value: 'popular', label: 'Most popular' },
+  { value: 'newest', label: 'Recently added' },
+];
 
 const CATEGORIES = [
   { value: 'all', label: 'All events' },
@@ -33,7 +43,6 @@ const TIMEFRAMES = [
 ];
 
 const DESKTOP_CATS_SHOWN = 6;
-const MOBILE_CATS_SHOWN = 4;
 
 interface EventFiltersProps {
   currentCategory?: string;
@@ -52,16 +61,27 @@ export default function EventFilters({
   const searchParams = useSearchParams();
   const [showAllCats, setShowAllCats] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [updating, startUpdate] = useTransition();
+
+  useEffect(() => {
+    const open = () => setMobileOpen(true);
+    window.addEventListener(EVENTS_OPEN_FILTERS, open);
+    return () => window.removeEventListener(EVENTS_OPEN_FILTERS, open);
+  }, []);
 
   const setFilter = useCallback((key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString());
-    if (value === 'all' || !value) params.delete(key);
+    // Time defaults to "upcoming", so "Any time" has to be written out, or it would quietly mean upcoming again.
+    if (key === 'timeframe') {
+      if (!value || value === 'upcoming') params.delete(key);
+      else params.set(key, value);
+    } else if (value === 'all' || !value) params.delete(key);
     else params.set(key, value);
-    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    startUpdate(() => router.push(`${pathname}?${params.toString()}`, { scroll: false }));
   }, [router, pathname, searchParams]);
 
   const clearAll = useCallback(() => {
-    router.push(pathname, { scroll: false });
+    startUpdate(() => router.push(pathname, { scroll: false }));
   }, [router, pathname]);
 
   const activeFilterCount = [
@@ -77,12 +97,21 @@ export default function EventFilters({
   if (currentFormat && currentFormat !== 'all') {
     activeFilters.push({ key: 'format', label: FORMATS.find(f => f.value === currentFormat)?.label || currentFormat });
   }
+  if (currentTimeframe && currentTimeframe !== 'upcoming') {
+    activeFilters.push({ key: 'timeframe', label: TIMEFRAMES.find(t => t.value === currentTimeframe)?.label || currentTimeframe });
+  }
+
+  const noAll = (list: { value: string; label: string }[]) => list.map(o => (o.value === 'all' ? { ...o, value: '' } : o));
+  const sheetRows: FilterRow[] = [
+    { key: 'sort', label: 'Sort by', options: SORTS, value: currentSort || 'soonest', defaultValue: 'soonest', onChange: v => setFilter('sort', v === 'soonest' ? '' : v) },
+    { key: 'timeframe', label: 'When', options: TIMEFRAMES, value: currentTimeframe || 'upcoming', defaultValue: 'upcoming', onChange: v => setFilter('timeframe', v) },
+    { key: 'category', label: 'Category', options: noAll(CATEGORIES), value: currentCategory && currentCategory !== 'all' ? currentCategory : '', onChange: v => setFilter('category', v) },
+    { key: 'format', label: 'Format', options: noAll(FORMATS), value: currentFormat && currentFormat !== 'all' ? currentFormat : '', onChange: v => setFilter('format', v) },
+  ];
 
   const desktopCats = showAllCats ? CATEGORIES : CATEGORIES.slice(0, DESKTOP_CATS_SHOWN);
   const desktopHidden = CATEGORIES.length - DESKTOP_CATS_SHOWN;
 
-  const mobileCats = showAllCats ? CATEGORIES.filter(c => c.value !== 'all') : CATEGORIES.filter(c => c.value !== 'all').slice(0, MOBILE_CATS_SHOWN);
-  const mobileHidden = CATEGORIES.filter(c => c.value !== 'all').length - MOBILE_CATS_SHOWN;
 
   const SECTION = "text-[11px] font-bold font-jakarta text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3";
   const RADIO = "w-4 h-4 accent-gray-900 dark:accent-white border-gray-300 dark:border-gray-600 cursor-pointer";
@@ -147,130 +176,42 @@ export default function EventFilters({
         </div>
       </aside>
 
-      {/* ─── MOBILE: filter row + bottom sheet ─── */}
+      {/* ─── MOBILE: active filters + count (the Filters button is in the sticky search bar) ─── */}
       <div className="lg:hidden">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
-            <button
-              onClick={() => setMobileOpen(o => !o)}
-              className={clsx(
-                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-jakarta font-semibold shrink-0 transition-colors',
-                activeFilterCount > 0
-                  ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-              )}
-            >
-              <SlidersHorizontal className="w-3 h-3" />
-              Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
-            </button>
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 [&>*]:shrink-0">
             {activeFilters.map(f => (
               <button
                 key={f.key}
                 onClick={() => setFilter(f.key, '')}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-jakarta font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 shrink-0"
+                aria-label={`Remove filter: ${f.label}`}
+                className="inline-flex items-center gap-1 h-8 px-2.5 rounded-full text-[13px] font-jakarta font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300"
               >
-                {f.label} <X className="w-3 h-3 text-gray-400" />
+                {f.label} <X className="w-3 h-3 text-gray-400" aria-hidden />
               </button>
             ))}
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta shrink-0">
-            <span className="font-bold text-navy dark:text-white">{total}</span> events
+          <p className="text-[13px] text-gray-500 dark:text-gray-400 font-jakarta shrink-0">
+            <span className="font-semibold text-navy dark:text-white">{total}</span> {total === 1 ? 'event' : 'events'}
           </p>
         </div>
 
-        {mobileOpen && (
-          <div className="fixed inset-0 z-50">
-            <div className="absolute inset-0 bg-black/30" onClick={() => setMobileOpen(false)} />
-            <div className="absolute bottom-16 left-0 right-0 bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl animate-slide-up" style={{ maxHeight: '45vh' }}>
-              <button onClick={() => setMobileOpen(false)} className="w-full flex justify-center pt-2.5 pb-1">
-                <div className="w-9 h-1 rounded-full bg-gray-300 dark:bg-gray-600" />
-              </button>
-              <div className="flex items-center justify-between px-4 pb-2">
-                <h3 className="font-sora font-bold text-sm text-navy dark:text-white">Filters</h3>
-                {activeFilterCount > 0 && (
-                  <button onClick={clearAll} className="text-xs font-semibold font-jakarta text-brand">Clear all</button>
-                )}
-              </div>
-              <div className="overflow-y-auto px-4 pb-3" style={{ maxHeight: 'calc(45vh - 5rem)' }}>
-                {/* WHEN */}
-                <div>
-                  <h4 className="text-[10px] font-bold font-jakarta text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">When</h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {TIMEFRAMES.map(tf => (
-                      <button
-                        key={tf.value}
-                        onClick={() => setFilter('timeframe', tf.value)}
-                        className={clsx(
-                          'px-3 py-1.5 rounded-full text-xs font-jakarta font-medium transition-colors',
-                          (currentTimeframe || 'upcoming') === tf.value
-                            ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
-                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-                        )}
-                      >
-                        {tf.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* CATEGORY */}
-                <div className="mt-3">
-                  <h4 className="text-[10px] font-bold font-jakarta text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Category</h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {mobileCats.map(cat => (
-                      <button
-                        key={cat.value}
-                        onClick={() => setFilter('category', cat.value)}
-                        className={clsx(
-                          'px-3 py-1.5 rounded-full text-xs font-jakarta font-medium transition-colors',
-                          currentCategory === cat.value
-                            ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
-                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-                        )}
-                      >
-                        {cat.label}
-                      </button>
-                    ))}
-                    {!showAllCats && mobileHidden > 0 && (
-                      <button onClick={() => setShowAllCats(true)} className="px-3 py-1.5 rounded-full text-xs font-jakarta font-medium bg-gray-100 dark:bg-gray-800 text-gray-500">
-                        +{mobileHidden} more
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* FORMAT */}
-                <div className="mt-3">
-                  <h4 className="text-[10px] font-bold font-jakarta text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Format</h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {FORMATS.map(fmt => (
-                      <button
-                        key={fmt.value}
-                        onClick={() => setFilter('format', fmt.value)}
-                        className={clsx(
-                          'px-3 py-1.5 rounded-full text-xs font-jakarta font-medium transition-colors',
-                          (currentFormat || 'all') === fmt.value
-                            ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
-                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-                        )}
-                      >
-                        {fmt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div className="px-4 pb-5 pt-2 border-t border-gray-100 dark:border-gray-800">
-                <button
-                  onClick={() => setMobileOpen(false)}
-                  className="w-full py-2.5 rounded-lg bg-brand text-white font-sora font-bold text-xs"
-                >
-                  Show {total} events
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <BottomSheet
+          open={mobileOpen}
+          onClose={() => setMobileOpen(false)}
+          title="Filters"
+          flush
+          headerAction={(activeFilterCount > 0 || (currentSort && currentSort !== 'soonest')) ? (
+            <button type="button" onClick={clearAll} className="min-h-[44px] px-2 text-sm font-semibold text-brand font-jakarta">Clear all</button>
+          ) : null}
+          footer={(
+            <button type="button" onClick={() => setMobileOpen(false)} className="w-full min-h-[48px] rounded-xl bg-brand text-white font-jakarta font-bold text-[15px] inline-flex items-center justify-center gap-2 active:scale-[0.98] transition-transform duration-150 motion-reduce:transition-none">
+              {updating ? <><Loader2 className="w-4 h-4 animate-spin" aria-hidden /> Finding events</> : `Show ${total} ${total === 1 ? 'event' : 'events'}`}
+            </button>
+          )}
+        >
+          <FilterList sheetOpen={mobileOpen} rows={sheetRows} />
+        </BottomSheet>
       </div>
     </>
   );

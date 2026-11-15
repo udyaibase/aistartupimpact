@@ -4,7 +4,7 @@ import { prisma } from '@udyaibase/database';
 import { verifyTurnstileToken } from '@/lib/turnstile';
 import { checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 import { resumeUploadRateLimit } from '@/lib/event-rate-limit';
-import { publicListingWhere } from '@/lib/jobs/public';
+import { applyableListingWhere } from '@/lib/jobs/public';
 import { hashIp, signApplySession } from '@/lib/jobs/apply-session';
 import { putResume, resumeStorageReady } from '@/lib/jobs/resume-storage';
 import { MAX_RESUME_BYTES, sniffResume } from '@/lib/jobs/resume-text';
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
   if (file.size > MAX_RESUME_BYTES) return NextResponse.json({ error: 'Resume must be 5 MB or smaller.' }, { status: 413 });
 
   const listing = await prisma.jobBoardListing.findFirst({
-    where: { ...publicListingWhere(), slug, applicationType: 'INTERNAL' },
+    where: { ...applyableListingWhere(), slug, applicationType: 'INTERNAL' },
     select: { id: true },
   });
   if (!listing) return NextResponse.json({ error: 'This job is no longer accepting applications.' }, { status: 404 });

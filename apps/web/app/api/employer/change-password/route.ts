@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { passwordProblem } from "@/lib/password-rules";
 import { prisma } from '@udyaibase/database';
 import bcrypt from 'bcryptjs';
 import { requireEmployerAuth, sessionCutoff, setEmployerSession } from '@/lib/employer-auth';
@@ -27,6 +28,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: validation.error }, { status: 400 });
     }
     const { currentPassword, newPassword } = validation.data;
+    const pwProblem = passwordProblem(newPassword, null, 'mixed'); // also rejects common passwords
+    if (pwProblem) return NextResponse.json({ success: false, error: pwProblem }, { status: 400 });
 
     const employer = await prisma.jobBoardEmployer.findUnique({
       where: { id: session.id },

@@ -1,3 +1,4 @@
+import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 import { sql } from '@/lib/db';
@@ -9,7 +10,7 @@ import { logEmployerActivity } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 
-const CHALLENGE_SECRET = new TextEncoder().encode(process.env.EMPLOYER_JWT_SECRET || process.env.USER_JWT_SECRET!);
+const CHALLENGE_SECRET = jwtSecret(process.env.EMPLOYER_JWT_SECRET || process.env.USER_JWT_SECRET, 'EMPLOYER_JWT_SECRET');
 
 export async function POST(request: NextRequest) {
   try {

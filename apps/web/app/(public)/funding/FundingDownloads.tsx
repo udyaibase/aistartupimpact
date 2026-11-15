@@ -140,6 +140,26 @@ function Consent({ checked, onChange }: { checked: boolean; onChange: (v: boolea
   );
 }
 
+/** Paid checkout: the terms are required, the newsletter is a separate choice that is off unless ticked. */
+function PaidConsent({ terms, onTerms, newsletter, onNewsletter }: { terms: boolean; onTerms: (v: boolean) => void; newsletter: boolean; onNewsletter: (v: boolean) => void }) {
+  const box = "mt-0.5 w-4 h-4 rounded border-gray-300 text-brand focus:ring-brand shrink-0";
+  return (
+    <div className="space-y-2">
+      <label className="flex items-start gap-2.5 cursor-pointer">
+        <input type="checkbox" checked={terms} onChange={(e) => onTerms(e.target.checked)} required className={box} />
+        <span className="text-sm text-gray-600 dark:text-gray-400">
+          I agree to the <a href="/terms" target="_blank" className="text-brand hover:underline">Terms</a> and{' '}
+          <a href="/privacy" target="_blank" className="text-brand hover:underline">Privacy Policy</a>.
+        </span>
+      </label>
+      <label className="flex items-start gap-2.5 cursor-pointer">
+        <input type="checkbox" checked={newsletter} onChange={(e) => onNewsletter(e.target.checked)} className={box} />
+        <span className="text-sm text-gray-600 dark:text-gray-400">Also send me the Udyaibase newsletter (optional). I can unsubscribe at any time.</span>
+      </label>
+    </div>
+  );
+}
+
 // ── Multi-select with search (sectors, stages, cities) ──────────────────────
 
 function MultiPick({ label, options, value, onChange }: { label: string; options: Facet[]; value: string[]; onChange: (v: string[]) => void }) {
@@ -186,6 +206,7 @@ export default function FundingDownloads() {
   const [mode, setMode] = useState<null | 'free' | 'paid'>(null);
   const [verified, setVerified] = useState<{ pass: string; email: string } | null>(null);
   const [consent, setConsent] = useState(false);
+  const [newsletter, setNewsletter] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -273,7 +294,7 @@ export default function FundingDownloads() {
     const billing = billingType === 'GST'
       ? { billingType, billingName, billingGstin: gstin, billingAddressLine1: addressLine1, billingCity: city, billingPostalCode: pin }
       : { billingType, billingName, billingState };
-    const r = await post('/api/funding-data/checkout', { pass: verified.pass, consent, pack, filters, billing });
+    const r = await post('/api/funding-data/checkout', { pass: verified.pass, consent, newsletter, pack, filters, billing });
     if (r.status === 401) { setBusy(false); return passExpired(); }
     if (!r.ok) { setBusy(false); return setError(r.data.error || 'Couldn’t start the payment.'); }
     const outcome = await payWithRazorpay(r.data, '/api/funding-data/verify');
@@ -475,7 +496,7 @@ export default function FundingDownloads() {
                       {Object.entries(GST_STATES).sort((a, b) => a[1].localeCompare(b[1])).map(([code, name]) => <option key={code} value={code}>{name}</option>)}
                     </select>
                   )}
-                  <Consent checked={consent} onChange={setConsent} />
+                  <PaidConsent terms={consent} onTerms={setConsent} newsletter={newsletter} onNewsletter={setNewsletter} />
                   {error && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>}
                   <button type="submit" disabled={!consent || busy || !selected || (billingType === 'GST' && !gstinValid)} className="btn-brand w-full justify-center gap-2 disabled:opacity-60">
                     {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />} Pay {selected ? rupees(selected.totalPaise) : ''}

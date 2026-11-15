@@ -6,7 +6,7 @@ import { GSTIN_RE, gstinChecksumValid } from '@/lib/billing/details';
 import { GST_STATES } from '@/lib/billing/gst-states';
 import { verifyEmailPass } from '@/lib/funding/access';
 import { loadDataset, selectStartups } from '@/lib/funding/dataset';
-import { CONSENT_TEXT, isPackKey, packOptions, PACKS, parseFilters, splitInclusive, type PackKey } from '@/lib/funding/packs';
+import { CONSENT_TEXT, TERMS_TEXT, isPackKey, packOptions, PACKS, parseFilters, splitInclusive, type PackKey } from '@/lib/funding/packs';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,7 +42,7 @@ function parseBilling(raw: unknown): { ok: true; data: Billing } | { ok: false; 
 
 /**
  * Create the Razorpay order for a funding-data pack. Needs a verified email (pass from the code check) and the
- * consent box. The price comes from the pack on the server, and the pack must make sense for the filters
+ * terms box (the newsletter box is optional). The price comes from the pack on the server, and the pack must make sense for the filters
  * (no paying for a 1,000-startup pack when 300 match).
  */
 export async function POST(request: NextRequest) {
@@ -73,7 +73,8 @@ export async function POST(request: NextRequest) {
         email, pack: pack.key, startupLimit: pack.limit, filters: filters as object, matchedAtPurchase: pack.key === 'FULL' ? all.length : matched,
         amountPaise: price.amount, gstPaise: price.gst, totalPaise: price.total, razorpayOrderId: orderId,
         billingDetails: { ...billing.data, billingCountry: 'IN', billingEmail: email },
-        consentAt: new Date(), consentText: CONSENT_TEXT,
+        // The wording kept is what the buyer agreed to: with the newsletter only if they ticked that box too.
+        consentAt: new Date(), consentText: body.newsletter === true ? CONSENT_TEXT : TERMS_TEXT,
       },
     });
     return NextResponse.json({

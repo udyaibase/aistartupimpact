@@ -9,6 +9,7 @@ const mockPrisma = {
     findFirst: vi.fn(),
     update: vi.fn(),
   },
+  $queryRaw: vi.fn(),
 };
 
 vi.mock('@udyaibase/database', () => ({
@@ -99,107 +100,70 @@ describe('otp-flow', () => {
   });
 
   describe('verifyOtp', () => {
-    function hashCode(code: string): string {
-      return crypto.createHash('sha256').update(code).digest('hex');
-    }
+    const hash = (code: string) => crypto.createHash('sha256').update(code).digest('hex');
 
-    it('verifies correct code', async () => {
-      const code = '123456';
-      mockPrisma.emailOtp.findFirst.mockResolvedValue({
-        id: 'otp-1',
-        code: hashCode(code),
-        attempts: 0,
-        verified: false,
-        expiresAt: new Date(Date.now() + 600000),
-      });
-      mockPrisma.emailOtp.update.mockResolvedValue({});
+    it('verifies correct code, marks it used once and gives the attempt back', async () => {
+      mockPrisma.$queryRaw.mockResolvedValue([{ id: 'otp-1', attempts: 1, code: hash('123456') }]);
+      mockPrisma.emailOtp.updateMany.mockResolvedValue({ count: 1 });
 
       const { verifyOtp } = await import('@/lib/otp');
-      const result = await verifyOtp('user@example.com', code);
-      expect(result.valid).toBe(true);
+      expect(await verifyOtp('test@example.com', '123456')).toEqual({ valid: true });
+      expect(mockPrisma.emailOtp.updateMany).toHaveBeenCalledWith({
+        where: { id: 'otp-1', verified: false },
+        data: { verified: true, attempts: { decrement: 1 } },
+      });
     });
 
-    it('rejects wrong code and increments attempts', async () => {
-      mockPrisma.emailOtp.findFirst.mockResolvedValue({
-        id: 'otp-1',
-        code: hashCode('123456'),
-        attempts: 0,
-        verified: false,
-        expiresAt: new Date(Date.now() + 600000),
-      });
-      mockPrisma.emailOtp.update.mockResolvedValue({});
+    it('rejects a correct code that was already used by a request sent at the same moment', async () => {
+      mockPrisma.$queryRaw.mockResolvedValue([{ id: 'otp-1', attempts: 1, code: hash('123456') }]);
+      mockPrisma.emailOtp.updateMany.mockResolvedValue({ count: 0 });
 
       const { verifyOtp } = await import('@/lib/otp');
-      const result = await verifyOtp('user@example.com', '000000');
-      expect(result.valid).toBe(false);
-      expect(result.error).toContain('Incorrect code');
-      expect(result.error).toContain('2 attempts remaining');
+      expect((await verifyOtp('test@example.com', '123456')).valid).toBe(false);
+    });
 
-      expect(mockPrisma.emailOtp.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ attempts: 1 }),
-        })
-      );
+    it('rejects wrong code and says how many attempts are left', async () => {
+      // The attempt was taken in the same statement that read the code: attempts is already 1.
+      mockPrisma.$queryRaw.mockResolvedValue([{ id: 'otp-1', attempts: 1, code: hash('123456') }]);
+
+      const { verifyOtp } = await import('@/lib/otp');
+      const result = await verifyOtp('test@example.com', '000000');
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('2 attempts remaining');
+      expect(mockPrisma.emailOtp.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('takes the attempt and reads the code in one statement, limited to 3 attempts', async () => {
+      mockPrisma.$queryRaw.mockResolvedValue([]);
+      mockPrisma.emailOtp.updateMany.mockResolvedValue({ count: 0 });
+
+      const { verifyOtp } = await import('@/lib/otp');
+      await verifyOtp('Test@Example.COM', '123456');
+      const [strings, ...values] = mockPrisma.$queryRaw.mock.calls[0];
+      const text = (strings as string[]).join('?');
+      expect(text).toContain('SET attempts = attempts + 1');
+      expect(text).toContain('attempts < ?');
+      expect(values).toEqual(['test@example.com', 'signup', 3]); // lowercased email, purpose, limit
     });
 
     it('locks out after max attempts', async () => {
-      mockPrisma.emailOtp.findFirst.mockResolvedValue({
-        id: 'otp-1',
-        code: hashCode('123456'),
-        attempts: 3, // MAX_ATTEMPTS
-        verified: false,
-        expiresAt: new Date(Date.now() + 600000),
-      });
-      mockPrisma.emailOtp.update.mockResolvedValue({});
+      mockPrisma.$queryRaw.mockResolvedValue([]); // no code with attempts left
+      mockPrisma.emailOtp.updateMany.mockResolvedValue({ count: 1 }); // a used-up code was retired
 
       const { verifyOtp } = await import('@/lib/otp');
-      const result = await verifyOtp('user@example.com', '123456');
+      const result = await verifyOtp('test@example.com', '123456');
       expect(result.valid).toBe(false);
       expect(result.error).toContain('Too many incorrect attempts');
     });
 
     it('returns error for expired/not found OTP', async () => {
-      mockPrisma.emailOtp.findFirst.mockResolvedValue(null);
+      mockPrisma.$queryRaw.mockResolvedValue([]);
+      mockPrisma.emailOtp.updateMany.mockResolvedValue({ count: 0 });
 
       const { verifyOtp } = await import('@/lib/otp');
-      const result = await verifyOtp('user@example.com', '123456');
+      const result = await verifyOtp('test@example.com', '123456');
       expect(result.valid).toBe(false);
-      expect(result.error).toContain('expired');
-    });
-
-    it('lowercases email for lookup', async () => {
-      mockPrisma.emailOtp.findFirst.mockResolvedValue(null);
-
-      const { verifyOtp } = await import('@/lib/otp');
-      await verifyOtp('User@EXAMPLE.com', '123456');
-
-      expect(mockPrisma.emailOtp.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({ email: 'user@example.com' }),
-        })
-      );
-    });
-
-    it('marks OTP as verified on success', async () => {
-      const code = '654321';
-      mockPrisma.emailOtp.findFirst.mockResolvedValue({
-        id: 'otp-2',
-        code: hashCode(code),
-        attempts: 0,
-        verified: false,
-        expiresAt: new Date(Date.now() + 600000),
-      });
-      mockPrisma.emailOtp.update.mockResolvedValue({});
-
-      const { verifyOtp } = await import('@/lib/otp');
-      await verifyOtp('user@example.com', code);
-
-      expect(mockPrisma.emailOtp.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 'otp-2' },
-          data: expect.objectContaining({ verified: true }),
-        })
-      );
+      expect(result.error).toContain('expired or not found');
     });
   });
 });

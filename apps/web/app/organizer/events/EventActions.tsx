@@ -6,6 +6,8 @@ import Link from "next/link";
 import { MoreVertical, Edit, Trash2, Share2, ExternalLink, Copy, Check, CodeXml, Send, EyeOff, Loader2 } from "lucide-react";
 
 interface Props {
+  /** What this person's role can do; defaults to everything (owner). The API checks the same rules. */
+  allowed?: { edit: boolean; del: boolean; promote: boolean; download: boolean; embed: boolean };
   eventId: string;
   eventSlug: string;
   eventTitle: string;
@@ -14,7 +16,9 @@ interface Props {
   registrationCount: number;
 }
 
-export default function EventActions({ eventId, eventSlug, eventTitle, shortCode, status, registrationCount }: Props) {
+const ALL = { edit: true, del: true, promote: true, download: true, embed: true };
+
+export default function EventActions({ eventId, eventSlug, eventTitle, shortCode, status, registrationCount, allowed = ALL }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
@@ -130,35 +134,45 @@ export default function EventActions({ eventId, eventSlug, eventTitle, shortCode
             <a href={`/events/${eventSlug}`} target="_blank" rel="noopener" className="flex items-center gap-2.5 px-4 min-h-[44px] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 font-jakarta transition-colors">
               <ExternalLink className="w-3.5 h-3.5 text-gray-400" /> View Public Page
             </a>
+            {allowed.edit && (
             <Link href={`/organizer/events/${eventId}`} onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-4 min-h-[44px] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 font-jakarta transition-colors">
               <Edit className="w-3.5 h-3.5 text-gray-400" /> Edit Event
             </Link>
+            )}
+            {allowed.promote && (
             <Link href={`/organizer/promote?event=${eventId}`} onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-4 min-h-[44px] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 font-jakarta transition-colors">
               <Share2 className="w-3.5 h-3.5 text-gray-400" /> Promote Event
             </Link>
-            {isDraft && (
+            )}
+            {isDraft && allowed.edit && (
               <button onClick={() => changeStatus("PUBLISHED")} className="w-full flex items-center gap-2.5 px-4 min-h-[44px] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 font-jakarta transition-colors">
                 <Send className="w-3.5 h-3.5 text-gray-400" /> Publish
               </button>
             )}
-            {isPublished && (
+            {isPublished && allowed.edit && (
               <button onClick={() => { setOpen(false); setShowUnpublish(true); }} className="w-full flex items-center gap-2.5 px-4 min-h-[44px] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 font-jakarta transition-colors">
                 <EyeOff className="w-3.5 h-3.5 text-gray-400" /> Unpublish
               </button>
             )}
+            {allowed.download && (
             <a href={`/api/organizer/attendees?eventId=${eventId}`} download className="flex items-center gap-2.5 px-4 min-h-[44px] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 font-jakarta transition-colors">
               <Copy className="w-3.5 h-3.5 text-gray-400" /> Download Attendees
             </a>
+            )}
             <button onClick={() => { setShowShare(true); setOpen(false); }} className="w-full flex items-center gap-2.5 px-4 min-h-[44px] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 font-jakarta transition-colors">
               <Share2 className="w-3.5 h-3.5 text-gray-400" /> Share Event
             </button>
+            {allowed.embed && (
             <Link href={`/organizer/embed?event=${eventId}`} onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-4 min-h-[44px] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 font-jakarta transition-colors">
               <CodeXml className="w-3.5 h-3.5 text-gray-400" /> Embed on website
             </Link>
+            )}
+            {allowed.del && (<>
             <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
             <button onClick={() => { setShowDelete(true); setOpen(false); }} className="w-full flex items-center gap-2.5 px-4 min-h-[44px] text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/10 font-jakarta transition-colors">
               <Trash2 className="w-3.5 h-3.5" /> Delete Event
             </button>
+            </>)}
           </div>
         </>
       )}

@@ -65,3 +65,12 @@ describe('tool submission', () => {
     expect(toolSubmissionSchema.safeParse({ ...tool, screenshotUrls: ['data:image/png;base64,x'] }).success).toBe(false);
   });
 });
+
+describe('startup description limit', () => {
+  it('allows up to 1,000 characters and refuses more', () => {
+    expect(startupSubmissionSchema.safeParse({ ...startup, description: 'a'.repeat(1000) }).success).toBe(true);
+    const over = startupSubmissionSchema.safeParse({ ...startup, description: 'a'.repeat(1001) });
+    expect(over.success).toBe(false);
+    expect(message(over as never)).toBe('Description must be 1,000 characters or fewer');
+  });
+});

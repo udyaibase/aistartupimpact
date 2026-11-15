@@ -1,9 +1,11 @@
-import { getOrganizerSession } from "@/lib/organizer-auth";
+import { NextResponse } from "next/server";
+import { requirePermission, eventScope } from "@/lib/organizer-auth/require-permission";
 import { prisma } from "@udyaibase/database";
 import Image from "next/image";
 import Link from "next/link";
 import { Plus, Calendar, Users, MapPin } from "lucide-react";
 import EventActions from "./EventActions";
+import { hasPermission } from "@/lib/organizer-auth/permissions";
 import PublishedModal from "@/components/organizer/embed/PublishedModal";
 
 export const dynamic = "force-dynamic";
@@ -13,12 +15,18 @@ export default async function OrganizerEventsPage({
 }: {
   searchParams: Promise<{ published?: string; review?: string }>;
 }) {
-  const session = await getOrganizerSession();
-  if (!session) return null;
+  // The active workspace (their own, or a team they chose), with the same role rules as the API.
+  const session = await requirePermission("events.view");
+  if (session instanceof NextResponse) return session.status === 401 ? null : <p className="py-16 text-center text-sm text-gray-500 dark:text-gray-400">Your role in this workspace doesn’t include this page.</p>;
   const { published, review } = await searchParams;
+  const can = (p: Parameters<typeof hasPermission>[1]) => hasPermission(session.role, p);
+  const allowed = {
+    edit: can("events.edit"), del: can("events.delete"), promote: can("promote"),
+    download: can("registrations.view"), embed: can("embed.view"),
+  };
 
   const events = await prisma.event.findMany({
-    where: { organizerId: session.id, deletedAt: null },
+    where: { ...eventScope(session), deletedAt: null },
     orderBy: { createdAt: "desc" },
     select: {
       id: true, title: true, slug: true, shortCode: true, status: true, category: true,
@@ -30,7 +38,7 @@ export default async function OrganizerEventsPage({
   const publishedEvent = published ? events.find((e) => e.id === published && e.status === "PUBLISHED") : undefined;
   const liveWidget = publishedEvent
     ? await prisma.embedWidget.findFirst({
-        where: { organizerId: session.id, active: true, firstSeenAt: { not: null } },
+        where: { organizerId: session.organizerId, active: true, firstSeenAt: { not: null } },
         select: { firstSeenHost: true },
       })
     : null;
@@ -53,18 +61,22 @@ export default async function OrganizerEventsPage({
       )}
       <div className="flex items-center justify-between">
         <h1 className="portal-title">My Events</h1>
-        <Link data-tour="create-event" href="/organizer/events/create" className="inline-flex items-center gap-1.5 min-h-[44px] px-4 bg-brand hover:bg-brand-600 active:bg-brand-700 text-white text-sm font-bold font-jakarta rounded-lg">
-          <Plus className="w-4 h-4" /> Create Event
-        </Link>
+        {can("events.create") && (
+          <Link data-tour="create-event" href="/organizer/events/create" className="inline-flex items-center gap-1.5 min-h-[44px] px-4 bg-brand hover:bg-brand-600 active:bg-brand-700 text-white text-sm font-bold font-jakarta rounded-lg">
+            <Plus className="w-4 h-4" /> Create Event
+          </Link>
+        )}
       </div>
 
       {events.length === 0 ? (
         <div className="text-center py-16 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl">
           <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-3" />
           <p className="text-gray-500 font-jakarta mb-4">No events yet.</p>
-          <Link href="/organizer/events/create" className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand text-white font-bold font-jakarta text-sm rounded-xl">
-            <Plus className="w-4 h-4" /> Create Your First Event
-          </Link>
+          {can("events.create") && (
+            <Link href="/organizer/events/create" className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand text-white font-bold font-jakarta text-sm rounded-xl">
+              <Plus className="w-4 h-4" /> Create Your First Event
+            </Link>
+          )}
         </div>
       ) : (
         <div data-tour="events-list" className="space-y-3">
@@ -113,7 +125,7 @@ export default async function OrganizerEventsPage({
                 </div>
 
                 {/* Actions */}
-                <EventActions eventId={event.id} eventSlug={event.slug} eventTitle={event.title} shortCode={event.shortCode} status={event.status} registrationCount={event.registrationCount} />
+                <EventActions eventId={event.id} eventSlug={event.slug} eventTitle={event.title} shortCode={event.shortCode} status={event.status} registrationCount={event.registrationCount} allowed={allowed} />
               </div>
             </div>
           ))}
