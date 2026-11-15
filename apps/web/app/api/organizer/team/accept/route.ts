@@ -1,33 +1,81 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
-import { checkRateLimit, getClientIdentifier, strictRateLimit } from "@/lib/rate-limit";
+import { apiRateLimit, authRateLimit, checkRateLimit, getClientIdentifier, rateLimitMessage, retryAfterHeaders } from "@/lib/rate-limit";
 import { logOrganizerActivity } from '@/lib/workspace-activity';
 import { maskEmail } from '@/lib/mask';
+import { passwordProblem } from "@/lib/password-rules";
 
 export const dynamic = "force-dynamic";
 
+const ROLE_INFO: Record<string, { label: string; can: string }> = {
+  ADMIN: { label: "Admin", can: "Manage events, registrations and the team." },
+  MANAGER: { label: "Manager", can: "Create and edit events, and manage registrations." },
+  STAFF: { label: "Staff", can: "Help run the events you're assigned to." },
+  CHECK_IN: { label: "Check-in", can: "Check attendees in at the door for assigned events." },
+};
+
+/**
+ * What the invite page shows before accepting: who invited you, to which team, in what role, and whether you
+ * already have an organizer account (then you keep your password; there's nothing to set).
+ */
+export async function GET(request: NextRequest) {
+  // Reading the invite is harmless and happens on every page load, so it uses the normal API limit; accepting
+  // (POST) keeps the strict one.
+  const { success: rlOk, reset: rlReset } = await checkRateLimit(apiRateLimit, `organizer-invite-view:${getClientIdentifier(request)}`);
+  if (!rlOk) return NextResponse.json({ success: false, error: rateLimitMessage(rlReset) }, { status: 429, headers: retryAfterHeaders(rlReset) });
+  const token = request.nextUrl.searchParams.get("token");
+  if (!token) return NextResponse.json({ state: "invalid" }, { status: 400 });
+  const member = await prisma.eventTeamMember.findUnique({
+    where: { inviteToken: token },
+    select: { email: true, role: true, status: true, expiresAt: true, organizer: { select: { name: true, company: true } } },
+  }).catch(() => null);
+  if (!member) return NextResponse.json({ state: "invalid" });
+  if (member.status === "ACTIVE") return NextResponse.json({ state: "accepted", email: member.email });
+  if (member.expiresAt < new Date()) return NextResponse.json({ state: "expired", team: member.organizer?.company || member.organizer?.name || null });
+  const account = await prisma.eventOrganizer.findUnique({ where: { email: member.email }, select: { passwordHash: true } });
+  const role = ROLE_INFO[member.role] ?? { label: member.role, can: "" };
+  return NextResponse.json({
+    state: "pending",
+    email: member.email,
+    team: member.organizer?.company || member.organizer?.name || "an organizer team",
+    inviter: member.organizer?.name || null,
+    role: role.label,
+    roleCan: role.can,
+    hasAccount: !!account?.passwordHash,
+    expiresAt: member.expiresAt.toISOString(),
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const identifier = getClientIdentifier(request);
-    const { success: rlOk } = await checkRateLimit(strictRateLimit, identifier);
-    if (!rlOk) return NextResponse.json({ error: "Too many requests. Try again later." }, { status: 429 });
+    // Its own counter at the sign-in rate (5 per 15 minutes per IP). The shared 3-per-hour bucket blocked people
+    // after a couple of tries; the token is a long random value, so guessing isn't a risk here.
+    const identifier = `organizer-invite-accept:${getClientIdentifier(request)}`;
+    const { success: rlOk, reset: rlReset } = await checkRateLimit(authRateLimit, identifier);
+    if (!rlOk) return NextResponse.json({ success: false, error: rateLimitMessage(rlReset) }, { status: 429, headers: retryAfterHeaders(rlReset) });
 
-    const { token, password } = await request.json();
+    const body = await request.json().catch(() => ({}));
+    const { token, password } = body as { token?: unknown; password?: unknown };
+    const name = typeof body?.name === "string" ? body.name.trim().slice(0, 100) : "";
 
     if (!token || typeof token !== "string") {
       return NextResponse.json({ success: false, error: "Token required" }, { status: 400 });
-    }
-    if (!password || typeof password !== "string") {
-      return NextResponse.json({ success: false, error: "Password required" }, { status: 400 });
-    }
-    if (password.length < 8 || password.length > 128) {
-      return NextResponse.json({ success: false, error: "Password must be 8–128 characters" }, { status: 400 });
     }
 
     const member = await prisma.eventTeamMember.findUnique({
       where: { inviteToken: token },
       include: { organizer: { select: { id: true, name: true, company: true } } },
     });
+    const existingOrganizer = member ? await prisma.eventOrganizer.findUnique({ where: { email: member.email } }) : null;
+    // Someone who already has an organizer account keeps their password; a new member must set one.
+    const needsPassword = !existingOrganizer?.passwordHash;
+    if (needsPassword) {
+      if (!password || typeof password !== "string") {
+        return NextResponse.json({ success: false, error: "Set a password to continue." }, { status: 400 });
+      }
+      const problem = passwordProblem(password, member?.email, 'mixed', name);
+      if (problem) return NextResponse.json({ success: false, error: problem, field: "password" }, { status: 400 });
+    }
 
     if (!member) {
       return NextResponse.json({ success: false, error: "Invalid or expired invite" }, { status: 400 });
@@ -40,22 +88,20 @@ export async function POST(request: NextRequest) {
     }
 
     const { hash } = await import("bcryptjs");
-    const passwordHash = await hash(password, 12);
+    const passwordHash = needsPassword ? await hash(password as string, 12) : existingOrganizer!.passwordHash;
 
-    await prisma.eventTeamMember.update({
-      where: { id: member.id },
+    // Only one accept can flip a pending invite.
+    const flipped = await prisma.eventTeamMember.updateMany({
+      where: { id: member.id, status: { not: "ACTIVE" } },
       data: { status: "ACTIVE", passwordHash, acceptedAt: new Date() },
     });
-
-    const existingOrganizer = await prisma.eventOrganizer.findUnique({
-      where: { email: member.email },
-    });
+    if (!flipped.count) return NextResponse.json({ success: false, error: "Already accepted" }, { status: 400 });
 
     if (!existingOrganizer) {
       await prisma.eventOrganizer.create({
         data: {
           email: member.email,
-          name: member.email.split("@")[0],
+          name: name || member.email.split("@")[0],
           passwordHash,
           emailVerified: true,
           status: "ACTIVE",
@@ -65,12 +111,12 @@ export async function POST(request: NextRequest) {
     } else if (!existingOrganizer.passwordHash) {
       await prisma.eventOrganizer.update({
         where: { id: existingOrganizer.id },
-        data: { passwordHash },
+        data: { passwordHash, ...(name ? { name } : {}) },
       });
     }
 
     await logOrganizerActivity(member.organizerId, 'team_invite_accepted', { actor: { email: member.email }, request, metadata: { member: maskEmail(member.email) } });
-    return NextResponse.json({ success: true, message: "Welcome! You can now log in." });
+    return NextResponse.json({ success: true, email: member.email, existingAccount: !needsPassword, team: member.organizer?.company || member.organizer?.name || null });
   } catch (err) {
     console.error("[organizer/team/accept]", err);
     return NextResponse.json({ success: false, error: "Something went wrong" }, { status: 500 });

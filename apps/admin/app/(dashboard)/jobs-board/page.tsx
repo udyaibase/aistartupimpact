@@ -200,7 +200,9 @@ export default function AdminJobsBoardPage() {
 
       {/* Table */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-        <table className="w-full">
+        {/* Scrolls sideways on small screens, so status, edit and delete stay reachable. */}
+        <div className="overflow-x-auto overscroll-x-contain">
+        <table className="w-full min-w-[600px]">
           <thead>
             <tr className="bg-gray-50 dark:bg-gray-800/50 text-left">
               <th className="pl-4 pr-1 py-3 w-10">
@@ -243,8 +245,8 @@ export default function AdminJobsBoardPage() {
                     className="w-4 h-4 text-brand border-gray-300 rounded focus:ring-brand"
                   />
                 </td>
-                <td className="px-6 py-4">
-                  <div>
+                <td className="px-6 py-4 max-w-[260px]">
+                  <div className="min-w-[160px]">
                     <h4 className="font-sora font-semibold text-sm text-navy dark:text-white line-clamp-1 flex items-center gap-1.5">
                       {job.isFeatured && <Star className="w-3.5 h-3.5 shrink-0 fill-amber-400 text-amber-400" aria-label="Featured" />}
                       <span className="truncate">{job.title}</span>
@@ -280,7 +282,7 @@ export default function AdminJobsBoardPage() {
                 <td className="px-6 py-4">
                   <button
                     onClick={() => toggleActive(job.id, job.isActive)}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold cursor-pointer transition-colors ${
+                    className={`inline-flex items-center gap-1.5 whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-semibold cursor-pointer transition-colors ${
                       job.isActive
                         ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'
                         : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
@@ -305,7 +307,7 @@ export default function AdminJobsBoardPage() {
                       className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" title="View">
                       <ExternalLink className="w-3.5 h-3.5 text-gray-400" />
                     </a>
-                    <button onClick={() => setDeleteConfirm(job.id)}
+                    <button onClick={() => setDeleteConfirm(job.id)} title="Delete" aria-label={`Delete ${job.title}`}
                       className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20">
                       <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-500" />
                     </button>
@@ -315,6 +317,7 @@ export default function AdminJobsBoardPage() {
             ))}
           </tbody>
         </table>
+        </div>
         <Pagination
           page={page}
           totalPages={totalPages}

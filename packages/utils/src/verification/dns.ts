@@ -45,6 +45,8 @@ const NOT_FOUND = new Set(['ENOTFOUND', 'ENODATA', 'ENOTIMP', 'ESERVFAIL', 'NXDO
 export async function verifyDNS(domain: string, expectedToken: string): Promise<{
   verified: boolean;
   error?: string;
+  /** The resolver failed (timeout, server error), so "not verified" says nothing about the record. */
+  lookupFailed?: boolean;
 }> {
   const cleanDomain = extractDomain(domain).toLowerCase();
   const expected = `udyaibase-verify=${expectedToken}`;
@@ -59,6 +61,7 @@ export async function verifyDNS(domain: string, expectedToken: string): Promise<
   }
   return {
     verified: false,
+    lookupFailed: !!lookupError,
     error: lookupError
       ? `We couldn't check DNS for ${cleanDomain} right now (${lookupError}). Try again in a minute.`
       : `The TXT record isn't on ${cleanDomain} yet. Add it at @ (the root of the domain) and allow 5–10 minutes, sometimes up to an hour, for DNS to update.`,

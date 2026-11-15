@@ -20,6 +20,10 @@
     {
       "path": "/api/admin/publish-scheduled",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/admin/verification-lifecycle",
+      "schedule": "30 3 * * *"
     }
   ]
 }

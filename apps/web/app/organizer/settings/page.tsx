@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import PasswordField from '@/components/ui/PasswordField';
+import { passwordProblem } from '@/lib/password-rules';
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Loader2, Save, CreditCard, Globe, Download, Shield } from "lucide-react";
@@ -51,8 +53,8 @@ export default function OrganizerSettingsPage() {
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault(); setMsg('');
-    if (passwords.newPass.length < 8) { setMsg('Password must be at least 8 characters'); return; }
-    if (passwords.newPass !== passwords.confirm) { setMsg('Passwords do not match'); return; }
+    const pwProblem = passwordProblem(passwords.newPass);
+    if (pwProblem) { setMsg(pwProblem); return; }
     setChangingPassword(true);
     try {
       const res = await fetch('/api/organizer/settings/password', {
@@ -355,18 +357,22 @@ export default function OrganizerSettingsPage() {
               <p className="text-gray-600 dark:text-gray-400 text-sm">Enter your current password and choose a new one</p>
             </div>
             <form onSubmit={handleChangePassword} className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Current Password</label>
-                <input type="password" autoComplete="current-password" value={passwords.current} onChange={(e) => setPasswords({ ...passwords, current: e.target.value })} required className={inputClass} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">New Password</label>
-                <input type="password" autoComplete="new-password" value={passwords.newPass} onChange={(e) => setPasswords({ ...passwords, newPass: e.target.value })} required minLength={8} className={inputClass} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Confirm New Password</label>
-                <input type="password" autoComplete="new-password" value={passwords.confirm} onChange={(e) => setPasswords({ ...passwords, confirm: e.target.value })} required minLength={8} className={inputClass} />
-              </div>
+              <PasswordField
+                label="Current password"
+                autoComplete="current-password"
+                value={passwords.current}
+                onChange={(v) => setPasswords({ ...passwords, current: v })}
+                required
+              />
+              <PasswordField
+                label="New password"
+                autoComplete="new-password"
+                value={passwords.newPass}
+                onChange={(v) => setPasswords({ ...passwords, newPass: v })}
+                showRules={passwords.newPass.length > 0}
+                hint={passwords.newPass.length === 0 ? 'At least 8 characters, with upper and lower case letters and a number.' : undefined}
+                required
+              />
               <button type="submit" disabled={changingPassword} className="w-full min-h-[48px] px-4 bg-gray-900 dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-100 text-white dark:text-gray-900 text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                 {changingPassword ? 'Changing Password...' : 'Change Password'}
               </button>

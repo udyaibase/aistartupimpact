@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CareersJob } from "@/lib/jobs/careers";
-import { EMPLOYMENT_TYPES, EXPERIENCE_BANDS } from "@/lib/jobs/composer";
+import type { CareersJob, CareersSettings } from "@/lib/jobs/careers";
+import NotifyForm from "@/components/careers/NotifyForm";
+import { categoryText, EMPLOYMENT_TYPES, EXPERIENCE_BANDS } from "@/lib/jobs/composer";
 import { getEmbedFont, TEXT_SCALES } from "@/lib/embed/fonts";
 import { placeText, salaryText } from "@/lib/jobs/format";
 import { EMBED_CSS } from "./EmbedWidgetView";
@@ -38,13 +39,16 @@ export interface JobsWidgetConfig {
   showPoweredBy: boolean;
   design: WidgetDesign;
   applyForm: ApplyFormConfig;
-  company: { name: string; logoUrl: string | null; slug: string };
+  /** perks: company-wide, set by the employer; shown on every job like on the Udyaibase job page. */
+  company: { name: string; logoUrl: string | null; slug: string; perks?: string[] };
+  /** "Life at {company}" content, Notify me and general applications (same shape the employer portal edits). */
+  careers: CareersSettings;
 }
 
 const PREVIEW_KEYS: (keyof JobsWidgetConfig)[] = [
   "layout", "accentColor", "darkMode", "cornerStyle", "buttonText", "heading", "subheading", "headingAlign", "headingSize",
   "fontFamily", "textScale", "buttonSize", "buttonStyle", "cardStyle", "spacing", "maxJobs",
-  "showLogo", "showDepartment", "showSalary", "showSkills", "design", "applyForm",
+  "showLogo", "showDepartment", "showSalary", "showSkills", "design", "applyForm", "careers",
 ];
 
 /** Stands in on the Application form preview when no job is open yet. Never shown to candidates. */
@@ -73,11 +77,16 @@ export default function JobsWidgetView({ config: initial, jobs }: { config: Jobs
   const [attribution, setAttribution] = useState<ApplyAttribution>({ source: "widget", widgetId: initial.id });
   const [openId, setOpenId] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+  /** The Apply tab was opened for this job: its form stays mounted (hidden) so switching tabs keeps what was typed. */
+  const [formOpened, setFormOpened] = useState(false);
+  const [applied, setApplied] = useState(false);
   const [origin, setOrigin] = useState("");
   const [search, setSearch] = useState("");
   const [place, setPlace] = useState("ALL");
   const [site, setSite] = useState<SiteHint>({});
   const [previewScreen, setPreviewScreen] = useState<"list" | "form-upload" | "form-details">("list");
+  const [generalOpen, setGeneralOpen] = useState(false);
+  const [isPreview, setIsPreview] = useState(false);
 
   useEffect(() => setConfig(initial), [initial]);
 
@@ -106,6 +115,7 @@ export default function JobsWidgetView({ config: initial, jobs }: { config: Jobs
       utm_source: p.get("utm_source") || undefined, utm_medium: p.get("utm_medium") || undefined, utm_campaign: p.get("utm_campaign") || undefined,
     });
 
+    if (p.get("preview") === "1") setIsPreview(true);
     if (p.get("preview") === "1" || (navigator as any).webdriver || !ref) return;
     fetch("/api/embed/track", {
       method: "POST",
@@ -251,8 +261,9 @@ export default function JobsWidgetView({ config: initial, jobs }: { config: Jobs
   const href = (j: CareersJob) => `${origin}/jobs/${j.slug}${query}`;
   const openJob = jobs.find((j) => j.id === openId) ?? null;
   const scrollParentToTop = () => { if (window.parent !== window) window.parent.postMessage({ type: "udyaibase:scroll-top" }, "*"); };
-  const open = (j: CareersJob) => { setOpenId(j.id); setApplying(false); scrollParentToTop(); };
-  const close = () => { setOpenId(null); setApplying(false); scrollParentToTop(); };
+  const open = (j: CareersJob) => { setOpenId(j.id); setApplying(false); setFormOpened(false); setApplied(false); scrollParentToTop(); };
+  const close = () => { setOpenId(null); setApplying(false); setFormOpened(false); setApplied(false); scrollParentToTop(); };
+  const showTab = (apply: boolean) => { setApplying(apply); if (apply) setFormOpened(true); scrollParentToTop(); };
   const cardBox = { borderRadius: "var(--r-card)", borderColor: "var(--card-border)", background: "var(--card-bg)", boxShadow: "var(--card-shadow)" };
   const formVars = {
     ["--af-text" as string]: "var(--w-text)", ["--af-muted" as string]: "var(--w-muted)", ["--af-border" as string]: "var(--w-border)",
@@ -260,6 +271,10 @@ export default function JobsWidgetView({ config: initial, jobs }: { config: Jobs
     ["--af-on-accent" as string]: "var(--embed-on-accent)", ["--af-radius" as string]: "var(--r-control)", ["--af-btn-radius" as string]: "var(--r-button)",
   };
   const previewingForm = previewScreen !== "list";
+  const careers = config.careers;
+  // The widget shows open roles only; the company story lives on the careers page template.
+  const noRoles = jobs.length === 0;
+  const generalSlug = careers?.acceptGeneral ? careers.generalSlug : null;
   const previewJob = jobs.find((j) => j.applicationType === "INTERNAL") ?? jobs[0];
 
   return (
@@ -281,23 +296,47 @@ export default function JobsWidgetView({ config: initial, jobs }: { config: Jobs
             />
           </div>
         ) : openJob ? (
-          applying && openJob.applicationType === "INTERNAL" ? (
-            <div className="border p-4 sm:p-6" style={cardBox}>
-              <JobApplyForm
-                variant="embed"
-                job={{
-                  slug: openJob.slug, title: openJob.title, company: config.company.name, skills: openJob.skills,
-                  screeningQuestions: openJob.screeningQuestions, consentText: applyConsentText(config.company.name),
-                  form: config.applyForm,
-                }}
-                attribution={attribution}
-                onBack={close}
-                style={formVars}
-              />
-            </div>
-          ) : (
-            <JobDetail job={openJob} config={config} pageHref={href(openJob)} onBack={close} onApply={() => { setApplying(true); scrollParentToTop(); }} />
-          )
+          <JobScreens
+            job={openJob}
+            tab={applying && openJob.applicationType === "INTERNAL" ? "apply" : "overview"}
+            applied={applied}
+            onTab={(t) => showTab(t === "apply")}
+            onBack={close}
+            overview={<JobDetail job={openJob} config={config} pageHref={href(openJob)} onApply={() => showTab(true)} />}
+            form={formOpened && openJob.applicationType === "INTERNAL" ? (
+              <div className="border p-4 sm:p-6" style={cardBox}>
+                <JobApplyForm
+                  variant="embed"
+                  job={{
+                    slug: openJob.slug, title: openJob.title, company: config.company.name, skills: openJob.skills,
+                    screeningQuestions: openJob.screeningQuestions, consentText: applyConsentText(config.company.name),
+                    form: config.applyForm,
+                  }}
+                  attribution={attribution}
+                  onBack={close}
+                  showBackLink={false}
+                  onDone={() => setApplied(true)}
+                  style={formVars}
+                />
+              </div>
+            ) : null}
+          />
+        ) : generalOpen && generalSlug ? (
+          <div className="border p-4 sm:p-6" style={cardBox}>
+            <button type="button" onClick={() => { setGeneralOpen(false); scrollParentToTop(); }}
+              className="embed-focus mb-3 text-sm font-semibold" style={{ color: "var(--embed-accent-text)" }}>← Back</button>
+            <JobApplyForm
+              variant="embed"
+              job={{
+                slug: generalSlug, title: "General application", company: config.company.name, skills: [], screeningQuestions: [],
+                consentText: applyConsentText(config.company.name), form: config.applyForm,
+              }}
+              attribution={attribution}
+              onBack={() => setGeneralOpen(false)}
+              showBackLink={false}
+              style={formVars}
+            />
+          </div>
         ) : (
         <>
         {(config.heading || config.subheading) && (
@@ -315,6 +354,27 @@ export default function JobsWidgetView({ config: initial, jobs }: { config: Jobs
           </header>
         )}
 
+        {noRoles ? (
+          <div className="flex flex-col gap-6">
+            <div className="text-center px-6 py-10 border" style={cardBox}>
+              <p className="text-base font-semibold">No open roles right now</p>
+              <p className="text-sm mt-1" style={{ color: "var(--w-muted)" }}>
+                {design.emptyText || `New jobs from ${config.company.name} will appear here automatically.`}
+              </p>
+            </div>
+            <NotifyForm companySlug={config.company.slug} companyName={config.company.name} source="widget" preview={isPreview} />
+            {generalSlug && (
+              <div className="border p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-3" style={cardBox}>
+                <div className="flex-1">
+                  <p className="font-semibold">Don’t want to wait?</p>
+                  <p className="text-sm mt-0.5" style={{ color: "var(--w-muted)" }}>Send a general application and the {config.company.name} team will keep you in mind.</p>
+                </div>
+                <button type="button" onClick={() => { setGeneralOpen(true); scrollParentToTop(); }} className="embed-btn embed-btn-size embed-focus shrink-0 font-semibold">Apply generally</button>
+              </div>
+            )}
+          </div>
+        ) : (
+        <div>
         {(design.showSearch || places.length > 0) && (
           <div className="flex flex-col sm:flex-row gap-2 mb-3">
             {design.showSearch && (
@@ -352,10 +412,8 @@ export default function JobsWidgetView({ config: initial, jobs }: { config: Jobs
 
         {visible.length === 0 ? (
           <div className="text-center px-6 py-10 border" style={cardBox}>
-            <p className="text-base font-semibold">{jobs.length > 0 ? "No roles match your search" : "No open roles right now"}</p>
-            <p className="text-sm mt-1" style={{ color: "var(--w-muted)" }}>
-              {jobs.length > 0 ? "Try a different search or location." : design.emptyText || `New jobs from ${config.company.name} will appear here automatically.`}
-            </p>
+            <p className="text-base font-semibold">No roles match your search</p>
+            <p className="text-sm mt-1" style={{ color: "var(--w-muted)" }}>Try a different search or location.</p>
           </div>
         ) : (
           <ul
@@ -376,6 +434,8 @@ export default function JobsWidgetView({ config: initial, jobs }: { config: Jobs
             style={{ borderRadius: "var(--r-button)", borderColor: "var(--w-border)", background: "var(--w-surface)", color: "var(--w-text)" }}>
             View all {filtered.length} jobs
           </button>
+        )}
+        </div>
         )}
         </>
         )}
@@ -414,59 +474,193 @@ const BagIcon = () => (
   <svg aria-hidden className="shrink-0" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" /></svg>
 );
 
-function JobDetail({ job, config, pageHref, onBack, onApply }: {
-  job: CareersJob; config: JobsWidgetConfig; pageHref: string; onBack: () => void; onApply: () => void;
+/**
+ * An open job: "All jobs" to go back to the list, then two tabs for this job, Overview and Apply.
+ * Tabs rather than breadcrumbs: the description and the form are two views of the same job, and candidates go back
+ * and forth (checking requirements while answering questions). The form stays mounted while hidden, so switching
+ * tabs never loses what was typed. Jobs that take applications elsewhere have no Apply tab.
+ */
+function JobScreens({ job, tab, applied, onTab, onBack, overview, form }: {
+  job: CareersJob; tab: "overview" | "apply"; applied: boolean; onTab: (t: "overview" | "apply") => void; onBack: () => void;
+  overview: React.ReactNode; form: React.ReactNode;
 }) {
-  const salary = config.showSalary ? salaryText(job) : null;
-  const kind = [label(EMPLOYMENT_TYPES, job.employmentType), job.experienceBand ? `${label(EXPERIENCE_BANDS, job.experienceBand)}` : null].filter(Boolean).join(" · ");
-  const internal = job.applicationType === "INTERNAL";
-  const applyButton = internal ? (
-    <button type="button" onClick={onApply} className="embed-focus embed-btn embed-btn-size inline-flex items-center justify-center font-semibold whitespace-nowrap transition">Apply now</button>
-  ) : (
-    <a href={job.applicationUrl || pageHref} target="_blank" rel="noopener" className="embed-focus embed-btn embed-btn-size inline-flex items-center justify-center font-semibold whitespace-nowrap transition">
-      Apply now<span className="sr-only"> (opens the company site in a new tab)</span>
-    </a>
-  );
+  const hasForm = job.applicationType === "INTERNAL";
+  const tabs = hasForm ? (["overview", "apply"] as const) : (["overview"] as const);
+  const names = { overview: "Overview", apply: applied ? "Applied" : "Apply" };
+  const id = (t: string) => `job-${job.id}-${t}`;
+  const keyNav = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight" && e.key !== "Home" && e.key !== "End") return;
+    e.preventDefault();
+    const i = tabs.indexOf(tab as never);
+    const next = e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : (i + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+    onTab(tabs[next]);
+    document.getElementById(`${id(tabs[next])}-tab`)?.focus();
+  };
   return (
-    <article className="border p-4 sm:p-6" style={{ borderRadius: "var(--r-card)", borderColor: "var(--card-border)", background: "var(--card-bg)", boxShadow: "var(--card-shadow)" }}>
+    <div>
       <button type="button" onClick={onBack} className="embed-focus inline-flex items-center gap-1.5 min-h-[40px] -ml-1 px-1 text-sm font-semibold" style={{ color: "var(--w-muted)" }}>
         <svg aria-hidden width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
-        Back to jobs
+        All jobs
       </button>
-      <div className="flex items-start gap-3 mt-2">
-        {config.showLogo && <Logo config={config} size="md" />}
-        <div className="min-w-0">
-          {job.department && <p className="text-[0.75rem] font-semibold uppercase tracking-wide" style={{ color: "var(--w-muted)" }}>{job.department}</p>}
-          <h2 className="text-xl font-bold leading-tight">{job.title}</h2>
-          <p className="text-sm mt-1" style={{ color: "var(--w-muted)" }}>{config.company.name} · {placeText(job)}{kind ? ` · ${kind}` : ""}</p>
-          {salary && <p className="text-sm font-semibold mt-1">{salary}{job.hasEsops ? " + ESOPs" : ""}</p>}
-        </div>
-      </div>
-      <div className="mt-4">{applyButton}</div>
-      {job.skills.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mt-4">
-          {job.skills.map((s) => (
-            <span key={s} className="inline-flex items-center px-2 py-0.5 text-[0.75rem] font-medium leading-5" style={{ borderRadius: "999px", background: "var(--w-subtle)", color: "var(--w-muted)" }}>{s}</span>
-          ))}
+      {hasForm && (
+        <div role="tablist" aria-label={job.title} className="flex gap-1 mt-2 mb-4 border-b" style={{ borderColor: "var(--w-border)" }}>
+          {tabs.map((t) => {
+            const active = tab === t;
+            return (
+              <button
+                key={t} type="button" role="tab" id={`${id(t)}-tab`} aria-selected={active} aria-controls={id(t)} tabIndex={active ? 0 : -1}
+                onClick={() => onTab(t)} onKeyDown={keyNav}
+                className="embed-focus inline-flex items-center gap-1.5 min-h-[44px] px-3 -mb-px text-sm font-semibold border-b-2 transition-colors"
+                style={{ color: active ? "var(--w-text)" : "var(--w-muted)", borderColor: active ? "var(--embed-accent)" : "transparent" }}
+              >
+                {t === "apply" && applied && <svg aria-hidden width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}
+                {names[t]}
+              </button>
+            );
+          })}
         </div>
       )}
-      <div className="mt-5 pt-5 border-t text-[0.9375rem] embed-description" style={{ borderColor: "var(--w-border)" }}>
-        <JobDescription content={job.description} />
+      <div id={id("overview")} role={hasForm ? "tabpanel" : undefined} aria-labelledby={hasForm ? `${id("overview")}-tab` : undefined} hidden={tab !== "overview"} className={hasForm ? "" : "mt-2"}>
+        {overview}
       </div>
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        {applyButton}
-        <a href={pageHref} target="_blank" rel="noopener" className="embed-focus text-sm font-semibold underline-offset-2 hover:underline" style={{ color: "var(--embed-accent-text)" }}>
-          View on Udyaibase<span className="sr-only"> (opens in a new tab)</span>
-        </a>
-      </div>
-    </article>
+      {hasForm && (
+        <div id={id("apply")} role="tabpanel" aria-labelledby={`${id("apply")}-tab`} hidden={tab !== "apply"}>
+          {form}
+        </div>
+      )}
+    </div>
   );
+}
+
+const CheckIcon = () => (
+  <svg aria-hidden className="shrink-0 mt-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="m9 12 2 2 4-4" /></svg>
+);
+
+/** "3 days ago", the same wording as the job page on Udyaibase. */
+function timeAgo(iso: string | null): string {
+  if (!iso) return "Recently";
+  const hours = Math.floor((Date.now() - new Date(iso).getTime()) / 36e5);
+  if (hours < 1) return "Just now";
+  if (hours < 24) return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "1 day ago";
+  if (days < 7) return `${days} days ago`;
+  if (days < 30) { const w = Math.floor(days / 7); return `${w} week${w !== 1 ? "s" : ""} ago`; }
+  const m = Math.floor(days / 30);
+  return `${m} month${m !== 1 ? "s" : ""} ago`;
+}
+
+/**
+ * One job, laid out like its page on Udyaibase (/jobs/[slug]) so a candidate sees the same thing in both places:
+ * header with the key facts, About the Role, Perks & Benefits, Required Skills, then a single Apply.
+ * Colours, corners and fonts still follow the widget's own design settings.
+ */
+function JobDetail({ job, config, pageHref, onApply }: {
+  job: CareersJob; config: JobsWidgetConfig; pageHref: string; onApply: () => void;
+}) {
+  const salary = config.showSalary ? salaryText(job) : null;
+  const experience = job.experienceMin != null
+    ? `${job.experienceMin}–${job.experienceMax || "10+"} years`
+    : label(EXPERIENCE_BANDS, job.experienceBand) ?? null;
+  const type = label(EMPLOYMENT_TYPES, job.employmentType) ?? job.employmentType.replace(/_/g, " ").toLowerCase();
+  const location = job.workType === "REMOTE" ? "Remote" : `${job.city || ""} ${job.country || ""}`.trim() || placeText(job);
+  const perks = config.company.perks ?? [];
+  const internal = job.applicationType === "INTERNAL";
+  const card = { borderRadius: "var(--r-card)", borderColor: "var(--card-border)", background: "var(--card-bg)", boxShadow: "var(--card-shadow)" };
+  const sectionTitle = "text-base font-bold mb-3";
+  const badge = "inline-flex items-center gap-1 px-2.5 py-1 text-[0.75rem] font-medium";
+  const badgeStyle = { borderRadius: "var(--r-control)", background: "var(--w-subtle)", color: "var(--w-muted)" };
+  const fact = (value: string, caption: string, big = false) => (
+    <div>
+      <p className={big ? "text-lg font-bold" : "text-sm font-bold"}>{value}</p>
+      <p className="text-[0.625rem] uppercase tracking-wider" style={{ color: "var(--w-muted)" }}>{caption}</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <article className="border p-4 sm:p-6" style={card}>
+        <div className="flex items-start gap-3">
+          {config.showLogo && <Logo config={config} size="md" />}
+          <div className="min-w-0">
+            <h2 className="text-xl font-bold leading-tight">{job.title}</h2>
+            <p className="text-sm font-semibold mt-1" style={{ color: "var(--embed-accent-text)" }}>{config.company.name}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 pt-4 border-t" style={{ borderColor: "var(--w-border)" }}>
+          {salary && fact(`${salary}${job.hasEsops ? " + ESOPs" : ""}`, "per annum", true)}
+          {fact(timeAgo(job.publishedAt), "posted")}
+          {experience && fact(experience, "experience")}
+          {fact(type, "type")}
+          {job.positions > 1 && fact(String(job.positions), "openings")}
+        </div>
+        <div className="flex flex-wrap gap-2 mt-3">
+          <span className={badge} style={badgeStyle}><PinIcon />{location}</span>
+          <span className={badge} style={badgeStyle}>{categoryText(job.category, job.categoryLabel)}</span>
+          {config.showDepartment && job.department && <span className={badge} style={badgeStyle}>{job.department}</span>}
+          {job.visaSponsorship && <span className={badge} style={badgeStyle}>Visa Sponsorship</span>}
+        </div>
+      </article>
+
+      {/* About the Role */}
+      <section className="border p-4 sm:p-6" style={card}>
+        <h3 className={sectionTitle}>About the Role</h3>
+        {job.hiringManagerName && (
+          <p className="text-sm -mt-1 mb-4" style={{ color: "var(--w-muted)" }}>Reports to <span className="font-semibold" style={{ color: "var(--w-text)" }}>{job.hiringManagerName}</span></p>
+        )}
+        <div className="text-[0.9375rem] embed-description"><JobDescription content={job.description} /></div>
+      </section>
+
+      {/* Perks & Benefits (company-wide, set by the employer) */}
+      {perks.length > 0 && (
+        <section className="border p-4 sm:p-6" style={card}>
+          <h3 className={sectionTitle}>Perks &amp; Benefits</h3>
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+            {perks.map((perk) => <li key={perk} className="flex items-start gap-2 text-sm"><CheckIcon />{perk}</li>)}
+          </ul>
+        </section>
+      )}
+
+      {/* Required Skills */}
+      {job.skills.length > 0 && (
+        <section className="border p-4 sm:p-6" style={card}>
+          <h3 className={sectionTitle}>Required Skills</h3>
+          <div className="flex flex-wrap gap-2">
+            {job.skills.map((s) => <span key={s} className={badge} style={badgeStyle}>{s}</span>)}
+          </div>
+        </section>
+      )}
+
+      {/* Apply (once, at the end, like the job page). No "View on Udyaibase" link: the candidate is already on the
+          company's own site, which is the point of the widget. Udyaibase is credited by the "Powered by" line, which
+          paid plans may hide; a link here would undo that. */}
+      <section className="border p-4 sm:p-6" style={card}>
+        <p className="text-base font-bold mb-1">Interested in this role?</p>
+        <p className="text-xs mb-4" style={{ color: "var(--w-muted)" }}>Apply now. It only takes a few minutes.</p>
+        {internal ? (
+          <button type="button" onClick={onApply} className="embed-focus embed-btn embed-btn-size inline-flex items-center justify-center font-semibold whitespace-nowrap transition">Apply now</button>
+        ) : (
+          // The company's own application link; jobs that take applications by email have none, and their
+          // Udyaibase page shows how to apply instead.
+          <a href={job.applicationUrl || pageHref} target="_blank" rel="noopener" className="embed-focus embed-btn embed-btn-size inline-flex items-center justify-center font-semibold whitespace-nowrap transition">
+            Apply now<span className="sr-only"> (opens in a new tab)</span>
+          </a>
+        )}
+      </section>
+    </div>
+  );
+}
+
+/** "5 openings" for roles hiring more than one person; nothing for a single hire. */
+function openingsText(n: number | undefined): string | null {
+  return n && n > 1 ? `${n} openings` : null;
 }
 
 function JobCard({ job, layout, config, onOpen }: { job: CareersJob; layout: "grid" | "list" | "compact"; config: JobsWidgetConfig; onOpen: () => void }) {
   const salary = config.showSalary ? salaryText(job) : null;
   const pay = salary ? `${salary}${job.hasEsops ? " + ESOPs" : ""}` : null;
-  const kind = [label(EMPLOYMENT_TYPES, job.employmentType), job.experienceBand ? `${label(EXPERIENCE_BANDS, job.experienceBand)}` : null].filter(Boolean).join(" · ");
+  const kind = [label(EMPLOYMENT_TYPES, job.employmentType), job.experienceBand ? `${label(EXPERIENCE_BANDS, job.experienceBand)}` : null, openingsText(job.positions)].filter(Boolean).join(" · ");
   const btnText = config.buttonText || "View role";
 
   const button = (
@@ -492,7 +686,7 @@ function JobCard({ job, layout, config, onOpen }: { job: CareersJob; layout: "gr
         <div className="min-w-0 flex-1">
           <h3 className="text-[0.9375rem] font-semibold leading-snug truncate">{job.title}</h3>
           <p className="text-[0.8125rem] truncate" style={{ color: "var(--w-muted)" }}>
-            {placeText(job)}{config.showDepartment && job.department ? ` · ${job.department}` : ""}{pay ? ` · ${pay}` : ""}
+            {placeText(job)}{config.showDepartment && job.department ? ` · ${job.department}` : ""}{job.positions > 1 ? ` · ${openingsText(job.positions)}` : ""}{pay ? ` · ${pay}` : ""}
           </p>
         </div>
         {button}

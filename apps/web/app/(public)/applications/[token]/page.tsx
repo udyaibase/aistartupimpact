@@ -62,7 +62,7 @@ export default async function ApplicationStatusPage(props: { params: Promise<{ t
       </section>
 
       {app.fullName !== 'Deleted applicant' && <TalentPoolToggle token={token} company={company} on={!!app.talentPoolUntil && app.talentPoolUntil > new Date()} />}
-      <ApplicationActions token={token} withdrawn={!!app.withdrawnAt} jobSlug={app.Listing.slug} />
+      <ApplicationActions token={token} withdrawn={!!app.withdrawnAt} jobHref={app.Listing.isGeneral ? `/jobs/company/${app.Listing.Employer.slug}` : `/jobs/${app.Listing.slug}`} jobLabel={app.Listing.isGeneral ? 'View company' : 'View job'} />
 
       <p className="mt-8 text-xs text-gray-500 dark:text-gray-400">
         This page is private to you. Anyone with this link can see your application status, so don&apos;t share it.

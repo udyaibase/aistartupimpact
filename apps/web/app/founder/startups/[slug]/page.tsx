@@ -2,6 +2,8 @@ import { requireFounderAuth } from '@/lib/founder-auth';
 import { prisma } from '@udyaibase/database';
 import { notFound, redirect } from 'next/navigation';
 import StartupForm from '@/components/founder/StartupForm';
+import OwnershipTransferCard from '@/components/founder/OwnershipTransferCard';
+import { getPendingTransferAction } from '@/app/founder/startups/transfer-actions';
 import SlugEditor from '@/components/shared/SlugEditor';
 import { sql } from '@/lib/db';
 import Link from 'next/link';
@@ -28,7 +30,7 @@ export default async function EditStartupPage(props: PageProps) {
         id, name, slug, tagline, description, "websiteUrl", "logoUrl",
         stage, "totalFundingInr", "foundedYear",
         "linkedinUrl", "twitterUrl", "claimStatus", "isApproved", "isVerified",
-        "headquartersCity", "employeeCount", founders, "foundersData", "socialLinks", status::text AS status, "ownerId", category, "businessType",
+        "headquartersCity", "employeeCount", founders, "foundersData", "socialLinks", status::text AS status, "ownerId", category, "businessType", "contactEmail",
         "slugChangedAt"::text AS "slugChangedAt"
       FROM "Startup"
       WHERE slug = ${params.slug} AND "deletedAt" IS NULL
@@ -54,6 +56,7 @@ export default async function EditStartupPage(props: PageProps) {
   if (!role || !canEditStartup(role)) redirect('/founder/startups');
   const isOwner = role === 'OWNER';
   const pendingEdits = await pendingEditsFor('startup', startup.id);
+  const pendingTransfer = isOwner ? await getPendingTransferAction(startup.id) : null;
 
   // Fetch funding rounds
   const fundingRounds = await sql`
@@ -137,6 +140,8 @@ export default async function EditStartupPage(props: PageProps) {
         existingFaqs={faqs}
         existingFundingRounds={fundingRounds}
       />
+
+      {isOwner && <OwnershipTransferCard startupId={startup.id} startupName={startup.name} pending={pendingTransfer} />}
 
       {/* Profile URL Editor — LinkedIn-style, 45-day cooldown */}
       <div className="card p-5 sm:p-6">

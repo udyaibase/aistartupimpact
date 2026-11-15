@@ -49,5 +49,5 @@ export type { EmployerActivity, OrganizerActivity, WorkspaceActivity, WorkspaceA
 
 export { LOGO_SIZES, sizedKey, mediaVariantKeys, ownMediaKey } from './src/media-keys';
 
-export { IDENTITY_FIELDS, canonicalValue, changedListingFields, decideListingEdit, listingFieldLabel, listingValueText, registrableDomain, sameListingValue, websiteDomain } from './src/listing-edit-policy';
+export { IDENTITY_FIELDS, canonicalValue, changedListingFields, decideListingEdit, listingFieldLabel, listingValueText, registrableDomain, sameListingValue, websiteDomain, isPlatformPage, isPlatformHosted } from './src/listing-edit-policy';
 export type { ListingFields, ListingType } from './src/listing-edit-policy';

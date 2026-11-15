@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { hashOtp } from '@/lib/otp';
 import { sql } from '@/lib/db';
 import { emailCodeAllowed } from '@/lib/rate-limit';
 import { checkDomainCode } from '@/lib/startups/domain-otp';
@@ -20,7 +21,7 @@ export async function sendActionCode(email: string): Promise<ActionCodeResult> {
   const code = crypto.randomInt(100000, 1000000).toString();
   await sql`DELETE FROM "EmailOtp" WHERE email = ${to} AND purpose = ${PURPOSE}`;
   await sql`INSERT INTO "EmailOtp" (id, email, code, purpose, "expiresAt", "createdAt")
-    VALUES (gen_random_uuid()::text, ${to}, ${crypto.createHash('sha256').update(code).digest('hex')}, ${PURPOSE}, ${new Date(Date.now() + 600_000).toISOString()}::timestamp, NOW())`;
+    VALUES (gen_random_uuid()::text, ${to}, ${hashOtp(code)}, ${PURPOSE}, ${new Date(Date.now() + 600_000).toISOString()}::timestamp, NOW())`;
   await sendAccountActionCode(to, code);
   return { ok: true };
 }

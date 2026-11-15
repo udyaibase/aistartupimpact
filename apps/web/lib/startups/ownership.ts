@@ -15,11 +15,25 @@ export const employerSubmitter = (employerId: string) => `employer:${employerId}
  * Pass `founderUserId` when the proof came from a founder account: it also records them as owner and moves what
  * we already hold for the startup to them (see adoptStartupContent).
  */
+/** How long a verification lasts before it must be renewed (DNS renews itself while the record stays). */
+export const VERIFICATION_VALID_DAYS = 365;
+
+export type VerificationProof = {
+  method: 'DNS' | 'EMAIL';
+  /** The work email that received the code (EMAIL). */
+  email?: string | null;
+  /** The DNS token that was found (DNS); kept so the record can be re-checked later. */
+  token?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+};
+
 export async function markStartupVerified(
   tx: Tx,
   startupId: string,
   domain: string,
   founderUserId?: string,
+  proof?: VerificationProof,
 ): Promise<void> {
   const now = new Date();
   const current = await tx.startup.findUnique({ where: { id: startupId }, select: { verifiedAt: true } });
@@ -31,8 +45,34 @@ export async function markStartupVerified(
       verifiedAt: current?.verifiedAt ?? now,
       claimStatus: 'VERIFIED',
       ...(founderUserId ? { ownerId: founderUserId, claimedBy: founderUserId, claimedAt: now } : {}),
+      ...(proof ? {
+        verificationMethod: proof.method,
+        verifiedEmail: proof.method === 'EMAIL' ? (proof.email ?? null)?.toLowerCase() ?? null : null,
+        verificationExpiresAt: new Date(now.getTime() + VERIFICATION_VALID_DAYS * 86_400_000),
+        verificationCheckedAt: now,
+        verificationRemindedAt: null,
+        ...(proof.method === 'DNS' && proof.token ? { verificationToken: proof.token } : {}),
+      } : {}),
     },
   });
+  // Audit trail: who proved it, how, with which email, from where.
+  if (proof && founderUserId) {
+    await tx.startupVerificationLog.create({
+      data: {
+        id: crypto.randomUUID(),
+        startupId,
+        userId: founderUserId,
+        action: `${proof.method}_VERIFIED`,
+        method: proof.method,
+        token: proof.method === 'DNS' ? (proof.token ?? null) : null,
+        dnsRecord: proof.method === 'DNS' && proof.token ? `udyaibase-verify=${proof.token}` : null,
+        email: proof.method === 'EMAIL' ? (proof.email ?? null)?.toLowerCase() ?? null : null,
+        success: true,
+        ipAddress: proof.ipAddress ?? null,
+        userAgent: proof.userAgent ?? null,
+      },
+    });
+  }
   if (founderUserId) await adoptStartupContent(tx, startupId, domain, founderUserId);
 }
 

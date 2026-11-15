@@ -1,10 +1,11 @@
+import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 import { sql } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
-const JWT_SECRET = new TextEncoder().encode(process.env.USER_JWT_SECRET!);
+const JWT_SECRET = jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET');
 
 const VALID_ACTIONS = ['view', 'click', 'save', 'upvote', 'share', 'search', 'apply', 'register', 'start', 'complete_step', 'skip_step', 'complete', 'skip_all'];
 const VALID_ENTITY_TYPES = ['tool', 'startup', 'article', 'event', 'job', 'search', 'onboarding'];

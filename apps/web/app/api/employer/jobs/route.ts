@@ -18,7 +18,7 @@ export async function GET() {
   if (!can(session.role, 'jobs.view')) return forbidden();
 
   const jobs = await prisma.jobBoardListing.findMany({
-    where: { ...listingScope(session), deletedAt: null },
+    where: { ...listingScope(session), deletedAt: null, isGeneral: false },
     orderBy: { createdAt: 'desc' },
     select: {
       id: true, slug: true, title: true, status: true, workType: true, location: true,

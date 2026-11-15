@@ -3,6 +3,7 @@
 import { getUserSession } from "@/lib/user-session";
 import { sql } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { claimHelpfulVote } from "@/lib/review-helpful";
 
 export async function submitStartupReview(data: {
   startupSlug: string;
@@ -83,14 +84,19 @@ export async function submitStartupReview(data: {
   }
 }
 
-export async function incrementStartupReviewHelpful(reviewId: string, startupSlug: string) {
+export async function incrementStartupReviewHelpful(reviewId: string, _startupSlug?: string) {
   try {
-    await sql`
-      UPDATE "StartupReview" 
-      SET "helpfulCount" = "helpfulCount" + 1 
-      WHERE id = ${reviewId}
+    // One vote per visitor per review; a repeat is accepted quietly without counting again.
+    if (!(await claimHelpfulVote('startup', reviewId))) return { success: true };
+    // The page to refresh comes from the review itself, never from the caller.
+    const rows = await sql`
+      UPDATE "StartupReview" r
+      SET "helpfulCount" = r."helpfulCount" + 1
+      FROM "Startup" s
+      WHERE r.id = ${reviewId} AND s.id = r."startupId"
+      RETURNING s.slug
     `;
-    revalidatePath(`/startups/${startupSlug}`);
+    if (rows[0]?.slug) revalidatePath(`/startups/${rows[0].slug}`);
     return { success: true };
   } catch (err) {
     console.error("Helpful upvote failed", err);

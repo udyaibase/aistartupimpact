@@ -58,6 +58,12 @@
    ═══════════════════════════════════════════════════ */
 
 @layer base {
+  /* Height of the phone/tablet bottom tab bar while it is showing; the Navbar sets it to 0 while it slides away, and
+     anything placed just above the bar (compare bar, back-to-top, a page's sticky action) follows it. */
+  :root {
+    --bottom-nav-h: calc(4rem + env(safe-area-inset-bottom));
+  }
+
   * {
     -webkit-tap-highlight-color: transparent;
   }

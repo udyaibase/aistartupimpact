@@ -21,6 +21,19 @@ export function publicListingWhere(now = new Date()) {
   };
 }
 
+/**
+ * Listings that take applications: public ones, plus a workspace's hidden "General application" listing
+ * while that workspace accepts general applications (lib/jobs/careers.ts).
+ */
+export function applyableListingWhere(now = new Date()) {
+  return {
+    OR: [
+      publicListingWhere(now),
+      { isGeneral: true, deletedAt: null, Employer: { acceptGeneralApplications: true, isActive: true, deactivatedAt: null, deletedAt: null } },
+    ],
+  };
+}
+
 export function isListingPublic(l: { status: string; deletedAt: Date | string | null; expiresAt: Date | string | null; moderationHold?: boolean }, now = Date.now()): boolean {
   if (l.status !== 'OPEN' || l.deletedAt || l.moderationHold) return false;
   return !l.expiresAt || new Date(l.expiresAt).getTime() > now;

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import RegistrationModal from "./RegistrationModal";
 import ShareMenu from "@/components/shared/ShareMenu";
+import BookmarkButton from "@/components/BookmarkButton";
 import ReportButton from "@/components/shared/ReportButton";
 import { EVENT_REPORT_REASONS } from "@/lib/events/report-reasons";
 import { descriptionHtml, descriptionText } from "@/lib/events/description";
@@ -253,9 +254,12 @@ export default function EventDetailClient({
         {/* Right: All details + CTA (4 cols) */}
         <div className="md:col-span-4 flex flex-col">
           {/* Title */}
-          <h1 className="font-sora font-bold text-xl sm:text-2xl text-navy dark:text-white leading-tight mb-1.5">
-            {event.title}
-          </h1>
+          <div className="flex items-start justify-between gap-3 mb-1.5">
+            <h1 className="font-sora font-bold text-xl sm:text-2xl text-navy dark:text-white leading-tight">
+              {event.title}
+            </h1>
+            <BookmarkButton type="event" itemId={event.slug} itemName={event.title} className="shrink-0" />
+          </div>
           {event.subtitle && (
             <p className="text-sm text-gray-500 dark:text-gray-400 font-jakarta mb-4">{event.subtitle}</p>
           )}

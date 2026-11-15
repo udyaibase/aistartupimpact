@@ -3,7 +3,7 @@ import { hostPlanStatus } from "@/lib/events/billing";
 import { HOST_PLANS } from "@/lib/events/plans";
 import { prisma } from "@udyaibase/database";
 import { requirePermission } from "@/lib/organizer-auth/require-permission";
-import { canAssignRole } from "@/lib/organizer-auth/permissions";
+import { assignableRoles, canAssignRole, canManageMember, isTeamRole, ownEventIds } from "@/lib/organizer-auth/permissions";
 import { teamInviteHtml } from "@udyaibase/utils";
 import { sendEmailFireAndForget } from "@/lib/email/send";
 import crypto from "crypto";
@@ -29,7 +29,16 @@ export async function GET() {
     include: { assignments: { include: { event: { select: { id: true, title: true } } } } },
   });
 
-  return NextResponse.json({ success: true, members });
+  // Tell the page what this person may do, so it only offers controls the API will accept.
+  const canManage = session.role === "OWNER" || session.role === "ADMIN";
+  return NextResponse.json({
+    success: true,
+    members: members.map(({ inviteToken: _t, passwordHash: _p, ...m }) => ({
+      ...m,
+      canEdit: canManage && canManageMember(session.role, m.role) && m.id !== session.teamMemberId,
+    })),
+    viewer: { role: session.role, canManage, assignableRoles: canManage ? assignableRoles(session.role) : [] },
+  });
 }
 
 /**
@@ -40,19 +49,32 @@ export async function POST(request: NextRequest) {
   if (result instanceof NextResponse) return result;
   const session = result;
 
-  const { email, role, eventIds } = await request.json();
-
-  if (!email) return NextResponse.json({ success: false, error: "Email is required" }, { status: 400 });
-
-  const assignedRole = role || "STAFF";
-  if (!canAssignRole(session.role, assignedRole)) {
-    return NextResponse.json({ success: false, error: "Cannot assign a role equal to or higher than your own" }, { status: 403 });
+  const body = await request.json().catch(() => ({}));
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return NextResponse.json({ success: false, error: "Enter a valid email address" }, { status: 400 });
+  }
+  if (email === session.email.trim().toLowerCase()) {
+    return NextResponse.json({ success: false, error: "You can't invite yourself" }, { status: 400 });
   }
 
-  // Check duplicate
-  const existing = await prisma.eventTeamMember.findUnique({
-    where: { organizerId_email: { organizerId: session.organizerId, email } },
+  const assignedRole = body.role ?? "STAFF";
+  if (!isTeamRole(assignedRole)) {
+    return NextResponse.json({ success: false, error: "Unknown role" }, { status: 400 });
+  }
+  if (!canAssignRole(session.role, assignedRole)) {
+    return NextResponse.json({ success: false, error: "You can only give a role below your own" }, { status: 403 });
+  }
+  const eventIds = body.eventIds === undefined ? [] : await ownEventIds(session.organizerId, body.eventIds);
+  if (eventIds === null) return NextResponse.json({ success: false, error: "Invalid events" }, { status: 400 });
+
+  // Check duplicate (emails used to be saved as typed, so match case-insensitively)
+  const existing = await prisma.eventTeamMember.findFirst({
+    where: { organizerId: session.organizerId, email: { equals: email, mode: "insensitive" } },
   });
+  if (existing && existing.status !== "REVOKED" && !canManageMember(session.role, existing.role)) {
+    return NextResponse.json({ success: false, error: "This person already has a role equal to or above yours" }, { status: 403 });
+  }
   if (existing && existing.status === "ACTIVE") {
     return NextResponse.json({ success: false, error: "Already an active team member" }, { status: 409 });
   }
@@ -72,19 +94,20 @@ export async function POST(request: NextRequest) {
   if (existing) {
     member = await prisma.eventTeamMember.update({
       where: { id: existing.id },
-      data: { role: role || "STAFF", status: "PENDING", inviteToken, expiresAt, acceptedAt: null, passwordHash: null },
+      data: { email, role: assignedRole, status: "PENDING", inviteToken, expiresAt, acceptedAt: null, passwordHash: null },
     });
   } else {
     member = await prisma.eventTeamMember.create({
-      data: { organizerId: session.organizerId, email, role: role || "STAFF", inviteToken, expiresAt },
+      data: { organizerId: session.organizerId, email, role: assignedRole, inviteToken, expiresAt },
     });
   }
 
   // Assign events
-  if (eventIds && eventIds.length > 0) {
-    await prisma.eventTeamAssignment.deleteMany({ where: { teamMemberId: member.id } });
+  // Always reset on (re)invite, so an old invite's event list doesn't carry over.
+  await prisma.eventTeamAssignment.deleteMany({ where: { teamMemberId: member.id } });
+  if (eventIds.length > 0) {
     await prisma.eventTeamAssignment.createMany({
-      data: eventIds.map((eventId: string) => ({ teamMemberId: member.id, eventId })),
+      data: eventIds.map((eventId) => ({ teamMemberId: member.id, eventId })),
     });
   }
 
@@ -94,10 +117,11 @@ export async function POST(request: NextRequest) {
     to: email,
     from: `Udyaibase Events <${FROM_EMAIL}>`,
     subject: "You're invited to manage events — Udyaibase",
-    html: teamInviteHtml(session.name, role || "STAFF", acceptUrl),
+    html: teamInviteHtml(session.name, assignedRole, acceptUrl),
     type: "team_invite",
   });
 
   await logOrganizerActivity(session.organizerId, 'team_member_invited', { actor: organizerActor(session), request, metadata: { member: maskEmail(String(email)), role: String(assignedRole) } });
-  return NextResponse.json({ success: true, member });
+  const { inviteToken: _t, passwordHash: _p, ...safe } = member;
+  return NextResponse.json({ success: true, member: { ...safe, assignments: eventIds.map((eventId) => ({ eventId })), canEdit: true } });
 }

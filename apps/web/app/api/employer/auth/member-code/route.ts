@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { hashOtp, otpMatches } from '@/lib/otp';
 import crypto from 'crypto';
 import { prisma } from '@udyaibase/database';
 import { sql } from '@/lib/db';
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
         const code = crypto.randomInt(100000, 1000000).toString();
         await sql`DELETE FROM "EmailOtp" WHERE email = ${email} AND purpose = ${PURPOSE}`;
         await sql`INSERT INTO "EmailOtp" (id, email, code, purpose, "expiresAt", "createdAt")
-          VALUES (gen_random_uuid()::text, ${email}, ${crypto.createHash('sha256').update(code).digest('hex')}, ${PURPOSE}, ${new Date(Date.now() + 600_000).toISOString()}::timestamp, NOW())`;
+          VALUES (gen_random_uuid()::text, ${email}, ${hashOtp(code)}, ${PURPOSE}, ${new Date(Date.now() + 600_000).toISOString()}::timestamp, NOW())`;
         await sendMemberLoginCode(email, code);
       }
     }
@@ -61,8 +62,7 @@ export async function POST(request: NextRequest) {
   if (!chosen) {
     const peek = await sql`SELECT code FROM "EmailOtp" WHERE email = ${email} AND purpose = ${PURPOSE} AND verified = false AND "expiresAt" > NOW() ORDER BY "createdAt" DESC LIMIT 1`;
     const stored = (peek[0] as { code: string } | undefined)?.code;
-    const hashed = crypto.createHash('sha256').update(code).digest('hex');
-    if (!stored || stored.length !== hashed.length || !crypto.timingSafeEqual(Buffer.from(stored), Buffer.from(hashed))) {
+    if (!otpMatches(stored, code)) {
       return checkDomainCode({ email, purpose: PURPOSE, code }).then((r) => NextResponse.json({ error: r.ok ? 'Choose a workspace.' : r.error }, { status: r.ok ? 400 : r.status }));
     }
     return NextResponse.json({

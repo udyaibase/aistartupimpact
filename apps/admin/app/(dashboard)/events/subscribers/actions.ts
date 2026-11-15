@@ -102,7 +102,7 @@ export async function sendCampaignAction(data: { subject: string; body: string }
     await prisma.eventCampaignRecipient.createMany({ data: audience.map((s) => ({ campaignId: campaign.id, subscriberId: s.id })), skipDuplicates: true });
 
     const ctaUrl = event ? `${SITE_URL}/events/${event.slug}` : `${SITE_URL}/events`;
-    const ctaLabel = event ? "Register Now →" : "Browse Events";
+    const ctaLabel = event ? "Register now" : "Browse events";
     let sent = 0;
     for (let i = 0; i < audience.length; i += 100) {
       const batch = audience.slice(i, i + 100);

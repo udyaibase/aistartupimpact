@@ -88,7 +88,7 @@ export default function SmartSearchBox({
   return (
     <div className="relative w-full">
       <div
-        className={`group flex items-center gap-2 sm:gap-2.5 h-10 sm:h-12 pl-3 sm:pl-4 pr-1.5 sm:pr-2 rounded-xl sm:rounded-2xl border bg-white dark:bg-gray-900 transition-all ${
+        className={`group flex items-center gap-2 sm:gap-2.5 h-10 sm:h-12 pl-3 sm:pl-4 pr-1.5 sm:pr-2 rounded-md sm:rounded-2xl border bg-white dark:bg-gray-900 transition-all ${
           focused
             ? 'border-brand ring-4 ring-brand/10 shadow-md'
             : 'border-gray-200 dark:border-gray-700 shadow-sm hover:border-gray-300 dark:hover:border-gray-600'

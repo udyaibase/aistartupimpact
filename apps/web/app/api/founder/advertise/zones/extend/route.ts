@@ -5,13 +5,14 @@ import {
   calculateExtensionCost,
   ZONE_EXTENSION_RATES,
   getZoneTier,
-  type AdvZoneSlot,
+  type AdvZoneSlot, selfServeAdsEnabled, SELF_SERVE_ADS_OFF,
 } from '@/lib/advertise';
 
 export const dynamic = 'force-dynamic';
 
 // POST — extend a zone beyond 3 free days (creates Razorpay order)
 export async function POST(request: NextRequest) {
+  if (!selfServeAdsEnabled()) return NextResponse.json(SELF_SERVE_ADS_OFF, { status: 503 });
   try {
     const session = await getFounderSession();
     if (!session) return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });

@@ -57,7 +57,6 @@ udyaibase/
 │   ├── web/              → Public website + Founder + Organizer dashboards
 │   │   ├── app/          → Next.js App Router pages
 │   │   │   ├── (public)/ → Public pages (tools, startups, events, stories)
-│   │   │   ├── (client)/ → Authenticated user pages
 │   │   │   ├── founder/  → Founder dashboard
 │   │   │   ├── organizer/→ Event organizer dashboard
 │   │   │   └── api/      → API routes

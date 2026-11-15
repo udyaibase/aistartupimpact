@@ -3,6 +3,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { Metadata } from 'next';
 import { generateItemListSchema, generateCollectionPageSchema, generateBreadcrumbSchema } from '@/lib/seo';
+import CategoryTileLink from '@/components/tools/CategoryTileLink';
 import FounderActionButton from '@/components/auth/FounderActionButton';
 import { Code, MessageSquare, GraduationCap, Video, Music, Zap, PenTool, Palette, Megaphone, BarChart3, DollarSign, Image, Bot, ShoppingCart, Scale, Shield, ChevronRight, Folder } from 'lucide-react';
 
@@ -202,8 +203,9 @@ export default async function ToolsPage() {
               const meta = categoryMeta[cat.slug] || defaultMeta;
               const IconComp = meta.icon;
               return (
-                <Link
+                <CategoryTileLink
                   key={cat.slug}
+                  slug={cat.slug}
                   href={`/tools/category/${cat.slug}`}
                   className="flex items-center gap-3 p-3 sm:p-4 rounded-xl bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700 hover:shadow-sm transition-all group"
                 >
@@ -215,7 +217,7 @@ export default async function ToolsPage() {
                     <p className="text-[10px] sm:text-xs text-gray-400 font-jakarta">{cat.totalToolCount} {cat.totalToolCount === 1 ? 'tool' : 'tools'}</p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-brand transition-colors shrink-0" />
-                </Link>
+                </CategoryTileLink>
               );
             })}
           </div>

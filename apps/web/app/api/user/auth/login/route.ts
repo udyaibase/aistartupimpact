@@ -1,3 +1,4 @@
+import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from 'next/server';
 import { logFounderSignIn, logFounderSignInFailed } from '@/lib/founder/activity';
 import { secondFactorChallenge } from '@/lib/auth/second-factor';
@@ -13,12 +14,10 @@ import { loginSchema, validateInput } from '@/lib/validation';
 import { accountLockoutHtml } from '@udyaibase/utils';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 
-const CHALLENGE_SECRET = new TextEncoder().encode(process.env.USER_JWT_SECRET!);
+const CHALLENGE_SECRET = jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET');
 
 export const dynamic = 'force-dynamic';
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.USER_JWT_SECRET!
-);
+const JWT_SECRET = jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET');
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 15;
@@ -209,7 +208,7 @@ export async function POST(request: NextRequest) {
           .setProtectedHeader({ alg: 'HS256' })
           .setIssuedAt()
           .setExpirationTime('5m')
-          .sign(new TextEncoder().encode(process.env.FOUNDER_JWT_SECRET!));
+          .sign(jwtSecret(process.env.FOUNDER_JWT_SECRET, 'FOUNDER_JWT_SECRET'));
         return NextResponse.json({ success: false, requires2FA: true, challengeToken });
       }
 

@@ -28,7 +28,7 @@ export interface SearchResult {
   category: "page" | "action" | "event";
 }
 
-const PAGES: SearchResult[] = [
+export const ORGANIZER_PAGES: SearchResult[] = [
   { id: "home", label: "Home", description: "Overview & stats", href: "/organizer", icon: <LayoutDashboard className="w-4 h-4" />, category: "page" },
   { id: "events", label: "Events", description: "Manage your events", href: "/organizer/events", icon: <CalendarDays className="w-4 h-4" />, category: "page" },
   { id: "attendees", label: "Attendees", description: "View attendee list", href: "/organizer/attendees", icon: <Users className="w-4 h-4" />, category: "page" },
@@ -41,7 +41,7 @@ const PAGES: SearchResult[] = [
   { id: "support", label: "Help & support", description: "Get help", href: "/organizer/support", icon: <HelpCircle className="w-4 h-4" />, category: "page" },
 ];
 
-const ACTIONS: SearchResult[] = [
+export const ORGANIZER_ACTIONS: SearchResult[] = [
   { id: "create-event", label: "Create new event", description: "Start a new event", href: "/organizer/events/create", icon: <Plus className="w-4 h-4" />, category: "action" },
 ];
 
@@ -58,7 +58,7 @@ async function searchOrganizerEvents(q: string): Promise<SearchResult[]> {
 }
 
 export default function CommandPalette({
-  open, onClose, pages = PAGES, actions = ACTIONS, search = searchOrganizerEvents,
+  open, onClose, pages = ORGANIZER_PAGES, actions = ORGANIZER_ACTIONS, search = searchOrganizerEvents,
   placeholder = "Search pages, events, actions...", resultsLabel = "Events",
 }: CommandPaletteProps) {
   const [query, setQuery] = useState("");

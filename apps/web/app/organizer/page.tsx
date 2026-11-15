@@ -1,5 +1,8 @@
 import { redirect } from "next/navigation";
-import { getOrganizerSession } from "@/lib/organizer-auth";
+import { getPermissions } from "@/lib/organizer-auth/permissions";
+import { accessFor, canOpen } from "@/lib/organizer-auth/nav";
+import { NextResponse } from "next/server";
+import { requirePermission, eventScope } from "@/lib/organizer-auth/require-permission";
 import { prisma } from "@udyaibase/database";
 import Link from "next/link";
 import {
@@ -18,23 +21,31 @@ function getGreeting(): string {
 }
 
 export default async function OrganizerHome() {
-  const session = await getOrganizerSession();
-  if (!session) return null;
+  // The active workspace (their own, or a team they chose), with the same role rules as the API.
+  const session = await requirePermission("events.view");
+  if (session instanceof NextResponse) return session.status === 401 ? null : <p className="py-16 text-center text-sm text-gray-500 dark:text-gray-400">Your role in this workspace doesn’t include this page.</p>;
 
-  if (!session.onboardingCompleted) {
+  // Onboarding is about the person's own workspace; a teammate working in someone else's skips it.
+  if (session.role === "OWNER" && !session.onboardingCompleted) {
     redirect("/organizer/onboarding");
   }
 
+  // Teammates only get links their role can open. Settings is the person's own account, so workspace set-up
+  // steps that point there (company email, payouts) are the owner's job.
+  const teammate = session.role !== "OWNER";
+  const access = accessFor(getPermissions(session.role), teammate);
+  const ok = (href: string) => canOpen(href, access) && !(teammate && href === "/organizer/settings");
+
   const [organizer, teamCount, widgets] = await Promise.all([
     prisma.eventOrganizer.findUnique({
-      where: { id: session.id },
+      where: { id: session.organizerId },
       select: { companyEmailVerified: true },
     }),
     prisma.eventTeamMember.count({
-      where: { organizerId: session.id },
+      where: { organizerId: session.organizerId },
     }).catch(() => 0),
     prisma.embedWidget.findMany({
-      where: { organizerId: session.id },
+      where: { organizerId: session.organizerId },
       select: { active: true, firstSeenAt: true, firstSeenHost: true, codeCopiedAt: true, markedInstalledAt: true },
     }).catch(() => []),
   ]);
@@ -45,7 +56,7 @@ export default async function OrganizerHome() {
   });
 
   const events = await prisma.event.findMany({
-    where: { organizerId: session.id, deletedAt: null },
+    where: { ...eventScope(session), deletedAt: null },
     orderBy: { startAt: "asc" },
     select: {
       id: true, title: true, slug: true, status: true,
@@ -59,7 +70,7 @@ export default async function OrganizerHome() {
   const firstName = session.name.split(" ")[0];
 
   if (!hasEvents) {
-    return <NewAccountView firstName={firstName} companyEmailVerified={organizer?.companyEmailVerified ?? false} events={events} teamCount={teamCount} widgetLive={widgetLive} />;
+    return <NewAccountView firstName={firstName} companyEmailVerified={organizer?.companyEmailVerified ?? false} events={events} teamCount={teamCount} widgetLive={widgetLive} ok={ok} />;
   }
 
   const now = new Date();
@@ -73,11 +84,11 @@ export default async function OrganizerHome() {
   const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
 
   const [totalRegs, checkedIn, waitlisted, recentRegs, regsLast30, regsPrev30, totalViews] = await Promise.all([
-    prisma.eventRegistration.count({ where: { event: { organizerId: session.id }, deletedAt: null } }),
-    prisma.eventRegistration.count({ where: { event: { organizerId: session.id }, status: "CHECKED_IN", deletedAt: null } }),
-    prisma.eventRegistration.count({ where: { event: { organizerId: session.id }, status: "WAITLISTED", deletedAt: null } }),
+    prisma.eventRegistration.count({ where: { event: eventScope(session), deletedAt: null } }),
+    prisma.eventRegistration.count({ where: { event: eventScope(session), status: "CHECKED_IN", deletedAt: null } }),
+    prisma.eventRegistration.count({ where: { event: eventScope(session), status: "WAITLISTED", deletedAt: null } }),
     prisma.eventRegistration.findMany({
-      where: { event: { organizerId: session.id }, deletedAt: null },
+      where: { event: eventScope(session), deletedAt: null },
       orderBy: { registeredAt: "desc" },
       select: {
         id: true, guestName: true, registeredAt: true, status: true,
@@ -85,8 +96,8 @@ export default async function OrganizerHome() {
       },
       take: 5,
     }),
-    prisma.eventRegistration.count({ where: { event: { organizerId: session.id }, deletedAt: null, registeredAt: { gte: thirtyDaysAgo } } }),
-    prisma.eventRegistration.count({ where: { event: { organizerId: session.id }, deletedAt: null, registeredAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } } }),
+    prisma.eventRegistration.count({ where: { event: eventScope(session), deletedAt: null, registeredAt: { gte: thirtyDaysAgo } } }),
+    prisma.eventRegistration.count({ where: { event: eventScope(session), deletedAt: null, registeredAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } } }),
     prisma.analyticsDaily.aggregate({
       where: { entityType: "event", entityId: { in: events.map(e => e.id) }, date: { gte: thirtyDaysAgo } },
       _sum: { views: true },
@@ -154,6 +165,7 @@ export default async function OrganizerHome() {
     });
   }
 
+  const visibleAttention = attentionItems.filter((a) => ok(a.href));
   const checkInRate = totalRegs > 0 ? Math.round((checkedIn / totalRegs) * 100) : 0;
 
   return (
@@ -170,18 +182,18 @@ export default async function OrganizerHome() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Link
+          {ok("/organizer/events/create") && <Link
             href="/organizer/events/create"
             data-tour="create-event"
             className="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 bg-brand hover:bg-brand-600 active:bg-brand-700 text-white text-sm font-bold font-jakarta rounded-md transition-colors"
           >
             <Plus className="w-4 h-4" /> Create event
-          </Link>
+          </Link>}
         </div>
       </div>
 
       {/* Needs your attention */}
-      {attentionItems.length > 0 && (
+      {visibleAttention.length > 0 && (
         <div data-tour="attention" className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md">
           <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-800">
             <h2 className="portal-section-title flex items-center gap-2">
@@ -190,7 +202,7 @@ export default async function OrganizerHome() {
             </h2>
           </div>
           <div className="flex flex-col lg:flex-row divide-y lg:divide-y-0 lg:divide-x divide-gray-100 dark:divide-gray-800">
-            {attentionItems.map((item, i) => (
+            {visibleAttention.map((item, i) => (
               <div key={i} className="flex-1 min-w-0 px-4 sm:px-5 py-4 flex items-center gap-3 sm:gap-4">
                 <div className="shrink-0">{item.icon}</div>
                 <div className="flex-1 min-w-0">
@@ -381,7 +393,7 @@ export default async function OrganizerHome() {
 
 /* ── New Account View ────────────────────────────────────── */
 
-function NewAccountView({ firstName, companyEmailVerified, events, teamCount, widgetLive }: { firstName: string; companyEmailVerified: boolean; events: any[]; teamCount: number; widgetLive: boolean }) {
+function NewAccountView({ firstName, companyEmailVerified, events, teamCount, widgetLive, ok }: { firstName: string; companyEmailVerified: boolean; events: any[]; teamCount: number; widgetLive: boolean; ok: (href: string) => boolean }) {
   const hasEvent = events.length > 0;
   const hasTeam = teamCount > 0;
   const steps = [
@@ -391,8 +403,20 @@ function NewAccountView({ firstName, companyEmailVerified, events, teamCount, wi
     { num: 4, title: "Invite your team", desc: hasTeam ? `Done · ${teamCount} member${teamCount !== 1 ? "s" : ""} added` : "Add co-organizers and check-in staff.", done: hasTeam, action: hasTeam ? null : "Invite", href: "/organizer/team" },
     { num: 5, title: "Show events on your website", desc: widgetLive ? "Done · your widget is live" : "Paste one snippet so visitors register on your own site.", done: widgetLive, action: widgetLive ? null : "Set up", href: "/organizer/embed" },
     { num: 6, title: "Set up payouts (optional)", desc: "Only needed if you'll sell paid tickets.", done: false, action: "Set up", href: "/organizer/settings" },
-  ];
+  ].filter((st) => !st.href || ok(st.href));
   const doneCount = steps.filter(s => s.done).length;
+  const canCreate = ok("/organizer/events/create");
+  // A teammate who can't create events or set the workspace up has nothing to do here yet.
+  if (!canCreate && steps.length <= 1) {
+    return (
+      <div className="space-y-6">
+        <div className="min-w-0">
+          <h1 className="portal-title">{getGreeting()}, {firstName}</h1>
+          <p className="portal-subtitle">There are no published events in this workspace yet. They’ll show here once the team publishes one.</p>
+        </div>
+      </div>
+    );
+  }
 
   const templates = [
     { icon: Code2, label: "Hackathon", desc: "Teams, judging, 24–48 h", href: "/organizer/events/create?template=hackathon" },
@@ -413,17 +437,17 @@ function NewAccountView({ firstName, companyEmailVerified, events, teamCount, wi
             Let&apos;s get your first event live. Most organizers publish in under 10 minutes.
           </p>
         </div>
-        <Link
+        {ok("/organizer/events/create") && <Link
           href="/organizer/events/create"
           data-tour="create-event"
           className="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 bg-brand hover:bg-brand-600 active:bg-brand-700 text-white text-sm font-bold font-jakarta rounded-md transition-colors"
         >
           <Plus className="w-4 h-4" /> Create event
-        </Link>
+        </Link>}
       </div>
 
       {/* Setup checklist + Templates */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
+      <div className={`grid grid-cols-1 gap-6 ${canCreate ? "lg:grid-cols-[1fr_340px]" : ""}`}>
         {/* Setup checklist */}
         <div data-tour="checklist" className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md">
           <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
@@ -475,7 +499,7 @@ function NewAccountView({ firstName, companyEmailVerified, events, teamCount, wi
         </div>
 
         {/* Start from a template */}
-        <div data-tour="templates" className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md">
+        {canCreate && <div data-tour="templates" className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md">
           <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
             <h2 className="portal-section-title">Start from a template</h2>
             <p className="text-xs text-gray-400 font-jakarta mt-0.5">Pre-filled schedule, tickets and registration questions.</p>
@@ -506,7 +530,7 @@ function NewAccountView({ firstName, companyEmailVerified, events, teamCount, wi
               </Link>
             </p>
           </div>
-        </div>
+        </div>}
       </div>
 
       {/* Overview stats (empty state) */}

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { UserCheck, CreditCard, Home, Briefcase, Users, Plus, MoreHorizontal, X, Globe, BarChart3, Building2, Settings, HelpCircle, UserPlus, History } from 'lucide-react';
+import { UserCheck, CreditCard, Home, Briefcase, Users, Plus, MoreHorizontal, X, Globe, BarChart3, Building2, Settings, HelpCircle, UserPlus, History, LayoutTemplate } from 'lucide-react';
 import { can, type Permission, WORKSPACE_WIDE_PAGES } from '@/lib/employer/roles';
 import type { EmployerShell } from '@/lib/employer/portal';
 import { CompanyAvatar, VerificationLine } from './EmployerSidebar';
@@ -17,6 +17,7 @@ const ALL_TABS: { href: string; icon: typeof Home; label: string; exact?: boolea
 
 const ALL_MORE: { href: string; icon: typeof Home; label: string; desc: string; perm?: Permission }[] = [
   { href: '/employer/talent', icon: UserCheck, label: 'Talent pool', desc: 'Past applicants open to other roles', perm: 'candidates.view' },
+  { href: '/employer/careers-page', icon: LayoutTemplate, label: 'Careers page', desc: 'Your ready-made careers page with open roles', perm: 'company.manage' },
   { href: '/employer/careers', icon: Globe, label: 'Website widget', desc: 'Show your open roles on your website', perm: 'widget.manage' },
   { href: '/employer/analytics', icon: BarChart3, label: 'Insights', desc: 'Views, applications and sources', perm: 'insights.view' },
   { href: '/employer/company', icon: Building2, label: 'Company profile', desc: 'Logo, description, startup claim', perm: 'company.manage' },

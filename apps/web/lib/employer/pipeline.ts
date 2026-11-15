@@ -1,4 +1,5 @@
 import { prisma } from '@udyaibase/database';
+import { newlyFilledJobs, type FilledJob } from '@/lib/employer/job-stages';
 import type { JobBoardAppStatus } from '@prisma/client';
 import { sendEmailBatch } from '@/lib/email/send';
 
@@ -85,7 +86,11 @@ export interface MoveEmail {
   sendAt?: string | null;
 }
 
-export interface MoveResult { moved: number; skipped: number; emailed: number; scheduled: number; failed: number }
+export interface MoveResult {
+  moved: number; skipped: number; emailed: number; scheduled: number; failed: number;
+  /** After a move to Hired: jobs that are still open but now have every position filled (the UI offers to close them). */
+  filledJobs?: FilledJob[];
+}
 
 /**
  * Moves candidates to a stage and optionally emails them. Safe to retry with the same `batchKey`:
@@ -104,12 +109,13 @@ export async function moveApplications(opts: {
   const { employerId, toStatus, batchKey } = opts;
   const apps = await prisma.jobBoardApplication.findMany({
     where: { id: { in: opts.ids.slice(0, 1000) }, Listing: { employerId } },
-    select: { id: true, status: true, fullName: true, email: true, withdrawnAt: true, firstResponseAt: true, reviewedAt: true, Listing: { select: { title: true } } },
+    select: { id: true, status: true, fullName: true, email: true, withdrawnAt: true, firstResponseAt: true, reviewedAt: true, listingId: true, Listing: { select: { title: true } } },
   });
 
   const result: MoveResult = { moved: 0, skipped: opts.ids.length - apps.length, emailed: 0, scheduled: 0, failed: 0 };
   const toEmail: { eventId: string; to: string; subject: string; html: string }[] = [];
   const now = new Date();
+  const hiredInto: string[] = [];
 
   for (const a of apps) {
     if (a.withdrawnAt || (a.status === toStatus && toStatus !== 'REVIEWED')) { result.skipped++; continue; }
@@ -133,6 +139,7 @@ export async function moveApplications(opts: {
         return ev.id;
       });
       result.moved++;
+      if (toStatus === 'HIRED') hiredInto.push(a.listingId);
       const deleted = a.email.endsWith('@deleted.invalid');
       if (opts.email && !deleted) {
         const vars = {
@@ -169,6 +176,7 @@ export async function moveApplications(opts: {
       });
     }));
   }
+  if (hiredInto.length) result.filledJobs = await newlyFilledJobs(hiredInto);
   return result;
 }
 

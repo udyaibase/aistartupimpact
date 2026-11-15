@@ -10,12 +10,16 @@ import { requireActionAuth } from '@/lib/api-auth';
 import { refreshPublic } from '@/lib/refresh-public';
 import { checkLocation } from '@/lib/locations';
 
+/** Startup descriptions are capped at 1,000 characters (matches the founder portal). */
+const STARTUP_DESCRIPTION_MAX = 1000;
+
 const sql = neon(process.env.DATABASE_URL!);
 
 export async function getStartupsAction() {
   const { error } = await requireActionAuth();
   if (error) return { success: false, error };
   try {
+    // Pending first; among those, domain-verified startups are reviewed first (the founder portal says so).
     const startups = await sql`
       SELECT 
         id, name, slug, "slugChangedAt", "previousSlugs", tagline, description, "logoUrl", "websiteUrl", "linkedinUrl", "twitterUrl",
@@ -25,7 +29,7 @@ export async function getStartupsAction() {
         "ownerId", category, "businessType", founders, "foundersData", "createdAt", "updatedAt"
       FROM "Startup"
       WHERE "deletedAt" IS NULL
-      ORDER BY "isApproved" ASC, "isFeatured" DESC, "createdAt" DESC
+      ORDER BY "isApproved" ASC, "isVerified" DESC, "isFeatured" DESC, "createdAt" DESC
     `;
     return startups;
   } catch (error) {
@@ -113,6 +117,10 @@ export async function createStartupAction(data: {
 }) {
   const { error } = await requireActionAuth();
   if (error) return { success: false, error };
+  // Same 1,000-character cap as the founder portal.
+  if ((data.description || '').length > STARTUP_DESCRIPTION_MAX) {
+    return { success: false, error: `Description must be ${STARTUP_DESCRIPTION_MAX.toLocaleString('en-IN')} characters or fewer` };
+  }
   try {
     // Generate clean SEO-friendly slug
     const { slugify } = await import('@/lib/slug-utils');
@@ -276,6 +284,10 @@ export async function updateStartupAction(id: string, data: {
 }) {
   const { error } = await requireActionAuth();
   if (error) return { success: false, error };
+  // Same 1,000-character cap as the founder portal.
+  if ((data.description || '').length > STARTUP_DESCRIPTION_MAX) {
+    return { success: false, error: `Description must be ${STARTUP_DESCRIPTION_MAX.toLocaleString('en-IN')} characters or fewer` };
+  }
   try {
     // Auto-calculate impact score from funding + employees + stage + age
     let totalFundingUsdCents = 0;

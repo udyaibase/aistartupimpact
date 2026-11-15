@@ -4,6 +4,8 @@ import { sendEmailFireAndForget } from '@/lib/email/send';
 import { screenApplication } from '@/lib/jobs/ai-screen';
 import { button, esc, shell } from '@/lib/jobs/apply-emails';
 import { eraseApplication } from '@/lib/jobs/candidate-status';
+import { POOL_REMINDER_DAYS, poolEmailHeaders, poolLink } from '@/lib/jobs/talent-pool';
+import { employerContext } from '@/lib/employer/applications';
 
 const SITE = (process.env.NEXT_PUBLIC_SITE_URL || 'https://udyaibase.com').replace(/\/$/, '');
 const DAY = 864e5;
@@ -14,6 +16,8 @@ export const RETENTION = {
   afterWithdrawDays: 30,
   afterJobClosedDays: 365,
   talentPoolDays: 365,
+  /** After a talent pool membership ends (and isn't extended), data whose purpose is over goes this soon. */
+  afterPoolEndsDays: 30,
 };
 
 /**
@@ -84,18 +88,60 @@ export async function runHiringMaintenance(now = new Date(), opts: { onlyEmploye
     await prisma.jobBoardListing.updateMany({ where: { id: { in: adminClosing.map((l) => l.id) } }, data: { expiryNudgeAt: now } });
   }
 
-  // 3. Retention (DPDP): erase candidate data once its purpose is over, unless they joined the talent pool.
-  const notInPool = { OR: [{ talentPoolUntil: null }, { talentPoolUntil: { lt: now } }] };
+  // 2c. Talent pool ending in 30 days: ask the candidate if they'd like another 12 months (a fresh consent).
+  //     One email per person per company per membership period.
+  const ending = await prisma.jobBoardApplication.findMany({
+    where: {
+      talentPoolUntil: { gt: now, lte: new Date(t + POOL_REMINDER_DAYS * DAY) },
+      talentPoolReminderAt: null,
+      NOT: { email: { endsWith: '@deleted.invalid' } },
+      Listing: { Employer: { deletedAt: null, isActive: true, ...only } },
+    },
+    orderBy: { appliedAt: 'desc' },
+    select: { id: true, email: true, fullName: true, talentPoolUntil: true, Listing: { select: { employerId: true } } },
+    take: 500,
+  });
+  const reminded = new Set<string>();
+  const companies = new Map<string, string>();
+  for (const a of ending) {
+    const key = `${a.Listing.employerId}:${a.email.toLowerCase()}`;
+    if (reminded.has(key)) continue;
+    reminded.add(key);
+    const company = companies.get(a.Listing.employerId) ?? (await employerContext(a.Listing.employerId)).company;
+    companies.set(a.Listing.employerId, company);
+    sendPoolEndingEmail({ to: a.email, name: a.fullName, company, until: a.talentPoolUntil!, applicationId: a.id });
+    await prisma.jobBoardApplication.updateMany({
+      where: { email: { equals: a.email, mode: 'insensitive' }, Listing: { employerId: a.Listing.employerId }, talentPoolUntil: { not: null } },
+      data: { talentPoolReminderAt: now },
+    });
+  }
+
+  // 3. Retention (DPDP): erase candidate data once its purpose is over, unless they're in the talent pool.
+  //    A pool membership covers 12 months only: once it ends, the data goes 30 days later (time to say "extend"
+  //    to the reminder), not after the longer post-decision periods below, so pool + rejection never adds up
+  //    to 18 months.
+  const poolGrace = new Date(t - RETENTION.afterPoolEndsDays * DAY);
+  const notInPool = { OR: [{ talentPoolUntil: null }, { talentPoolUntil: { lt: poolGrace } }] };
+  const scoped = opts.onlyEmployerId ? { Listing: { employerId: opts.onlyEmployerId } } : {};
   const due = await prisma.jobBoardApplication.findMany({
     where: {
       NOT: { email: { endsWith: '@deleted.invalid' } },
-      AND: [notInPool, {
-        OR: [
-          { status: 'REJECTED', statusChangedAt: { lt: new Date(t - RETENTION.afterDecisionDays * DAY) }, ...(opts.onlyEmployerId ? { Listing: { employerId: opts.onlyEmployerId } } : {}) },
-          { withdrawnAt: { lt: new Date(t - RETENTION.afterWithdrawDays * DAY) }, ...(opts.onlyEmployerId ? { Listing: { employerId: opts.onlyEmployerId } } : {}) },
-          { Listing: { ...(opts.onlyEmployerId ? { employerId: opts.onlyEmployerId } : {}), OR: [{ closedAt: { lt: new Date(t - RETENTION.afterJobClosedDays * DAY) } }, { deletedAt: { lt: new Date(t - RETENTION.afterJobClosedDays * DAY) } }] } },
-        ],
-      }],
+      OR: [
+        {
+          AND: [notInPool, {
+            OR: [
+              { status: 'REJECTED', statusChangedAt: { lt: new Date(t - RETENTION.afterDecisionDays * DAY) }, ...scoped },
+              { withdrawnAt: { lt: new Date(t - RETENTION.afterWithdrawDays * DAY) }, ...scoped },
+              { Listing: { ...(opts.onlyEmployerId ? { employerId: opts.onlyEmployerId } : {}), OR: [{ closedAt: { lt: new Date(t - RETENTION.afterJobClosedDays * DAY) } }, { deletedAt: { lt: new Date(t - RETENTION.afterJobClosedDays * DAY) } }] } },
+            ],
+          }],
+        },
+        // Pool ended 30+ days ago and the application itself is finished (not selected, withdrawn, or the job closed).
+        {
+          talentPoolUntil: { lt: poolGrace }, ...scoped,
+          OR: [{ status: 'REJECTED' }, { withdrawnAt: { not: null } }, { Listing: { OR: [{ closedAt: { not: null } }, { deletedAt: { not: null } }] } }],
+        },
+      ],
     },
     select: { id: true },
     take: 200,
@@ -125,7 +171,7 @@ export async function runHiringMaintenance(now = new Date(), opts: { onlyEmploye
     }
   }
 
-  return { aiRetried, reviewNudgesSent: byEmployer.size, closingNudgesSent: closingBy.size, adminClosingJobs: adminClosing.length, applicationsErased: erased };
+  return { aiRetried, poolRemindersSent: reminded.size, reviewNudgesSent: byEmployer.size, closingNudgesSent: closingBy.size, adminClosingJobs: adminClosing.length, applicationsErased: erased };
 }
 
 /** Workspace email plus active owners and recruiters (the people who can act on candidates and jobs). */
@@ -184,5 +230,22 @@ function sendAdminClosingDigest(jobs: { id: string; title: string; expiresAt: Da
 <h1 style="font-size:20px;margin:0 0 8px">Admin-managed jobs closing soon</h1>
 <p style="margin:0 0 16px;font-size:15px;line-height:1.6">These jobs were added from the admin app, so there's no employer to remind. Renew the ones still open, or let them close.</p>
 <ul style="margin:0 0 20px;padding-left:18px;font-size:15px;line-height:1.5">${rows}</ul>`),
+  });
+}
+
+function sendPoolEndingEmail(o: { to: string; name: string; company: string; until: Date; applicationId: string }) {
+  const first = o.name.split(' ')[0] || o.name;
+  const date = o.until.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' });
+  sendEmailFireAndForget({
+    to: o.to,
+    subject: `Your talent pool membership with ${o.company} ends in 30 days`.replace(/[\r\n]+/g, ' '),
+    type: 'job_talent_pool_ending',
+    headers: poolEmailHeaders(o.applicationId),
+    html: shell(`
+<h1 style="font-size:20px;margin:0 0 8px">Hi ${esc(first)}, stay in ${esc(o.company)}’s talent pool?</h1>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.6">When you applied, you agreed that ${esc(o.company)} could contact you about other roles for 12 months. That ends on <strong>${esc(date)}</strong>.</p>
+<p style="margin:0 0 20px;font-size:15px;line-height:1.6">If you’d like them to keep you in mind for another year, confirm below. If you do nothing, you’ll leave the pool on that date. Unless one of your applications is still being considered, your details are then deleted about a month later.</p>
+<p style="margin:0 0 24px">${button(poolLink(o.applicationId, 'extend'), 'Keep me for 12 more months')}</p>
+<p style="margin:0;font-size:13px;color:#6b7280;line-height:1.6">Not interested? <a href="${poolLink(o.applicationId, 'leave')}" style="color:#6b7280">Leave the talent pool now</a>.</p>`),
   });
 }

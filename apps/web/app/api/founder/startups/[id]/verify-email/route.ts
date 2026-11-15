@@ -3,10 +3,13 @@ import { logFounderActivity } from '@/lib/founder/activity';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { getFounderSession } from '@/lib/founder-auth';
+import { clientIp } from '@/lib/client-ip';
 import { authRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
-import { emailDomain, emailMatchesDomain, isFreeMailDomain, websiteDomain } from '@/lib/jobs/trust';
+import { emailDomain, emailMatchesDomain, isFreeMailDomain } from '@/lib/jobs/trust';
 import { checkDomainCode, sendDomainCode } from '@/lib/startups/domain-otp';
 import { markStartupVerified } from '@/lib/startups/ownership';
+import { emailVerificationDomain } from '@/lib/startups/listing-domain';
+import { isPlatformHosted, isPlatformPage } from '@udyaibase/utils';
 import { refreshPublicListing } from '@/lib/founder/refresh-listing';
 
 export const dynamic = 'force-dynamic';
@@ -38,7 +41,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     return NextResponse.json({ error: STARTUP_LIMIT_MESSAGE }, { status: 400 });
   }
 
-  const companyDomain = websiteDomain(startup.websiteUrl);
+  const companyDomain = emailVerificationDomain(startup.websiteUrl);
+  if (!companyDomain && startup.websiteUrl && (isPlatformPage(startup.websiteUrl) || isPlatformHosted(startup.websiteUrl))) {
+    return NextResponse.json({ error: `${startup.name}'s website is a page on a shared platform, so an email can't prove ownership. Add your own domain as the website, or contact support.` }, { status: 422 });
+  }
   if (!companyDomain) {
     return NextResponse.json({ error: `${startup.name} has no website on file, so it can't be verified by email. Use the DNS method or contact support.` }, { status: 422 });
   }
@@ -56,17 +62,22 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   if (step === 'send') {
     const { success: allowed } = await checkRateLimit(authRateLimit, getClientIdentifier(request));
     if (!allowed) return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
-    const r = await sendDomainCode({ email, purpose, startupName: startup.name, requester: session.name || 'A founder' });
+    const r = await sendDomainCode({ email, purpose, startupName: startup.name, requester: session.name || 'A founder', account: `founder:${session.userId}` });
     if (!r.ok) return NextResponse.json({ error: r.error, retryAfter: r.retryAfter }, { status: r.status });
     return NextResponse.json({ success: true, companyDomain, cooldown: r.cooldown });
   }
 
+  // Guesses are limited per founder and startup as well as per code, so asking for fresh codes doesn't buy more tries.
+  const { success: mayTry } = await checkRateLimit(authRateLimit, `claim-verify:${session.userId}:${startup.id}`);
+  if (!mayTry) return NextResponse.json({ error: 'Too many attempts. Please try again in 15 minutes.' }, { status: 429 });
   const code = String(body.code ?? '').replace(/\D/g, '');
   if (code.length !== 6) return NextResponse.json({ error: 'Enter the 6-digit code from the email.' }, { status: 400 });
   const r = await checkDomainCode({ email, purpose, code });
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
 
-  await markStartupVerified(prisma, startup.id, companyDomain, session.userId);
+  await markStartupVerified(prisma, startup.id, companyDomain, session.userId, {
+    method: 'EMAIL', email, ipAddress: clientIp(request), userAgent: request.headers.get('user-agent'),
+  });
   await refreshPublicListing('startup', startup.id); // verified badge
   await logFounderActivity(session.userId, 'startup_claim_verified', { request, metadata: { startupId: startup.id, method: 'email' } });
   return NextResponse.json({ success: true, startup: { id: startup.id, name: startup.name } });

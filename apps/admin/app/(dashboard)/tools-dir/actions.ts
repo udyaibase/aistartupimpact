@@ -962,6 +962,8 @@ export async function bulkDeleteToolsAction(ids: string[]) {
 // ─── Sprint 4.2: Duplicate Detection ────────────────────────────────────────
 
 export async function checkDuplicateToolAction(name: string, websiteUrl: string) {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return [];
   try {
     const results = await sql`
       SELECT id, name, slug, "websiteUrl"

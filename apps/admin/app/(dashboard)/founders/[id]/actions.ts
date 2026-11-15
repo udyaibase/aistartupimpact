@@ -6,7 +6,7 @@ import { authOptions } from '@/lib/auth';
 import { DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { eraseFounderRecords, findUnusedMedia, prisma } from '@udyaibase/database';
 import { mediaVariantKeys, ownMediaKey } from '@udyaibase/utils';
-import { twoFactorBlock } from '@/lib/api-auth';
+import { requireActionAuth, twoFactorBlock } from '@/lib/api-auth';
 import { logAuditEvent } from '@/lib/audit-log';
 import { r2, R2_BUCKET } from '@/lib/media';
 import { refreshPublic } from '@/lib/refresh-public';
@@ -14,6 +14,8 @@ import { refreshPublic } from '@/lib/refresh-public';
 const sql = neon(process.env.DATABASE_URL!);
 
 export async function getFounderByIdAction(founderId: string) {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     // Get founder details
     const founders = await sql`

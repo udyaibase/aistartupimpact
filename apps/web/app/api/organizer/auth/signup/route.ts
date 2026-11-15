@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { passwordProblem } from "@/lib/password-rules";
 import { verifyTurnstileToken } from "@/lib/turnstile";
 import { prisma } from "@udyaibase/database";
 import { createOrganizerSession, hashPassword, generateToken } from "@/lib/organizer-auth";
@@ -34,6 +35,7 @@ export async function POST(request: NextRequest) {
     if (password.length < 8) {
       return NextResponse.json({ success: false, error: "Password must be at least 8 characters." }, { status: 400 });
     }
+    const pwProblem = passwordProblem(password, email, 'mixed', name); if (pwProblem) return NextResponse.json({ success: false, error: pwProblem }, { status: 400 });
     if (!/[A-Z]/.test(password)) {
       return NextResponse.json({ success: false, error: "Password must contain an uppercase letter." }, { status: 400 });
     }

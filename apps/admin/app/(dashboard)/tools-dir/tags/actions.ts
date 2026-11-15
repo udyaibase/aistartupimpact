@@ -11,6 +11,8 @@ const sql = neon(process.env.DATABASE_URL!);
 // ─── Read Operations ────────────────────────────────────────────────────────
 
 export async function getTagGroupsWithTagsAction() {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     const groups = await sql`
       SELECT id, name, slug, icon, description, "sortOrder", "displayMode", "maxVisibleDefault", "isAdminOnly", "isActive"
@@ -43,6 +45,8 @@ export async function getTagGroupsWithTagsAction() {
 }
 
 export async function getToolTagsAction(toolId: string) {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     const mappings = await sql`
       SELECT t.id, t.name, t.slug, t.emoji, t."groupId", g.name AS "groupName", g.slug AS "groupSlug"
@@ -129,6 +133,8 @@ export async function createTagAction(data: {
   groupId: string;
   emoji?: string;
 }) {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     const slug = data.name
       .toLowerCase()
@@ -167,6 +173,8 @@ export async function createTagsBulkAction(data: {
   names: string[];
   groupId: string;
 }) {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     const results: Array<{ name: string; success: boolean; error?: string }> = [];
 
@@ -213,6 +221,8 @@ export async function createTagsBulkAction(data: {
 }
 
 export async function updateTagAction(id: string, data: { name?: string; emoji?: string; isActive?: boolean; sortOrder?: number }) {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     if (data.name !== undefined) {
       await sql`UPDATE "ToolSystemTag" SET name = ${data.name}, "updatedAt" = NOW() WHERE id = ${id}`;
@@ -236,6 +246,8 @@ export async function updateTagAction(id: string, data: { name?: string; emoji?:
 }
 
 export async function deleteTagAction(id: string) {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     // Remove all mappings first
     await sql`DELETE FROM "ToolSystemTagMapping" WHERE "tagId" = ${id}`;
@@ -260,6 +272,8 @@ export async function createTagGroupAction(data: {
   maxVisibleDefault?: number;
   isAdminOnly?: boolean;
 }) {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     const slug = data.name
       .toLowerCase()
@@ -286,6 +300,8 @@ export async function createTagGroupAction(data: {
 }
 
 export async function refreshTagCountsAction() {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     await sql`
       UPDATE "ToolSystemTag" t

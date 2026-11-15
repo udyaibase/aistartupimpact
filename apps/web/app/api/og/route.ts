@@ -1,60 +1,55 @@
 import { NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
+import { getFounderSession } from '@/lib/founder-auth';
+import { apiRateLimit, checkRateLimit } from '@/lib/rate-limit';
+import { fetchPublicHtml } from '@/lib/embed/safe-fetch';
 
 export const dynamic = 'force-dynamic';
 
-function isAllowedUrl(raw: string): URL | null {
-  try {
-    const parsed = new URL(raw.startsWith('http') ? raw : `https://${raw}`);
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
-    const hostname = parsed.hostname.toLowerCase();
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' ||
-        hostname === '0.0.0.0' || hostname.endsWith('.local') || hostname.endsWith('.internal') ||
-        /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.)/.test(hostname)) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
+/**
+ * Reads a page's title, description and image to pre-fill a listing form. Signed-in founders only, rate limited,
+ * and fetched through fetchPublicHtml: public https addresses only, every redirect re-checked, at most 200 KB read.
+ * (It used to be open to anyone and checked only how the host name was spelled.)
+ */
 export async function POST(req: Request) {
   try {
-    const { url } = await req.json();
-    if (!url) return NextResponse.json({ error: 'URL required' }, { status: 400 });
+    const session = await getFounderSession();
+    if (!session) return NextResponse.json({ error: 'Please sign in.' }, { status: 401 });
+    const { success } = await checkRateLimit(apiRateLimit, `og:${session.userId}`);
+    if (!success) return NextResponse.json({ error: 'Too many requests. Try again in a minute.' }, { status: 429 });
 
-    const parsedUrl = isAllowedUrl(url);
-    if (!parsedUrl) return NextResponse.json({ error: 'Invalid or disallowed URL' }, { status: 400 });
+    const { url } = await req.json().catch(() => ({}));
+    if (!url || typeof url !== 'string' || url.length > 2000) return NextResponse.json({ error: 'URL required' }, { status: 400 });
 
-    const response = await fetch(parsedUrl.href, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; UdyaibaseBot/1.0)' },
-      redirect: 'error',
-      signal: AbortSignal.timeout(5000)
-    });
-
-    if (!response.ok) {
-      return NextResponse.json({ error: 'Failed to fetch the URL' }, { status: response.status });
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`);
+      if (parsedUrl.protocol === 'http:') parsedUrl.protocol = 'https:';
+    } catch {
+      return NextResponse.json({ error: 'Invalid or disallowed URL' }, { status: 400 });
     }
 
-    const html = await response.text();
-    const $ = cheerio.load(html);
+    const page = await fetchPublicHtml(parsedUrl, { timeoutMs: 5000, stopAt: '</head>' });
+    if (!page.ok) {
+      return NextResponse.json({ error: page.reason === 'unsafe' ? 'Invalid or disallowed URL' : 'Failed to fetch the URL' }, { status: page.reason === 'unsafe' ? 400 : 502 });
+    }
 
+    const $ = cheerio.load(page.html);
     const title = $('meta[property="og:title"]').attr('content') || $('title').text() || '';
     const description = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
     const logo = $('meta[property="og:image"]').attr('content') || $('link[rel="icon"]').attr('href') || $('link[rel="shortcut icon"]').attr('href') || '';
 
-    let finalLogo = logo;
-    if (logo && !logo.startsWith('http')) {
-      const urlObj = parsedUrl;
-      finalLogo = `${urlObj.protocol}//${urlObj.host}${logo.startsWith('/') ? '' : '/'}${logo}`;
+    let finalLogo = '';
+    if (logo) {
+      try {
+        const resolved = new URL(logo, page.finalUrl);
+        if (resolved.protocol === 'https:') finalLogo = resolved.href;
+      } catch { /* leave empty */ }
     }
 
-    return NextResponse.json({
-      title: title.trim(),
-      description: description.trim(),
-      logo: finalLogo
-    });
+    return NextResponse.json({ title: title.trim().slice(0, 300), description: description.trim().slice(0, 1000), logo: finalLogo });
   } catch (error) {
-    console.error('OG Fetch Auto-fill error:', error);
+    console.error('OG Fetch Auto-fill error:', error instanceof Error ? error.message : error);
     return NextResponse.json({ error: 'Failed to extract metadata' }, { status: 500 });
   }
 }

@@ -83,7 +83,6 @@ test.describe('Auth flows', () => {
       '/founder/dashboard',
       '/employer/dashboard',
       '/organizer/events',
-      '/client-portal',
     ];
 
     for (const route of protectedRoutes) {

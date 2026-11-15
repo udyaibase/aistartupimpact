@@ -22,7 +22,7 @@ export async function findByStatusToken(token: string) {
     where: { statusTokenHash: hashStatusToken(token) },
     select: {
       id: true, status: true, appliedAt: true, withdrawnAt: true, fullName: true, talentPoolUntil: true,
-      Listing: { select: { title: true, slug: true, Employer: { select: { companyName: true, startupClaimMethod: true, startupId: true, Startup: { select: { name: true } } } } } },
+      Listing: { select: { title: true, slug: true, isGeneral: true, Employer: { select: { slug: true, companyName: true, startupClaimMethod: true, startupId: true, Startup: { select: { name: true } } } } } },
     },
   });
 }
@@ -32,8 +32,13 @@ export async function eraseApplication(applicationId: string) {
   const uploads = await prisma.jobBoardResumeUpload.findMany({ where: { applicationId }, select: { id: true, key: true } });
   const app = await prisma.jobBoardApplication.findUnique({ where: { id: applicationId }, select: { resumeKey: true } });
   const keys = new Set([...uploads.map((u) => u.key), ...(app?.resumeKey ? [app.resumeKey] : [])]);
-  for (const key of keys) await deleteResume(key).catch(() => {});
+  // A file that couldn't be deleted keeps its upload record, detached from the application, so the daily cleanup
+  // of unattached uploads tries again. Dropping the record here would leave the file in storage with nothing
+  // pointing at it.
+  const failed: string[] = [];
+  for (const key of keys) await deleteResume(key).catch(() => { failed.push(key); });
   await prisma.$transaction([
+    prisma.jobBoardResumeUpload.updateMany({ where: { applicationId, key: { in: failed } }, data: { applicationId: null } }),
     prisma.jobBoardResumeUpload.deleteMany({ where: { applicationId } }),
     prisma.jobBoardApplicationNote.deleteMany({ where: { applicationId } }),
     prisma.jobBoardAiScreening.deleteMany({ where: { applicationId } }),
@@ -45,6 +50,7 @@ export async function eraseApplication(applicationId: string) {
         currentTitle: null, currentCompany: null, city: null, expectedCtcLakh: null, experienceYears: null, noticePeriodDays: null,
         screeningAnswers: Prisma.DbNull, confirmedSkills: [], matchedSkills: [], referrerUrl: null, notes: null,
         consentText: null, statusTokenHash: null, withdrawnAt: new Date(),
+        talentPoolUntil: null, talentPoolReminderAt: null, talentTags: [],
       },
     }),
   ]);

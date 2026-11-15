@@ -1,3 +1,4 @@
+import { getDomain, getPublicSuffix } from 'tldts';
 /**
  * Which edits to a public listing go live straight away, and which wait for an admin. Decided field by field, so a
  * founder's description can publish while their new website waits, with the old website still showing.
@@ -73,25 +74,71 @@ export function listingValueText(value: unknown): string {
   return String(v);
 }
 
-/** Registrable domains, shared by every check that compares a website or work email to a company. */
-const TWO_LEVEL_SUFFIXES = new Set([
-  'co.in', 'net.in', 'org.in', 'firm.in', 'gen.in', 'ind.in', 'ac.in', 'edu.in', 'gov.in', 'res.in',
-  'co.uk', 'org.uk', 'ac.uk', 'com.au', 'net.au', 'org.au', 'co.nz', 'com.sg', 'com.my', 'co.jp',
-  'com.br', 'co.za', 'com.mx', 'co.id', 'com.ph', 'com.cn', 'com.hk', 'com.tw', 'co.kr',
-]);
-
+/**
+ * Registrable domain (eTLD+1) from the Public Suffix List, including its private section, shared by every check
+ * that compares a website or work email to a company. acme.co.in → acme.co.in, app.acme.com.au → acme.com.au, and
+ * hosting platforms count as suffixes: acme.vercel.app → acme.vercel.app, so a mailbox at vercel.app never matches it.
+ * A bare suffix (vercel.app, co.in) or an IP address comes back as the host itself.
+ */
 export function registrableDomain(host: string): string {
-  const parts = host.toLowerCase().replace(/^www\./, '').replace(/\.$/, '').split('.');
-  if (parts.length <= 2) return parts.join('.');
-  const lastTwo = parts.slice(-2).join('.');
-  return TWO_LEVEL_SUFFIXES.has(lastTwo) ? parts.slice(-3).join('.') : lastTwo;
+  const h = host.trim().toLowerCase().replace(/\.$/, '').replace(/^www\./, '');
+  return getDomain(h, { allowPrivateDomains: true }) ?? h;
 }
 
-export function websiteDomain(websiteUrl: string | null | undefined): string | null {
-  if (!websiteUrl) return null;
+/**
+ * Big platforms where a company's "website" is often just a page on someone else's domain. Their own root site
+ * (google.com, linkedin.com) is a real company domain; a page or subdomain on them (sites.google.com/view/acme,
+ * linkedin.com/company/acme, linktr.ee/acme) is not.
+ */
+const PLATFORM_DOMAINS = new Set([
+  'google.com', 'linkedin.com', 'facebook.com', 'instagram.com', 'x.com', 'twitter.com', 'youtube.com', 'github.com',
+  'gitlab.com', 'medium.com', 'linktr.ee', 'apple.com', 'producthunt.com', 'crunchbase.com', 'wellfound.com', 'angel.co',
+  'bit.ly', 'wa.me', 'whatsapp.com', 't.me', 'notion.so', 'tracxn.com', 'substack.com', 'behance.net', 'dribbble.com',
+  'wix.com', 'webflow.com', 'canva.com', 'canva.site', 'carrd.co', 'beacons.ai', 'bio.link', 'about.me',
+]);
+
+function parseSite(websiteUrl: string): { host: string; path: string } | null {
   try {
-    return registrableDomain(new URL(/^https?:\/\//i.test(websiteUrl) ? websiteUrl : `https://${websiteUrl}`).hostname);
+    const u = new URL(/^https?:\/\//i.test(websiteUrl.trim()) ? websiteUrl.trim() : `https://${websiteUrl.trim()}`);
+    return { host: u.hostname.toLowerCase().replace(/\.$/, ''), path: u.pathname.replace(/\/+$/, '') };
   } catch {
     return null;
   }
+}
+
+/** A website that's only a page or subdomain on a big platform (see PLATFORM_DOMAINS), not a company domain. */
+export function isPlatformPage(websiteUrl: string | null | undefined): boolean {
+  if (!websiteUrl) return false;
+  const site = parseSite(websiteUrl);
+  if (!site) return false;
+  const reg = registrableDomain(site.host);
+  if (!PLATFORM_DOMAINS.has(reg)) return false;
+  const bareHost = site.host.replace(/^www\./, '');
+  return bareHost !== reg || site.path !== '';
+}
+
+/**
+ * True when the site lives on a hosting platform's own suffix (acme.vercel.app, acme.github.io, acme.notion.site):
+ * a separate company for matching, but nobody has a mailbox there and its DNS belongs to the platform.
+ */
+export function isPlatformHosted(websiteUrl: string | null | undefined): boolean {
+  if (!websiteUrl) return false;
+  const site = parseSite(websiteUrl);
+  if (!site) return false;
+  const priv = getPublicSuffix(site.host, { allowPrivateDomains: true });
+  const icann = getPublicSuffix(site.host, { allowPrivateDomains: false });
+  return !!priv && priv !== icann;
+}
+
+/**
+ * The company domain behind a website, or null when there isn't one: no usable address, a bare suffix, or just a
+ * page on a big platform (see isPlatformPage).
+ */
+export function websiteDomain(websiteUrl: string | null | undefined): string | null {
+  if (!websiteUrl) return null;
+  const site = parseSite(websiteUrl);
+  if (!site || !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(site.host)) return null;
+  if (!getDomain(site.host, { allowPrivateDomains: true })) return null;
+  if (isPlatformPage(websiteUrl)) return null;
+  return registrableDomain(site.host);
 }

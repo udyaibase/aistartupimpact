@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { effectivePlan, PLANS } from '@/lib/employer/plans';
 import { featuredFor } from '@/lib/employer/billing';
@@ -13,6 +13,7 @@ import { refreshPaths, refreshSections } from '@/lib/revalidate';
 import { maybeStartTrial } from '@/lib/employer/trial';
 import { writeLimited } from '@/lib/employer/write-limit';
 import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
+import { notifyCareersSubscribers } from '@/lib/jobs/careers-subscribers';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     }),
   ]);
   if (!listing || !employer) return NextResponse.json({ error: 'Job not found.' }, { status: 404 });
+  if (listing.isGeneral) return NextResponse.json({ error: 'General applications are turned on or off in Website widget settings.' }, { status: 400 });
 
   const now = new Date();
 
@@ -123,6 +125,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       if (!employer.firstJobPublishedAt) {
         await prisma.jobBoardEmployer.update({ where: { id: session.id }, data: { firstJobPublishedAt: now } });
       }
+      // People who asked to hear when this company is hiring (only for a role's first publish, not a reopen).
+      if (firstPublish && (listing.showOnCareers || listing.showOnProfile)) after(() => notifyCareersSubscribers(session.id, { title: listing.title, slug: listing.slug }).then(() => undefined));
       break;
     }
     case 'pause':

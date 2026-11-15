@@ -1,12 +1,11 @@
+import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { jwtVerify } from 'jose';
 
 export const dynamic = 'force-dynamic';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.USER_JWT_SECRET!
-);
+const JWT_SECRET = jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET');
 
 async function getUserId(request: NextRequest): Promise<string | null> {
   const token = request.cookies.get('user-token')?.value;

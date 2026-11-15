@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { passwordProblem } from "@/lib/password-rules";
 import { verifyTurnstileToken } from "@/lib/turnstile";
 import { prisma } from "@udyaibase/database";
 import { createUnifiedSession, hashPassword, generateToken } from "@/lib/unified-auth";
@@ -24,6 +25,7 @@ export async function POST(request: NextRequest) {
   }
   if (!name || !email || !password) return NextResponse.json({ success: false, error: "All fields required." }, { status: 400 });
   if (password.length < 8) return NextResponse.json({ success: false, error: "Password min 8 characters." }, { status: 400 });
+  const pwProblem = passwordProblem(password, email, 'mixed', name); if (pwProblem) return NextResponse.json({ success: false, error: pwProblem }, { status: 400 });
   if (typeof email !== 'string' || email.length > 255 || !email.includes('@') || !email.split('@')[1]?.includes('.')) return NextResponse.json({ success: false, error: "Invalid email." }, { status: 400 });
   if (isDisposableEmail(email)) return NextResponse.json({ success: false, error: "Disposable email addresses are not allowed. Please use a permanent email." }, { status: 400 });
 

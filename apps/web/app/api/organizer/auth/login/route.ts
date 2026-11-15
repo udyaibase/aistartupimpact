@@ -1,3 +1,4 @@
+import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from "next/server";
 import { isTwoFactorOn } from '@/lib/auth/account-two-factor';
 import { verifyTurnstileToken } from "@/lib/turnstile";
@@ -10,7 +11,7 @@ import { accountLockoutHtml } from "@udyaibase/utils";
 import { sendEmailFireAndForget } from "@/lib/email/send";
 import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
 
-const CHALLENGE_SECRET = new TextEncoder().encode(process.env.ORGANIZER_JWT_SECRET || process.env.USER_JWT_SECRET!);
+const CHALLENGE_SECRET = jwtSecret(process.env.ORGANIZER_JWT_SECRET || process.env.USER_JWT_SECRET, 'ORGANIZER_JWT_SECRET');
 
 export const dynamic = "force-dynamic";
 

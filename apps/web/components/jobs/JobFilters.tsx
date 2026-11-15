@@ -1,24 +1,18 @@
 'use client';
 
 import { useRouter, usePathname } from 'next/navigation';
-import { useState, useCallback, useTransition } from 'react';
+import { JOB_CATEGORIES } from '@/lib/jobs/composer';
+import { useState, useCallback, useEffect, useTransition } from 'react';
 import BottomSheet from '@/components/ui/BottomSheet';
 import FilterList, { type FilterRow } from '@/components/ui/FilterList';
 import { clsx } from 'clsx';
-import { SlidersHorizontal, X, ChevronDown, Loader2 } from 'lucide-react';
+import { X, ChevronDown, Loader2 } from 'lucide-react';
 
+// Every role employers can post under (same list as the job form), so no job is unfindable by filter.
 const CATEGORIES = [
   { value: 'all', label: 'All roles' },
-  { value: 'AI_ENGINEER', label: 'AI Engineer' },
-  { value: 'ML_ENGINEER', label: 'ML Engineer' },
-  { value: 'LLM_ENGINEER', label: 'LLM Engineer' },
-  { value: 'DATA_SCIENTIST', label: 'Data Scientist' },
-  { value: 'AI_RESEARCH_SCIENTIST', label: 'Research' },
-  { value: 'AI_INFRASTRUCTURE', label: 'Infra / MLOps' },
-  { value: 'AI_PRODUCT_MANAGER', label: 'Product Manager' },
-  { value: 'PROMPT_ENGINEER', label: 'Prompt Engineer' },
-  { value: 'NLP_ENGINEER', label: 'NLP' },
-  { value: 'COMPUTER_VISION', label: 'Computer Vision' },
+  ...JOB_CATEGORIES.filter((c) => c.value !== 'OTHER').map((c) => ({ value: c.value, label: c.label })),
+  { value: 'OTHER', label: 'Other roles' },
 ];
 
 const WORK_TYPES = [
@@ -43,6 +37,9 @@ const DATE_POSTED = [
 ];
 
 const DESKTOP_ROLES_SHOWN = 7;
+
+/** The filter button sits in the sticky search bar (JobSearchBar) and opens this sheet. */
+export const JOBS_OPEN_FILTERS = 'jobs:open-filters';
 
 const SORT_LABELS = [
   { value: '', label: 'Most recent' },
@@ -79,6 +76,13 @@ export default function JobFilters({
   const [showAllRoles, setShowAllRoles] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [updating, startUpdate] = useTransition();
+
+  useEffect(() => {
+    if (part === 'desktop') return;
+    const open = () => setMobileOpen(true);
+    window.addEventListener(JOBS_OPEN_FILTERS, open);
+    return () => window.removeEventListener(JOBS_OPEN_FILTERS, open);
+  }, [part]);
 
   // The URL is read when a filter is clicked, not during render: useSearchParams would keep the filters out of
   // the cached /jobs HTML.
@@ -241,20 +245,8 @@ export default function JobFilters({
       <div className="lg:hidden">
         {/* Combined filter + count + sort row */}
         <div className="flex items-center justify-between gap-2">
+          {/* The Filters button is beside the search box (JobSearchBar); this row keeps the active filters and the count. */}
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
-            <button
-              onClick={() => setMobileOpen(true)}
-              aria-haspopup="dialog"
-              className={clsx(
-                'inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[13px] font-jakarta font-medium shrink-0 transition-colors duration-200',
-                activeFilterCount > 0
-                  ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-              )}
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
-            </button>
             {activeFilters.map(f => (
               <button
                 key={f.key}

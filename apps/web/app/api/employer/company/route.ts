@@ -6,6 +6,7 @@ import { refreshPaths, refreshSections } from '@/lib/revalidate';
 import { checkLocation } from '@/lib/locations';
 import { writeLimited } from '@/lib/employer/write-limit';
 import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
+import { cleanPerks } from '@/lib/jobs/perks';
 
 export const dynamic = 'force-dynamic';
 export async function GET() {
@@ -15,7 +16,7 @@ export async function GET() {
     if (!can(session.role, 'jobs.view')) return forbidden();
 
     const result = await sql`
-      SELECT e."companyName", e.email, e."startupClaimMethod", e."verifiedCompanyDomain", e.description, e."websiteUrl", e.industry, e."companySize",
+      SELECT e."companyName", e.email, e.perks, e."startupClaimMethod", e."verifiedCompanyDomain", e.description, e."websiteUrl", e.industry, e."companySize",
              e.location, e.country, e."linkedinUrl", e."twitterUrl", e."logoUrl", e."startupId",
              s.name AS "startupName", s.slug AS "startupSlug", s."logoUrl" AS "startupLogo", s."isVerified" AS "startupIsVerified",
              s."headquartersCity" AS "startupCity", s.stage AS "startupStage", s."websiteUrl" AS "startupWebsite"
@@ -54,6 +55,15 @@ export async function PUT(request: NextRequest) {
       await sql`UPDATE "JobBoardEmployer" SET "startupId" = NULL, "startupClaimMethod" = NULL, "startupClaimVerifiedAt" = NULL, "verifiedCompanyDomain" = NULL, "updatedAt" = NOW() WHERE id = ${session.id}`;
       await sql`UPDATE "JobBoardListing" SET "startupId" = NULL WHERE "employerId" = ${session.id}`;
       return NextResponse.json({ success: true, connected: false });
+    }
+
+    // Company perks (shown on every job and the careers page). Set on their own from the job form.
+    if (body.action === 'set_perks') {
+      const perks = cleanPerks(body.perks);
+      await sql`UPDATE "JobBoardEmployer" SET perks = ${perks}::text[], "updatedAt" = NOW() WHERE id = ${session.id}`;
+      refreshSections(['jobs']);
+      await logEmployerActivity(session.id, 'profile_updated', { actor: employerActor(session), request, metadata: { what: 'company perks' } });
+      return NextResponse.json({ success: true, perks });
     }
 
     // Regular profile update. City and country only from the standard lists.

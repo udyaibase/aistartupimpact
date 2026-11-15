@@ -25,6 +25,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'All required fields must be filled' }, { status: 400 });
     }
 
+    // A resume is either a file we stored privately (reference from /api/careers/upload-resume) or an https link.
+    // Anything else (javascript:, data:, a made-up reference) is refused: staff click these in the admin app.
+    const isStoredResume = (v: unknown) => typeof v === 'string' && /^private:careers\/[0-9a-f-]{36}\.pdf$/.test(v);
+    const isHttpsLink = (v: unknown) => { try { return typeof v === 'string' && v.length <= 2000 && new URL(v).protocol === 'https:'; } catch { return false; } };
+    if ((resumeUrl && !isStoredResume(resumeUrl)) || (resumeLink && !isStoredResume(resumeLink) && !isHttpsLink(resumeLink))) {
+      return NextResponse.json({ error: 'Upload your resume as a PDF, or paste an https link to it.' }, { status: 400 });
+    }
+
     if (typeof email !== 'string' || email.length > 255 || !email.includes('@') || !email.split('@')[1]?.includes('.')) {
       return NextResponse.json({ error: 'Invalid email address' }, { status: 400 });
     }
@@ -33,10 +41,6 @@ export async function POST(req: NextRequest) {
     const domain = email.split('@')[1]?.toLowerCase();
     if (disposableDomains.some(d => domain?.includes(d))) {
       return NextResponse.json({ error: 'Please use a valid working email address' }, { status: 400 });
-    }
-
-    if (!consent) {
-      return NextResponse.json({ error: 'Newsletter consent is required to submit application' }, { status: 400 });
     }
 
     const existingByEmail = await sql`
@@ -90,8 +94,8 @@ export async function POST(req: NextRequest) {
       throw dbError;
     }
 
-    // Add to newsletter subscribers with double opt-in
-    try {
+    // The newsletter is a separate, optional choice: applying never depends on it. Double opt-in when ticked.
+    if (consent === true) try {
       const existing = await sql`
         SELECT id, "isActive", "emailVerified" FROM "NewsletterSubscriber" WHERE email = ${email} LIMIT 1
       `;

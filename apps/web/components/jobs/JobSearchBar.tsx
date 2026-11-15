@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import { MapPin, Search, X } from 'lucide-react';
+import { MapPin, Search, X, SlidersHorizontal } from 'lucide-react';
+import { JOBS_OPEN_FILTERS } from './JobFilters';
 
 export default function JobSearchBar({ initialQuery, initialLocation }: { initialQuery?: string; initialLocation?: string }) {
   const router = useRouter();
@@ -48,10 +49,15 @@ export default function JobSearchBar({ initialQuery, initialLocation }: { initia
 
   useEffect(() => () => clearTimeout(debounceRef.current), []);
 
+  // Phones and tablets: the filter button sits beside the search box, so it's always one flick away (it opens JobFilters' sheet).
+  const isOn = (k: string) => { const v = searchParams.get(k); return !!v && v !== 'all'; };
+  const filterCount = ['category', 'workType', 'experience', 'visa', 'salaryDisclosed', 'datePosted'].filter(isOn).length;
+  const sorted = isOn('sort') && searchParams.get('sort') !== 'recent';
+
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 sm:rounded-lg sm:border sm:border-gray-200 dark:sm:border-gray-700 sm:bg-white dark:sm:bg-gray-900 sm:p-2">
+    <form onSubmit={handleSubmit} className="flex flex-row items-center gap-2 sm:gap-3 sm:rounded-lg sm:border sm:border-gray-200 dark:sm:border-gray-700 sm:bg-white dark:sm:bg-gray-900 sm:p-2">
       {/* Job title input */}
-      <div className="relative flex-1 rounded-xl sm:rounded-md bg-white sm:bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 sm:border-0 overflow-hidden">
+      <div className="relative flex-1 rounded-md bg-white sm:bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 sm:border-0 overflow-hidden">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         <input
           type="text"
@@ -82,6 +88,20 @@ export default function JobSearchBar({ initialQuery, initialLocation }: { initia
           </button>
         )}
       </div>
+      <button
+        type="button"
+        onClick={() => window.dispatchEvent(new Event(JOBS_OPEN_FILTERS))}
+        aria-haspopup="dialog"
+        aria-label={filterCount > 0 ? `Filters, ${filterCount} on` : 'Filters'}
+        className={`lg:hidden relative shrink-0 w-10 h-10 flex items-center justify-center rounded-md border transition-colors duration-200 active:scale-95 motion-reduce:active:scale-100 ${
+          filterCount > 0 || sorted
+            ? 'border-brand bg-brand/5 text-brand'
+            : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+        }`}
+      >
+        <SlidersHorizontal className="w-4 h-4" aria-hidden />
+        {filterCount > 0 && <span className="absolute -top-1.5 -right-1.5 w-5 h-5 flex items-center justify-center bg-brand text-white text-xs font-bold rounded-full">{filterCount}</span>}
+      </button>
       {/* Search button */}
       <button
         type="submit"

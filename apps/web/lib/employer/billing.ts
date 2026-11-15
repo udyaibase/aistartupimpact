@@ -6,6 +6,7 @@ import { calendarMonthStart, cycleDays, effectivePlan, GRACE_DAYS, periodStart, 
 import { emailInvoice } from '@/lib/billing/invoice';
 import { setListingStatus } from '@/lib/jobs/listing-status';
 import { logEmployerActivity, paiseLabel } from '@/lib/workspace-activity';
+import { aiRerunCount } from '@/lib/employer/ai-usage';
 
 /**
  * Plan in force plus AI usage for the current period. During the grace days after a paid plan ends, everything
@@ -21,8 +22,9 @@ export async function planStatus(employerId: string) {
   const plan = effectivePlan(e);
   const { phase, endsAt, graceEndsAt } = planPhase(e);
   const since = plan.key === 'FREE' ? calendarMonthStart() : phase === 'trial' ? e.trialStartedAt : periodStart(e.planExpiresAt);
+  // Reviews on record this period, plus re-runs that replaced an earlier review (see lib/employer/ai-usage.ts).
   const used = since
-    ? await prisma.jobBoardAiScreening.count({ where: { employerId, billable: true, createdAt: { gte: since } } })
+    ? (await prisma.jobBoardAiScreening.count({ where: { employerId, billable: true, createdAt: { gte: since } } })) + (await aiRerunCount(employerId, since))
     : 0;
   const limit = phase === 'grace' ? 0 : phase === 'trial' ? Math.min(TRIAL_AI_SCREENS, plan.aiScreensPerPeriod) : plan.aiScreensPerPeriod;
   return {
@@ -33,6 +35,8 @@ export async function planStatus(employerId: string) {
     graceEndsAt: phase === 'grace' ? graceEndsAt : null,
     trialEndsAt: phase === 'trial' ? endsAt : null,
     aiAutoScreen: e.aiAutoScreen,
+    /** Start of the current AI allowance period. */
+    aiPeriodStart: since,
     ai: { used, limit, left: Math.max(0, limit - used) },
   };
 }

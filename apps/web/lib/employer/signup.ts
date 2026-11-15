@@ -1,3 +1,5 @@
+import { jwtSecret } from '@/lib/jwt-secret';
+import { hashOtp } from '@/lib/otp';
 import crypto from 'crypto';
 import { randomUUID } from 'crypto';
 import { cookies } from 'next/headers';
@@ -26,7 +28,7 @@ export { CODE_ONLY_MARKER } from '@/lib/employer/owners';
 export const SIGNUP_PURPOSE = 'employer_signup_code';
 const PASS_COOKIE = 'employer_signup';
 const PASS_MINUTES = 30;
-const SECRET = new TextEncoder().encode(process.env.EMPLOYER_JWT_SECRET || process.env.USER_JWT_SECRET!);
+const SECRET = jwtSecret(process.env.EMPLOYER_JWT_SECRET || process.env.USER_JWT_SECRET, 'EMPLOYER_JWT_SECRET');
 const SITE = () => (process.env.NEXT_PUBLIC_SITE_URL || 'https://udyaibase.com').replace(/\/$/, '');
 /** After a declined request, the same person can ask again after this many days. */
 export const REQUEST_COOLOFF_DAYS = 30;
@@ -61,7 +63,7 @@ export async function sendSignupCode(email: string): Promise<{ ok: true } | { ok
   const code = crypto.randomInt(100000, 1000000).toString();
   await sql`DELETE FROM "EmailOtp" WHERE email = ${email} AND purpose = ${SIGNUP_PURPOSE}`;
   await sql`INSERT INTO "EmailOtp" (id, email, code, purpose, "expiresAt", "createdAt")
-    VALUES (gen_random_uuid()::text, ${email}, ${crypto.createHash('sha256').update(code).digest('hex')}, ${SIGNUP_PURPOSE}, ${new Date(Date.now() + 600_000).toISOString()}::timestamp, NOW())`;
+    VALUES (gen_random_uuid()::text, ${email}, ${hashOtp(code)}, ${SIGNUP_PURPOSE}, ${new Date(Date.now() + 600_000).toISOString()}::timestamp, NOW())`;
   const sent = await sendEmail({
     to: email,
     subject: `${code} is your Udyaibase code`,

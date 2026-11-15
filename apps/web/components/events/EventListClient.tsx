@@ -1,5 +1,6 @@
 'use client';
 
+import BookmarkButton from '@/components/BookmarkButton';
 import { useState, useMemo, useEffect } from 'react';
 import IntentLink from '@/components/IntentLink';
 import { Calendar, MapPin, Video, Users, Clock, ExternalLink, BadgeCheck } from 'lucide-react';
@@ -143,6 +144,7 @@ function EventCard({ event, now }: { event: Event; now: Date | null }) {
               )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              <BookmarkButton type="event" itemId={event.slug} itemName={event.title} size="sm" className="order-last" />
               {event.featured && (
                 <span className="text-[10px] font-bold font-jakarta px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300">Featured</span>
               )}

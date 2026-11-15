@@ -7,6 +7,7 @@ const db = vi.hoisted(() => {
     jobBoardEmployer: { delete: vi.fn(), update: vi.fn() },
     jobBoardListing: { deleteMany: vi.fn(), updateMany: vi.fn() },
     jobBoardCareersWidget: { deleteMany: vi.fn() },
+    jobBoardCareersSubscriber: { deleteMany: vi.fn() },
     jobBoardTeamMember: { deleteMany: vi.fn() },
     jobBoardAiScreening: { deleteMany: vi.fn() },
     jobBoardPayment: { deleteMany: vi.fn() },

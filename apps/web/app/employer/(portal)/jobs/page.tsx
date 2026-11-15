@@ -1,6 +1,7 @@
 import { listingScope } from '@/lib/employer/permissions';
 import Link from 'next/link';
-import { Plus, Briefcase } from 'lucide-react';
+import { Plus, Briefcase, Inbox, ChevronRight } from 'lucide-react';
+import { hiresByJob, stageCountsByJob, type StageCounts } from '@/lib/employer/job-stages';
 import { prisma } from '@udyaibase/database';
 import { requirePagePermission } from '@/lib/employer/page-guard';
 import JobRowActions from '@/components/employer/jobs/JobRowActions';
@@ -31,18 +32,22 @@ export default async function EmployerJobsPage(props: { searchParams: Promise<{ 
   const { tab: rawTab } = await props.searchParams;
   const now = new Date();
 
-  const [counts, rows] = await Promise.all([
+  const [counts, rows, general] = await Promise.all([
     prisma.jobBoardListing.groupBy({ by: ['status'], where: { ...listingScope(session), deletedAt: null }, _count: { _all: true } }),
     prisma.jobBoardListing.findMany({
-      where: { ...listingScope(session), deletedAt: null },
+      where: { ...listingScope(session), deletedAt: null, isGeneral: false },
       orderBy: [{ updatedAt: 'desc' }],
       select: {
         id: true, slug: true, title: true, status: true, workType: true, location: true, viewsCount: true,
-        expiresAt: true, publishedAt: true, closedAt: true, moderationHold: true, approvalRequestedAt: true, approvalRequestedBy: true, publishedByName: true, publishedByEmail: true, promotedNewsletterAt: true, promotedSocialAt: true, promotedSocialUrl: true, closeReason: true, draftSavedAt: true, updatedAt: true,
-        _count: { select: { Applications: { where: { withdrawnAt: null } } } },
+        expiresAt: true, publishedAt: true, closedAt: true, moderationHold: true, approvalRequestedAt: true, approvalRequestedBy: true, publishedByName: true, publishedByEmail: true, promotedNewsletterAt: true, promotedSocialAt: true, promotedSocialUrl: true, closeReason: true, draftSavedAt: true, updatedAt: true, positions: true,
       },
     }),
+    // Applications sent without a role live in a hidden listing; surface them here so they're never lost.
+    prisma.jobBoardListing.findFirst({ where: { ...listingScope(session), deletedAt: null, isGeneral: true }, select: { id: true } }),
   ]);
+  const live = rows.filter((r) => r.status !== 'DRAFT').map((r) => r.id);
+  const [stages, hires] = await Promise.all([stageCountsByJob([...live, ...(general ? [general.id] : [])]), hiresByJob(live)]);
+  const generalCounts = general ? stages[general.id] : null;
 
   const count = (k: Tab) => counts.find((c) => c.status === k)?._count._all ?? 0;
   const tab: Tab = (TABS.some((t) => t.key === rawTab) ? rawTab : count('OPEN') || !count('DRAFT') ? 'OPEN' : 'DRAFT') as Tab;
@@ -73,6 +78,20 @@ export default async function EmployerJobsPage(props: { searchParams: Promise<{ 
           );
         })}
       </nav>
+
+      {generalCounts && generalCounts.total > 0 && tab !== 'DRAFT' && (
+        <Link href={`/employer/applications?job=${general!.id}`}
+          className="mb-3 flex items-center gap-3 px-4 sm:px-5 py-3.5 rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-gray-400 dark:hover:border-gray-600">
+          <span className="w-9 h-9 rounded-[10px] bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0"><Inbox className="w-4 h-4 text-gray-700 dark:text-gray-300" aria-hidden /></span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-[15px] font-semibold text-gray-900 dark:text-white">General applications</span>
+            <span className="block text-[13px] text-gray-500 dark:text-gray-400 truncate">
+              {generalCounts.total.toLocaleString('en-IN')} applied without a specific role{generalCounts.unseen ? ` · ${generalCounts.unseen} new` : ''}
+            </span>
+          </span>
+          <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" aria-hidden />
+        </Link>
+      )}
 
       {jobs.length === 0 ? (
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] px-4 py-10 text-center">
@@ -117,13 +136,15 @@ export default async function EmployerJobsPage(props: { searchParams: Promise<{ 
                     {status !== 'DRAFT' && j.publishedByEmail && j.publishedByEmail.toLowerCase() !== session.email.toLowerCase() && <span> · by {j.publishedByName || j.publishedByEmail}</span>}
                     <span className={status !== 'DRAFT' && status !== 'CLOSED' && daysLeft != null && daysLeft <= 7 ? ' text-amber-700 dark:text-amber-400 font-semibold' : ''}> · {line}</span>
                   </p>
+                  {status !== 'DRAFT' && stages[j.id] && <StageLine jobId={j.id} c={stages[j.id]} positions={j.positions} hired={hires[j.id] ?? 0} />}
                 </div>
                 {status !== 'DRAFT' && (
-                  <div className="hidden sm:flex items-center gap-5 text-right shrink-0">
-                    <div><p className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{j.viewsCount.toLocaleString('en-IN')}</p><p className="text-xs text-gray-500">views</p></div>
-                    <Link href={`/employer/applications?job=${j.id}`} className="group">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums group-hover:text-brand">{j._count.Applications.toLocaleString('en-IN')}</p>
-                      <p className="text-xs text-gray-500 group-hover:text-brand">candidates</p>
+                  <div className="flex items-center gap-4 sm:gap-5 shrink-0">
+                    <div className="hidden md:block text-right"><p className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{j.viewsCount.toLocaleString('en-IN')}</p><p className="text-xs text-gray-500">views</p></div>
+                    <Link href={`/employer/applications?job=${j.id}`}
+                      className="inline-flex items-center gap-1.5 min-h-[40px] px-3 rounded-[10px] border border-gray-300 dark:border-gray-700 text-sm font-semibold text-gray-800 dark:text-gray-200 hover:border-gray-400 whitespace-nowrap">
+                      <span className="hidden sm:inline">View candidates</span><span className="sm:hidden">Candidates</span>
+                      <span className="tabular-nums text-gray-500">{(stages[j.id]?.total ?? 0).toLocaleString('en-IN')}</span>
                     </Link>
                   </div>
                 )}
@@ -137,5 +158,37 @@ export default async function EmployerJobsPage(props: { searchParams: Promise<{ 
         </ul>
       )}
     </div>
+  );
+}
+
+const STAGE_LABELS: { key: keyof StageCounts; label: string }[] = [
+  { key: 'new', label: 'New' },
+  { key: 'shortlisted', label: 'Shortlisted' },
+  { key: 'interview', label: 'Interview' },
+  { key: 'offer', label: 'Offer' },
+  { key: 'hired', label: 'Hired' },
+];
+
+/** "New 40 (12 unseen) · Shortlisted 15 · Interview 6 · Offer 1": only the stages that have someone in them. */
+function StageLine({ jobId, c, positions = 1, hired = 0 }: { jobId: string; c: StageCounts; positions?: number; hired?: number }) {
+  // Hired always shows against the openings once there's more than one ("Hired 3/5"), even at 0.
+  const parts = STAGE_LABELS.filter((s) => c[s.key] > 0 || (s.key === 'hired' && positions > 1));
+  if (!parts.length) return <p className="mt-1 text-[12.5px] text-gray-500 dark:text-gray-400">No candidates yet</p>;
+  const filled = hired >= positions;
+  return (
+    <p className="mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5 text-[12.5px] text-gray-600 dark:text-gray-400">
+      {parts.map((s) => (
+        <Link key={s.key} href={`/employer/applications?job=${jobId}`} className="hover:text-gray-900 dark:hover:text-white whitespace-nowrap">
+          {s.label}{' '}
+          {s.key === 'hired' && positions > 1 ? (
+            <span className={`font-semibold tabular-nums ${filled ? 'text-emerald-700 dark:text-emerald-400' : 'text-gray-900 dark:text-white'}`}
+              aria-label={`${hired} of ${positions} positions filled`}>{hired}/{positions}</span>
+          ) : (
+            <span className="font-semibold tabular-nums text-gray-900 dark:text-white">{c[s.key].toLocaleString('en-IN')}</span>
+          )}
+          {s.key === 'new' && c.unseen > 0 && <span className="ml-1 font-semibold text-[#A50F15]">({c.unseen} unseen)</span>}
+        </Link>
+      ))}
+    </p>
   );
 }

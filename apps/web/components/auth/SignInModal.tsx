@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { X, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { X, Loader2 } from 'lucide-react';
+import PasswordField from '@/components/ui/PasswordField';
+import { passwordProblem } from '@/lib/password-rules';
 import { useRouter } from 'next/navigation';
 import TurnstileWidget from '@/components/shared/TurnstileWidget';
 
@@ -30,8 +32,6 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
     agreeToTerms: false,
     subscribeNewsletter: false,
   });
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showResendVerification, setShowResendVerification] = useState(false);
@@ -79,8 +79,6 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
       subscribeNewsletter: false,
     });
     setError('');
-    setShowPassword(false);
-    setShowConfirmPassword(false);
     setShowResendVerification(false);
     setResendSuccess(false);
     setRequires2FA(false);
@@ -91,15 +89,6 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
     setOtpCode('');
   };
 
-  const getPasswordStrength = (password: string) => {
-    if (password.length === 0) return { strength: 0, label: '', color: '' };
-    if (password.length < 6) return { strength: 1, label: 'Weak', color: 'bg-red-500' };
-    if (password.length < 8) return { strength: 2, label: 'Fair', color: 'bg-orange-500' };
-    if (password.length < 12) return { strength: 3, label: 'Good', color: 'bg-yellow-500' };
-    return { strength: 4, label: 'Strong', color: 'bg-green-500' };
-  };
-
-  const passwordStrength = getPasswordStrength(formData.password);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,16 +100,13 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
         setError('Name must be at least 2 characters');
         return;
       }
-      if (formData.password.length < 8) {
-        setError('Password must be at least 8 characters');
+      const pwProblem = passwordProblem(formData.password, formData.email, 'mixed', formData.name);
+      if (pwProblem) {
+        setError(pwProblem);
         return;
       }
       if (!formData.agreeToTerms) {
         setError('Please agree to the terms and conditions');
-        return;
-      }
-      if (formData.password !== formData.confirmPassword) {
-        setError('Passwords do not match');
         return;
       }
 
@@ -499,69 +485,27 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
                 {/* Password */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Password</label>
+                    <label htmlFor="modal-password" className="text-sm font-medium text-gray-700 dark:text-gray-300">Password</label>
                     {mode === 'signin' && (
                       <button type="button" onClick={handleForgotPassword} className="text-xs text-brand hover:underline">
                         Forgot password?
                       </button>
                     )}
                   </div>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      required
-                      autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-                      value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white pr-11 text-sm"
-                      placeholder="••••••••"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  {mode === 'signup' && formData.password && (
-                    <div className="mt-1.5 flex items-center gap-2">
-                      <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                        <div className={`h-full transition-all ${passwordStrength.color}`} style={{ width: `${(passwordStrength.strength / 4) * 100}%` }} />
-                      </div>
-                      <span className="text-xs font-medium text-gray-500">{passwordStrength.label}</span>
-                    </div>
-                  )}
+                  <PasswordField
+                    id="modal-password"
+                    label="Password"
+                    hideLabel
+                    required
+                    autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                    value={formData.password}
+                    onChange={(v) => setFormData({ ...formData, password: v })}
+                    email={formData.email}
+                    personName={formData.name}
+                    showRules={mode === 'signup' && formData.password.length > 0}
+                    placeholder={mode === 'signup' ? 'At least 8 characters' : undefined}
+                  />
                 </div>
-
-                {/* Confirm Password - signup only */}
-                {mode === 'signup' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Confirm Password</label>
-                    <div className="relative">
-                      <input
-                        type={showConfirmPassword ? 'text' : 'password'}
-                        required
-                        autoComplete="new-password"
-                        value={formData.confirmPassword}
-                        onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                        className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-brand focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white pr-11 text-sm ${
-                          formData.confirmPassword && formData.confirmPassword !== formData.password
-                            ? 'border-red-300 dark:border-red-700'
-                            : 'border-gray-300 dark:border-gray-700'
-                        }`}
-                        placeholder="••••••••"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                      >
-                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-                )}
 
                 {/* Terms - signup only */}
                 {mode === 'signup' && (

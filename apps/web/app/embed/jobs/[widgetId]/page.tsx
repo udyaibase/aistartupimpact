@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import { prisma } from "@udyaibase/database";
 import JobsWidgetView, { type JobsWidgetConfig } from "@/components/embed/JobsWidgetView";
 import EmbedEmptyState from "@/components/embed/EmbedEmptyState";
-import { getCareersCompany, getCareersJobs } from "@/lib/jobs/careers";
+import { careersSettingsOf, getCareersCompany, getCareersJobs } from "@/lib/jobs/careers";
 import { effectivePlan } from "@/lib/employer/plans";
 import { parseWidgetDesign } from "@/lib/jobs/widget-design";
+import { canHideBrandingFor, careersPageData, getCareersPageJobs } from "@/lib/jobs/careers-page";
+import CareersEmbed from "@/components/careers/CareersEmbed";
 
 export const revalidate = 300;
 
@@ -20,6 +22,19 @@ export default async function JobsEmbedPage({ params }: { params: Promise<{ widg
   if (!widget || !widget.active) return <EmbedEmptyState />;
   const company = await getCareersCompany({ id: widget.employerId });
   if (!company) return <EmbedEmptyState />;
+
+  // "Full careers page": the company's careers page template, with the roles chosen for the website inside.
+  const design = parseWidgetDesign(widget.design);
+  if (design.show === "page") {
+    const [pageJobs, canHide] = await Promise.all([
+      getCareersPageJobs(widget.employerId, { widget: { departments: widget.departments } }),
+      canHideBrandingFor(widget.employerId),
+    ]);
+    return (
+      <CareersEmbed data={careersPageData(company, pageJobs, canHide)} widgetId={widget.id}
+        darkMode={pick(widget.darkMode, ["auto", "light", "dark"] as const, "auto")} />
+    );
+  }
   const [jobs, employer] = await Promise.all([
     getCareersJobs(widget.employerId, widget.departments),
     prisma.jobBoardEmployer.findUnique({ where: { id: widget.employerId }, select: { plan: true, planExpiresAt: true, planIsTrial: true } }),
@@ -50,9 +65,10 @@ export default async function JobsEmbedPage({ params }: { params: Promise<{ widg
     showSalary: widget.showSalary,
     showSkills: widget.showSkills,
     showPoweredBy: widget.showPoweredBy || !canHideBranding,
-    design: parseWidgetDesign(widget.design),
+    design,
     applyForm: company.applyForm,
-    company: { name: company.name, logoUrl: company.logoUrl, slug: company.slug },
+    company: { name: company.name, logoUrl: company.logoUrl, slug: company.slug, perks: company.perks },
+    careers: careersSettingsOf(company),
   };
 
   return <JobsWidgetView config={config} jobs={jobs} />;

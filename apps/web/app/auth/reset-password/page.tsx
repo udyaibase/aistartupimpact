@@ -4,7 +4,9 @@ import { Suspense } from 'react';
 import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Loader2, CheckCircle2, Eye, EyeOff, ArrowLeft, XCircle } from 'lucide-react';
+import { Loader2, CheckCircle2, ArrowLeft, XCircle } from 'lucide-react';
+import PasswordField from '@/components/ui/PasswordField';
+import { passwordProblem } from '@/lib/password-rules';
 import TurnstileWidget from '@/components/shared/TurnstileWidget';
 
 function ResetPasswordContent() {
@@ -12,22 +14,11 @@ function ResetPasswordContent() {
   const token = searchParams.get('token');
 
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const turnstileToken = useRef('');
 
-  const getPasswordStrength = (pw: string) => {
-    if (pw.length === 0) return { strength: 0, label: '', color: '' };
-    if (pw.length < 6) return { strength: 1, label: 'Weak', color: 'bg-red-500' };
-    if (pw.length < 8) return { strength: 2, label: 'Fair', color: 'bg-orange-500' };
-    if (pw.length < 12) return { strength: 3, label: 'Good', color: 'bg-yellow-500' };
-    return { strength: 4, label: 'Strong', color: 'bg-green-500' };
-  };
-
-  const passwordStrength = getPasswordStrength(password);
 
   if (!token) {
     return (
@@ -52,15 +43,8 @@ function ResetPasswordContent() {
     e.preventDefault();
     setError('');
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
+    const problem = passwordProblem(password);
+    if (problem) { setError(problem); return; }
 
     setLoading(true);
 
@@ -125,47 +109,16 @@ function ResetPasswordContent() {
               </div>
             )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">New Password</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white pr-12"
-                  placeholder="••••••••"
-                />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-              {password && (
-                <div className="mt-2 flex items-center gap-2">
-                  <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <div className={`h-full transition-all ${passwordStrength.color}`} style={{ width: `${(passwordStrength.strength / 4) * 100}%` }} />
-                  </div>
-                  <span className="text-xs font-medium text-gray-600 dark:text-gray-400">{passwordStrength.label}</span>
-                </div>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Confirm Password</label>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                required
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-brand focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white ${
-                  confirmPassword && confirmPassword !== password ? 'border-red-300 dark:border-red-700' : 'border-gray-300 dark:border-gray-700'
-                }`}
-                placeholder="••••••••"
-              />
-              {confirmPassword && confirmPassword !== password && (
-                <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
-              )}
-            </div>
+            <PasswordField
+              label="New password"
+              name="new-password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(v) => { setPassword(v); if (error) setError(''); }}
+              showRules={password.length > 0}
+              hint={password.length === 0 ? 'At least 8 characters, with upper and lower case letters and a number.' : undefined}
+              autoFocus
+            />
 
             <TurnstileWidget
               onSuccess={(token) => { turnstileToken.current = token; }}
@@ -174,7 +127,7 @@ function ResetPasswordContent() {
 
             <button
               type="submit"
-              disabled={loading || password.length < 8 || password !== confirmPassword}
+              disabled={loading}
               className="w-full bg-brand hover:bg-brand/90 text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? <><Loader2 className="w-5 h-5 animate-spin" /> Resetting...</> : 'Reset Password'}

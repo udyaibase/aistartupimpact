@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { canOpen, OWNER_ACCESS, type NavAccess } from "@/lib/organizer-auth/nav";
 import { CreditCard, LayoutDashboard, CalendarDays, Users, BarChart3, Settings, QrCode, Send, CodeXml, HelpCircle, MoreHorizontal, X, Building2, UserCog, Plus, History } from "lucide-react";
 
 const TABS = [
@@ -24,13 +25,16 @@ const MORE = [
   { href: "/organizer/support", icon: HelpCircle, label: "Help & support", desc: "Guides and contact" },
 ];
 
-export default function OrganizerMobileNav() {
+export default function OrganizerMobileNav({ access = OWNER_ACCESS }: { access?: NavAccess }) {
   const pathname = usePathname();
   const [sheet, setSheet] = useState(false);
+  const tabs = TABS.filter((t) => canOpen(t.href, access));
+  const more = MORE.filter((m) => canOpen(m.href, access));
+  const canCreate = canOpen("/organizer/events/create", access);
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname === href || pathname.startsWith(href + "/");
-  const moreActive = MORE.some((m) => isActive(m.href));
+  const moreActive = more.some((m) => isActive(m.href));
 
   useEffect(() => setSheet(false), [pathname]);
 
@@ -53,8 +57,8 @@ export default function OrganizerMobileNav() {
         className="md:hidden fixed bottom-0 left-0 right-0 z-sticky bg-white/95 dark:bg-gray-950/95 backdrop-blur border-t border-gray-200 dark:border-gray-800"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <div className="grid grid-cols-5 h-16">
-          {TABS.map((item) => {
+        <div className="grid h-16" style={{ gridTemplateColumns: `repeat(${tabs.length + 1}, minmax(0, 1fr))` }}>
+          {tabs.map((item) => {
             const active = isActive(item.href, item.exact);
             return (
               <Link
@@ -109,15 +113,15 @@ export default function OrganizerMobileNav() {
               </div>
             </div>
 
-            <Link
+            {canCreate && <Link
               href="/organizer/events/create"
               className="mx-4 mt-1 mb-3 flex items-center justify-center gap-2 min-h-[48px] rounded-[12px] bg-brand text-white text-[15px] font-bold font-jakarta active:opacity-90"
             >
               <Plus className="w-5 h-5" /> Create event
-            </Link>
+            </Link>}
 
             <ul className="px-2">
-              {MORE.map((m) => {
+              {more.map((m) => {
                 const active = isActive(m.href);
                 return (
                   <li key={m.href}>

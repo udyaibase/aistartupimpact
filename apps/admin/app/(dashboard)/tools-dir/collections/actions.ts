@@ -8,6 +8,8 @@ import { refreshPublic } from '@/lib/refresh-public';
 const sql = neon(process.env.DATABASE_URL!);
 
 export async function getCollectionsAction() {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     const collections = await sql`
       SELECT c.*, 
@@ -23,6 +25,8 @@ export async function getCollectionsAction() {
 }
 
 export async function createCollectionAction(data: { title: string; description?: string }) {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     const slug = data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const existing = await sql`SELECT id FROM "ToolCollection" WHERE slug = ${slug} LIMIT 1`;
@@ -40,6 +44,8 @@ export async function createCollectionAction(data: { title: string; description?
 }
 
 export async function updateCollectionAction(id: string, data: { title?: string; description?: string; isPublished?: boolean }) {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     if (data.title !== undefined) await sql`UPDATE "ToolCollection" SET title = ${data.title}, "updatedAt" = NOW() WHERE id = ${id}`;
     if (data.description !== undefined) await sql`UPDATE "ToolCollection" SET description = ${data.description}, "updatedAt" = NOW() WHERE id = ${id}`;
@@ -52,6 +58,8 @@ export async function updateCollectionAction(id: string, data: { title?: string;
 }
 
 export async function deleteCollectionAction(id: string) {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     await sql`DELETE FROM "ToolCollectionItem" WHERE "collectionId" = ${id}`;
     await sql`DELETE FROM "ToolCollection" WHERE id = ${id}`;
@@ -63,6 +71,8 @@ export async function deleteCollectionAction(id: string) {
 }
 
 export async function getCollectionItemsAction(collectionId: string) {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     const items = await sql`
       SELECT ci.id, ci."sortOrder", ci."editorNote", 
@@ -79,6 +89,8 @@ export async function getCollectionItemsAction(collectionId: string) {
 }
 
 export async function addToolToCollectionAction(collectionId: string, toolId: string, editorNote?: string) {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     const existing = await sql`SELECT id FROM "ToolCollectionItem" WHERE "collectionId" = ${collectionId} AND "toolId" = ${toolId} LIMIT 1`;
     if (existing.length > 0) return { success: false, error: 'Tool already in collection' };
@@ -96,6 +108,8 @@ export async function addToolToCollectionAction(collectionId: string, toolId: st
 }
 
 export async function removeToolFromCollectionAction(itemId: string) {
+  const { error: authError } = await requireActionAuth();
+  if (authError) return { success: false, error: authError };
   try {
     await sql`DELETE FROM "ToolCollectionItem" WHERE id = ${itemId}`;
     revalidatePath('/tools-dir/collections');

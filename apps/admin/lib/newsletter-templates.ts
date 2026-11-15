@@ -23,7 +23,7 @@ const NAV_LINKS = [
 ];
 
 const FOOTER_LINKS = [
-  { label: 'Unsubscribe', url: `${SITE_URL}/unsubscribe?email={{email}}` },
+  { label: 'Unsubscribe', url: `${SITE_URL}/unsubscribe?email={{email}}&token={{unsubToken}}` },
   { label: 'Privacy Policy', url: `${SITE_URL}/privacy` },
   { label: 'Visit Website', url: SITE_URL },
   { label: 'Contact Us', url: `${SITE_URL}/contact` },

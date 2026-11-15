@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { clientIp } from '@/lib/client-ip';
 import { prisma } from "@udyaibase/database";
 import crypto from "crypto";
+import { newsletterLinkValid } from "@/lib/newsletter-link";
 
 function hashIp(ip: string): string {
   return crypto.createHash('sha256').update(ip).digest('hex').substring(0, 16);
@@ -20,10 +21,32 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
+  // Only links we signed when sending the campaign are followed off-site or counted. An unsigned link (older
+  // emails, or one somebody made up) goes to its page on this site, or to the homepage: never to another website.
+  if (!newsletterLinkValid(campaignId, email, url, searchParams.get("s"))) {
+    const home = new URL("/", request.url);
+    try {
+      const target = new URL(url, home);
+      return NextResponse.redirect(target.origin === home.origin ? target : home);
+    } catch {
+      return NextResponse.redirect(home);
+    }
+  }
+
+  // The signed address must be a web page (http or https); relative links point at this site.
+  let destination: URL;
   try {
-    const decodedEmail = decodeURIComponent(email);
-    const decodedUrl = decodeURIComponent(url);
-    const decodedLabel = label ? decodeURIComponent(label) : null;
+    destination = new URL(url, request.url);
+    if (destination.protocol !== "https:" && destination.protocol !== "http:") throw new Error("not a web address");
+  } catch {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+
+  try {
+    // searchParams values are already decoded.
+    const decodedEmail = email;
+    const decodedUrl = url;
+    const decodedLabel = label || null;
     const rawIp = clientIp(request);
     const ipHashed = hashIp(rawIp);
     const userAgent = request.headers.get("user-agent") || "unknown";
@@ -64,9 +87,9 @@ export async function GET(request: NextRequest) {
     `;
 
     // Redirect to the actual URL
-    return NextResponse.redirect(decodedUrl);
+    return NextResponse.redirect(destination);
   } catch (error) {
     console.error("Track click error:", error);
-    return NextResponse.redirect(decodeURIComponent(url));
+    return NextResponse.redirect(destination); // signature already checked above
   }
 }

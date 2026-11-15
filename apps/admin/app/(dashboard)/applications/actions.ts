@@ -3,6 +3,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@udyaibase/database";
+import { careersResumeKey, deleteCareersResume } from '@/lib/careers-resume';
 
 const ALLOWED_ROLES = ["SUPER_ADMIN", "EDITOR_IN_CHIEF"] as const;
 
@@ -112,7 +113,11 @@ export async function deleteApplicationAction(id: string) {
   }
 
   try {
+    const app = await prisma.jobApplication.findUnique({ where: { id }, select: { resumeUrl: true, resumeLink: true } });
     await prisma.jobApplication.delete({ where: { id } });
+    // The applicant's file goes with the record.
+    const key = careersResumeKey(app?.resumeUrl) ?? careersResumeKey(app?.resumeLink);
+    if (key) await deleteCareersResume(key).catch((e) => console.error('[applications] resume delete', e instanceof Error ? e.message : e));
     return { success: true as const };
   } catch (e: any) {
     return { success: false as const, error: e.message };

@@ -1,3 +1,5 @@
+import { jwtSecret } from '@/lib/jwt-secret';
+import { passwordProblem } from "@/lib/password-rules";
 import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
 import { cookies } from 'next/headers';
@@ -22,6 +24,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: validation.error }, { status: 400 });
     }
     const { currentPassword, newPassword } = validation.data;
+    const pwProblem = passwordProblem(newPassword, null, 'mixed'); // also rejects common passwords
+    if (pwProblem) return NextResponse.json({ success: false, error: pwProblem }, { status: 400 });
 
     // Checked against the password they really sign in with, which may be on another of their account records.
     const email = session.email.toLowerCase();
@@ -43,7 +47,7 @@ export async function POST(request: NextRequest) {
     const userToken = (await cookies()).get('user-token')?.value;
     if (userToken) {
       try {
-        const { payload } = await jwtVerify(userToken, new TextEncoder().encode(process.env.USER_JWT_SECRET!));
+        const { payload } = await jwtVerify(userToken, jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET'));
         keepWebSessionId = typeof payload.sessionId === 'string' ? payload.sessionId : null;
       } catch { /* expired: nothing to keep */ }
     }

@@ -2,7 +2,9 @@
 
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, Lock, CheckCircle, CalendarDays } from "lucide-react";
+import { Loader2, CheckCircle } from "lucide-react";
+import PasswordField from "@/components/ui/PasswordField";
+import { passwordProblem } from "@/lib/password-rules";
 
 function ResetPasswordContent() {
   const router = useRouter();
@@ -10,7 +12,6 @@ function ResetPasswordContent() {
   const token = searchParams.get("token");
 
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -27,15 +28,8 @@ function ResetPasswordContent() {
     e.preventDefault();
     setError("");
 
-    if (password !== confirmPassword) {
-      setError("Passwords don't match.");
-      return;
-    }
-
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
-      return;
-    }
+    const problem = passwordProblem(password);
+    if (problem) { setError(problem); return; }
 
     setLoading(true);
     try {
@@ -73,56 +67,33 @@ function ResetPasswordContent() {
   }
 
   return (
-    <div className="max-w-md mx-auto px-4 py-12 sm:py-20">
-      <div className="text-center mb-8">
-        <div className="w-14 h-14 mx-auto bg-brand/10 rounded-2xl flex items-center justify-center mb-4">
-          <CalendarDays className="w-7 h-7 text-brand" />
-        </div>
-        <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Set new password</h1>
-        <p className="text-sm text-gray-500 font-jakarta mt-2">Enter your new password below.</p>
-      </div>
+    <div className="max-w-[400px] mx-auto px-4 py-12 sm:py-20">
+      <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-6 py-8 sm:px-8">
+        <h1 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-white">Set a new password</h1>
+        <p className="mt-1.5 text-sm text-gray-600 dark:text-gray-400">Choose a password you don’t use anywhere else.</p>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="relative">
-          <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="password"
-            required
-            minLength={8}
+        <form onSubmit={handleSubmit} noValidate className="mt-7 space-y-5">
+          <PasswordField
+            label="New password"
+            name="new-password"
             autoComplete="new-password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="New password (min 8 characters)"
-            className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-jakarta focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand placeholder-gray-400"
+            onChange={(v) => { setPassword(v); if (error) setError(""); }}
+            showRules={password.length > 0}
+            error={error || null}
+            hint={password.length === 0 ? "At least 8 characters, with upper and lower case letters and a number." : undefined}
+            autoFocus
           />
-        </div>
-        <div className="relative">
-          <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="password"
-            required
-            minLength={8}
-            autoComplete="new-password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder="Confirm new password"
-            className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-jakarta focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand placeholder-gray-400"
-          />
-        </div>
-
-        {error && (
-          <p className="text-sm text-red-500 font-jakarta bg-red-50 dark:bg-red-900/20 p-3 rounded-xl">{error}</p>
-        )}
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full py-3 bg-brand hover:bg-brand-600 text-white font-bold font-jakarta text-sm rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-        >
-          {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-          Reset Password
-        </button>
-      </form>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full h-11 inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900 font-medium text-[15px] transition-colors disabled:opacity-60"
+          >
+            {loading && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />}
+            {loading ? "Saving…" : "Reset password"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

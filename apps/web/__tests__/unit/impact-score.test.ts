@@ -235,3 +235,18 @@ describe('calculateImpactScore', () => {
     });
   });
 });
+
+describe('stage scores cover every StartupStage', () => {
+  it('gives every stage in the schema a score above zero, never lower than an earlier round', async () => {
+    const { readFileSync } = await import('fs');
+    const { join } = await import('path');
+    const schema = readFileSync(join(__dirname, '../../../../packages/database/prisma/schema.prisma'), 'utf8');
+    const stages = schema.match(/enum StartupStage \{([^}]+)\}/)![1].trim().split(/\s+/);
+    expect(stages.length).toBeGreaterThan(10);
+    const score = (stage: string) => calculateImpactScore({ totalFundingUsdCents: 0, employeeCount: null, stage, foundedYear: null }).stage.score;
+    for (const stage of stages) expect(score(stage), stage).toBeGreaterThan(0);
+    // The enum lists funding rounds in order from PRE_SEED onwards.
+    const rounds = stages.slice(stages.indexOf('PRE_SEED'));
+    for (let i = 1; i < rounds.length; i++) expect(score(rounds[i]), rounds[i]).toBeGreaterThanOrEqual(score(rounds[i - 1]));
+  });
+});

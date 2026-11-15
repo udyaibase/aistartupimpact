@@ -176,3 +176,23 @@ export const applicationStatusRateLimit = redis
       prefix: "ratelimit:jobs:status",
     })
   : null;
+
+/** "Get notified when they're hiring" sign-ups per IP (each sends a confirmation email). */
+export const careersSubscribeRateLimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(5, "1 h"),
+      analytics: false,
+      prefix: "ratelimit:jobs:notify",
+    })
+  : null;
+
+/** Confirmation emails per recipient address per day, across all companies (stops using sign-ups to flood an inbox). */
+export const careersConfirmPerEmailRateLimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(5, "24 h"),
+      analytics: false,
+      prefix: "ratelimit:jobs:notify-to",
+    })
+  : null;

@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Invalid action" }, { status: 400 });
     }
 
-    const { code, token } = generateOTP();
+    const { code, token } = generateOTP(session.userId, action);
 
     sendEmailFireAndForget({
       to: session.email,

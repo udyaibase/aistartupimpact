@@ -4,26 +4,72 @@
  */
 
 export const JOB_CATEGORIES = [
-  { value: 'AI_ENGINEER', label: 'AI Engineer' },
-  { value: 'ML_ENGINEER', label: 'ML Engineer' },
-  { value: 'LLM_ENGINEER', label: 'LLM Engineer' },
-  { value: 'AI_RESEARCH_SCIENTIST', label: 'AI Research Scientist' },
-  { value: 'DATA_SCIENTIST', label: 'Data Scientist' },
-  { value: 'DATA_ENGINEER', label: 'Data Engineer' },
-  { value: 'PROMPT_ENGINEER', label: 'Prompt Engineer' },
-  { value: 'AI_PRODUCT_MANAGER', label: 'Product Manager' },
-  { value: 'AI_DESIGNER', label: 'Designer' },
-  { value: 'AI_SALES', label: 'Sales' },
-  { value: 'AI_MARKETING', label: 'Marketing' },
-  { value: 'AI_DEVREL', label: 'Developer Relations' },
-  { value: 'AI_SOLUTIONS_ARCHITECT', label: 'Solutions Architect' },
-  { value: 'AI_ETHICS', label: 'AI Ethics & Policy' },
-  { value: 'ROBOTICS_ENGINEER', label: 'Robotics Engineer' },
-  { value: 'COMPUTER_VISION', label: 'Computer Vision' },
-  { value: 'NLP_ENGINEER', label: 'NLP Engineer' },
-  { value: 'AI_INFRASTRUCTURE', label: 'Infrastructure / MLOps' },
-  { value: 'OTHER', label: 'Other' },
+  { value: 'AI_ENGINEER', label: 'AI Engineer', group: 'AI & ML' },
+  { value: 'ML_ENGINEER', label: 'ML Engineer', group: 'AI & ML' },
+  { value: 'LLM_ENGINEER', label: 'LLM / GenAI Engineer', group: 'AI & ML' },
+  { value: 'AI_RESEARCH_SCIENTIST', label: 'AI Research Scientist', group: 'AI & ML' },
+  { value: 'PROMPT_ENGINEER', label: 'Prompt Engineer', group: 'AI & ML' },
+  { value: 'NLP_ENGINEER', label: 'NLP Engineer', group: 'AI & ML' },
+  { value: 'COMPUTER_VISION', label: 'Computer Vision', group: 'AI & ML' },
+  { value: 'ROBOTICS_ENGINEER', label: 'Robotics Engineer', group: 'AI & ML' },
+  { value: 'AI_INFRASTRUCTURE', label: 'Infrastructure / MLOps', group: 'AI & ML' },
+  { value: 'AI_SOLUTIONS_ARCHITECT', label: 'Solutions Architect', group: 'AI & ML' },
+  { value: 'AI_ETHICS', label: 'AI Ethics & Policy', group: 'AI & ML' },
+  { value: 'SOFTWARE_ENGINEER', label: 'Software Engineer', group: 'Engineering' },
+  { value: 'FRONTEND_ENGINEER', label: 'Frontend Engineer', group: 'Engineering' },
+  { value: 'BACKEND_ENGINEER', label: 'Backend Engineer', group: 'Engineering' },
+  { value: 'FULL_STACK_ENGINEER', label: 'Full-stack Engineer', group: 'Engineering' },
+  { value: 'MOBILE_ENGINEER', label: 'Mobile Engineer', group: 'Engineering' },
+  { value: 'DEVOPS_ENGINEER', label: 'DevOps / SRE', group: 'Engineering' },
+  { value: 'QA_ENGINEER', label: 'QA / Test Engineer', group: 'Engineering' },
+  { value: 'SECURITY_ENGINEER', label: 'Security Engineer', group: 'Engineering' },
+  { value: 'ENGINEERING_MANAGER', label: 'Engineering Manager', group: 'Engineering' },
+  { value: 'DATA_SCIENTIST', label: 'Data Scientist', group: 'Data' },
+  { value: 'DATA_ENGINEER', label: 'Data Engineer', group: 'Data' },
+  { value: 'DATA_ANALYST', label: 'Data Analyst', group: 'Data' },
+  { value: 'BUSINESS_ANALYST', label: 'Business Analyst', group: 'Data' },
+  { value: 'AI_PRODUCT_MANAGER', label: 'Product Manager', group: 'Product & Design' },
+  { value: 'PROJECT_MANAGER', label: 'Project / Program Manager', group: 'Product & Design' },
+  { value: 'AI_DESIGNER', label: 'Designer', group: 'Product & Design' },
+  { value: 'AI_DEVREL', label: 'Developer Relations', group: 'Product & Design' },
+  { value: 'AI_SALES', label: 'Sales', group: 'Business' },
+  { value: 'BUSINESS_DEVELOPMENT', label: 'Business Development', group: 'Business' },
+  { value: 'AI_MARKETING', label: 'Marketing', group: 'Business' },
+  { value: 'CONTENT_WRITING', label: 'Content & Writing', group: 'Business' },
+  { value: 'CUSTOMER_SUCCESS', label: 'Customer Success', group: 'Business' },
+  { value: 'CUSTOMER_SUPPORT', label: 'Customer Support', group: 'Business' },
+  { value: 'OPERATIONS', label: 'Operations', group: 'Operations' },
+  { value: 'FINANCE', label: 'Finance', group: 'Operations' },
+  { value: 'HR_RECRUITING', label: 'HR & Recruiting', group: 'Operations' },
+  { value: 'LEGAL', label: 'Legal', group: 'Operations' },
+  { value: 'FOUNDERS_OFFICE', label: 'Founder’s Office', group: 'Operations' },
+  { value: 'OTHER', label: 'Other', group: 'Other' },
 ] as const;
+
+/** Label shown for a job's category: the employer's own name when they used a custom one. */
+export function categoryText(category: string | null | undefined, categoryLabel?: string | null): string {
+  if (category === 'OTHER' && categoryLabel?.trim()) return categoryLabel.trim();
+  return JOB_CATEGORIES.find((c) => c.value === category)?.label ?? 'Other';
+}
+
+/** Teams offered in the Team dropdown; an employer's own teams (from earlier jobs) are added to these. */
+export const DEFAULT_TEAMS = [
+  'Engineering', 'AI / ML', 'Data', 'Research', 'Product', 'Design', 'Sales', 'Marketing', 'Growth',
+  'Customer Success', 'Operations', 'Finance', 'People / HR', 'Legal', 'Founder’s Office',
+] as const;
+
+export const MAX_EXPERIENCE_YEARS = 40;
+
+/** How candidates apply. EXTERNAL covers the last three (stored as a link or an email). */
+export const APPLY_VIA = [
+  { value: 'udyaibase', label: 'On Udyaibase' },
+  { value: 'website', label: 'Company website' },
+  { value: 'google_form', label: 'Google Form' },
+  { value: 'email', label: 'Email' },
+] as const;
+export type ApplyVia = (typeof APPLY_VIA)[number]['value'];
+
+export const GOOGLE_FORM_URL = /^https:\/\/(docs\.google\.com\/forms\/|forms\.gle\/)\S+$/i;
 
 export const EMPLOYMENT_TYPES = [
   { value: 'FULL_TIME', label: 'Full-time' },
@@ -46,6 +92,8 @@ export const EXPERIENCE_BANDS = [
   { value: '5-8', label: '5–8 years', min: 5, max: 8 },
   { value: '8+', label: '8+ years', min: 8, max: null },
 ] as const;
+/** The Experience control's "Custom" choice: the employer types their own min and max years. */
+export const CUSTOM_EXPERIENCE = 'custom';
 
 export const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'SGD', 'AED'] as const;
 
@@ -69,9 +117,15 @@ export interface ScreeningQuestion {
 export interface JobDraft {
   title: string;
   category: string;
+  /** Own category name when category is OTHER (custom). */
+  categoryLabel: string;
   department: string;
   employmentType: string;
+  /** A band value, CUSTOM_EXPERIENCE, or '' for any. */
   experienceBand: string;
+  /** Custom experience range in years (strings, as typed). Used when experienceBand is CUSTOM_EXPERIENCE. */
+  experienceMin: string;
+  experienceMax: string;
   hiringManagerName: string;
   workType: string;
   city: string;
@@ -86,6 +140,8 @@ export interface JobDraft {
   skills: string[];
   screeningQuestions: ScreeningQuestion[];
   applicationType: 'INTERNAL' | 'EXTERNAL';
+  /** Which way candidates apply; decides applicationType and which of link or email is used. */
+  applyVia: ApplyVia;
   applicationUrl: string;
   applicationEmail: string;
   /** YYYY-MM-DD */
@@ -97,6 +153,8 @@ export interface JobDraft {
   mustHaveSkills: string[];
   /** '' = no preference, otherwise days as a string ('0' = immediate). */
   maxNoticeDays: string;
+  /** How many people to hire for this role, as typed (1–MAX_POSITIONS). */
+  positions: string;
 }
 
 export function salaryUnit(currency: string): { factor: number; suffix: string; symbol: string } {
@@ -115,13 +173,13 @@ export function defaultClosesOn(from = new Date()) {
 
 export function emptyDraft(): JobDraft {
   return {
-    title: '', category: 'OTHER', department: '', employmentType: 'FULL_TIME', experienceBand: '',
+    title: '', category: 'OTHER', categoryLabel: '', department: '', employmentType: 'FULL_TIME', experienceBand: '', experienceMin: '', experienceMax: '',
     hiringManagerName: '', workType: 'HYBRID', city: '', country: 'India',
     salaryCurrency: 'INR', salaryMin: '', salaryMax: '', showSalary: true, hasEsops: false,
     shortDescription: '', description: '', skills: [], screeningQuestions: [],
-    applicationType: 'INTERNAL', applicationUrl: '', applicationEmail: '',
+    applicationType: 'INTERNAL', applyVia: 'udyaibase', applicationUrl: '', applicationEmail: '',
     closesOn: defaultClosesOn(), showOnJobsPage: true, showOnProfile: true, showOnCareers: true,
-    mustHaveSkills: [], maxNoticeDays: '',
+    mustHaveSkills: [], maxNoticeDays: '', positions: '1',
   };
 }
 
@@ -131,16 +189,25 @@ export function draftFromRow(row: Record<string, any>): JobDraft {
   const currency = row.salaryCurrency || 'INR';
   const { factor } = salaryUnit(currency);
   const toUnit = (n: number | null) => (n ? String(Math.round((n / factor) * 10) / 10) : '');
-  const band = row.experienceBand
-    || EXPERIENCE_BANDS.find((b) => b.min === row.experienceMin && b.max === row.experienceMax)?.value
-    || '';
+  const knownBand = EXPERIENCE_BANDS.find((b) => b.value === row.experienceBand)?.value
+    || EXPERIENCE_BANDS.find((b) => b.min === row.experienceMin && b.max === row.experienceMax)?.value;
+  const hasRange = row.experienceMin != null || row.experienceMax != null;
+  const band = knownBand || (hasRange ? CUSTOM_EXPERIENCE : '');
+  const external = row.applicationType === 'EXTERNAL';
+  const url = String(row.applicationUrl ?? '');
+  const applyVia: ApplyVia = !external ? 'udyaibase'
+    : url ? (GOOGLE_FORM_URL.test(url) ? 'google_form' : 'website')
+    : row.applicationEmail ? 'email' : 'website';
   return {
     ...base,
     title: row.title ?? '',
     category: row.category ?? base.category,
+    categoryLabel: row.category === 'OTHER' ? (row.categoryLabel ?? '') : '',
     department: row.department ?? '',
     employmentType: row.employmentType ?? base.employmentType,
     experienceBand: band,
+    experienceMin: band === CUSTOM_EXPERIENCE && row.experienceMin != null ? String(row.experienceMin) : '',
+    experienceMax: band === CUSTOM_EXPERIENCE && row.experienceMax != null ? String(row.experienceMax) : '',
     hiringManagerName: row.hiringManagerName ?? '',
     workType: row.workType ?? base.workType,
     city: row.city ?? '',
@@ -154,7 +221,8 @@ export function draftFromRow(row: Record<string, any>): JobDraft {
     description: row.description ?? '',
     skills: Array.isArray(row.skills) ? row.skills : [],
     screeningQuestions: Array.isArray(row.screeningQuestions) ? row.screeningQuestions : [],
-    applicationType: row.applicationType === 'EXTERNAL' ? 'EXTERNAL' : 'INTERNAL',
+    applicationType: external ? 'EXTERNAL' : 'INTERNAL',
+    applyVia,
     applicationUrl: row.applicationUrl ?? '',
     applicationEmail: row.applicationEmail ?? '',
     closesOn: row.expiresAt ? isoDate(new Date(row.expiresAt)) : defaultClosesOn(),
@@ -163,7 +231,17 @@ export function draftFromRow(row: Record<string, any>): JobDraft {
     showOnCareers: row.showOnCareers ?? true,
     mustHaveSkills: Array.isArray(row.mustHaveSkills) ? row.mustHaveSkills : [],
     maxNoticeDays: row.maxNoticeDays != null ? String(row.maxNoticeDays) : '',
+    positions: String(cleanPositions(row.positions)),
   };
+}
+
+/** Most openings one job can list (larger hiring drives post more than one job). */
+export const MAX_POSITIONS = 500;
+
+/** Whole number of openings, 1–MAX_POSITIONS; anything unreadable is 1. */
+export function cleanPositions(v: unknown): number {
+  const n = parseInt(String(v ?? '').trim(), 10);
+  return Number.isFinite(n) && n >= 1 ? Math.min(n, MAX_POSITIONS) : 1;
 }
 
 const clip = (v: unknown, n: number) => String(v ?? '').trim().slice(0, n);
@@ -186,6 +264,14 @@ export function draftToData(input: Partial<JobDraft>) {
   let salaryMax = money(d.salaryMax);
   if (salaryMin && salaryMax && salaryMax < salaryMin) [salaryMin, salaryMax] = [salaryMax, salaryMin];
   const band = EXPERIENCE_BANDS.find((b) => b.value === d.experienceBand);
+  // Custom range: whole years 0–40, in order; either end may be open.
+  const years = (v: unknown) => {
+    const n = parseInt(String(v ?? '').trim(), 10);
+    return Number.isFinite(n) && n >= 0 ? Math.min(n, MAX_EXPERIENCE_YEARS) : null;
+  };
+  let customMin = d.experienceBand === CUSTOM_EXPERIENCE ? years(d.experienceMin) : null;
+  let customMax = d.experienceBand === CUSTOM_EXPERIENCE ? years(d.experienceMax) : null;
+  if (customMin != null && customMax != null && customMax < customMin) [customMin, customMax] = [customMax, customMin];
 
   const today = new Date();
   let closes = /^\d{4}-\d{2}-\d{2}$/.test(d.closesOn) ? new Date(`${d.closesOn}T23:59:59+05:30`) : null;
@@ -208,16 +294,21 @@ export function draftToData(input: Partial<JobDraft>) {
 
   const city = clip(d.city, 80);
   const country = clip(d.country, 80);
-  const external = d.applicationType === 'EXTERNAL';
+  // applyVia decides the apply method (older drafts without it fall back to applicationType).
+  const via: ApplyVia = APPLY_VIA.some((a) => a.value === d.applyVia) ? d.applyVia
+    : d.applicationType === 'EXTERNAL' ? (d.applicationUrl ? 'website' : 'email') : 'udyaibase';
+  const external = via !== 'udyaibase';
+  const customCategory = d.category === 'OTHER' ? clip(d.categoryLabel, 60) : '';
 
   return {
     title: clip(d.title, 120),
     category: oneOf(JOB_CATEGORIES, d.category, 'OTHER') as any,
+    categoryLabel: customCategory || null,
     department: clip(d.department, 80) || null,
     employmentType: oneOf(EMPLOYMENT_TYPES, d.employmentType, 'FULL_TIME') as any,
     experienceBand: band?.value ?? null,
-    experienceMin: band ? band.min : null,
-    experienceMax: band ? band.max : null,
+    experienceMin: band ? band.min : customMin,
+    experienceMax: band ? band.max : customMax,
     hiringManagerName: clip(d.hiringManagerName, 80) || null,
     workType: oneOf(WORK_TYPES, d.workType, 'HYBRID') as any,
     city: city || null,
@@ -235,14 +326,15 @@ export function draftToData(input: Partial<JobDraft>) {
     skills,
     screeningQuestions: questions,
     applicationType: (external ? 'EXTERNAL' : 'INTERNAL') as any,
-    applicationUrl: external ? clip(d.applicationUrl, 500) || null : null,
-    applicationEmail: external ? clip(d.applicationEmail, 200) || null : null,
+    applicationUrl: via === 'website' || via === 'google_form' ? clip(d.applicationUrl, 500) || null : null,
+    applicationEmail: via === 'email' ? clip(d.applicationEmail, 200) || null : null,
     expiresAt: closes,
     showOnJobsPage: !!d.showOnJobsPage,
     showOnProfile: !!d.showOnProfile,
     showOnCareers: !!d.showOnCareers,
     mustHaveSkills: (Array.isArray(d.mustHaveSkills) ? d.mustHaveSkills : []).filter((m) => skills.includes(m)),
     maxNoticeDays: ['0', '15', '30', '60', '90'].includes(String(d.maxNoticeDays)) ? Number(d.maxNoticeDays) : null,
+    positions: cleanPositions(d.positions),
   };
 }
 
@@ -259,12 +351,27 @@ export function publishProblems(d: JobDraft): { field: keyof JobDraft; message: 
   if (d.workType !== 'REMOTE' && !d.city.trim()) p.push({ field: 'city', message: 'Choose the city for an on-site or hybrid role.' });
   if (d.salaryMin && d.salaryMax && parseFloat(d.salaryMax) < parseFloat(d.salaryMin)) p.push({ field: 'salaryMax', message: 'Maximum salary is lower than the minimum.' });
   if (d.description.trim().length < 100) p.push({ field: 'description', message: 'Write at least a short paragraph about the role (100+ characters).' });
-  if (d.applicationType === 'EXTERNAL') {
-    const url = d.applicationUrl.trim();
-    const email = d.applicationEmail.trim();
-    if (!url && !email) p.push({ field: 'applicationUrl', message: 'Add an application link or email.' });
-    if (url && !/^https:\/\/[^\s]+\.[^\s]+$/i.test(url)) p.push({ field: 'applicationUrl', message: 'Use a full https:// link.' });
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) p.push({ field: 'applicationEmail', message: 'Enter a valid email.' });
+  const via: ApplyVia = d.applyVia ?? (d.applicationType === 'EXTERNAL' ? (d.applicationUrl ? 'website' : 'email') : 'udyaibase');
+  const url = (d.applicationUrl ?? '').trim();
+  const email = (d.applicationEmail ?? '').trim();
+  if (via === 'website') {
+    if (!url) p.push({ field: 'applicationUrl', message: 'Add the link to your careers page or job post.' });
+    else if (!/^https:\/\/[^\s]+\.[^\s]+$/i.test(url)) p.push({ field: 'applicationUrl', message: 'Use a full https:// link.' });
+  }
+  if (via === 'google_form') {
+    if (!url) p.push({ field: 'applicationUrl', message: 'Add the link to your Google Form.' });
+    else if (!GOOGLE_FORM_URL.test(url)) p.push({ field: 'applicationUrl', message: 'Use the Google Form’s share link (docs.google.com/forms/… or forms.gle/…).' });
+  }
+  if (via === 'email') {
+    if (!email) p.push({ field: 'applicationEmail', message: 'Add the email address candidates should apply to.' });
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) p.push({ field: 'applicationEmail', message: 'Enter a valid email.' });
+  }
+  if (d.experienceBand === CUSTOM_EXPERIENCE) {
+    const lo = (d.experienceMin ?? '').trim(); const hi = (d.experienceMax ?? '').trim();
+    if (!lo && !hi) p.push({ field: 'experienceMin', message: 'Enter the minimum or maximum years of experience.' });
+    else if ([lo, hi].some((v) => v && !/^\d{1,2}$/.test(v))) p.push({ field: 'experienceMin', message: 'Use whole years, like 2 or 6.' });
+    else if (lo && hi && Number(hi) < Number(lo)) p.push({ field: 'experienceMax', message: 'Maximum years is lower than the minimum.' });
+    else if ([lo, hi].some((v) => v && Number(v) > MAX_EXPERIENCE_YEARS)) p.push({ field: 'experienceMax', message: `Use ${MAX_EXPERIENCE_YEARS} years or less.` });
   }
   if (d.screeningQuestions.some((q) => !q.question.trim())) p.push({ field: 'screeningQuestions', message: 'Fill in or remove empty screening questions.' });
   if (d.screeningQuestions.some((q) => q.type === 'choice' && cleanOptions(q.options).length < 2)) p.push({ field: 'screeningQuestions', message: 'Multiple-choice questions need at least two options.' });
@@ -308,8 +415,8 @@ export function formatSalaryDraft(d: Pick<JobDraft, 'salaryCurrency' | 'salaryMi
   const min = d.salaryMin.trim();
   const max = d.salaryMax.trim();
   if (!min && !max) return null;
-  if (min && max && min !== max) return `${symbol}${min}–${max}${suffix} a year`;
-  return `${symbol}${min || max}${suffix} a year`;
+  if (min && max && min !== max) return `${symbol}${min}–${max}${suffix} per annum`;
+  return `${symbol}${min || max}${suffix} per annum`;
 }
 
 export interface JobTemplate {

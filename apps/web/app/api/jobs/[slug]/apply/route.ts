@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { prisma } from '@udyaibase/database';
 import { checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 import { jobApplyRateLimit } from '@/lib/event-rate-limit';
-import { publicListingWhere } from '@/lib/jobs/public';
+import { applyableListingWhere } from '@/lib/jobs/public';
 import { verifyApplySession } from '@/lib/jobs/apply-session';
 import { matchSkills } from '@/lib/jobs/skills';
 import { applyConsentText } from '@/lib/jobs/consent';
@@ -15,9 +15,9 @@ import { parseApplyFormConfig, requiredFieldErrors, withoutHiddenFields } from '
 
 export const dynamic = 'force-dynamic';
 
-type Source = 'JOBS_PAGE' | 'STARTUP_PROFILE' | 'GOOGLE' | 'WIDGET' | 'REFERRAL' | 'DIRECT' | 'OTHER';
+type Source = 'JOBS_PAGE' | 'STARTUP_PROFILE' | 'GOOGLE' | 'WIDGET' | 'CAREERS_PAGE' | 'REFERRAL' | 'DIRECT' | 'OTHER';
 const SOURCE_LABEL: Record<Source, string> = {
-  JOBS_PAGE: 'Udyaibase AI Jobs', STARTUP_PROFILE: 'your startup profile', GOOGLE: 'Google', WIDGET: 'your website',
+  JOBS_PAGE: 'Udyaibase AI Jobs', STARTUP_PROFILE: 'your startup profile', GOOGLE: 'Google', WIDGET: 'your website', CAREERS_PAGE: 'your Udyaibase careers page',
   REFERRAL: 'a referral', DIRECT: 'a direct link', OTHER: 'another site',
 };
 
@@ -47,9 +47,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
   const raw = await request.json().catch(() => ({}));
 
   const listing = await prisma.jobBoardListing.findFirst({
-    where: { ...publicListingWhere(), slug },
+    where: { ...applyableListingWhere(), slug },
     select: {
-      id: true, title: true, skills: true, applicationType: true, screeningQuestions: true, employerId: true,
+      id: true, title: true, skills: true, applicationType: true, screeningQuestions: true, employerId: true, isGeneral: true,
       Employer: {
         select: {
           id: true, email: true, companyName: true, passwordHash: true, startupId: true, startupClaimMethod: true, applyFormConfig: true,
@@ -105,6 +105,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
   let source: Source = 'JOBS_PAGE';
   if (att.source === 'widget' && widgetId) source = 'WIDGET';
   else if (att.source === 'profile') source = 'STARTUP_PROFILE';
+  else if (att.source === 'careers') source = 'CAREERS_PAGE';
   else if (referrerUrl && /(^|\.)google\./i.test(new URL(referrerUrl).hostname)) source = 'GOOGLE';
   else if (att.source === 'referral') source = 'REFERRAL';
 
@@ -170,7 +171,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
 
   // Auto-screening on, with quota left on any plan: review runs after the response, so the candidate never waits.
   const employerId = listing.employerId;
-  after(() => screenApplication(applicationId, employerId, { auto: true }).then(() => undefined));
+  // General applications have no role to screen against.
+  if (!listing.isGeneral) after(() => screenApplication(applicationId, employerId, { auto: true }).then(() => undefined));
 
   return NextResponse.json({ success: true, applicationId }, { status: 201 });
 }

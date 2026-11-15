@@ -3,6 +3,7 @@ import { prisma } from '@udyaibase/database';
 import { checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 import { applicationStatusRateLimit } from '@/lib/event-rate-limit';
 import { eraseApplication, findByStatusToken } from '@/lib/jobs/candidate-status';
+import { leavePool, POOL_DAYS } from '@/lib/jobs/talent-pool';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,10 +27,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ toke
   }
   if (action === 'pool_on' || action === 'pool_off') {
     if (app.fullName === 'Deleted applicant') return NextResponse.json({ error: 'This application was deleted.' }, { status: 410 });
-    await prisma.jobBoardApplication.update({
-      where: { id: app.id },
-      data: { talentPoolUntil: action === 'pool_on' ? new Date(Date.now() + 365 * 864e5) : null },
-    });
+    // Leaving applies to every application they sent this company; joining starts a fresh 12 months.
+    if (action === 'pool_off') await leavePool(app.id);
+    else await prisma.jobBoardApplication.update({ where: { id: app.id }, data: { talentPoolUntil: new Date(Date.now() + POOL_DAYS * 864e5), talentPoolReminderAt: null } });
     return NextResponse.json({ success: true });
   }
   return NextResponse.json({ error: 'Unknown action.' }, { status: 400 });

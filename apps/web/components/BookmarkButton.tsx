@@ -4,8 +4,18 @@ import { useState, useEffect } from 'react';
 import { Bookmark } from 'lucide-react';
 import { useUser } from './UserProvider';
 
+export type BookmarkType = 'tool' | 'startup' | 'event' | 'story';
+
+// Where each kind is saved. itemId is the slug for every kind.
+const BOOKMARK_API: Record<BookmarkType, { endpoint: string; idKey: string; checkKey: string }> = {
+  tool: { endpoint: '/api/bookmarks/tools', idKey: 'toolId', checkKey: 'toolIds' },
+  startup: { endpoint: '/api/bookmarks/startups', idKey: 'startupId', checkKey: 'startupIds' },
+  event: { endpoint: '/api/bookmarks/events', idKey: 'eventSlug', checkKey: 'eventSlugs' },
+  story: { endpoint: '/api/bookmarks/stories', idKey: 'storySlug', checkKey: 'storySlugs' },
+};
+
 interface BookmarkButtonProps {
-  type: 'tool' | 'startup';
+  type: BookmarkType;
   itemId: string;
   itemName?: string;
   size?: 'sm' | 'md' | 'lg';
@@ -38,11 +48,7 @@ export default function BookmarkButton({
     const checkSaved = async () => {
       try {
         const params = new URLSearchParams();
-        if (type === 'tool') {
-          params.set('toolIds', itemId);
-        } else {
-          params.set('startupIds', itemId);
-        }
+        params.set(BOOKMARK_API[type].checkKey, itemId);
 
         const res = await fetch(`/api/bookmarks/check?${params}`, { signal: controller.signal });
         if (!res.ok) return;
@@ -74,18 +80,16 @@ export default function BookmarkButton({
     setIsSaved(!isSaved);
 
     try {
-      const endpoint = type === 'tool' ? '/api/bookmarks/tools' : '/api/bookmarks/startups';
-      const idKey = type === 'tool' ? 'toolId' : 'startupId';
+      const { endpoint, idKey } = BOOKMARK_API[type];
 
       if (previousState) {
         // Unsave
-        const res = await fetch(`${endpoint}?${idKey}=${itemId}`, {
+        const res = await fetch(`${endpoint}?${idKey}=${encodeURIComponent(itemId)}`, {
           method: 'DELETE',
         });
 
         if (!res.ok) {
-          const error = await res.json();
-          console.error('Error unsaving:', error);
+          console.error('Error unsaving:', res.status);
           // Revert optimistic update
           setIsSaved(previousState);
         }
@@ -98,8 +102,7 @@ export default function BookmarkButton({
         });
 
         if (!res.ok) {
-          const error = await res.json();
-          console.error('Error saving:', error);
+          console.error('Error saving:', res.status);
           // Revert optimistic update
           setIsSaved(previousState);
         }

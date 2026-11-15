@@ -1,121 +1,72 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import crypto from 'crypto';
 
-// Set env before import so the module-level constant picks it up
 process.env.NEXTAUTH_SECRET = 'test-otp-secret-for-testing';
 
 import { generateOTP, verifyOTP } from '@/lib/action-otp';
 
+const USER = 'founder-1';
+const ACTION = 'role_change';
+
 describe('action-otp', () => {
-  beforeEach(() => {
-    // env already set at top level
-  });
+  afterEach(() => vi.useRealTimers());
 
   describe('generateOTP', () => {
-    it('returns a 6-digit code', () => {
-      const { code } = generateOTP();
+    it('returns a 6-digit code and a base64url token', () => {
+      const { code, token } = generateOTP(USER, ACTION);
       expect(code).toMatch(/^\d{6}$/);
-    });
-
-    it('returns a base64url token', () => {
-      const { token } = generateOTP();
-      expect(token).toBeTruthy();
-      expect(typeof token).toBe('string');
-      // base64url: only alphanumeric, -, _
       expect(token).toMatch(/^[A-Za-z0-9_-]+$/);
     });
 
-    it('generates different codes each time', () => {
-      const codes = new Set(Array.from({ length: 20 }, () => generateOTP().code));
-      expect(codes.size).toBeGreaterThan(1);
-    });
-
-    it('generates different tokens each time', () => {
-      const tokens = new Set(Array.from({ length: 10 }, () => generateOTP().token));
-      expect(tokens.size).toBeGreaterThan(1);
-    });
-
-    it('code is in range 100000-999999', () => {
-      for (let i = 0; i < 50; i++) {
-        const { code } = generateOTP();
-        const num = parseInt(code, 10);
-        expect(num).toBeGreaterThanOrEqual(100000);
-        expect(num).toBeLessThanOrEqual(999999);
-      }
+    it('generates different codes and tokens each time', () => {
+      const made = Array.from({ length: 20 }, () => generateOTP(USER, ACTION));
+      expect(new Set(made.map((m) => m.code)).size).toBeGreaterThan(1);
+      expect(new Set(made.map((m) => m.token)).size).toBeGreaterThan(1);
     });
   });
 
   describe('verifyOTP', () => {
-    it('verifies correct code', () => {
-      const { code, token } = generateOTP();
-      const result = verifyOTP(token, code);
-      expect(result.valid).toBe(true);
-      expect(result.error).toBeUndefined();
+    it('verifies the correct code for the same founder and action', () => {
+      const { code, token } = generateOTP(USER, ACTION);
+      expect(verifyOTP(token, code, USER, ACTION)).toEqual({ valid: true });
     });
 
-    it('rejects wrong code', () => {
-      const { token } = generateOTP();
-      const result = verifyOTP(token, '000000');
-      expect(result.valid).toBe(false);
-      expect(result.error).toBe('Incorrect code');
+    it('rejects a wrong code', () => {
+      const { code, token } = generateOTP(USER, ACTION);
+      const wrong = code === '000000' ? '111111' : '000000';
+      expect(verifyOTP(token, wrong, USER, ACTION)).toEqual({ valid: false, error: 'Incorrect code' });
     });
 
-    it('rejects tampered token', () => {
-      const { code } = generateOTP();
-      const result = verifyOTP('tampered-token-data', code);
-      expect(result.valid).toBe(false);
-      expect(result.error).toBe('Invalid verification token');
+    it('rejects the right code for another founder or another action', () => {
+      const { code, token } = generateOTP(USER, ACTION);
+      expect(verifyOTP(token, code, 'founder-2', ACTION).valid).toBe(false);
+      expect(verifyOTP(token, code, USER, 'revoke').valid).toBe(false);
     });
 
-    it('rejects empty token', () => {
-      const result = verifyOTP('', '123456');
-      expect(result.valid).toBe(false);
-      expect(result.error).toBe('Invalid verification token');
+    it('rejects malformed and empty tokens', () => {
+      expect(verifyOTP('tampered-token-data', '123456', USER, ACTION)).toEqual({ valid: false, error: 'Invalid verification token' });
+      expect(verifyOTP('', '123456', USER, ACTION)).toEqual({ valid: false, error: 'Invalid verification token' });
     });
 
-    it('rejects code from different OTP generation', () => {
-      const otp1 = generateOTP();
-      const otp2 = generateOTP();
-      // Use code from otp1 with token from otp2
-      const result = verifyOTP(otp2.token, otp1.code);
-      // This might pass if codes happen to match, but very unlikely
-      if (otp1.code !== otp2.code) {
-        expect(result.valid).toBe(false);
-      }
+    it('rejects a token after 10 minutes', () => {
+      vi.useFakeTimers();
+      const { code, token } = generateOTP(USER, ACTION);
+      vi.advanceTimersByTime(10 * 60 * 1000 + 1);
+      expect(verifyOTP(token, code, USER, ACTION)).toEqual({ valid: false, error: 'Code expired — request a new one' });
     });
 
-    it('rejects token after expiry window', async () => {
-      // We can't easily test expiry without controlling time or knowing the internal secret.
-      // Instead, verify that a valid OTP works immediately (proving the flow is correct)
-      // and that a structurally invalid expired payload is rejected.
-      const { code, token } = generateOTP();
-      // Immediate verification works
-      expect(verifyOTP(token, code).valid).toBe(true);
-      // Second use of same token fails (already verified conceptually)
-      // The token is stateless so same code+token would still pass,
-      // but we verify the overall flow integrity
-    });
-
-    it('rejects token with modified signature', () => {
-      const { code, token } = generateOTP();
+    it('rejects a token whose expiry was extended', () => {
+      const { code, token } = generateOTP(USER, ACTION);
       const decoded = JSON.parse(Buffer.from(token, 'base64url').toString());
-      decoded.s = 'a'.repeat(64); // fake signature
-      const modifiedToken = Buffer.from(JSON.stringify(decoded)).toString('base64url');
-      const result = verifyOTP(modifiedToken, code);
-      expect(result.valid).toBe(false);
-      expect(result.error).toBe('Invalid verification token');
+      decoded.e += 60 * 60 * 1000;
+      const modified = Buffer.from(JSON.stringify(decoded)).toString('base64url');
+      expect(verifyOTP(modified, code, USER, ACTION).valid).toBe(false);
     });
 
-    it('rejects token with modified payload', () => {
-      const { code, token } = generateOTP();
-      const decoded = JSON.parse(Buffer.from(token, 'base64url').toString());
-      // Modify the payload to extend expiry
-      const payload = JSON.parse(decoded.p);
-      payload.e = Date.now() + 999999999;
-      decoded.p = JSON.stringify(payload);
-      const modifiedToken = Buffer.from(JSON.stringify(decoded)).toString('base64url');
-      const result = verifyOTP(modifiedToken, code);
-      expect(result.valid).toBe(false);
-      expect(result.error).toBe('Invalid verification token');
+    it('the token does not reveal the code: no plain hash of any 6-digit code appears in it', () => {
+      const { code, token } = generateOTP(USER, ACTION);
+      const { m } = JSON.parse(Buffer.from(token, 'base64url').toString());
+      expect(m).not.toBe(crypto.createHash('sha256').update(code).digest('hex'));
     });
   });
 });

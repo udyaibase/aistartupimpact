@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { MapPin, Building2, ExternalLink, Bookmark, Loader2 } from 'lucide-react';
+import { MapPin, Building2, ExternalLink, Bookmark, Loader2, Users } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useUser } from '@/components/UserProvider';
 import { JOBS_PAGE_SIZE as PAGE_SIZE } from '@/lib/jobs/search-keys';
@@ -180,6 +180,12 @@ function JobCard({ job, isSaved, onToggleSave }: { job: any; isSaved: boolean; o
                 {expLabel}
               </span>
             )}
+            {Number(job.positions) > 1 && (
+              <span className="inline-flex items-center gap-1">
+                <Users className="w-3 h-3" aria-hidden />
+                {Number(job.positions)} openings
+              </span>
+            )}
             {job.showSalary && job.salaryMin && (
               <span className="inline-flex items-center gap-1">
                 ₹ {(job.salaryMin / 100000).toFixed(0)}L–{(job.salaryMax / 100000).toFixed(0)}L
@@ -200,6 +206,11 @@ function JobCard({ job, isSaved, onToggleSave }: { job: any; isSaved: boolean; o
             <span className="text-[11px] font-jakarta bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2.5 py-1 rounded-md">
               {formatEmploymentType(job.employmentType)}
             </span>
+            {Number(job.positions) > 1 && (
+              <span className="text-[11px] font-jakarta bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2.5 py-1 rounded-md">
+                {Number(job.positions)} openings
+              </span>
+            )}
           </div>
 
           <SkillChips skills={job.skills} />

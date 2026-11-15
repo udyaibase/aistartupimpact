@@ -1,3 +1,4 @@
+import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from 'next/server';
 import { isTwoFactorOn, verifyAccountCode } from '@/lib/auth/account-two-factor';
 import { TWO_FACTOR_LOCKED_MESSAGE, clearTwoFactorFailures, isTwoFactorLocked, recordTwoFactorFailure } from '@/lib/auth/two-factor-attempts';
@@ -9,7 +10,7 @@ import { setFounderSession } from '@/lib/founder-auth';
 
 export const dynamic = 'force-dynamic';
 
-const CHALLENGE_SECRET = new TextEncoder().encode(process.env.FOUNDER_JWT_SECRET!);
+const CHALLENGE_SECRET = jwtSecret(process.env.FOUNDER_JWT_SECRET, 'FOUNDER_JWT_SECRET');
 
 /**
  * POST /api/founder/auth/verify-2fa

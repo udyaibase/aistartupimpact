@@ -12,8 +12,15 @@ import { refreshPublicListing } from '@/lib/founder/refresh-listing';
 import { logFounderActivity } from '@/lib/founder/activity';
 import { founderAtStartupLimit, STARTUP_LIMIT_MESSAGE } from '@/lib/founder/limits';
 import { checkLocation } from '@/lib/locations';
+import { emailVerificationDomain, listingDomainKey } from '@/lib/startups/listing-domain';
+import { contactEmailConfirmed, isPlausibleEmail, normalizeEmail } from '@/lib/startups/contact-email';
+import { emailMatchesDomain } from '@/lib/jobs/trust';
+import { markStartupVerified } from '@/lib/startups/ownership';
 
 interface StartupSubmission {
+  /** Private contact email (admin and platform emails only) and the proof the founder confirmed it. */
+  contactEmail?: string;
+  contactEmailProof?: string;
   name: string;
   tagline: string;
   description: string;
@@ -60,7 +67,45 @@ interface StartupSubmission {
   }>;
 }
 
-export async function submitStartupAction(data: StartupSubmission) {
+type ListedStartup = { id: string; name: string; slug: string; ownerId: string | null; isVerified: boolean; createdAt: Date; verificationMethod: string | null };
+
+/** A live startup whose website is on the same company domain, if any (see listingDomainKey). */
+async function findListedByDomain(key: string): Promise<ListedStartup | null> {
+  const rows = await prisma.$queryRaw<(ListedStartup & { websiteUrl: string | null; verifiedDomain: string | null })[]>`
+    SELECT id, name, slug, "ownerId", "isVerified", "createdAt", "websiteUrl", "verifiedDomain", "verificationMethod"
+    FROM "Startup"
+    WHERE "deletedAt" IS NULL
+      AND ("websiteUrl" ILIKE ${'%' + key + '%'} OR "verifiedDomain" = ${key})
+    ORDER BY "isVerified" DESC, "createdAt" ASC
+    LIMIT 25
+  `;
+  return rows.find((r) => r.verifiedDomain === key || listingDomainKey(r.websiteUrl) === key) ?? null;
+}
+
+export type DomainCheck =
+  | { status: 'free' }
+  | { status: 'yours'; name: string; slug: string }
+  | { status: 'listed'; id: string; name: string; slug: string; verified: boolean; dnsTakeover: boolean };
+
+/** Step 1 of the add-startup flow: is a startup on this website already listed? */
+export async function checkStartupDomainAction(websiteUrl: string): Promise<DomainCheck> {
+  const session = await requireFounderAuth();
+  const key = listingDomainKey(String(websiteUrl ?? '').slice(0, 2048));
+  if (!key) return { status: 'free' };
+  const found = await findListedByDomain(key);
+  if (!found) return { status: 'free' };
+  if (found.ownerId === session.userId) return { status: 'yours', name: found.name, slug: found.slug };
+  return { status: 'listed', id: found.id, name: found.name, slug: found.slug, verified: found.isVerified, dnsTakeover: found.isVerified && found.verificationMethod === 'EMAIL' };
+}
+
+export type SubmitResult =
+  | { success: true; startupId: string; slug: string; name: string; verified: boolean; workEmailHint: string | null; repeated?: boolean }
+  | { success: false; error: string; duplicate?: { id: string; name: string; slug: string; verified: boolean; dnsTakeover: boolean } };
+
+/** A repeat of the same submit (double tap, retry on a slow network) within this window returns the first result. */
+const REPEAT_WINDOW_MS = 15 * 60 * 1000;
+
+export async function submitStartupAction(data: StartupSubmission): Promise<SubmitResult> {
   try {
     const session = await requireFounderAuth();
     if (await founderAtStartupLimit(session.userId)) return { success: false, error: STARTUP_LIMIT_MESSAGE };
@@ -73,6 +118,15 @@ export async function submitStartupAction(data: StartupSubmission) {
       if (!loc.ok) return { success: false, error: loc.error };
       data = { ...data, headquartersCity: loc.city ?? undefined };
     }
+
+    // Contact email: required for new startups, and only once the founder has proven they receive mail there.
+    const contactEmail = normalizeEmail(data.contactEmail);
+    if (!isPlausibleEmail(contactEmail)) return { success: false, error: 'Add a valid contact email.' };
+    if (!(await contactEmailConfirmed(session.userId, contactEmail, data.contactEmailProof))) {
+      return { success: false, error: 'Confirm your contact email with the 6-digit code first.' };
+    }
+
+    const domainKey = listingDomainKey(data.websiteUrl);
 
     // Generate clean SEO-friendly slug (no random hash)
     const { slugify } = await import('@/lib/slug-utils');
@@ -88,26 +142,8 @@ export async function submitStartupAction(data: StartupSubmission) {
       slug = `${baseSlug}-${counter}`;
     }
 
-    // Check if startup with same name already exists for this founder
-    const existingByName = await prisma.$queryRaw<any[]>`
-      SELECT id
-      FROM "Startup"
-      WHERE LOWER(name) = LOWER(${data.name})
-        AND "ownerId" = ${session.userId}
-        AND "deletedAt" IS NULL
-      LIMIT 1
-    `;
-
-    if (existingByName.length > 0) {
-      return {
-        success: false,
-        error: 'You have already submitted a startup with this name. View it in your dashboard.',
-      };
-    }
-
     // Create startup using raw query
     // Try to include category and businessType if columns exist, otherwise skip them
-    let startupId: string | null = null;
     const foundersDataJson = data.foundersData && data.foundersData.length > 0
       ? JSON.stringify(data.foundersData)
       : null;
@@ -127,8 +163,31 @@ export async function submitStartupAction(data: StartupSubmission) {
       cityId = cityMatch.length > 0 ? cityMatch[0].id : null;
     }
 
-    try {
-      const result = await prisma.$queryRaw<any[]>`
+    // One submit at a time per founder, so a double tap can't create two startups. The lock ends with the transaction.
+    const outcome = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'startup-submit:' + session.userId}))`;
+
+      if (domainKey) {
+        const listed = await findListedByDomain(domainKey);
+        if (listed) {
+          // The same founder submitting the same startup again moments later: hand back the first one.
+          if (listed.ownerId === session.userId && Date.now() - new Date(listed.createdAt).getTime() < REPEAT_WINDOW_MS) {
+            return { kind: 'repeat', listed } as const;
+          }
+          return { kind: 'duplicate', listed } as const;
+        }
+      }
+
+      const existingByName = await tx.$queryRaw<any[]>`
+        SELECT id FROM "Startup"
+        WHERE LOWER(name) = LOWER(${data.name})
+          AND "ownerId" = ${session.userId}
+          AND "deletedAt" IS NULL
+        LIMIT 1
+      `;
+      if (existingByName.length > 0) return { kind: 'sameName' } as const;
+
+      const inserted = await tx.$queryRaw<{ id: string }[]>`
         INSERT INTO "Startup" (
           id, name, slug, tagline, description, "websiteUrl", "linkedinUrl", "twitterUrl",
           "foundedYear", "headquartersCity", "cityId", stage, "employeeCount", founders, "foundersData", "socialLinks", "logoUrl",
@@ -163,47 +222,32 @@ export async function submitStartupAction(data: StartupSubmission) {
         )
         RETURNING id
       `;
-      startupId = result[0]?.id;
-    } catch (error: any) {
-      // If category or businessType column doesn't exist, insert without them
-      if (error.message?.includes('category') || error.message?.includes('businessType') || error.message?.includes('column')) {
-        console.log('[submitStartup] Category or businessType column not found, inserting without them');
-        const result = await prisma.$queryRaw<any[]>`
-          INSERT INTO "Startup" (
-            id, name, slug, tagline, description, "websiteUrl", "linkedinUrl", "twitterUrl",
-            "foundedYear", "headquartersCity", stage, "employeeCount", founders, "socialLinks", "logoUrl",
-            "totalFundingInr", status, "ownerId", "claimStatus", "submittedBy", "createdAt", "updatedAt"
-          ) VALUES (
-            gen_random_uuid(),
-            ${data.name},
-            ${slug},
-            ${data.tagline},
-            ${data.description},
-            ${data.websiteUrl},
-            ${data.linkedinUrl || null},
-            ${data.twitterUrl || null},
-            ${data.foundedYear},
-            ${data.headquartersCity || null},
-            ${data.stage}::"StartupStage",
-            ${data.employeeCount || null},
-            ${data.founders}::text[],
-            ${socialLinksJson}::jsonb,
-            ${data.logoUrl || null},
-            ${data.totalFundingInr || 0},
-            ${data.status || 'ACTIVE'}::"CompanyStatus",
-            ${session.userId},
-            'PENDING'::"ClaimStatus",
-            'FOUNDER',
-            NOW(),
-            NOW()
-          )
-          RETURNING id
-        `;
-        startupId = result[0]?.id;
-      } else {
-        throw error;
+      const id = inserted[0]?.id;
+      if (id) {
+        await tx.$executeRaw`UPDATE "Startup" SET "contactEmail" = ${contactEmail}, "contactEmailVerifiedAt" = NOW() WHERE id = ${id}`;
       }
+      return { kind: 'created', id: id ?? null } as const;
+    }, { maxWait: 10_000, timeout: 20_000 });
+
+    if (outcome.kind === 'repeat') {
+      const r = outcome.listed;
+      return { success: true, startupId: r.id, slug: r.slug, name: r.name, verified: r.isVerified, workEmailHint: null, repeated: true };
     }
+    if (outcome.kind === 'duplicate') {
+      const d = outcome.listed;
+      return {
+        success: false,
+        error: d.ownerId === session.userId
+          ? `You've already added ${d.name}. Find it under My startups.`
+          : `${d.name} is already listed on Udyaibase. Claim it instead of adding it again.`,
+        duplicate: { id: d.id, name: d.name, slug: d.slug, verified: d.isVerified, dnsTakeover: d.isVerified && d.verificationMethod === 'EMAIL' },
+      };
+    }
+    if (outcome.kind === 'sameName') {
+      return { success: false, error: 'You have already submitted a startup with this name. View it in your dashboard.' };
+    }
+    const startupId: string | null = outcome.id;
+    if (!startupId) return { success: false, error: 'Failed to submit startup' };
 
     // Insert FAQs if provided
     if (startupId && data.faqs && data.faqs.length > 0) {
@@ -249,10 +293,28 @@ export async function submitStartupAction(data: StartupSubmission) {
     }
 
     await logFounderActivity(session.userId, 'startup_submitted', { metadata: { name: data.name } });
+
+    // A contact email on the website's own domain proves control of it (same check as the work-email method).
+    const companyDomain = emailVerificationDomain(data.websiteUrl);
+    let verified = false;
+    if (companyDomain && emailMatchesDomain(contactEmail, companyDomain)) {
+      await markStartupVerified(prisma, startupId, companyDomain, session.userId, { method: 'EMAIL', email: contactEmail });
+      await refreshPublicListing('startup', startupId);
+      await logFounderActivity(session.userId, 'startup_claim_verified', { metadata: { startupId, method: 'email' } });
+      verified = true;
+    }
+
+    // Offer the founder's own sign-in or work email first on the verify screen when it's on the domain.
+    let workEmailHint: string | null = null;
+    if (!verified && companyDomain) {
+      const me = await prisma.founderUser.findUnique({ where: { id: session.userId }, select: { email: true, companyEmail: true } });
+      workEmailHint = [me?.companyEmail, me?.email].find((e): e is string => !!e && emailMatchesDomain(e, companyDomain)) ?? null;
+    }
+
     revalidatePath('/founder/startups');
     revalidatePath('/founder/dashboard');
 
-    return { success: true };
+    return { success: true, startupId, slug, name: data.name, verified, workEmailHint };
   } catch (error: any) {
     console.error('Startup submission error:', error);
     return {
@@ -279,6 +341,19 @@ export async function updateStartupAction(id: string, data: StartupSubmission) {
     const access = await listingAccess(session, 'startup', id);
     if (!access?.canEdit) {
       return { success: false, error: 'Startup not found or you do not have permission to edit it' };
+    }
+
+    // Private contact email: not part of the public listing, so it saves straight away, once confirmed.
+    if (data.contactEmail !== undefined) {
+      const contactEmail = normalizeEmail(data.contactEmail);
+      const current = await prisma.startup.findUnique({ where: { id }, select: { contactEmail: true } });
+      if (contactEmail && contactEmail !== normalizeEmail(current?.contactEmail)) {
+        if (!isPlausibleEmail(contactEmail)) return { success: false, error: 'Add a valid contact email.' };
+        if (!(await contactEmailConfirmed(session.userId, contactEmail, data.contactEmailProof))) {
+          return { success: false, error: 'Confirm the new contact email with the 6-digit code first.' };
+        }
+        await prisma.startup.update({ where: { id }, data: { contactEmail, contactEmailVerifiedAt: new Date() } });
+      }
     }
 
     const result = await saveListingEdit('startup', id, {

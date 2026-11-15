@@ -140,8 +140,10 @@ export default function ApplicationsPage() {
   };
 
   const getResumeUrl = (app: Application) => {
+    // Uploaded resumes live in private storage and are served to signed-in staff only.
+    if (app.resumeUrl?.startsWith('private:') || app.resumeLink?.startsWith('private:')) return `/api/admin/applications/${app.id}/resume`;
     if (app.resumeUrl) return app.resumeUrl;
-    if (app.resumeLink && !app.resumeLink.startsWith('data:')) return app.resumeLink;
+    if (app.resumeLink && /^https?:\/\//i.test(app.resumeLink)) return app.resumeLink;
     return null;
   };
 

@@ -1,5 +1,16 @@
 import { sql } from '@/lib/db';
 
+// ── Availability ─────────────────────────────────────────
+
+/**
+ * Self-serve ad purchases are switched off until the flow is finished: no public page shows the zones a founder
+ * buys, no GST invoice is issued for these payments, and activation relies on the webhook alone. While off, the
+ * purchase routes refuse to create orders, so nobody can pay for something that isn't delivered.
+ * Set ADVERTISE_SELF_SERVE=on to open them again.
+ */
+export const selfServeAdsEnabled = () => process.env.ADVERTISE_SELF_SERVE === 'on';
+export const SELF_SERVE_ADS_OFF = { success: false, error: 'Advertising packages can’t be bought online yet. Contact us to book a placement.', code: 'ADS_UNAVAILABLE' } as const;
+
 // ── Pricing Constants (single source of truth) ───────────
 
 export const GST_RATE = 0.18;

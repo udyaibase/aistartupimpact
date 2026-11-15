@@ -9,6 +9,8 @@ import { jobPostingSalary, publicListingWhere } from '@/lib/jobs/public';
 import { publicQuestions } from '@/lib/jobs/composer';
 import { parseApplyFormConfig, type ApplyFormConfig } from '@/lib/jobs/apply-form';
 import { parseWidgetDesign, type WidgetDesign } from '@/lib/jobs/widget-design';
+import { LIMITS, parseCareersContent, plain, type CareersContent } from '@/lib/jobs/careers-content';
+import { cleanPerks } from '@/lib/jobs/perks';
 
 /** What both the hosted careers page and the website widget show about a company. */
 export interface CareersCompany {
@@ -24,6 +26,12 @@ export interface CareersCompany {
   verified: boolean;
   perks: string[];
   applyForm: ApplyFormConfig;
+  /** "Life at {company}" sections (lib/jobs/careers-content.ts). */
+  content: CareersContent;
+  /** Short facts for the careers page (city, team size, stage, founded), each already formatted. */
+  facts: { label: string; value: string }[];
+  /** The hidden listing behind "Apply generally" (shown when no roles are open), or null when it's turned off. */
+  general: { slug: string; title: string } | null;
 }
 
 export interface CareersJob {
@@ -37,6 +45,14 @@ export interface CareersJob {
   workType: string;
   employmentType: string;
   experienceBand: string | null;
+  experienceMin: number | null;
+  experienceMax: number | null;
+  category: string;
+  categoryLabel: string | null;
+  visaSponsorship: boolean;
+  hiringManagerName: string | null;
+  /** Openings for this role (1 = a single hire). */
+  positions: number;
   salaryMin: number | null;
   salaryMax: number | null;
   salaryCurrency: string;
@@ -56,9 +72,10 @@ export const DEFAULT_BRAND = '#111827';
 
 const employerSelect = {
   id: true, slug: true, companyName: true, logoUrl: true, websiteUrl: true, description: true,
-  tagline: true, careersHeadline: true, brandColor: true, perks: true, applyFormConfig: true, isActive: true, deactivatedAt: true, deletedAt: true,
+  tagline: true, careersHeadline: true, brandColor: true, perks: true, applyFormConfig: true, careersContent: true, location: true, companySize: true, teamSize: true, stage: true, industry: true, acceptGeneralApplications: true, isActive: true, deactivatedAt: true, deletedAt: true,
   startupId: true, startupClaimMethod: true,
-  Startup: { select: { name: true, logoUrl: true, websiteUrl: true, description: true } },
+  Startup: { select: { name: true, logoUrl: true, websiteUrl: true, description: true, foundedYear: true, headquartersCity: true } },
+  Listings: { where: { isGeneral: true, deletedAt: null }, select: { slug: true, title: true }, take: 1 },
 } as const;
 
 type EmployerRow = NonNullable<Awaited<ReturnType<typeof findEmployer>>>;
@@ -81,7 +98,27 @@ function toCompany(e: EmployerRow): CareersCompany {
     verified,
     perks: e.perks,
     applyForm: parseApplyFormConfig(e.applyFormConfig),
+    content: parseCareersContent(e.careersContent),
+    general: e.acceptGeneralApplications ? e.Listings[0] ?? null : null,
+    facts: factsOf(e, verified),
   };
+}
+
+const STAGE_LABEL: Record<string, string> = {
+  IDEA: 'Idea', PRE_SEED: 'Pre-seed', SEED: 'Seed', SERIES_A: 'Series A', SERIES_B: 'Series B', SERIES_C: 'Series C',
+  SERIES_D: 'Series D', GROWTH: 'Growth', LATE_STAGE: 'Late stage', IPO: 'Public', PUBLIC: 'Public', BOOTSTRAPPED: 'Bootstrapped',
+};
+
+function factsOf(e: EmployerRow, verified: boolean): { label: string; value: string }[] {
+  const out: { label: string; value: string }[] = [];
+  const city = (e.location || (verified ? e.Startup?.headquartersCity : null) || '').split(',')[0].trim();
+  if (city) out.push({ label: 'Based in', value: city });
+  const size = (e.teamSize || e.companySize || '').trim();
+  if (size) out.push({ label: 'Team', value: /people|employees/i.test(size) ? size : `${size} people` });
+  if (e.stage) out.push({ label: 'Stage', value: STAGE_LABEL[e.stage] ?? e.stage.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase()) });
+  if (verified && e.Startup?.foundedYear) out.push({ label: 'Founded', value: String(e.Startup.foundedYear) });
+  if (e.industry) out.push({ label: 'Industry', value: e.industry });
+  return out.slice(0, 4);
 }
 
 export async function getCareersCompany(where: { id: string } | { slug: string }): Promise<CareersCompany | null> {
@@ -103,7 +140,8 @@ export async function getCareersJobs(employerId: string, departments: string[] =
     take: 100,
     select: {
       id: true, slug: true, title: true, department: true, location: true, city: true, country: true, workType: true,
-      employmentType: true, experienceBand: true, salaryMin: true, salaryMax: true, salaryCurrency: true, showSalary: true,
+      employmentType: true, experienceBand: true, experienceMin: true, experienceMax: true, category: true, categoryLabel: true,
+      visaSponsorship: true, hiringManagerName: true, positions: true, salaryMin: true, salaryMax: true, salaryCurrency: true, showSalary: true,
       hasEsops: true, skills: true, shortDescription: true, description: true, publishedAt: true, expiresAt: true,
       applicationType: true, applicationUrl: true, screeningQuestions: true,
     },
@@ -132,6 +170,7 @@ export function careersJobPostings(company: CareersCompany, jobs: CareersJob[], 
     datePosted: j.publishedAt ?? undefined,
     validThrough: j.expiresAt ?? undefined,
     employmentType: EMPLOYMENT[j.employmentType] ?? 'FULL_TIME',
+    ...(j.positions > 1 ? { totalJobOpenings: j.positions } : {}),
     url: `${siteUrl}/jobs/${j.slug}`,
     hiringOrganization: {
       '@type': 'Organization',
@@ -144,6 +183,79 @@ export function careersJobPostings(company: CareersCompany, jobs: CareersJob[], 
       : { jobLocation: { '@type': 'Place', address: { '@type': 'PostalAddress', addressLocality: j.city ?? undefined, addressCountry: j.country || 'IN' } } }),
     ...(jobPostingSalary(j) ? { baseSalary: jobPostingSalary(j) } : {}),
   }));
+}
+
+// ── Company page content (edited in the widget's Customize panel) ────────
+
+export interface CareersSettings {
+  content: CareersContent;
+  /** The Intro section edits the company's careers headline and description. */
+  headline: string;
+  description: string;
+  /** The Perks section edits the company perks list (also shown on every job). */
+  perks: string[];
+  acceptGeneral: boolean;
+  generalSlug: string | null;
+  /** Hex like #A50F15; colours the careers page hero and accents. */
+  brandColor: string;
+}
+
+export function careersSettingsOf(company?: CareersCompany | null): CareersSettings {
+  return {
+    content: company?.content ?? parseCareersContent(null),
+    headline: company?.headline ?? '',
+    description: company?.description ?? '',
+    perks: company?.perks ?? [],
+    acceptGeneral: !!company?.general,
+    generalSlug: company?.general?.slug ?? null,
+    brandColor: company?.brandColor ?? DEFAULT_BRAND,
+  };
+}
+
+/** Validated database update for a `careers` patch from the Customize panel. */
+export function parseCareersSettingsInput(raw: unknown) {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const data: Record<string, unknown> = {};
+  if ('content' in r) data.careersContent = parseCareersContent(r.content);
+  if ('headline' in r) data.careersHeadline = plain(r.headline, LIMITS.headline) || null;
+  if ('description' in r) data.description = plain(r.description, LIMITS.description, true) || null;
+  if ('perks' in r) data.perks = cleanPerks(r.perks);
+  if (typeof r.acceptGeneral === 'boolean') data.acceptGeneralApplications = r.acceptGeneral;
+  if ('brandColor' in r) {
+    if (typeof r.brandColor !== 'string' || !/^#[0-9a-f]{6}$/i.test(r.brandColor)) throw new JobsWidgetInputError('Use a 6-digit hex colour, such as #A50F15.');
+    data.brandColor = r.brandColor.toLowerCase();
+  }
+  return data;
+}
+
+// ── General applications ────────
+
+export const GENERAL_TITLE = 'General application';
+
+/**
+ * The workspace's hidden "General application" listing, created on first use. It is never public (closed, hidden from
+ * the job board and portal job list); applications to it go into the normal pipeline. Returns its id.
+ */
+export async function ensureGeneralListing(employerId: string): Promise<string> {
+  const existing = await prisma.jobBoardListing.findFirst({ where: { employerId, isGeneral: true, deletedAt: null }, select: { id: true } });
+  if (existing) return existing.id;
+  const e = await prisma.jobBoardEmployer.findUnique({ where: { id: employerId }, select: { slug: true, companyName: true } });
+  if (!e) throw new Error('Workspace not found');
+  const created = await prisma.jobBoardListing.create({
+    data: {
+      employerId,
+      isGeneral: true,
+      slug: `${e.slug}-general-application-${createHash('sha256').update(employerId).digest('hex').slice(0, 6)}`,
+      title: GENERAL_TITLE,
+      description: `Candidates interested in future roles at ${e.companyName}. Applications arrive here while no roles are open.`,
+      status: 'CLOSED',
+      showOnProfile: false,
+      showOnCareers: false,
+      applicationType: 'INTERNAL',
+    },
+    select: { id: true },
+  });
+  return created.id;
 }
 
 // ── Website widget ────────────────────────────────────────────────
@@ -197,12 +309,12 @@ export type JobsPortalWidget = Omit<
   status: WidgetStatus;
 };
 
-export function toJobsPortalWidget(w: JobBoardCareersWidget, applyForm: ApplyFormConfig = parseApplyFormConfig(null)): JobsPortalWidget {
+export function toJobsPortalWidget(w: JobBoardCareersWidget, company?: CareersCompany | null): JobsPortalWidget {
   const iso = (d: Date | null) => (d ? d.toISOString() : null);
   return {
     ...w,
     design: parseWidgetDesign(w.design),
-    applyForm,
+    applyForm: company?.applyForm ?? parseApplyFormConfig(null),
     createdAt: w.createdAt.toISOString(),
     updatedAt: w.updatedAt.toISOString(),
     setupStartedAt: iso(w.setupStartedAt),

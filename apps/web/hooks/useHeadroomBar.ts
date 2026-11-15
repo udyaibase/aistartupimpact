@@ -11,6 +11,8 @@ export function useHeadroomBar(anchorRef: RefObject<HTMLDivElement | null>, keep
   const [headerOffset, setHeaderOffset] = useState(104); // announcement bar (44px) + navbar; measured on mount
   const [stuck, setStuck] = useState(false);
   const [hidden, setHidden] = useState(false);
+  /** The last clear scroll direction was up. On desktop, bars use it to open up again for the user. */
+  const [scrollingUp, setScrollingUp] = useState(false);
   const keepOpenRef = useRef(keepOpen);
   keepOpenRef.current = keepOpen;
   const offsetRef = useRef(104);
@@ -35,6 +37,10 @@ export function useHeadroomBar(anchorRef: RefObject<HTMLDivElement | null>, keep
   useEffect(() => {
     let lastY = window.scrollY;
     let frame = 0;
+    // Direction needs a deliberate move (24px one way) before it changes, so trackpad jitter and momentum don't flip it.
+    let prevY = window.scrollY;
+    let dir = 0;
+    let travelled = 0;
     const desktop = window.matchMedia('(min-width: 1024px)');
     const onScroll = () => {
       if (frame) return;
@@ -50,6 +56,14 @@ export function useHeadroomBar(anchorRef: RefObject<HTMLDivElement | null>, keep
         else if (Date.now() > ignoreUntil.current) {
           if (delta > 6) setHidden(true);
           else if (delta < -6) setHidden(false);
+        }
+        const step = y - prevY;
+        prevY = y;
+        if (step !== 0) {
+          const d = step > 0 ? 1 : -1;
+          if (d !== dir) { dir = d; travelled = 0; }
+          travelled += Math.abs(step);
+          if (travelled >= 24) setScrollingUp(dir < 0);
         }
         if (Math.abs(delta) > 6) lastY = y;
       });
@@ -70,5 +84,5 @@ export function useHeadroomBar(anchorRef: RefObject<HTMLDivElement | null>, keep
     window.scrollTo({ top: window.scrollY + top - offsetRef.current, behavior: 'smooth' });
   }, [anchorRef]);
 
-  return { headerOffset, stuck, hidden, scrollToResults };
+  return { headerOffset, stuck, hidden, scrollingUp, scrollToResults };
 }

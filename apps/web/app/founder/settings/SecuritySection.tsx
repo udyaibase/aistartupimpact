@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import PasswordField from '@/components/ui/PasswordField';
+import { passwordProblem } from '@/lib/password-rules';
 import { Lock, X, AlertTriangle, Shield, Trash2, Mail } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Toast from '@/components/Toast';
@@ -75,15 +77,10 @@ export default function SecuritySection() {
     // Trim all password fields to remove accidental whitespace
     const currentPasswordTrimmed = passwordData.currentPassword.trim();
     const newPasswordTrimmed = passwordData.newPassword.trim();
-    const confirmPasswordTrimmed = passwordData.confirmPassword.trim();
-    
-    if (newPasswordTrimmed !== confirmPasswordTrimmed) {
-      setToast({ type: 'error', message: 'New passwords do not match' });
-      return;
-    }
 
-    if (newPasswordTrimmed.length < 8) {
-      setToast({ type: 'error', message: 'Password must be at least 8 characters long' });
+    const pwProblem = passwordProblem(newPasswordTrimmed);
+    if (pwProblem) {
+      setToast({ type: 'error', message: pwProblem });
       return;
     }
 
@@ -317,49 +314,22 @@ export default function SecuritySection() {
             </div>
 
             <form onSubmit={handlePasswordChange} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Current Password
-                </label>
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  value={passwordData.currentPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                  required
-                  className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-navy dark:text-white focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 font-jakarta text-sm transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  New Password
-                </label>
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  value={passwordData.newPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                  required
-                  minLength={8}
-                  className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-navy dark:text-white focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 font-jakarta text-sm transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Confirm New Password
-                </label>
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  value={passwordData.confirmPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                  required
-                  minLength={8}
-                  className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-navy dark:text-white focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 font-jakarta text-sm transition-all"
-                />
-              </div>
+              <PasswordField
+                label="Current password"
+                autoComplete="current-password"
+                value={passwordData.currentPassword}
+                onChange={(v) => setPasswordData({ ...passwordData, currentPassword: v })}
+                required
+              />
+              <PasswordField
+                label="New password"
+                autoComplete="new-password"
+                value={passwordData.newPassword}
+                onChange={(v) => setPasswordData({ ...passwordData, newPassword: v })}
+                showRules={passwordData.newPassword.length > 0}
+                hint={passwordData.newPassword.length === 0 ? 'At least 8 characters, with upper and lower case letters and a number.' : undefined}
+                required
+              />
 
               <button
                 type="submit"

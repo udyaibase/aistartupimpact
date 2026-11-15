@@ -8,13 +8,15 @@ import { usePathname } from "next/navigation";
 import { hasGuide, openGuide } from "./guide/GuideHost";
 import ProfileDropdown from "@/components/ProfileDropdown";
 import ThemeToggle from "@/components/ThemeToggle";
-import CommandPalette from "./CommandPalette";
+import CommandPalette, { ORGANIZER_ACTIONS, ORGANIZER_PAGES } from "./CommandPalette";
+import { canOpen, OWNER_ACCESS, type NavAccess } from "@/lib/organizer-auth/nav";
 
 interface Props {
   organizer: { name: string; email: string; company?: string; avatar?: string };
+  access?: NavAccess;
 }
 
-export default function OrganizerHeader({ organizer }: Props) {
+export default function OrganizerHeader({ organizer, access = OWNER_ACCESS }: Props) {
   const [commandOpen, setCommandOpen] = useState(false);
   const pathname = usePathname();
 
@@ -78,7 +80,9 @@ export default function OrganizerHeader({ organizer }: Props) {
         </div>
       </header>
 
-      <CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} />
+      <CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)}
+        pages={ORGANIZER_PAGES.filter((p) => canOpen(p.href, access))}
+        actions={ORGANIZER_ACTIONS.filter((a) => canOpen(a.href, access))} />
     </>
   );
 }

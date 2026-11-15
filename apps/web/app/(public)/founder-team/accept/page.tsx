@@ -2,35 +2,14 @@
 
 import { useEffect, useState, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { Loader2, Lock, CheckCircle, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { Loader2, Lock, CheckCircle, ShieldCheck } from "lucide-react";
+import PasswordField from "@/components/ui/PasswordField";
 import { validatePassword } from "@/lib/password-validation";
-
-function StrengthMeter({ score, label, color }: { score: number; label: string; color: string }) {
-  return (
-    <div className="space-y-1.5">
-      <div className="flex gap-1">
-        {[1, 2, 3, 4, 5].map(i => (
-          <div
-            key={i}
-            className="h-1.5 flex-1 rounded-full transition-all duration-300"
-            style={{ backgroundColor: i <= score ? color : '#e5e7eb' }}
-          />
-        ))}
-      </div>
-      <p className="text-xs font-jakarta font-medium" style={{ color }}>
-        {label}
-      </p>
-    </div>
-  );
-}
 
 function AcceptContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
   const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [showPw, setShowPw] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [serverErrors, setServerErrors] = useState<string[]>([]);
@@ -60,7 +39,6 @@ function AcceptContent() {
     setServerErrors([]);
 
     if (invite?.needsPassword) {
-      if (password !== confirm) { setError("Passwords don't match"); return; }
       if (validation && !validation.valid) { setError(validation.errors[0]); return; }
     }
 
@@ -131,60 +109,17 @@ function AcceptContent() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {invite?.needsPassword && (<>
-        <div>
-          <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 font-jakarta">Password</label>
-          <div className="relative">
-            <input
-              type={showPw ? "text" : "password"}
-              required
-              minLength={8}
-              autoComplete="new-password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="Min 8 characters, mixed case + number + symbol"
-              className="w-full px-4 py-3 pr-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-jakarta text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/30"
-            />
-            <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-              {showPw ? <EyeOff className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
-            </button>
-          </div>
-          {validation && (
-            <div className="mt-2">
-              <StrengthMeter score={validation.strength.score} label={validation.strength.label} color={validation.strength.color} />
-              {validation.errors.length > 0 && (
-                <ul className="mt-2 space-y-0.5">
-                  {validation.errors.map((err, i) => (
-                    <li key={i} className="text-xs text-red-500 font-jakarta flex items-start gap-1">
-                      <span className="mt-0.5">•</span> {err}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div>
-          <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 font-jakarta">Confirm Password</label>
-          <div className="relative">
-            <input
-              type={showConfirm ? "text" : "password"}
-              required
-              minLength={8}
-              autoComplete="new-password"
-              value={confirm}
-              onChange={e => setConfirm(e.target.value)}
-              placeholder="Re-enter your password"
-              className="w-full px-4 py-3 pr-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-jakarta text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/30"
-            />
-            <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-              {showConfirm ? <EyeOff className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
-            </button>
-          </div>
-          {confirm && password !== confirm && (
-            <p className="text-xs text-red-500 font-jakarta mt-1">Passwords don&apos;t match</p>
-          )}
-        </div>
+        <PasswordField
+          label="Create a password"
+          name="new-password"
+          autoComplete="new-password"
+          value={password}
+          onChange={(v) => { setPassword(v); if (error) setError(""); }}
+          policy="strict"
+          showRules={password.length > 0}
+          hint={password.length === 0 ? "At least 8 characters, with upper and lower case letters, a number and a symbol." : undefined}
+        />
+        </>)}
 
         {error && (
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
@@ -199,23 +134,9 @@ function AcceptContent() {
           </div>
         )}
 
-        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg px-3 py-2.5 space-y-1">
-          <p className="text-xs font-bold text-gray-500 dark:text-gray-400 font-jakarta">Password requirements:</p>
-          <ul className="text-xs text-gray-400 font-jakarta space-y-0.5">
-            <li className={password.length >= 8 ? "text-green-600" : ""}>• At least 8 characters</li>
-            <li className={/[A-Z]/.test(password) ? "text-green-600" : ""}>• One uppercase letter</li>
-            <li className={/[a-z]/.test(password) ? "text-green-600" : ""}>• One lowercase letter</li>
-            <li className={/[0-9]/.test(password) ? "text-green-600" : ""}>• One number</li>
-            <li className={/[^A-Za-z0-9]/.test(password) ? "text-green-600" : ""}>• One special character (!@#$...)</li>
-            <li>• Must not contain your name or email</li>
-          </ul>
-        </div>
-        </>)}
-
-
         <button
           type="submit"
-          disabled={loading || (invite?.needsPassword ? ((validation ? !validation.valid : true) || password !== confirm) : false)}
+          disabled={loading || (invite?.needsPassword ? (validation ? !validation.valid : true) : false)}
           className="w-full py-3 bg-brand hover:bg-brand-600 text-white font-bold text-sm rounded-xl font-jakarta disabled:opacity-50 flex items-center justify-center gap-2"
         >
           {loading && <Loader2 className="w-4 h-4 animate-spin"/>}

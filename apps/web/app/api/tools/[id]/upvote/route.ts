@@ -1,12 +1,11 @@
+import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { jwtVerify } from 'jose';
 import { refreshPaths } from '@/lib/revalidate';
 
 export const dynamic = 'force-dynamic';
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.USER_JWT_SECRET!
-);
+const JWT_SECRET = jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET');
 
 const DAILY_UPVOTE_CAP = 20;
 const MIN_ACCOUNT_AGE_HOURS = 24;

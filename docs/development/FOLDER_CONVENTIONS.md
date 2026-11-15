@@ -40,8 +40,6 @@ apps/web/
 │   │   ├── search/         → Search results
 │   │   └── layout.tsx      → Public layout (Navbar + Footer)
 │   │
-│   ├── (client)/           → Authenticated user pages
-│   │   └── my-analytics/   → User analytics (future)
 │   │
 │   ├── founder/            → Founder dashboard (founder-token auth)
 │   │   ├── dashboard/      → Main founder dashboard

@@ -1,3 +1,5 @@
+import { jwtSecret } from '@/lib/jwt-secret';
+import { passwordProblem } from "@/lib/password-rules";
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
@@ -9,9 +11,7 @@ import { logFounderActivity } from '@/lib/founder/activity';
 
 export const dynamic = 'force-dynamic';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.USER_JWT_SECRET!
-);
+const JWT_SECRET = jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET');
 
 export async function PUT(request: NextRequest) {
   try {
@@ -28,6 +28,7 @@ export async function PUT(request: NextRequest) {
     if (!newPassword || newPassword.length < 8) {
       return NextResponse.json({ error: 'New password must be at least 8 characters' }, { status: 400 });
     }
+    const pwProblem = passwordProblem(newPassword, email, 'mixed', null); if (pwProblem) return NextResponse.json({ error: pwProblem }, { status: 400 });
 
     // Get current user
     const users = await sql`

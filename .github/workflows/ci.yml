@@ -20,6 +20,7 @@ env:
   REFRESH_SECRET: "ci-refresh-secret"
   FOUNDER_JWT_SECRET: "ci-founder-secret"
   USER_JWT_SECRET: "ci-user-secret"
+  EMPLOYER_JWT_SECRET: "ci-employer-secret"
   IP_HASH_SALT: "ci-ip-hash-salt-placeholder-value"
   RESEND_API_KEY: "re_placeholder"
   RESEND_FROM_EMAIL: "no-reply@example.com"

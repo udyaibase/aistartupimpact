@@ -5,10 +5,12 @@ import { CreditCard, LayoutDashboard, CalendarDays, Plus, Users, BarChart3, Sett
 import CollapsibleSidebar from '@/components/ui/CollapsibleSidebar';
 import SidebarNav, { type NavItem } from '@/components/ui/SidebarNav';
 import { useSidebar } from '@/components/ui/SidebarContext';
+import { canOpen, filterNav, OWNER_ACCESS, type NavAccess } from '@/lib/organizer-auth/nav';
 
 interface Props {
   organizer: { name: string; email: string; company?: string };
   eventCount?: number;
+  access?: NavAccess;
 }
 
 const getNavItems = (eventCount?: number): NavItem[] => [
@@ -54,13 +56,15 @@ function NewEventButton() {
 }
 
 
-export default function OrganizerSidebar({ organizer, eventCount }: Props) {
-  const navItems = getNavItems(eventCount);
+export default function OrganizerSidebar({ eventCount, access = OWNER_ACCESS }: Props) {
+  const navItems = filterNav(getNavItems(eventCount), access);
   return (
     <CollapsibleSidebar logoHref="/organizer">
-      <div className="px-3 pt-3 pb-1">
-        <NewEventButton />
-      </div>
+      {canOpen('/organizer/events/create', access) && (
+        <div className="px-3 pt-3 pb-1">
+          <NewEventButton />
+        </div>
+      )}
       <SidebarNav items={navItems} />
     </CollapsibleSidebar>
   );

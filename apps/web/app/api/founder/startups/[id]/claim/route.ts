@@ -30,7 +30,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     // Check if startup exists using raw query
     const startups = await prisma.$queryRaw<any[]>`
       SELECT 
-        id, name, "websiteUrl", "isVerified", "claimedBy", "verificationToken", "ownerId"
+        id, name, "websiteUrl", "isVerified", "claimedBy", "verificationToken", "ownerId", "verificationMethod"
       FROM "Startup"
       WHERE id = ${id} AND "deletedAt" IS NULL
       LIMIT 1
@@ -46,7 +46,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     }
 
     // A verified startup already has a proven owner. Otherwise, whoever proves the domain becomes the owner.
-    if (startup.isVerified && startup.ownerId !== session.userId) {
+    // DNS may still take over: an EMAIL verification always, a DNS one only once its record is gone (checked at verify).
+    if (startup.isVerified && startup.ownerId !== session.userId && startup.verificationMethod !== 'EMAIL' && startup.verificationMethod !== 'DNS') {
       return NextResponse.json(
         { error: `${startup.name} is already verified by another founder. Ask them to add you to their team.` },
         { status: 400 }

@@ -6,6 +6,7 @@ import { handleNewsletterSubscription, sendConfirmationEmail } from '@/lib/event
 import { sendEmailFireAndForget } from '@/lib/email/send';
 import { button, esc, shell } from '@/lib/jobs/apply-emails';
 import { refreshPaths } from '@/lib/revalidate';
+import { opsAlert } from '@/lib/ops/alert';
 
 /**
  * Paid event tickets via Razorpay Route.
@@ -65,11 +66,20 @@ export async function startTicketCheckout(p: CheckoutParams) {
   const amount = splitTicket(tier.priceCents);
 
   // Lock the event row so two buyers can't take the last seat; unexpired holds count as taken.
-  const registrationId = await prisma.$transaction(async (tx) => {
+  const held = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "Event" WHERE id = ${event.id} FOR UPDATE`;
     const existing = await tx.eventRegistration.findUnique({ where: { eventId_guestEmail: { eventId: event.id, guestEmail: email } } });
     if (existing && !existing.deletedAt && ['CONFIRMED', 'CHECKED_IN', 'PENDING_APPROVAL', 'WAITLISTED'].includes(existing.status)) {
       throw new TicketError('You are already registered for this event.', 409, 'already_registered');
+    }
+    // Same buyer, same ticket, hold still running (a retry or a second tab): hand back the order they already have.
+    // Replacing it would leave the first order with no record, so paying it would take money and issue no ticket.
+    if (
+      existing && !existing.deletedAt && existing.status === 'PENDING_PAYMENT' && existing.razorpayOrderId
+      && existing.ticketTierId === tier.id && existing.amountPaise === amount.amount
+      && existing.paymentExpiresAt && existing.paymentExpiresAt > now
+    ) {
+      return { id: existing.id, orderId: existing.razorpayOrderId };
     }
     const [{ count: confirmed }] = await tx.$queryRaw<{ count: number }[]>`SELECT "registrationCount" AS count FROM "Event" WHERE id = ${event.id}`;
     const holds = await tx.eventRegistration.count({ where: { eventId: event.id, status: 'PENDING_PAYMENT', paymentExpiresAt: { gt: now }, deletedAt: null, NOT: { guestEmail: email } } });
@@ -93,19 +103,22 @@ export async function startTicketCheckout(p: CheckoutParams) {
       await tx.eventRegistrationAnswer.deleteMany({ where: { registrationId: reg.id } });
       await tx.eventRegistrationAnswer.createMany({ data: p.answers.filter((a) => a.answerText).map((a) => ({ registrationId: reg.id, questionId: a.questionId, answerText: a.answerText.slice(0, 2000) })) });
     }
-    return reg.id;
+    return { id: reg.id, orderId: null as string | null };
   });
+  const registrationId = held.id;
+  const checkout = (orderId: string, keyId: string) => ({
+    registrationId, keyId, orderId, amount: amount.amount, currency: 'INR', name: 'Udyaibase Events',
+    description: `${tier.name} ticket · ${event.title}`.slice(0, 250), prefill: { email, name: p.name, ...(p.phone ? { contact: p.phone } : {}) },
+    holdMinutes: HOLD_MINUTES,
+  });
+  if (held.orderId) return checkout(held.orderId, razorpayKeys()!.keyId);
 
   try {
     const holdUntil = Math.floor((event.endAt.getTime() + 2 * 864e5) / 1000);
     const { orderId, keyId } = await createRazorpayOrderWithTransfer(amount, event.organizer.payoutAccountId!, holdUntil, registrationId, event.id);
     await prisma.eventRegistration.update({ where: { id: registrationId }, data: { razorpayOrderId: orderId } });
     if (p.newsletterConsent) handleNewsletterSubscription(email, p.name, p.locationCity ?? undefined, event.id, event.tags).catch(() => {});
-    return {
-      registrationId, keyId, orderId, amount: amount.amount, currency: 'INR', name: 'Udyaibase Events',
-      description: `${tier.name} ticket · ${event.title}`.slice(0, 250), prefill: { email, name: p.name, ...(p.phone ? { contact: p.phone } : {}) },
-      holdMinutes: HOLD_MINUTES,
-    };
+    return checkout(orderId, keyId);
   } catch (err) {
     // Release the hold if the order couldn't be created.
     await prisma.eventRegistration.update({ where: { id: registrationId }, data: { status: 'CANCELLED', paymentStatus: 'FAILED', cancelledAt: new Date() } }).catch(() => {});
@@ -170,6 +183,70 @@ export async function confirmTicketPayment(orderId: string, paymentId: string): 
   const ev = await prisma.event.findUnique({ where: { id: reg.eventId }, select: { slug: true } });
   if (ev) refreshPaths([`/events/${ev.slug}`]); // spots left
   return 'confirmed';
+}
+
+/**
+ * A captured payment arrived for a ticket order we have no record of: the buyer's hold expired, they started again
+ * (which replaced the order id on their registration), and then paid the older order. The order itself says which
+ * registration it was for, so read it from Razorpay:
+ * - registration still unpaid at the same price → point it back at this order ('adopted'); the caller then confirms
+ *   it the normal way (seat check included);
+ * - anything else (already paid through the newer order, price changed, registration gone) → full refund with the
+ *   host transfer reversed ('refunded').
+ * Either way the admins are told. 'unknown' means the order isn't one of our tickets.
+ */
+export async function recoverSupersededTicketOrder(orderId: string, paymentId: string): Promise<'adopted' | 'refunded' | 'unknown'> {
+  let order: { amount?: number; notes?: Record<string, string> };
+  try {
+    order = await razorpayApi('GET', `/v1/orders/${encodeURIComponent(orderId)}`);
+  } catch {
+    return 'unknown';
+  }
+  const registrationId = order.notes?.registrationId;
+  if (order.notes?.purpose !== 'EVENT_TICKET' || !registrationId || !order.amount) return 'unknown';
+
+  const reg = await prisma.eventRegistration.findUnique({
+    where: { id: registrationId },
+    select: { id: true, eventId: true, amountPaise: true, guestEmail: true, guestName: true },
+  });
+  if (reg && reg.amountPaise === order.amount) {
+    const adopted = await prisma.eventRegistration.updateMany({
+      where: { id: reg.id, paymentStatus: { in: ['PENDING', 'FAILED', 'EXPIRED'] } },
+      data: { razorpayOrderId: orderId },
+    });
+    if (adopted.count) {
+      await opsAlert('ticket-order-recovered', 'A ticket was paid on an older checkout and recovered', [`Registration ${reg.id}`, `Order ${orderId}`, 'No action needed.'], 24).catch(() => {});
+      return 'adopted';
+    }
+  }
+
+  let refunded = false;
+  try {
+    await refundPayment(paymentId, order.amount, { registrationId, reason: 'superseded_order' }, { reverseTransfers: true });
+    refunded = true;
+  } catch (err) {
+    console.error('[ticket] superseded-order refund failed', orderId, err instanceof Error ? err.message : err);
+  }
+  await opsAlert(
+    refunded ? 'ticket-duplicate-refunded' : 'ticket-orphan-payment',
+    refunded ? 'A duplicate ticket payment was refunded' : 'Ticket payment needs a manual refund',
+    [`Registration ${registrationId}`, `Order ${orderId}`, `Payment ${paymentId}`, `Amount ₹${(order.amount / 100).toLocaleString('en-IN')}`,
+      refunded ? 'The buyer paid an older checkout after this ticket was already settled; the extra payment was refunded in full.' : 'The automatic refund failed. Refund this payment from the Razorpay dashboard.'],
+    refunded ? 24 : 1,
+  ).catch(() => {});
+  if (refunded && reg?.guestEmail) {
+    const ev = await prisma.event.findUnique({ where: { id: reg.eventId }, select: { title: true } });
+    sendEmailFireAndForget({
+      to: reg.guestEmail,
+      subject: `Refund on its way: extra payment for ${ev?.title ?? 'your ticket'}`,
+      type: 'event_ticket_duplicate_refund',
+      html: shell(`
+<h1 style="font-size:20px;margin:0 0 8px">We refunded an extra payment</h1>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.6">Hi ${esc(reg.guestName || 'there')}, we received a second payment of ₹${(order.amount / 100).toLocaleString('en-IN')} for <strong>${esc(ev?.title ?? 'your ticket')}</strong> from an earlier checkout window. It has been refunded in full to your original payment method; banks usually show it in 5–7 working days. If you already have a ticket, it is not affected.</p>
+<p style="margin:0">${button(`${SITE}/events`, 'Go to events')}</p>`),
+    });
+  }
+  return 'refunded';
 }
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];

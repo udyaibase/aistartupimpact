@@ -5,6 +5,7 @@ import { readResume } from '@/lib/jobs/resume-storage';
 import { resumeText, sniffResume } from '@/lib/jobs/resume-text';
 import { EXPERIENCE_BANDS } from '@/lib/jobs/composer';
 import { openaiChat } from '@/lib/ops/ai';
+import { recordAiRerun } from '@/lib/employer/ai-usage';
 
 /**
  * AI screening (every plan has a monthly quota, including Free). Reads a candidate's resume and answers against the job and writes a
@@ -144,8 +145,15 @@ export async function screenApplication(applicationId: string, employerId: strin
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return { ok: false, code: 'not_configured', message: 'AI screening isn’t available right now.' };
 
-  // A re-run replaces the old row so the quota counts this run (createdAt resets).
-  if (existing) await prisma.jobBoardAiScreening.delete({ where: { id: existing.id } });
+  // A re-run replaces the old row. If that row was a completed review from this period, deleting it would hand its
+  // place in the allowance to the new one and the re-run would cost nothing, so it is counted separately first.
+  if (existing) {
+    const replacesCounted = existing.billable && existing.status === 'DONE' && !!status.aiPeriodStart && existing.createdAt >= status.aiPeriodStart;
+    if (replacesCounted && !(await recordAiRerun(employerId, status.aiPeriodStart))) {
+      return { ok: false, code: 'failed', message: 'AI screening couldn’t start. Try again in a minute.' };
+    }
+    await prisma.jobBoardAiScreening.delete({ where: { id: existing.id } });
+  }
   const row = await prisma.jobBoardAiScreening.create({
     data: { applicationId, employerId, status: 'PENDING', model: AI_MODEL, promptVersion: PROMPT_VERSION, jobHash },
   });

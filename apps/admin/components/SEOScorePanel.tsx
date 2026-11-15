@@ -5,7 +5,8 @@ import {
   TrendingUp, AlertCircle, CheckCircle, Info, ChevronDown, ChevronUp,
   Target, FileText, Image, BookOpen, Code, Zap
 } from 'lucide-react';
-import { analyzeSEO, analyzeContentImages, type SEOAnalysis, type SEOIssue, type SEORecommendation } from '../lib/seo-analyzer';
+import { generateSlug } from '@udyaibase/utils/slug';
+import { analyzeSEO, analyzeContentImages, analyzeCoverImage, type SEOAnalysis, type SEOIssue, type SEORecommendation } from '../lib/seo-analyzer';
 
 interface SEOScorePanelProps {
   title: string;
@@ -14,6 +15,10 @@ interface SEOScorePanelProps {
   focusKeyword: string;
   content: string;
   slug: string;
+  /** Used as the meta description when none is set, as the article page does. */
+  subtitle?: string;
+  /** Shown at the top of the article, so it counts as the article's main image. */
+  coverImage?: string | null;
 }
 
 export default function SEOScorePanel({
@@ -23,6 +28,8 @@ export default function SEOScorePanel({
   focusKeyword,
   content,
   slug,
+  subtitle = '',
+  coverImage = null,
 }: SEOScorePanelProps) {
   const [analysis, setAnalysis] = useState<SEOAnalysis | null>(null);
   const [expanded, setExpanded] = useState(true);
@@ -30,18 +37,20 @@ export default function SEOScorePanel({
 
   useEffect(() => {
     // Analyze SEO whenever inputs change
-    const images = analyzeContentImages(content, focusKeyword);
+    // Score what the published page will actually have: the cover image, the subtitle as a fallback description,
+    // and the address made from the title when no slug is set yet.
+    const images = [...analyzeCoverImage(coverImage, title, focusKeyword), ...analyzeContentImages(content, focusKeyword)];
     const result = analyzeSEO({
       title,
       seoTitle,
-      metaDescription,
+      metaDescription: metaDescription.trim() || subtitle.trim(),
       focusKeyword,
       content,
-      slug,
+      slug: slug.trim() || generateSlug(title),
       images,
     });
     setAnalysis(result);
-  }, [title, seoTitle, metaDescription, focusKeyword, content, slug]);
+  }, [title, seoTitle, metaDescription, focusKeyword, content, slug, subtitle, coverImage]);
 
   if (!analysis) return null;
 

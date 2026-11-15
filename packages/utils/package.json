@@ -9,5 +9,8 @@
   },
   "devDependencies": {
     "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "tldts": "^7.4.15"
   }
 }

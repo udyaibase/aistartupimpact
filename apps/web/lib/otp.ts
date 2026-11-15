@@ -13,11 +13,39 @@ function generateOtp(): string {
   return crypto.randomInt(100000, 999999).toString();
 }
 
-/**
- * Hash an OTP for storage (we don't store plain codes).
- */
-function hashOtp(code: string): string {
+// A 6-digit code has only a million values, so a plain hash of it could be reversed instantly from a leaked row.
+// Codes are stored as an HMAC under OTP_HASH_SECRET: its own secret, so rotating the session (JWT) secrets never
+// breaks codes in flight, and a leak of one doesn't expose the other. Required in production.
+const IS_PROD = process.env.NODE_ENV === 'production' && process.env.NEXT_PHASE !== 'phase-production-build';
+const OTP_SECRET = process.env.OTP_HASH_SECRET || (IS_PROD ? '' : 'dev-only-otp-hash-secret');
+if (IS_PROD && !OTP_SECRET) console.error('[security] OTP_HASH_SECRET is not set. Verification codes cannot be sent or checked until it is.');
+
+function otpSecret(): string {
+  if (!OTP_SECRET) throw new Error('OTP_HASH_SECRET is not set');
+  return OTP_SECRET;
+}
+
+function legacyHash(code: string): string {
   return crypto.createHash("sha256").update(code).digest("hex");
+}
+
+/** How every verification code is stored (we never store plain codes). */
+export function hashOtp(code: string): string {
+  return crypto.createHmac("sha256", otpSecret()).update(code).digest("hex");
+}
+
+/**
+ * Constant-time check of a code against a stored hash. Also accepts the old plain hash, so codes sent just before
+ * this change keep working until they expire (10 minutes); that branch can be removed later.
+ */
+export function otpMatches(stored: string | null | undefined, code: string): boolean {
+  if (!stored) return false;
+  const a = Buffer.from(stored);
+  for (const h of [hashOtp(code), legacyHash(code)]) {
+    const b = Buffer.from(h);
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) return true;
+  }
+  return false;
 }
 
 /**
@@ -60,48 +88,62 @@ export async function createOtp(email: string, purpose: string = "signup"): Prom
   return { otp: plainOtp };
 }
 
+export type CodeCheck = { ok: true } | { ok: false; reason: "none" | "locked" | "wrong"; left: number };
+
+/**
+ * The one place an emailed code is checked, for every flow (sign-up, sign-in, startup claims, hiring team codes).
+ * Works on the latest unused, unexpired code for this email and purpose.
+ *
+ * - The attempt is taken and the code read in a single statement. Reading first and counting afterwards let many
+ *   requests sent at once all see "0 attempts used" and each get a guess.
+ * - A code works once, even if the right answer arrives twice at the same moment.
+ * - A right answer gives its attempt back, so one given on the last attempt still counts as proof afterwards.
+ * - A code whose attempts are used up is retired (kept, marked used, attempts at the maximum: consumeVerifiedOtp
+ *   tells it from a correct one by that) or deleted, as the caller's flow expects.
+ *
+ * `email` is matched as given: callers pass it the way they stored it.
+ */
+export async function checkEmailCode(email: string, purpose: string, code: string, opts: { whenSpent: "retire" | "delete" }): Promise<CodeCheck> {
+  const claimed = await prisma.$queryRaw<{ id: string; attempts: number; code: string }[]>`
+    UPDATE "EmailOtp" SET attempts = attempts + 1
+    WHERE id = (
+      SELECT id FROM "EmailOtp"
+      WHERE email = ${email} AND purpose = ${purpose} AND verified = false AND "expiresAt" >= NOW()
+      ORDER BY "createdAt" DESC LIMIT 1
+    ) AND attempts < ${MAX_ATTEMPTS}
+    RETURNING id, attempts, code
+  `;
+  const otp = claimed[0];
+
+  if (!otp) {
+    const spentWhere = { email, purpose, verified: false, expiresAt: { gte: new Date() }, attempts: { gte: MAX_ATTEMPTS } };
+    const spent = opts.whenSpent === "delete"
+      ? await prisma.emailOtp.deleteMany({ where: spentWhere })
+      : await prisma.emailOtp.updateMany({ where: spentWhere, data: { verified: true } });
+    return { ok: false, reason: spent.count ? "locked" : "none", left: 0 };
+  }
+
+  if (!otpMatches(otp.code, code)) {
+    return { ok: false, reason: "wrong", left: MAX_ATTEMPTS - otp.attempts };
+  }
+
+  const used = await prisma.emailOtp.updateMany({
+    where: { id: otp.id, verified: false },
+    data: { verified: true, attempts: { decrement: 1 } },
+  });
+  return used.count ? { ok: true } : { ok: false, reason: "none", left: 0 };
+}
+
 /**
  * Verify an OTP code.
  * Returns true if valid, false if invalid/expired/too many attempts.
  */
 export async function verifyOtp(email: string, code: string, purpose: string = "signup"): Promise<{ valid: boolean; error?: string }> {
-  const emailLower = email.toLowerCase();
-  const hashedCode = hashOtp(code);
-
-  // Find the latest unverified OTP for this email+purpose
-  const otpRecord = await prisma.emailOtp.findFirst({
-    where: {
-      email: emailLower,
-      purpose,
-      verified: false,
-      expiresAt: { gte: new Date() },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  if (!otpRecord) {
-    return { valid: false, error: "Code expired or not found. Please request a new one." };
-  }
-
-  // Check attempts
-  if (otpRecord.attempts >= MAX_ATTEMPTS) {
-    // Invalidate this OTP
-    await prisma.emailOtp.update({ where: { id: otpRecord.id }, data: { verified: true } });
-    return { valid: false, error: "Too many incorrect attempts. Please request a new code." };
-  }
-
-  // Verify code
-  if (otpRecord.code !== hashedCode) {
-    // Increment attempts
-    await prisma.emailOtp.update({ where: { id: otpRecord.id }, data: { attempts: otpRecord.attempts + 1 } });
-    const remaining = MAX_ATTEMPTS - otpRecord.attempts - 1;
-    return { valid: false, error: `Incorrect code. ${remaining} attempt${remaining !== 1 ? "s" : ""} remaining.` };
-  }
-
-  // Mark as verified
-  await prisma.emailOtp.update({ where: { id: otpRecord.id }, data: { verified: true } });
-
-  return { valid: true };
+  const r = await checkEmailCode(email.toLowerCase(), purpose, code, { whenSpent: "retire" });
+  if (r.ok) return { valid: true };
+  if (r.reason === "locked") return { valid: false, error: "Too many incorrect attempts. Please request a new code." };
+  if (r.reason === "wrong") return { valid: false, error: `Incorrect code. ${r.left} attempt${r.left !== 1 ? "s" : ""} remaining.` };
+  return { valid: false, error: "Code expired or not found. Please request a new one." };
 }
 
 /** How long a verified code stays valid as proof of email ownership for the next step. */

@@ -157,7 +157,8 @@ function analyzeTitleSEO(
   }
   
   // Keyword position (4 points)
-  if (focusKeyword && effectiveTitle.toLowerCase().indexOf(focusKeyword.toLowerCase()) < 20) {
+  const keywordAt = focusKeyword ? effectiveTitle.toLowerCase().indexOf(focusKeyword.toLowerCase()) : -1;
+  if (keywordAt >= 0 && keywordAt < 20) {
     score += 4;
   } else if (focusKeyword && effectiveTitle.toLowerCase().includes(focusKeyword.toLowerCase())) {
     score += 2;
@@ -268,7 +269,7 @@ function analyzeContent(
 ): number {
   let score = 0;
   const text = stripHTML(content);
-  const wordCount = text.trim().split(/\s+/).length;
+  const wordCount = countWords(text);
   
   // Word count (8 points)
   if (wordCount >= 1000) {
@@ -300,8 +301,8 @@ function analyzeContent(
   
   // Keyword density (7 points)
   if (focusKeyword) {
-    const keywordCount = (text.toLowerCase().match(new RegExp(focusKeyword.toLowerCase(), 'g')) || []).length;
-    const density = (keywordCount / wordCount) * 100;
+    const keywordCount = countOccurrences(text, focusKeyword);
+    const density = wordCount ? (keywordCount / wordCount) * 100 : 0;
     
     if (density >= 0.5 && density <= 2.5) {
       score += 7;
@@ -325,8 +326,8 @@ function analyzeContent(
   }
   
   // Headings structure (5 points)
-  const h2Count = (content.match(/<h2/g) || []).length;
-  const h3Count = (content.match(/<h3/g) || []).length;
+  const h2Count = (content.match(/<h2[\s>]/gi) || []).length;
+  const h3Count = (content.match(/<h3[\s>]/gi) || []).length;
   
   if (h2Count >= 2 && h3Count >= 1) {
     score += 5;
@@ -350,9 +351,11 @@ function analyzeContent(
   
   // Paragraph length (3 points)
   const paragraphs = content.split(/<\/p>/).filter(p => stripHTML(p).trim().length > 0);
-  const avgParagraphLength = paragraphs.reduce((sum, p) => sum + stripHTML(p).split(/\s+/).length, 0) / paragraphs.length;
+  const avgParagraphLength = paragraphs.length
+    ? paragraphs.reduce((sum, p) => sum + countWords(stripHTML(p)), 0) / paragraphs.length
+    : 0;
   
-  if (avgParagraphLength <= 100) {
+  if (paragraphs.length > 0 && avgParagraphLength <= 100) {
     score += 3;
   } else {
     recommendations.push({
@@ -365,7 +368,7 @@ function analyzeContent(
   }
   
   // Links (2 points)
-  const linkCount = (content.match(/<a /g) || []).length;
+  const linkCount = (content.match(/<a\s[^>]*href=/gi) || []).length;
   if (linkCount >= 2) {
     score += 2;
   } else {
@@ -430,7 +433,7 @@ function analyzeKeywords(
   }
   
   // Keyword in headings (4 points)
-  const headings = content.match(/<h[2-3][^>]*>(.*?)<\/h[2-3]>/g) || [];
+  const headings = content.match(/<h[2-3][^>]*>[\s\S]*?<\/h[2-3]>/gi) || [];
   const keywordInHeading = headings.some(h => stripHTML(h).toLowerCase().includes(focusKeyword.toLowerCase()));
   if (keywordInHeading) {
     score += 4;
@@ -535,7 +538,7 @@ function analyzeReadability(
   let score = 0;
   const text = stripHTML(content);
   const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
-  const words = text.trim().split(/\s+/);
+  const words = text ? text.split(/\s+/) : [];
   
   if (sentences.length === 0 || words.length === 0) return 0;
   
@@ -576,8 +579,8 @@ function analyzeReadability(
   }
   
   // Lists and formatting (3 points)
-  const hasLists = content.includes('<ul>') || content.includes('<ol>');
-  const hasBold = content.includes('<strong>') || content.includes('<b>');
+  const hasLists = /<(ul|ol)[\s>]/i.test(content);
+  const hasBold = /<(strong|b)[\s>]/i.test(content);
   
   if (hasLists && hasBold) {
     score += 3;
@@ -657,6 +660,27 @@ function getGrade(score: number): 'A+' | 'A' | 'B' | 'C' | 'D' | 'F' {
   return 'F';
 }
 
+function countWords(text: string): number {
+  const t = text.trim();
+  return t ? t.split(/\s+/).length : 0;
+}
+
+/** Plain-text occurrences, case-insensitive. No regex, so any keyword is safe. */
+function countOccurrences(text: string, keyword: string): number {
+  const hay = text.toLowerCase();
+  const needle = keyword.toLowerCase().trim();
+  if (!needle) return 0;
+  let count = 0;
+  for (let i = hay.indexOf(needle); i !== -1; i = hay.indexOf(needle, i + needle.length)) count++;
+  return count;
+}
+
+/** One attribute's value, in double or single quotes, so an apostrophe inside alt text doesn't cut it short. */
+function attr(tag: string, name: string): string {
+  const m = tag.match(new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, 'i'));
+  return m ? (m[1] ?? m[2] ?? '') : '';
+}
+
 /**
  * Strip HTML tags
  */
@@ -678,13 +702,13 @@ function generateLSIKeywords(focusKeyword: string): string[] {
   });
   
   // Add common variations
-  if (focusKeyword.includes('ai')) {
+  if (/\bai\b/i.test(focusKeyword)) {
     lsi.push('artificial intelligence', 'machine learning', 'AI technology');
   }
-  if (focusKeyword.includes('startup')) {
+  if (/startup/i.test(focusKeyword)) {
     lsi.push('startups', 'company', 'business', 'venture');
   }
-  if (focusKeyword.includes('india')) {
+  if (/india/i.test(focusKeyword)) {
     lsi.push('Indian', 'India\'s', 'Bharat');
   }
   
@@ -695,48 +719,44 @@ function generateLSIKeywords(focusKeyword: string): string[] {
  * Analyze images in content
  */
 export function analyzeContentImages(htmlContent: string, focusKeyword: string): ImageAnalysis[] {
-  const images: ImageAnalysis[] = [];
-  const imgRegex = /<img[^>]+>/g;
-  const matches = htmlContent.match(imgRegex) || [];
-  
-  matches.forEach(imgTag => {
-    const srcMatch = imgTag.match(/src=["']([^"']+)["']/);
-    const altMatch = imgTag.match(/alt=["']([^"']+)["']/);
-    
-    const src = srcMatch ? srcMatch[1] : '';
-    const altText = altMatch ? altMatch[1] : '';
-    const hasAlt = altText.length > 0;
-    const altLength = altText.split(/\s+/).length;
-    
-    const suggestions: string[] = [];
-    let isOptimal = true;
-    
-    if (!hasAlt) {
-      suggestions.push('Add descriptive alt text');
+  const tags = htmlContent.match(/<img\b[^>]*>/gi) || [];
+  return tags.map(tag => describeImage(attr(tag, 'src'), decodeEntities(attr(tag, 'alt')).trim(), focusKeyword));
+}
+
+/**
+ * The cover image, as readers and search engines see it: the article page shows it with the article title as its
+ * alt text, so that is what gets scored.
+ */
+export function analyzeCoverImage(src: string | null | undefined, title: string, focusKeyword: string): ImageAnalysis[] {
+  return src ? [describeImage(src, title.trim(), focusKeyword)] : [];
+}
+
+function describeImage(src: string, altText: string, focusKeyword: string): ImageAnalysis {
+  const hasAlt = altText.length > 0;
+  const altLength = countWords(altText);
+  const suggestions: string[] = [];
+  let isOptimal = true;
+
+  if (!hasAlt) {
+    suggestions.push('Add descriptive alt text');
+    isOptimal = false;
+  } else {
+    if (altLength < 5) {
+      suggestions.push('Make alt text more descriptive (5-15 words)');
       isOptimal = false;
-    } else {
-      if (altLength < 5) {
-        suggestions.push('Make alt text more descriptive (5-15 words)');
-        isOptimal = false;
-      }
-      if (altLength > 15) {
-        suggestions.push('Shorten alt text (keep under 15 words)');
-        isOptimal = false;
-      }
-      if (focusKeyword && !altText.toLowerCase().includes(focusKeyword.toLowerCase())) {
-        suggestions.push(`Consider including "${focusKeyword}" naturally`);
-      }
     }
-    
-    images.push({
-      src,
-      hasAlt,
-      altText,
-      altLength,
-      isOptimal,
-      suggestions,
-    });
-  });
-  
-  return images;
+    if (altLength > 15) {
+      suggestions.push('Shorten alt text (keep under 15 words)');
+      isOptimal = false;
+    }
+    if (focusKeyword && !altText.toLowerCase().includes(focusKeyword.toLowerCase())) {
+      suggestions.push(`Consider including "${focusKeyword}" naturally`);
+    }
+  }
+
+  return { src, hasAlt, altText, altLength, isOptimal, suggestions };
+}
+
+function decodeEntities(s: string): string {
+  return s.replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 }

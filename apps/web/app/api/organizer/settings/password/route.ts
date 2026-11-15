@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { passwordProblem } from "@/lib/password-rules";
 import { setAccountPassword } from '@/lib/auth/set-password';
 import { prisma } from "@udyaibase/database";
 import { getOrganizerSession, verifyPassword, hashPassword } from "@/lib/organizer-auth";
@@ -13,6 +14,7 @@ export async function POST(request: NextRequest) {
   const { currentPassword, newPassword } = await request.json();
   if (!currentPassword || !newPassword) return NextResponse.json({ success: false, error: "Both fields required" }, { status: 400 });
   if (newPassword.length < 8) return NextResponse.json({ success: false, error: "Min 8 characters" }, { status: 400 });
+  const pwProblem = passwordProblem(newPassword, null, 'mixed', null); if (pwProblem) return NextResponse.json({ success: false, error: pwProblem }, { status: 400 });
 
   const org = await prisma.eventOrganizer.findUnique({ where: { id: session.id }, select: { email: true, passwordHash: true } });
   if (!org?.passwordHash) return NextResponse.json({ success: false, error: "No password set (Google account)" }, { status: 400 });

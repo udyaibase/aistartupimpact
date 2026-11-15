@@ -42,6 +42,8 @@ const nextConfig = {
       "img-src 'self' data: blob: https:",
       "connect-src 'self' https://udyaibase.com https://media.udyaibase.com https://www.google-analytics.com https://vitals.vercel-insights.com https://va.vercel-scripts.com https://challenges.cloudflare.com https://api.razorpay.com https://lumberjack.razorpay.com",
       "frame-ancestors 'none'",
+      // Sentry Session Replay compresses in a web worker created from a blob.
+      "worker-src 'self' blob:",
       "frame-src 'self' https://challenges.cloudflare.com https://api.razorpay.com https://checkout.razorpay.com",
       "base-uri 'self'",
       "form-action 'self'",
@@ -66,7 +68,8 @@ const nextConfig = {
       {
         // Pages that frame the events widget or Razorpay checkout (billing, paid event tickets, funding data packs) can't
         // require COEP: those frames don't send it.
-        source: '/((?!embed|events|organizer/embed|organizer/billing|employer/careers|employer/billing|funding).*)',
+        // /careers is the jobs widget (it frames /embed/jobs/...).
+        source: '/((?!embed|events|organizer/embed|organizer/billing|employer/careers|employer/billing|funding|careers).*)',
         headers: [{ key: 'Cross-Origin-Embedder-Policy', value: 'credentialless' }],
       },
       {
@@ -81,12 +84,41 @@ const nextConfig = {
         ],
       },
       {
+        // "Get notified" confirm and unsubscribe links carry a private token in the URL.
+        source: '/job-alerts',
+        headers: [
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+          { key: 'Cache-Control', value: 'private, no-store' },
+        ],
+      },
+      {
+        // Talent pool leave/extend links carry a signed token in the URL.
+        source: '/talent-pool',
+        headers: [
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+          { key: 'Cache-Control', value: 'private, no-store' },
+        ],
+      },
+      {
         // Candidate status links carry a private token in the URL: never send it as a Referer.
         source: '/applications/:path*',
         headers: [
           { key: 'Referrer-Policy', value: 'no-referrer' },
           { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
           { key: 'Cache-Control', value: 'private, no-store' },
+        ],
+      },
+      {
+        // The resume viewer in the candidate panel frames this route (same origin only). Declared after the
+        // site-wide block so these replace "frame-ancestors 'none'" / DENY here. The PDF is our own response,
+        // so it gets a minimal policy: nothing loads, nothing runs, and only our pages may frame it.
+        source: '/api/employer/applications/:id/resume',
+        headers: [
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'Content-Security-Policy', value: "default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; frame-ancestors 'self'" },
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
         ],
       },
       {
@@ -103,6 +135,9 @@ const nextConfig = {
 export default withSentryConfig(nextConfig, {
   silent: !process.env.SENTRY_AUTH_TOKEN,
   widenClientFileUpload: true,
+  // Browser errors go to Sentry through this path on our own domain. Sent straight to Sentry they are blocked by
+  // the Content-Security-Policy above (connect-src lists no Sentry host), so client errors were never reported.
+  tunnelRoute: "/monitoring",
   hideSourceMaps: true,
   disableLogger: true,
 });

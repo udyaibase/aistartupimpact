@@ -1,3 +1,4 @@
+import { jwtSecret } from '@/lib/jwt-secret';
 import { cookies } from 'next/headers';
 import { getUnifiedSession } from '@/lib/unified-auth';
 import { SignJWT, jwtVerify } from 'jose';
@@ -5,13 +6,9 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { prisma } from '@udyaibase/database';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.FOUNDER_JWT_SECRET!
-);
+const JWT_SECRET = jwtSecret(process.env.FOUNDER_JWT_SECRET, 'FOUNDER_JWT_SECRET');
 
-const USER_JWT_SECRET = new TextEncoder().encode(
-  process.env.USER_JWT_SECRET!
-);
+const USER_JWT_SECRET = jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET');
 
 export interface FounderSession {
   userId: string;

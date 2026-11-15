@@ -1,3 +1,4 @@
+import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 import { prisma } from '@udyaibase/database';
@@ -8,7 +9,7 @@ import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
 
-const CHALLENGE_SECRET = new TextEncoder().encode(process.env.ORGANIZER_JWT_SECRET || process.env.USER_JWT_SECRET!);
+const CHALLENGE_SECRET = jwtSecret(process.env.ORGANIZER_JWT_SECRET || process.env.USER_JWT_SECRET, 'ORGANIZER_JWT_SECRET');
 
 export async function POST(request: NextRequest) {
   const identifier = getClientIdentifier(request);

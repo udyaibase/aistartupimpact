@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
 import { randomBytes } from "crypto";
-import { checkRateLimit, getClientIdentifier, strictRateLimit } from "@/lib/rate-limit";
+import { apiRateLimit, authRateLimit, checkRateLimit, getClientIdentifier, rateLimitMessage, retryAfterHeaders } from "@/lib/rate-limit";
 import { validatePassword } from "@/lib/password-validation";
 import { logFounderActivity } from "@/lib/founder/activity";
 import { maskEmail } from "@/lib/mask";
@@ -32,8 +32,8 @@ const INVALID = { success: false, error: "This invite is no longer valid. Ask fo
 
 /** What the invite is, so the page can say who's inviting and whether a password is needed. */
 export async function GET(request: NextRequest) {
-  const { success: rlOk } = await checkRateLimit(strictRateLimit, getClientIdentifier(request));
-  if (!rlOk) return NextResponse.json({ error: "Too many requests. Try again later." }, { status: 429 });
+  const { success: rlOk, reset: rlReset } = await checkRateLimit(apiRateLimit, `founder-invite-view:${getClientIdentifier(request)}`); // viewing is harmless: normal limit, own counter
+  if (!rlOk) return NextResponse.json({ success: false, error: rateLimitMessage(rlReset) }, { status: 429, headers: retryAfterHeaders(rlReset) });
 
   const member = await openInvite(request.nextUrl.searchParams.get("token"));
   if (!member) return NextResponse.json(INVALID, { status: 400 });
@@ -50,8 +50,8 @@ export async function GET(request: NextRequest) {
 /** Accepts or declines. A new person sets a password. Someone with an account keeps theirs, and signs in as usual. */
 export async function POST(request: NextRequest) {
   try {
-    const { success: rlOk } = await checkRateLimit(strictRateLimit, getClientIdentifier(request));
-    if (!rlOk) return NextResponse.json({ error: "Too many requests. Try again later." }, { status: 429 });
+    const { success: rlOk, reset: rlReset } = await checkRateLimit(authRateLimit, `founder-invite-accept:${getClientIdentifier(request)}`); // sign-in rate, own counter (not the shared 3/hour bucket)
+    if (!rlOk) return NextResponse.json({ success: false, error: rateLimitMessage(rlReset) }, { status: 429, headers: retryAfterHeaders(rlReset) });
 
     const { token, password, action } = await request.json();
     const member = await openInvite(token);

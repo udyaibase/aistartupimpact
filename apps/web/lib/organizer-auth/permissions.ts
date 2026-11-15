@@ -66,6 +66,33 @@ const ROLE_RANK: Record<string, number> = {
   CHECK_IN: 20,
 };
 
+/** Roles a teammate can hold (OWNER is implicit and never assigned). */
+export const TEAM_ROLES = ["ADMIN", "MANAGER", "STAFF", "CHECK_IN"] as const;
+export type TeamRoleName = (typeof TEAM_ROLES)[number];
+
+export function isTeamRole(role: unknown): role is TeamRoleName {
+  return typeof role === "string" && (TEAM_ROLES as readonly string[]).includes(role);
+}
+
+/** Roles this person may give a teammate: strictly below their own. */
+export function assignableRoles(actorRole: string): TeamRoleName[] {
+  return TEAM_ROLES.filter((r) => canAssignRole(actorRole, r));
+}
+
+/**
+ * Keep only event ids that belong to this workspace (and aren't deleted). `undefined` means "leave as is";
+ * a non-array or anything else is rejected by the caller.
+ */
+export async function ownEventIds(organizerId: string, ids: unknown): Promise<string[] | null> {
+  if (!Array.isArray(ids) || ids.some((x) => typeof x !== "string") || ids.length > 500) return null;
+  if (ids.length === 0) return [];
+  const rows = await prisma.event.findMany({
+    where: { organizerId, deletedAt: null, id: { in: Array.from(new Set(ids as string[])) } },
+    select: { id: true },
+  });
+  return rows.map((r) => r.id);
+}
+
 export function hasPermission(role: string, permission: Permission): boolean {
   const perms = ROLE_PERMISSIONS[role];
   if (!perms) return false;
@@ -102,27 +129,16 @@ export interface TeamContext {
  * Returns TeamContext if the user is a team member with role-based access.
  */
 export async function getTeamContext(sessionOrganizerId: string, sessionEmail: string): Promise<TeamContext | null> {
-  // Check if this person is a team member on someone else's org
-  const teamMember = await prisma.eventTeamMember.findFirst({
-    where: {
-      email: sessionEmail,
-      status: "ACTIVE",
-      organizer: { id: { not: sessionOrganizerId } },
-    },
-    include: {
-      assignments: { select: { eventId: true } },
-    },
-  });
-
-  if (!teamMember) return null;
+  // Their own workspace (null), or the team they chose to work in.
+  const { activeMembership } = await import("./workspace");
+  const { active } = await activeMembership(sessionOrganizerId, sessionEmail);
+  if (!active) return null;
 
   return {
-    organizerId: teamMember.organizerId,
-    role: teamMember.role,
-    teamMemberId: teamMember.id,
-    assignedEventIds: teamMember.assignments.length > 0
-      ? teamMember.assignments.map(a => a.eventId)
-      : undefined, // undefined = all events
+    organizerId: active.organizerId,
+    role: active.role as TeamContext["role"],
+    teamMemberId: active.teamMemberId,
+    assignedEventIds: active.assignedEventIds, // undefined = all events
   };
 }
 

@@ -4,14 +4,26 @@ import Image from 'next/image';
 import { BadgeCheck, Check, Circle, MapPin, Briefcase, Clock, Wallet } from 'lucide-react';
 import JobDescription from '@/components/jobs/JobDescription';
 import {
-  EMPLOYMENT_TYPES, EXPERIENCE_BANDS, WORK_TYPES, formatSalaryDraft, listingStrength, type JobDraft,
+  CUSTOM_EXPERIENCE, EMPLOYMENT_TYPES, EXPERIENCE_BANDS, WORK_TYPES, formatSalaryDraft, listingStrength, type JobDraft,
 } from '@/lib/jobs/composer';
+
+/** "3–5 years", "4+ years", "Up to 2 years" for a custom range. */
+export function experienceText(d: Pick<JobDraft, 'experienceBand' | 'experienceMin' | 'experienceMax'>): string | null {
+  if (d.experienceBand !== CUSTOM_EXPERIENCE) return EXPERIENCE_BANDS.find((b) => b.value === d.experienceBand)?.label ?? null;
+  const lo = d.experienceMin?.trim(); const hi = d.experienceMax?.trim();
+  if (lo && hi) return lo === hi ? `${lo} years` : `${Math.min(+lo, +hi)}–${Math.max(+lo, +hi)} years`;
+  if (lo) return `${lo}+ years`;
+  if (hi) return `Up to ${hi} years`;
+  return null;
+}
 
 export interface ComposerCompany {
   name: string;
   logoUrl: string | null;
   verified: boolean;
   hasPerks: boolean;
+  perks?: string[];
+  canEditPerks?: boolean;
 }
 
 const label = (list: readonly { value: string; label: string }[], v: string) => list.find((x) => x.value === v)?.label;
@@ -24,7 +36,7 @@ export function JobPreview({ draft, company }: { draft: JobDraft; company: Compo
   const meta = [
     { icon: MapPin, text: [place, draft.workType !== 'REMOTE' ? label(WORK_TYPES, draft.workType) : null].filter(Boolean).join(' · ') },
     { icon: Briefcase, text: label(EMPLOYMENT_TYPES, draft.employmentType) },
-    { icon: Clock, text: draft.experienceBand ? `${label(EXPERIENCE_BANDS, draft.experienceBand)} experience` : null },
+    { icon: Clock, text: experienceText(draft) ? `${experienceText(draft)} experience` : null },
     { icon: Wallet, text: salary ? `${salary}${draft.hasEsops ? ' + ESOPs' : ''}` : draft.hasEsops ? 'ESOPs offered' : null },
   ].filter((m) => m.text);
 
@@ -70,8 +82,20 @@ export function JobPreview({ draft, company }: { draft: JobDraft; company: Compo
         ) : (
           <p className="mt-4 text-sm text-gray-400">The job description will appear here.</p>
         )}
+        {(company.perks?.length ?? 0) > 0 && (
+          <div className="mt-4">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white mb-1.5">Perks & benefits</p>
+            <ul className="grid grid-cols-1 gap-1">
+              {company.perks!.map((p) => (
+                <li key={p} className="flex items-start gap-1.5 text-[13px] text-gray-700 dark:text-gray-300">
+                  <Check className="w-3.5 h-3.5 mt-0.5 text-green-600 shrink-0" aria-hidden /> {p}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div className="mt-4 h-11 rounded-[10px] bg-brand text-white text-sm font-bold flex items-center justify-center opacity-90" aria-hidden>
-          {draft.applicationType === 'EXTERNAL' ? 'Apply on company site' : 'Apply now'}
+          {draft.applyVia === 'email' ? 'Apply by email' : draft.applyVia === 'google_form' ? 'Apply via Google Form' : draft.applyVia === 'website' ? 'Apply on company site' : 'Apply now'}
         </div>
       </div>
     </div>

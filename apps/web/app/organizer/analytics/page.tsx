@@ -1,4 +1,5 @@
-import { getOrganizerSession } from "@/lib/organizer-auth";
+import { NextResponse } from "next/server";
+import { requirePermission, eventScope } from "@/lib/organizer-auth/require-permission";
 import { prisma } from "@udyaibase/database";
 import { sql } from "@/lib/db";
 import { BarChart3, Users, TrendingUp, Eye, Share2, Globe, Search, AtSign, Link2, CalendarDays, UserCheck } from "lucide-react";
@@ -6,18 +7,19 @@ import { BarChart3, Users, TrendingUp, Eye, Share2, Globe, Search, AtSign, Link2
 export const dynamic = "force-dynamic";
 
 export default async function AnalyticsPage() {
-  const session = await getOrganizerSession();
-  if (!session) return null;
+  // The active workspace (their own, or a team they chose), with the same role rules as the API.
+  const session = await requirePermission("analytics.view");
+  if (session instanceof NextResponse) return session.status === 401 ? null : <p className="py-16 text-center text-sm text-gray-500 dark:text-gray-400">Your role in this workspace doesn’t include this page.</p>;
 
   const events = await prisma.event.findMany({
-    where: { organizerId: session.id, deletedAt: null },
+    where: { ...eventScope(session), deletedAt: null },
     select: { id: true, title: true, registrationCount: true, startAt: true, slug: true, shortCode: true },
     orderBy: { startAt: "desc" },
   });
 
   const totalRegs = events.reduce((s, e) => s + e.registrationCount, 0);
   const checkedIn = await prisma.eventRegistration.count({
-    where: { event: { organizerId: session.id }, status: "CHECKED_IN", deletedAt: null },
+    where: { event: eventScope(session), status: "CHECKED_IN", deletedAt: null },
   });
 
   let trafficSources = { direct: 0, search: 0, social: 0, email: 0, referral: 0 };

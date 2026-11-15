@@ -1,9 +1,13 @@
+import { jwtSecret } from '@/lib/jwt-secret';
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { prisma } from '@udyaibase/database';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.EMPLOYER_JWT_SECRET!
+// Without its own secret, employer sessions use a key derived from USER_JWT_SECRET (never an empty key, and never
+// the user-session key itself, so a token for one portal can't be replayed in the other).
+const JWT_SECRET = jwtSecret(
+  process.env.EMPLOYER_JWT_SECRET || (process.env.USER_JWT_SECRET ? `employer-session:${process.env.USER_JWT_SECRET}` : undefined),
+  'EMPLOYER_JWT_SECRET',
 );
 
 const COOKIE_NAME = 'employer_session';
