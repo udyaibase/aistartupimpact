@@ -2,6 +2,7 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { Pool, neonConfig, types } from '@neondatabase/serverless';
 import { PrismaNeon } from '@prisma/adapter-neon';
 import ws from 'ws';
+import { assertNotProductionInDev } from './dev-guard';
 
 // Node < 22 has no global WebSocket.
 if (typeof WebSocket === 'undefined') neonConfig.webSocketConstructor = ws;
@@ -20,6 +21,7 @@ function createPrismaClient(): PrismaClient {
   if (!connectionString) {
     throw new Error('DATABASE_URL environment variable is not set');
   }
+  assertNotProductionInDev(connectionString);
   // WebSocket pool, not the HTTP driver: HTTP mode can't run transactions, updateMany,
   // createMany or upsert, all of which Prisma needs.
   const pool = new Pool({ connectionString });
@@ -52,6 +54,7 @@ export const prisma = new Proxy({} as PrismaClient, {
 
 export default prisma;
 export { PrismaClient, Prisma };
+export { assertNotProductionInDev, isProductionDatabase } from './dev-guard';
 export { eraseFounderRecords, findUnusedMedia } from './founder-erasure';
 export { decideListingEdits, readListingFields, restoreListingVersion, saveListingEdit } from './listing-edits';
 export type { EditActor, EditDecision, ListingEditResult } from './listing-edits';

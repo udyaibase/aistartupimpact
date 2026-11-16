@@ -1,6 +1,7 @@
 // Direct DB queries for server components — bypasses the need for the API server
 import { neon, NeonQueryFunction } from '@neondatabase/serverless';
 import { cached, CK } from './cache';
+import { assertNotProductionInDev } from '@udyaibase/database/dev-guard';
 
 // Lazy sql client — not instantiated at module load time (avoids build-time DATABASE_URL errors)
 let _sql: NeonQueryFunction<false, false> | undefined;
@@ -10,6 +11,7 @@ function getSql(): NeonQueryFunction<false, false> {
       console.warn('[db] DATABASE_URL not set — returning empty stub');
       return ((() => Promise.resolve([])) as unknown) as NeonQueryFunction<false, false>;
     }
+    assertNotProductionInDev(process.env.DATABASE_URL);
     _sql = neon(process.env.DATABASE_URL);
   }
   return _sql;
