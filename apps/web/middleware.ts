@@ -1,4 +1,5 @@
 import { jwtSecret } from '@/lib/jwt-secret';
+import { assertNotProductionInDev } from '@udyaibase/database/dev-guard';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
@@ -12,7 +13,7 @@ const USER_JWT_SECRET = jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET'
 
 let _sql: ReturnType<typeof neon> | undefined;
 function getSql() {
-  if (!_sql) _sql = neon(process.env.DATABASE_URL!);
+  if (!_sql) { assertNotProductionInDev(process.env.DATABASE_URL); _sql = neon(process.env.DATABASE_URL!); }
   return _sql;
 }
 
@@ -109,7 +110,10 @@ export async function middleware(request: NextRequest) {
       // RFC 8058 one-click unsubscribe: mail providers POST server-to-server. The route verifies the signed token.
       const isSignedUnsubscribe = (pathname === '/api/founder/email-preferences' || pathname === '/api/events/unsubscribe' || pathname === '/api/newsletter/unsubscribe') &&
         request.nextUrl.searchParams.has('token');
-      if (!isCronOrWebhook && !isSignedUnsubscribe) {
+      // Talent pool one-click leave (List-Unsubscribe-Post): signed id + t, verified by the route.
+      const isTalentPoolLeave = pathname === '/api/talent-pool/leave' &&
+        request.nextUrl.searchParams.has('id') && request.nextUrl.searchParams.has('t');
+      if (!isCronOrWebhook && !isSignedUnsubscribe && !isTalentPoolLeave) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
     }
