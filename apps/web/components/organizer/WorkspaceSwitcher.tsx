@@ -4,7 +4,7 @@ import { useState } from "react";
 
 interface Workspace { id: string; name: string; role: string }
 
-const ROLE_LABEL: Record<string, string> = { OWNER: "Owner", ADMIN: "Admin", MANAGER: "Manager", STAFF: "Staff", CHECKIN_ONLY: "Check-in only" };
+const ROLE_LABEL: Record<string, string> = { OWNER: "Owner", ADMIN: "Admin", MANAGER: "Manager", STAFF: "Staff", CHECK_IN: "Check-in only" };
 
 /**
  * Shown only to people who are on another host's team as well as having their own workspace:
@@ -34,6 +34,24 @@ export default function WorkspaceSwitcher({ workspaces, active }: { workspaces: 
     }
   };
 
+  const leave = async () => {
+    if (busy || current.id === "own") return;
+    if (!window.confirm(`Leave the ${current.name} team? You’ll lose access to its events until someone invites you again.`)) return;
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch("/api/organizer/workspace", {
+        method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace: current.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) throw new Error(data.error || "Couldn’t leave the team. Try again.");
+      window.location.assign("/organizer/events");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn’t leave the team. Try again.");
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm dark:border-gray-800 dark:bg-gray-900">
       <span className="text-gray-600 dark:text-gray-300">
@@ -55,6 +73,11 @@ export default function WorkspaceSwitcher({ workspaces, active }: { workspaces: 
           ))}
         </select>
       </label>
+      {current.id !== "own" && (
+        <button type="button" onClick={leave} disabled={busy} className="text-sm font-medium text-red-700 hover:underline disabled:opacity-60 dark:text-red-400">
+          Leave team
+        </button>
+      )}
       {error && <p role="alert" className="w-full text-sm text-red-600 dark:text-red-400">{error}</p>}
     </div>
   );

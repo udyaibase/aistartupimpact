@@ -44,9 +44,6 @@ export async function POST(request: NextRequest) {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
       return fail("Enter a valid email, like name@company.com.", 400, "invalid", "email");
     }
-    if (phone && !/^\+\d{8,16}$/.test(phone.replace(/[\s-]/g, ""))) {
-      return fail("Enter a valid phone number.", 400, "invalid", "phone");
-    }
     if (!body.turnstileToken) return fail("Complete the security check, then try again.", 403, "captcha");
 
     const [ipCheck, widgetCheck] = await Promise.all([
@@ -91,6 +88,8 @@ export async function POST(request: NextRequest) {
       name,
       email,
       phone,
+      company: clean(body.company, 100),
+      occupation: clean(body.occupation, 100),
       ticketTierId,
       answers,
       whatsappConsent: !!phone && body.whatsappConsent === true,
@@ -105,7 +104,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data: result });
   } catch (error) {
     if (error instanceof RegistrationError) {
-      return fail(error.message, error.statusCode, error.code);
+      return fail(error.message, error.statusCode, error.code, error.field);
     }
     console.error("Embed registration error:", error);
     return fail("We couldn't complete your registration. Try again in a moment.", 500);

@@ -47,6 +47,9 @@ function OrganizerAuthContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialMode = (searchParams.get("mode") === "signup" ? "signup" : "login") as Mode;
+  // Where to go after signing in: only a page inside the organizer portal (never another site).
+  const nextParam = searchParams.get("next") ?? "";
+  const afterSignIn = /^\/organizer\/[a-zA-Z0-9/_?=&.-]*$/.test(nextParam) && !nextParam.startsWith("//") ? nextParam : "/organizer";
   const [mode, setMode] = useState<Mode>(initialMode);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -70,6 +73,13 @@ function OrganizerAuthContent() {
     if (urlError === "suspended") setError("Your account has been suspended. Contact support.");
     if (urlError === "no_code") setError("Google sign-in was cancelled.");
     if (urlError === "invalid_token") setError("Invalid or expired verification link.");
+    if (urlError === "verify_expired") setError("That verification link has expired. Sign in and we'll send a new one.");
+    if (urlError === "deactivated") setError("This account is deactivated.");
+    const verified = searchParams.get("verified");
+    if (verified === "1") setSuccessMsg("Email confirmed. Sign in to continue.");
+    if (verified === "already") setSuccessMsg("Your email is already confirmed. Sign in to continue.");
+    // Back from Google with 2FA on: the challenge is in a cookie, so only the code is needed here.
+    if (searchParams.get("twofa") === "1") setRequires2FA(true);
   }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -130,11 +140,16 @@ function OrganizerAuthContent() {
         return;
       }
 
-      if (mode === "signup" && data.message) {
-        setSuccessMsg(data.message);
+      // New accounts confirm their email before the portal opens.
+      if (data.needsVerification) {
+        setSuccessMsg(data.message || "Check your email to confirm your address, then sign in.");
+        setMode("login");
+        setPassword("");
+        setLoading(false);
+        return;
       }
 
-      router.push("/organizer");
+      router.push(afterSignIn);
     } catch {
       setError("Network error. Please try again.");
       setLoading(false);
@@ -156,7 +171,7 @@ function OrganizerAuthContent() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) { setError(data.error || "2FA verification failed"); return; }
-      router.push("/organizer");
+      router.push(afterSignIn);
     } catch {
       setError("Network error. Please try again.");
     } finally {

@@ -402,6 +402,8 @@ export interface EventEmailData {
   eventTimezone: string;
   venueName?: string;
   address?: string;
+  /** Map link for the venue. */
+  mapUrl?: string;
   format: string;
   qrToken: string;
   googleCalendarUrl: string;
@@ -418,7 +420,7 @@ export function eventRegistrationHtml(name: string, data: EventEmailData): strin
   const locationHtml = data.format === 'VIRTUAL'
     ? `<p style="color: #6b7280; font-size: 14px;">Location: Virtual Event — link will be shared before the event</p>`
     : data.venueName
-    ? `<p style="color: #6b7280; font-size: 14px;">Location: ${data.venueName}${data.address ? `, ${data.address}` : ''}</p>`
+    ? `<p style="color: #6b7280; font-size: 14px;">Location: ${data.venueName}${data.address ? `, ${data.address}` : ''}${data.mapUrl && /^https?:\/\//i.test(data.mapUrl) ? ` · <a href="${data.mapUrl.replace(/"/g, '&quot;')}" style="color: #6366f1;">Open in Maps</a>` : ''}</p>`
     : '';
 
   return eventsWrapper(`

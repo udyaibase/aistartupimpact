@@ -97,6 +97,35 @@ export const recipientCodeRateLimit = redis ? new Ratelimit({
 }) : null;
 
 /** False when this email already received EMAIL_CODE limit codes for this purpose in the last 15 minutes. */
+// Wrong passwords for one account from one network (IP). Counted only on failures, so a stranger elsewhere
+// can't lock the real owner out; the account-wide lock in the sign-in route is a much higher backstop.
+export const loginFailureRateLimit = redis ? new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(5, "15 m"),
+  analytics: false,
+  prefix: "ratelimit:loginfail",
+}) : null;
+
+// Daily image-upload allowance per organizer workspace (5 MB each, so at most ~1 GB a day), so one workspace
+// can't fill the storage bucket. Generous for real use: a big event needs a few dozen images.
+export const organizerUploadDailyLimit = redis ? new Ratelimit({
+  redis,
+  limiter: Ratelimit.fixedWindow(200, "24 h"),
+  analytics: false,
+  prefix: "ratelimit:orgupload",
+}) : null;
+
+/** Whether the failures for this key are used up, without counting this call. Errors count as "not used up". */
+export async function failuresUsedUp(ratelimit: Ratelimit | null, identifier: string): Promise<boolean> {
+  if (!ratelimit || !rateLimitingEnabled) return false;
+  try {
+    const { remaining } = await ratelimit.getRemaining(identifier);
+    return remaining <= 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function emailCodeAllowed(email: string, purpose: string): Promise<boolean> {
   const { success } = await checkRateLimit(emailCodeRateLimit, `${purpose}:${email.trim().toLowerCase()}`);
   return success;

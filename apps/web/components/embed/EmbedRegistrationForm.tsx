@@ -5,6 +5,7 @@ import TurnstileWidget from "@/components/shared/TurnstileWidget";
 import { generateGoogleCalendarUrl, generateOutlookCalendarUrl } from "@/lib/events/calendar";
 import { eventPageUrl, type Attribution, type EmbedEvent } from "./EmbedWidgetView";
 import { eventState, formatRupees, formatWhen, formatWhere } from "./embed-utils";
+import { availableTiers, CHECKBOX_NO, CHECKBOX_YES, COUNTRY_CODES, formatPhone, OCCUPATIONS, phoneProblem } from "@/lib/events/registration-fields";
 
 interface Props {
   event: EmbedEvent;
@@ -21,15 +22,6 @@ type Outcome =
   | { kind: "CLOSED" }
   | { kind: "PAYMENT" };
 
-const COUNTRY_CODES = [
-  { code: "+91", label: "IN +91" },
-  { code: "+1", label: "US +1" },
-  { code: "+44", label: "UK +44" },
-  { code: "+971", label: "AE +971" },
-  { code: "+65", label: "SG +65" },
-  { code: "+61", label: "AU +61" },
-];
-
 const HAS_CAPTCHA = !!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
 export default function EmbedRegistrationForm({ event, widgetId, organizerName, attribution, onBack }: Props) {
@@ -38,18 +30,17 @@ export default function EmbedRegistrationForm({ event, widgetId, organizerName, 
   const state = eventState(event);
   const now = Date.now();
 
-  const tiers = event.ticketTiers.filter((t) => {
-    if (t.saleStart && new Date(t.saleStart).getTime() > now) return false;
-    if (t.saleEnd && new Date(t.saleEnd).getTime() < now) return false;
-    return !(t.quantity !== null && t.soldCount >= t.quantity);
-  });
+  const tiers = availableTiers(event.ticketTiers, now);
 
   const [outcome, setOutcome] = useState<Outcome | null>(state === "closed" ? { kind: "CLOSED" } : null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [countryCode, setCountryCode] = useState("+91");
   const [phone, setPhone] = useState("");
-  const [whatsapp, setWhatsapp] = useState(true);
+  // Consent must be an active choice, so this starts unticked (same as the event page).
+  const [whatsapp, setWhatsapp] = useState(false);
+  const [company, setCompany] = useState("");
+  const [occupation, setOccupation] = useState("");
   const [tierId, setTierId] = useState(tiers[0]?.id || "");
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [token, setToken] = useState(HAS_CAPTCHA ? "" : "no-captcha");
@@ -69,12 +60,11 @@ export default function EmbedRegistrationForm({ event, widgetId, organizerName, 
     const e: Record<string, string> = {};
     if (!name.trim()) e.name = "Enter your name.";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) e.email = "Enter a valid email, like name@company.com.";
-    const digits = phone.replace(/\D/g, "");
-    if (phone && (digits.length < 6 || digits.length > 14 || (countryCode === "+91" && digits.length !== 10))) {
-      e.phone = countryCode === "+91" ? "Enter a 10-digit mobile number." : "Enter a valid phone number.";
-    }
+    const pp = phoneProblem(countryCode, phone);
+    if (pp) e.phone = pp;
     for (const q of event.customQuestions) {
-      if (q.required && !answers[q.id]?.trim()) e[`q_${q.id}`] = "This question is required.";
+      const a = answers[q.id]?.trim();
+      if (q.required && (!a || (q.questionType === "CHECKBOX" && a !== CHECKBOX_YES))) e[`q_${q.id}`] = "This question is required.";
     }
     return e;
   }
@@ -112,11 +102,13 @@ export default function EmbedRegistrationForm({ event, widgetId, organizerName, 
           turnstileToken: token,
           name: name.trim(),
           email: email.trim(),
-          phone: phone ? `${countryCode} ${phone.replace(/\D/g, "")}` : undefined,
+          phone: formatPhone(countryCode, phone) || undefined,
+          company: company.trim() || undefined,
+          occupation: occupation || undefined,
           whatsappConsent: !!phone && whatsapp,
           ticketTierId: tierId || undefined,
           answers: Object.entries(answers)
-            .filter(([, val]) => val.trim())
+            .filter(([, val]) => val.trim())  // unticked yes/no questions are saved as "No" by the server
             .map(([questionId, answerText]) => ({ questionId, answerText })),
           referrerUrl: attribution.referrerUrl,
           utmSource: attribution.utmSource,
@@ -266,6 +258,27 @@ export default function EmbedRegistrationForm({ event, widgetId, organizerName, 
               )}
             </div>
 
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor={`${uid}-company`} className={labelCls}>
+                  Company <span className="font-normal" style={{ color: "var(--w-muted)" }}>(optional)</span>
+                </label>
+                <input {...field("company")} className="embed-input" autoComplete="organization" value={company}
+                  onChange={(e) => setCompany(e.target.value)} placeholder="Where you work or study" maxLength={100} />
+                {err("company")}
+              </div>
+              <div>
+                <label htmlFor={`${uid}-occupation`} className={labelCls}>
+                  Occupation <span className="font-normal" style={{ color: "var(--w-muted)" }}>(optional)</span>
+                </label>
+                <select {...field("occupation")} className="embed-input" value={occupation} onChange={(e) => setOccupation(e.target.value)}>
+                  <option value="">Choose one</option>
+                  {OCCUPATIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+                {err("occupation")}
+              </div>
+            </div>
+
             {event.customQuestions.map((q) => {
               const id = `q_${q.id}`;
               const opts = Array.isArray(q.options) ? (q.options as string[]) : [];
@@ -274,8 +287,8 @@ export default function EmbedRegistrationForm({ event, widgetId, organizerName, 
                 return (
                   <div key={q.id}>
                     <label className="flex items-start gap-2.5 min-h-[44px] py-2 text-[0.9375rem] cursor-pointer">
-                      <input {...field(id)} type="checkbox" checked={answers[q.id] === "Yes"}
-                        onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.checked ? "Yes" : "" }))}
+                      <input {...field(id)} type="checkbox" checked={answers[q.id] === CHECKBOX_YES}
+                        onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.checked ? CHECKBOX_YES : CHECKBOX_NO }))}
                         className="mt-0.5 w-4 h-4 shrink-0" style={{ accentColor: "var(--embed-accent)" }} />
                       <span>{q.questionText}{optional}</span>
                     </label>

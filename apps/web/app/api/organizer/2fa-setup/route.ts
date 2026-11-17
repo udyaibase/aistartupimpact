@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getOrganizerSession } from '@/lib/organizer-auth';
 import { twoFactorSetupResponse } from '@/lib/auth/account-two-factor';
 import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
+import { checkRateLimit, twoFactorRateLimit } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +10,8 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getOrganizerSession();
     if (!session) return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
+    const { success: allowed } = await checkRateLimit(twoFactorRateLimit, `organizer-2fa-setup:${session.id}`);
+    if (!allowed) return NextResponse.json({ success: false, error: 'Too many attempts. Please try again later.' }, { status: 429 });
     const body = await request.json();
     const response = await twoFactorSetupResponse(session.email, body);
     if (body.action === 'verify' && (await response.clone().json()).success) await logOrganizerActivity(session.id, '2fa_enabled', { actor: organizerActor(session), request });

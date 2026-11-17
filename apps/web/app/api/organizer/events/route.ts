@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createEventParts, hasPaidTickets, planAgenda } from "@/lib/events/new-event-parts";
+import { canSellTickets } from "@/lib/events/payouts";
+import { isProvider } from "@/lib/integrations/providers";
+import { meetingProofValid } from "@/lib/integrations/meeting-proof";
+import { descriptionTooLong, DESCRIPTION_TOO_LONG } from "@/lib/events/description-limit";
+import { cleanTimeZone } from "@/lib/events/zoned-time";
 import { prisma } from "@udyaibase/database";
 import { requirePermission } from "@/lib/organizer-auth/require-permission";
 import { featuredUntilFor, upcomingLimitProblem } from "@/lib/events/billing";
@@ -8,6 +14,8 @@ import { refreshPaths, refreshSections } from '@/lib/revalidate';
 import { applyFirstEventBoost } from "@/lib/events/free-boost";
 import { canTagStartup, publishDecision } from "@/lib/events/trust";
 import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
+import { cleanEventInput, cleanSlug } from "@/lib/events/event-input";
+import { eventScope } from "@/lib/organizer-auth/require-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -20,13 +28,23 @@ export async function POST(request: NextRequest) {
   const session = result;
 
   try {
-    const data = await request.json();
+    const cleaned = cleanEventInput(await request.json().catch(() => null));
+    if (!cleaned.ok) return NextResponse.json({ success: false, field: cleaned.field, error: cleaned.error }, { status: 400 });
+    const data = cleaned.data;
+    // Only a meeting this workspace just created can be attached (see lib/integrations/meeting-proof.ts).
+    if (!meetingProofValid(session.organizerId, data.meetingProvider, data.meetingExternalId, data.meetingProof)) {
+      data.meetingProvider = null;
+      data.meetingExternalId = null;
+    }
     const {
       title, slug, subtitle, category, format, startAt, endAt,
       venueName, address, venueMapUrl, meetingLink, description,
       capacity, coverImageUrl,
     } = data;
 
+    if (descriptionTooLong(description)) {
+      return NextResponse.json({ success: false, field: "description", error: DESCRIPTION_TOO_LONG }, { status: 400 });
+    }
     // "Hosted by <startup>": only a verified startup, tagged by one of its own people.
     const startupId = typeof data.startupId === 'string' && data.startupId ? data.startupId : null;
     if (startupId) {
@@ -42,6 +60,14 @@ export async function POST(request: NextRequest) {
     if (!title || !startAt || !endAt) {
       return NextResponse.json({ success: false, error: "Title, start date, and end date are required." }, { status: 400 });
     }
+    // Paid tickets need an activated payout account (same rule as editing).
+    if (hasPaidTickets(data.ticketTiers) && !(await canSellTickets(session.organizerId))) {
+      return NextResponse.json({ success: false, code: "payouts_required", error: "Set up payouts in Settings → Payments before selling paid tickets." }, { status: 400 });
+    }
+    // Agenda sessions are checked before anything is saved.
+    const agendaPlan = planAgenda(data.agenda, data.speakers, { startAt: new Date(startAt), endAt: new Date(endAt), timezone: cleanTimeZone(data.timezone) });
+    if ("error" in agendaPlan) return NextResponse.json({ success: false, field: "agenda", error: agendaPlan.error }, { status: 400 });
+
     // New events publish immediately, so the plan's upcoming-events limit applies here.
     if (new Date(endAt) > new Date()) {
       const limit = await upcomingLimitProblem(session.organizerId);
@@ -49,7 +75,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate reserved slugs
-    let finalSlug = slug || title.toLowerCase().replace(/[^\w\s-]/g, "").replace(/[\s_]+/g, "-").slice(0, 80);
+    let finalSlug = slug || cleanSlug(title) || "event";
     if (isSlugReserved(finalSlug)) {
       finalSlug = `${finalSlug}-event`;
     }
@@ -81,7 +107,10 @@ export async function POST(request: NextRequest) {
     // Store as a JSON object with text content
     const descriptionJson = description ? (description as any) : undefined;
 
-    const event = await prisma.event.create({
+    // The event and everything entered with it (speakers, tickets, questions, agenda) are saved together.
+    const featuredUntil = published ? await featuredUntilFor(session.organizerId, new Date(endAt)) : null;
+    const event = await prisma.$transaction(async (tx) => {
+     const created = await tx.event.create({
       data: {
         organizerId: session.organizerId,
         title,
@@ -94,39 +123,29 @@ export async function POST(request: NextRequest) {
         startupId,
         startAt: new Date(startAt),
         endAt: new Date(endAt),
-        featuredUntil: published ? await featuredUntilFor(session.organizerId, new Date(endAt)) : null,
-        timezone: "Asia/Kolkata",
+        featuredUntil,
+        timezone: cleanTimeZone(data.timezone),
         venueName: venueName || null,
+        venueMapUrl: venueMapUrl || null,
         address: address || null,
-        // Store venue map URL in the address field with a separator, or we use meetingLink field creatively
-        // Actually let's store the map URL in the existing latitude/longitude or address
         meetingLink: format === "VIRTUAL" || format === "HYBRID" ? (meetingLink || null) : null,
+        // A meeting made with a connected Zoom/Google account, so later time changes move it too.
+        ...((format === "VIRTUAL" || format === "HYBRID") && meetingLink && isProvider(data.meetingProvider) && typeof data.meetingExternalId === "string"
+          ? { meetingProvider: data.meetingProvider, meetingExternalId: data.meetingExternalId.slice(0, 200) } : {}),
         description: description ? { html: sanitizeUserHtml(String(description)), text: htmlToPlainText(String(description)) } : undefined,
         capacity: capacity ? parseInt(capacity) : null,
         coverImageUrl: coverImageUrl || null,
         visibility: "PUBLIC",
         publishedAt: published ? new Date() : null,
         reviewNote: published ? null : "First event from a new organizer",
-        // Store venue map URL - we'll put it in the address field combined
-        // Actually better: store map link as part of the venue info
+        approvalRequired: data.approvalRequired === true,
+        metaTitle: typeof data.seoTitle === "string" && data.seoTitle.trim() ? data.seoTitle.trim().slice(0, 120) : null,
+        metaDescription: typeof data.seoDescription === "string" && data.seoDescription.trim() ? data.seoDescription.trim().slice(0, 300) : null,
       },
-    });
-
-    // If venueMapUrl is provided, update the event with lat/lng extracted later
-    // For now store it in the address field alongside the address
-    if (venueMapUrl && event.id) {
-      const fullAddress = address
-        ? `${address}`
-        : null;
-      // We can store the google maps URL — users can click it from event detail page
-      // The address field already serves this purpose
-      await prisma.event.update({
-        where: { id: event.id },
-        data: {
-          address: venueMapUrl ? `${address || ""}|||${venueMapUrl}` : (address || null),
-        },
-      });
-    }
+     });
+     await createEventParts(tx, created.id, data, agendaPlan.sessions);
+     return created;
+    }, { timeout: 20_000 });
 
     if (published) {
       await applyFirstEventBoost(session.organizerId, event.id).catch((e) => console.error('[free boost]', e));
@@ -156,10 +175,8 @@ export async function GET() {
   const session = result;
 
   try {
-    const eventWhere: any = { organizerId: session.organizerId, deletedAt: null };
-    if (session.assignedEventIds) {
-      eventWhere.id = { in: session.assignedEventIds };
-    }
+    // Same rule as every other route: owners and admins see all events, limited teammates only theirs.
+    const eventWhere = { ...eventScope(session), deletedAt: null };
 
     const events = await prisma.event.findMany({
       where: eventWhere,

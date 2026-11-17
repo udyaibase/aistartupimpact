@@ -145,3 +145,101 @@ export async function reinstateOrganizerAction(organizerId: string) {
   await logAuditEvent({ action: "UPDATE", resourceType: "USER", resourceId: o.id, resourceName: `Event host ${o.name}`, after: { status: "ACTIVE", reinstated: true } });
   return { success: true as const };
 }
+
+// ── Full details for review ───────────────────────────────────────────────────
+
+export type ReviewFlag = { level: "warn" | "info"; text: string };
+export type ReviewDetails = {
+  basics: { title: string; subtitle: string | null; category: string; tags: string[]; coverImageUrl: string | null; gallery: string[]; hostedBy: { name: string; slug: string; verified: boolean } | null; visibility: string; approvalRequired: boolean };
+  when: { startAt: string; endAt: string; timezone: string; registrationDeadline: string | null };
+  where: { format: string; venueName: string | null; address: string | null; mapUrl: string | null; meetingLink: string | null; revealLinkAfterRegistration: boolean };
+  tickets: { capacity: number | null; tiers: { name: string; type: string; priceRupees: number; quantity: number | null; saleStart: string | null; saleEnd: string | null; description: string | null }[]; payoutReady: boolean };
+  details: { descriptionHtml: string; descriptionChars: number; speakers: { name: string; title: string | null; company: string | null; photo: string | null; link: string | null }[]; agenda: { day: number; start: string; end: string; title: string; note: string | null }[]; questions: { text: string; type: string; required: boolean }[] };
+  source: { name: string | null; url: string | null };
+  links: string[];
+  flags: ReviewFlag[];
+};
+
+/** Description HTML for the reviewer: formatting only, links open in a new tab and carry no referrer. */
+async function reviewHtml(html: string): Promise<string> {
+  const { default: sanitize } = await import("sanitize-html");
+  return sanitize(html, {
+    allowedTags: ["p", "br", "strong", "b", "em", "i", "u", "s", "ul", "ol", "li", "h2", "h3", "h4", "blockquote", "hr", "a"],
+    allowedAttributes: { a: ["href", "target", "rel"] },
+    allowedSchemes: ["http", "https", "mailto", "tel"],
+    transformTags: { a: (tagName, attribs) => ({ tagName, attribs: { ...attribs, target: "_blank", rel: "noopener noreferrer nofollow ugc" } }) },
+  });
+}
+
+const hostOf = (url: string) => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; } };
+const KNOWN_MEETING_HOSTS = ["zoom.us", "meet.google.com", "teams.microsoft.com", "teams.live.com", "youtube.com", "youtu.be", "webex.com", "streamyard.com", "linkedin.com", "airmeet.com", "hopin.com", "discord.gg", "discord.com"];
+
+/** Everything the organizer submitted, in the order of their form, plus things worth a closer look. */
+export async function getReviewDetailsAction(eventId: string) {
+  const { error } = await requireActionAuth(ROLES);
+  if (error) return { success: false as const, error };
+  const e = await prisma.event.findFirst({
+    where: { id: String(eventId ?? ""), deletedAt: null },
+    include: {
+      ticketTiers: { orderBy: { createdAt: "asc" } },
+      speakers: { orderBy: { sortOrder: "asc" } },
+      agendaItems: { orderBy: [{ dayNumber: "asc" }, { sortOrder: "asc" }] },
+      customQuestions: { orderBy: { sortOrder: "asc" } },
+      tags: { select: { tag: { select: { name: true } } } },
+      Startup: { select: { name: true, slug: true, isVerified: true } },
+      organizer: { select: { payoutStatus: true, payoutAccountId: true } },
+    },
+  });
+  if (!e) return { success: false as const, error: "Event not found." };
+
+  const desc = (e.description ?? {}) as { html?: string; text?: string };
+  const rawHtml = typeof desc.html === "string" ? desc.html : typeof desc.text === "string" ? `<p>${esc(desc.text)}</p>` : "";
+  const descriptionHtml = rawHtml ? await reviewHtml(rawHtml) : "";
+  const plain = (typeof desc.text === "string" ? desc.text : rawHtml.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+  const [address, mapUrl] = (e.address ?? "").split("|||");
+  const links = Array.from(new Set(Array.from(rawHtml.matchAll(/href="([^"]+)"/g)).map((m) => m[1]).filter((u) => /^https?:/i.test(u))));
+  const payoutReady = e.organizer.payoutStatus === "ACTIVATED" && !!e.organizer.payoutAccountId;
+  const tiers = e.ticketTiers.map((t) => ({
+    name: t.name, type: t.tierType, priceRupees: Math.round(t.priceCents) / 100, quantity: t.quantity,
+    saleStart: t.saleStart?.toISOString() ?? null, saleEnd: t.saleEnd?.toISOString() ?? null, description: t.description,
+  }));
+
+  const flags: ReviewFlag[] = [];
+  const hoursToStart = (e.startAt.getTime() - Date.now()) / 36e5;
+  if (hoursToStart < 0) flags.push({ level: "warn", text: "The start time has already passed." });
+  else if (hoursToStart < 48) flags.push({ level: "warn", text: `Starts in ${Math.max(1, Math.round(hoursToStart))} hours: little time for people to register.` });
+  if (!e.coverImageUrl) flags.push({ level: "info", text: "No cover image." });
+  if (plain.length < 100) flags.push({ level: "warn", text: plain ? `Very short description (${plain.length} characters).` : "No description." });
+  if (links.length) flags.push({ level: "info", text: `Description links to: ${Array.from(new Set(links.map(hostOf))).join(", ")}. Check they're genuine.` });
+  const paid = tiers.filter((t) => t.priceRupees > 0);
+  if (paid.length && !payoutReady) flags.push({ level: "warn", text: "Sells paid tickets, but the organizer's payout account isn't active yet." });
+  const top = Math.max(0, ...paid.map((t) => t.priceRupees));
+  if (top >= 25000) flags.push({ level: "warn", text: `High ticket price (₹${top.toLocaleString("en-IN")}). Check it's realistic.` });
+  if (e.meetingLink) {
+    const h = hostOf(e.meetingLink);
+    if (!KNOWN_MEETING_HOSTS.some((k) => h === k || h.endsWith(`.${k}`))) flags.push({ level: "warn", text: `Online link goes to ${h}, not a common meeting service.` });
+  }
+  if ((e.format === "IN_PERSON" || e.format === "HYBRID") && !e.venueName && !address) flags.push({ level: "warn", text: "In-person event without a venue or address." });
+  if (e.Startup && !e.Startup.isVerified) flags.push({ level: "warn", text: `Says it's hosted by ${e.Startup.name}, which isn't a verified startup.` });
+  if (e.sourceUrl) flags.push({ level: "info", text: `Imported from ${e.sourceName || hostOf(e.sourceUrl)}.` });
+
+  const details: ReviewDetails = {
+    basics: {
+      title: e.title, subtitle: e.subtitle, category: e.category, tags: e.tags.map((t) => t.tag.name), coverImageUrl: e.coverImageUrl, gallery: e.galleryImageUrls,
+      hostedBy: e.Startup ? { name: e.Startup.name, slug: e.Startup.slug, verified: e.Startup.isVerified } : null, visibility: e.visibility, approvalRequired: e.approvalRequired,
+    },
+    when: { startAt: e.startAt.toISOString(), endAt: e.endAt.toISOString(), timezone: e.timezone, registrationDeadline: e.registrationDeadline?.toISOString() ?? null },
+    where: { format: e.format, venueName: e.venueName, address: address || null, mapUrl: mapUrl || null, meetingLink: e.meetingLink, revealLinkAfterRegistration: e.revealLinkAfterRegistration },
+    tickets: { capacity: e.capacity, tiers, payoutReady },
+    details: {
+      descriptionHtml, descriptionChars: plain.length,
+      speakers: e.speakers.map((s) => ({ name: s.name, title: s.title, company: s.company, photo: s.headshotUrl, link: s.bio && /^https?:\/\//.test(s.bio) ? s.bio : null })),
+      agenda: e.agendaItems.map((a) => ({ day: a.dayNumber, start: a.startTime, end: a.endTime, title: a.title, note: a.description })),
+      questions: e.customQuestions.map((q) => ({ text: q.questionText, type: q.questionType, required: q.required })),
+    },
+    source: { name: e.sourceName, url: e.sourceUrl },
+    links,
+    flags,
+  };
+  return { success: true as const, details };
+}

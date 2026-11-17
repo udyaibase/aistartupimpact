@@ -4,6 +4,7 @@ import { apiRateLimit, authRateLimit, checkRateLimit, getClientIdentifier, rateL
 import { logOrganizerActivity } from '@/lib/workspace-activity';
 import { maskEmail } from '@/lib/mask';
 import { passwordProblem } from "@/lib/password-rules";
+import { findOrganizerByEmail } from "@/lib/organizer-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -29,10 +30,10 @@ export async function GET(request: NextRequest) {
     where: { inviteToken: token },
     select: { email: true, role: true, status: true, expiresAt: true, organizer: { select: { name: true, company: true } } },
   }).catch(() => null);
-  if (!member) return NextResponse.json({ state: "invalid" });
+  if (!member || member.status === "REVOKED") return NextResponse.json({ state: "invalid" });
   if (member.status === "ACTIVE") return NextResponse.json({ state: "accepted", email: member.email });
   if (member.expiresAt < new Date()) return NextResponse.json({ state: "expired", team: member.organizer?.company || member.organizer?.name || null });
-  const account = await prisma.eventOrganizer.findUnique({ where: { email: member.email }, select: { passwordHash: true } });
+  const account = await findOrganizerByEmail(member.email);
   const role = ROLE_INFO[member.role] ?? { label: member.role, can: "" };
   return NextResponse.json({
     state: "pending",
@@ -41,7 +42,8 @@ export async function GET(request: NextRequest) {
     inviter: member.organizer?.name || null,
     role: role.label,
     roleCan: role.can,
-    hasAccount: !!account?.passwordHash,
+    // An account that never confirmed its email doesn't count: its password may be someone else's.
+    hasAccount: !!account?.passwordHash && account.emailVerified,
     expiresAt: member.expiresAt.toISOString(),
   });
 }
@@ -66,9 +68,11 @@ export async function POST(request: NextRequest) {
       where: { inviteToken: token },
       include: { organizer: { select: { id: true, name: true, company: true } } },
     });
-    const existingOrganizer = member ? await prisma.eventOrganizer.findUnique({ where: { email: member.email } }) : null;
-    // Someone who already has an organizer account keeps their password; a new member must set one.
-    const needsPassword = !existingOrganizer?.passwordHash;
+    const existingOrganizer = member ? await findOrganizerByEmail(member.email) : null;
+    // Someone who already has a confirmed organizer account keeps their password; a new member must set one. An
+    // account that never confirmed its email may have been made by someone else, so its password is replaced: the
+    // invite link, sent to this address, is what proves who owns it.
+    const needsPassword = !existingOrganizer?.passwordHash || !existingOrganizer.emailVerified;
     if (needsPassword) {
       if (!password || typeof password !== "string") {
         return NextResponse.json({ success: false, error: "Set a password to continue." }, { status: 400 });
@@ -86,19 +90,26 @@ export async function POST(request: NextRequest) {
     if (member.status === "ACTIVE") {
       return NextResponse.json({ success: false, error: "Already accepted" }, { status: 400 });
     }
+    if (member.status === "REVOKED") {
+      return NextResponse.json({ success: false, error: "Invalid or expired invite" }, { status: 400 });
+    }
+    if (existingOrganizer && (existingOrganizer.status === "SUSPENDED" || existingOrganizer.deactivatedAt)) {
+      return NextResponse.json({ success: false, error: "This account can't join a team right now. Contact support." }, { status: 403 });
+    }
 
     const { hash } = await import("bcryptjs");
     const passwordHash = needsPassword ? await hash(password as string, 12) : existingOrganizer!.passwordHash;
 
     // Only one accept can flip a pending invite.
     const flipped = await prisma.eventTeamMember.updateMany({
-      where: { id: member.id, status: { not: "ACTIVE" } },
-      data: { status: "ACTIVE", passwordHash, acceptedAt: new Date() },
+      where: { id: member.id, status: "PENDING" },
+      data: { status: "ACTIVE", acceptedAt: new Date() },
     });
     if (!flipped.count) return NextResponse.json({ success: false, error: "Already accepted" }, { status: 400 });
 
+    let accountId = existingOrganizer?.id;
     if (!existingOrganizer) {
-      await prisma.eventOrganizer.create({
+      const created = await prisma.eventOrganizer.create({
         data: {
           email: member.email,
           name: name || member.email.split("@")[0],
@@ -107,13 +118,19 @@ export async function POST(request: NextRequest) {
           status: "ACTIVE",
           company: member.organizer?.company || undefined,
         },
+        select: { id: true },
       });
-    } else if (!existingOrganizer.passwordHash) {
+      accountId = created.id;
+    } else if (needsPassword) {
+      if (!existingOrganizer.emailVerified) await prisma.eventOrganizerSession.deleteMany({ where: { organizerId: existingOrganizer.id } });
       await prisma.eventOrganizer.update({
         where: { id: existingOrganizer.id },
-        data: { passwordHash, ...(name ? { name } : {}) },
+        data: { passwordHash, emailVerified: true, status: "ACTIVE", verifyToken: null, ...(name ? { name } : {}) },
       });
     }
+
+    // From now on the membership belongs to this account, whatever happens to the email address later.
+    await prisma.eventTeamMember.update({ where: { id: member.id }, data: { memberOrganizerId: accountId } });
 
     await logOrganizerActivity(member.organizerId, 'team_invite_accepted', { actor: { email: member.email }, request, metadata: { member: maskEmail(member.email) } });
     return NextResponse.json({ success: true, email: member.email, existingAccount: !needsPassword, team: member.organizer?.company || member.organizer?.name || null });

@@ -16,8 +16,11 @@ export type EmployerActivity = Common
   | 'job_posted' | 'job_updated' | 'job_status_changed' | 'job_deleted' | 'applications_exported';
 
 export type OrganizerActivity = Common
-  | 'boost_purchased' | 'event_created' | 'event_updated' | 'event_published' | 'event_cancelled' | 'event_deleted'
-  | 'ticket_refunded' | 'payout_details_changed' | 'attendees_exported' | 'team_events_changed';
+  | 'boost_purchased' | 'certificates_purchased' | 'event_created' | 'event_updated' | 'event_published' | 'event_cancelled' | 'event_deleted'
+  | 'ticket_refunded' | 'payout_details_changed' | 'attendees_exported' | 'team_events_changed'
+  | 'integration_connected' | 'integration_disconnected' | 'registrations_changed'
+  | 'devices_signed_out' | 'attendee_checked_in' | 'event_restored' | 'team_member_left' | 'event_content_changed'
+  | 'ownership_transfer_requested' | 'ownership_transfer_cancelled' | 'ownership_transferred';
 
 export type WorkspaceActivity = EmployerActivity | OrganizerActivity;
 export type WorkspaceActivityCategory = 'security' | 'team' | 'billing' | 'work';
@@ -68,6 +71,9 @@ const EMPLOYER: Record<EmployerActivity, Display> = {
 const ORGANIZER: Record<OrganizerActivity, Display> = {
   ...COMMON,
   team_events_changed: { category: 'team', title: (m) => `Changed which events ${text(m, 'member') || 'a team member'} can work on${text(m, 'events') === 'all' ? ' (all events)' : text(m, 'events') ? ` (${text(m, 'events')})` : ''}` },
+  integration_connected: { category: 'security', title: (m) => `Connected ${text(m, 'provider') || 'a meeting app'}${text(m, 'account') ? ` (${text(m, 'account')})` : ''}` },
+  integration_disconnected: { category: 'security', title: (m) => `Disconnected ${text(m, 'provider') || 'a meeting app'}` },
+  certificates_purchased: { category: 'billing', title: (m) => `Bought certificates for ${quoted(m, 'event', 'an event')}${text(m, 'amount') ? ` (${text(m, 'amount')})` : ''}` },
   boost_purchased: { category: 'billing', title: (m) => `Boosted ${quoted(m, 'event', 'an event')}${text(m, 'amount') ? ` (${text(m, 'amount')})` : ''}` },
   event_created: { category: 'work', title: (m) => `Created the event ${quoted(m, 'title', '')}`.trim() },
   event_updated: { category: 'work', title: (m) => `Edited the event ${quoted(m, 'title', '')}`.trim() },
@@ -76,6 +82,15 @@ const ORGANIZER: Record<OrganizerActivity, Display> = {
   event_deleted: { category: 'work', title: (m) => `Deleted the event ${quoted(m, 'title', '')}`.trim() },
   ticket_refunded: { category: 'billing', title: (m) => `Refunded ${text(m, 'attendee') || 'a ticket'}${text(m, 'event') ? ` for “${text(m, 'event')}”` : ''}${text(m, 'amount') ? ` (${text(m, 'amount')})` : ''}` },
   payout_details_changed: { category: 'billing', title: () => 'Updated the payout bank details' },
+  registrations_changed: { category: 'work', title: (m) => `${text(m, 'what') || 'Changed registrations'}${text(m, 'event') ? ` for “${text(m, 'event')}”` : ''}` },
+  ownership_transfer_requested: { category: 'team', title: (m) => `Asked ${text(m, 'member') || 'an admin'} to take over as owner` },
+  ownership_transfer_cancelled: { category: 'team', title: () => 'Cancelled the ownership transfer' },
+  ownership_transferred: { category: 'team', title: (m) => `${text(m, 'member') || 'An admin'} became the owner${text(m, 'previous') ? ` (${text(m, 'previous')} is now an admin)` : ''}` },
+  devices_signed_out: { category: 'security', title: (m) => text(m, 'what') || 'Signed out other devices' },
+  attendee_checked_in: { category: 'work', title: (m) => `${text(m, 'what') || 'Checked in'} ${text(m, 'attendee') || 'an attendee'}${text(m, 'event') ? ` at “${text(m, 'event')}”` : ''}` },
+  event_restored: { category: 'work', title: (m) => `Restored the deleted event ${quoted(m, 'title', '')}`.trim() },
+  team_member_left: { category: 'team', title: (m) => `${text(m, 'member') || 'A teammate'} left the team` },
+  event_content_changed: { category: 'work', title: (m) => `${text(m, 'what') || 'Changed event details'}${text(m, 'event') ? ` for “${text(m, 'event')}”` : ''}` },
   attendees_exported: { category: 'security', title: (m) => `Exported the attendee list${text(m, 'event') ? ` for “${text(m, 'event')}”` : ''}` },
 };
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getOrganizerSession } from '@/lib/organizer-auth';
 import { createTicket, getTicketsForUser } from '@/lib/support-tickets';
 import { supportTicketSchema, validateInput, sanitizeText } from '@/lib/validation';
+import { apiRateLimit, checkRateLimit, rateLimitMessage, retryAfterHeaders } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,8 +12,8 @@ export async function GET(request: NextRequest) {
     if (!session) return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
 
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1') || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '20') || 20));
     const status = searchParams.get('status') || undefined;
 
     const result = await getTicketsForUser('ORGANIZER', session.id, page, limit, status);
@@ -28,6 +29,8 @@ export async function POST(request: NextRequest) {
     const session = await getOrganizerSession();
     if (!session) return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
 
+    const { success: allowed, reset } = await checkRateLimit(apiRateLimit, `organizer-support:${session.id}`);
+    if (!allowed) return NextResponse.json({ success: false, error: rateLimitMessage(reset) }, { status: 429, headers: retryAfterHeaders(reset) });
     const body = await request.json();
     const validation = validateInput(supportTicketSchema, body);
     if (!validation.success) {

@@ -27,6 +27,7 @@ vi.mock('@/lib/rate-limit', () => ({
   getClientIdentifier: vi.fn(() => 'test-ip'),
   apiRateLimit: {},
   strictRateLimit: {},
+  organizerUploadDailyLimit: {},
 }));
 
 vi.mock('@aws-sdk/client-s3', () => {

@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
   const entity = body.payload?.payment?.entity;
   const purpose = entity?.notes?.purpose;
   const isEmployer = purpose === 'EMPLOYER_PLAN';
-  const isHost = purpose === 'ORGANIZER_PLAN' || purpose === 'ORGANIZER_BOOST';
+  const isHost = purpose === 'ORGANIZER_PLAN' || purpose === 'ORGANIZER_BOOST' || purpose === 'ORGANIZER_CERTIFICATES';
   const isTicket = purpose === 'EVENT_TICKET';
   const isFunding = purpose === 'FUNDING_DATA';
   if (!entity?.order_id || (!isEmployer && !isHost && !isTicket && !isFunding)) return NextResponse.json({ status: 'ignored' });
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
 /** What we charged for this order, by product (null when we have no record of it). */
 async function expectedTotal(purpose: string, orderId: string): Promise<number | null> {
   if (purpose === 'EMPLOYER_PLAN') return (await prisma.jobBoardPayment.findUnique({ where: { razorpayOrderId: orderId }, select: { totalPaise: true } }))?.totalPaise ?? null;
-  if (purpose === 'ORGANIZER_PLAN' || purpose === 'ORGANIZER_BOOST') return (await prisma.organizerPayment.findUnique({ where: { razorpayOrderId: orderId }, select: { totalPaise: true } }))?.totalPaise ?? null;
+  if (purpose === 'ORGANIZER_PLAN' || purpose === 'ORGANIZER_BOOST' || purpose === 'ORGANIZER_CERTIFICATES') return (await prisma.organizerPayment.findUnique({ where: { razorpayOrderId: orderId }, select: { totalPaise: true } }))?.totalPaise ?? null;
   if (purpose === 'FUNDING_DATA') return (await prisma.fundingDataPurchase.findUnique({ where: { razorpayOrderId: orderId }, select: { totalPaise: true } }))?.totalPaise ?? null;
   if (purpose === 'EVENT_TICKET') return (await prisma.eventRegistration.findFirst({ where: { razorpayOrderId: orderId }, select: { amountPaise: true } }))?.amountPaise ?? null;
   return null;

@@ -137,7 +137,9 @@ export default function JobsWidgetView({ config: initial, jobs }: { config: Jobs
       if (screen === "list" || screen === "form-upload" || screen === "form-details") setPreviewScreen(screen);
     }
     window.addEventListener("message", onMessage);
-    if (window.parent !== window) window.parent.postMessage({ type: "udyaibase:preview-ready" }, window.location.origin);
+    // Only Udyaibase's own preview listens for this. On a company's website the parent is another origin, and
+    // posting to it just logged "target origin does not match" warnings in their console.
+    if (parentIsUdyaibase()) window.parent.postMessage({ type: "udyaibase:preview-ready" }, window.location.origin);
     return () => window.removeEventListener("message", onMessage);
   }, []);
 
@@ -744,4 +746,13 @@ function JobCard({ job, layout, config, onOpen }: { job: CareersJob; layout: "gr
       </div>
     </article>
   );
+}
+
+/** True when this widget is framed by a Udyaibase page (the portal preview), not by a company's website. */
+function parentIsUdyaibase(): boolean {
+  try {
+    return window.parent !== window && window.parent.location.origin === window.location.origin;
+  } catch {
+    return false; // reading another origin's location throws: a company's website
+  }
 }

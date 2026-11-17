@@ -6,6 +6,7 @@ import { registrationRejectedHtml } from "@udyaibase/utils";
 import { sendConfirmationEmail } from "@/lib/events/register-event";
 import { sendEmailFireAndForget } from "@/lib/email/send";
 import { refreshPaths } from "@/lib/revalidate";
+import { logOrganizerActivity, organizerActor } from "@/lib/workspace-activity";
 
 export const dynamic = "force-dynamic";
 
@@ -16,12 +17,12 @@ export async function POST(request: NextRequest) {
   if (result instanceof NextResponse) return result;
   const session = result;
 
-  const { registrationIds, action } = (await request.json()) as {
+  const { registrationIds, action } = (await request.json().catch(() => ({}))) as {
     registrationIds: string[];
     action: BulkAction;
   };
 
-  if (!registrationIds?.length || !action) {
+  if (!Array.isArray(registrationIds) || !registrationIds.length || registrationIds.some((x) => typeof x !== "string") || !action) {
     return NextResponse.json({ success: false, error: "registrationIds and action are required" }, { status: 400 });
   }
 
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
     where: { id: { in: registrationIds }, deletedAt: null },
     include: {
       event: {
-        select: { id: true, organizerId: true, title: true, slug: true, startAt: true, timezone: true },
+        select: { id: true, organizerId: true, title: true, slug: true, startAt: true, timezone: true, capacity: true },
       },
     },
   });
@@ -48,7 +49,19 @@ export async function POST(request: NextRequest) {
   }
 
   let updated = 0;
+  let refunded = 0;
   const errors: string[] = [];
+
+  // Seats already taken per event, so approving or promoting can't go past the capacity the host set.
+  const seatsTaken = new Map<string, number>();
+  const hasSeat = async (eventId: string, capacity: number | null) => {
+    if (!capacity) return true;
+    if (!seatsTaken.has(eventId)) {
+      seatsTaken.set(eventId, await prisma.eventRegistration.count({ where: { eventId, deletedAt: null, status: { in: ["CONFIRMED", "CHECKED_IN"] } } }));
+    }
+    return (seatsTaken.get(eventId) ?? 0) < capacity;
+  };
+  const takeSeat = (eventId: string) => seatsTaken.set(eventId, (seatsTaken.get(eventId) ?? 0) + 1);
   const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "no-reply@udyaibase.com";
 
   for (const reg of registrations) {
@@ -60,6 +73,13 @@ export async function POST(request: NextRequest) {
       : "TBA";
 
     try {
+      if ((action === "approve" && reg.status === "PENDING_APPROVAL") || (action === "promote" && reg.status === "WAITLISTED")) {
+        if (!(await hasSeat(reg.eventId, reg.event.capacity))) {
+          errors.push(`${reg.guestEmail ?? reg.id}: the event is full. Raise the capacity first.`);
+          continue;
+        }
+        takeSeat(reg.eventId);
+      }
       if (action === "approve" && reg.status === "PENDING_APPROVAL") {
         await prisma.eventRegistration.update({
           where: { id: reg.id },
@@ -96,6 +116,7 @@ export async function POST(request: NextRequest) {
         if (reg.paymentStatus === "PAID") {
           const r = await refundTicket(reg.id, "host");
           if (!r.ok) { errors.push(`${reg.guestEmail}: ${r.error}`); continue; }
+          refunded++;
         }
 
         // Atomic cancel + auto-promote in a transaction
@@ -124,16 +145,37 @@ export async function POST(request: NextRequest) {
         });
 
         updated++;
+        // The attendee hears that the host cancelled their place (paid tickets also get the refund email).
+        if (reg.guestEmail) {
+          sendEmailFireAndForget({
+            to: reg.guestEmail,
+            from: `Udyaibase Events <${FROM_EMAIL}>`,
+            subject: `Registration cancelled: ${reg.event.title}`,
+            html: `<p>Hi ${esc(reg.guestName || "there")},</p><p>The organizer cancelled your registration for <strong>${esc(reg.event.title)}</strong> on ${esc(dateStr)}.${reg.paymentStatus === "PAID" ? " Your ticket has been refunded in full." : ""}</p><p>If you think this is a mistake, reply to the organizer or contact support.</p>`,
+            type: "registration_cancelled",
+          });
+        }
 
         if (promoted?.guestEmail) sendConfirmationEmail(reg.eventId, promoted.guestEmail, promoted.guestName || "there", promoted.qrToken).catch(() => {});
       } else {
         errors.push(`${reg.id}: invalid status transition from ${reg.status}`);
       }
-    } catch (err: any) {
-      errors.push(`${reg.id}: ${err.message}`);
+    } catch (err) {
+      console.error("[registrations/bulk]", reg.id, err instanceof Error ? err.message : err);
+      errors.push(`${reg.guestEmail ?? reg.id}: couldn’t be updated. Try again.`);
     }
   }
 
+  if (updated) {
+    const WHAT: Record<BulkAction, string> = { approve: "approved", reject: "rejected", promote: "moved off the waitlist", cancel: "cancelled" };
+    const events = [...new Set(registrations.map((r) => r.event.title))];
+    await logOrganizerActivity(session.organizerId, "registrations_changed", {
+      actor: organizerActor(session), request,
+      metadata: { what: `${updated} registration${updated === 1 ? "" : "s"} ${WHAT[action]}${refunded ? ` (${refunded} refunded)` : ""}`, event: events.length === 1 ? events[0] : `${events.length} events` },
+    });
+  }
   if (updated) refreshPaths([...new Set(registrations.map((r) => `/events/${r.event.slug}`))]);
   return NextResponse.json({ success: true, updated, errors: errors.length > 0 ? errors : undefined });
 }
+
+const esc = (v: string) => v.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));

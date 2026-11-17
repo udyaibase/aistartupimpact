@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
-const { member, organizer } = vi.hoisted(() => ({
-  member: { findUnique: vi.fn(), updateMany: vi.fn() },
-  organizer: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
+const { member, organizer, sessions } = vi.hoisted(() => ({
+  member: { findUnique: vi.fn(), updateMany: vi.fn(), update: vi.fn() },
+  organizer: { findUnique: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+  sessions: { deleteMany: vi.fn() },
 }));
-vi.mock('@udyaibase/database', () => ({ prisma: { eventTeamMember: member, eventOrganizer: organizer } }));
+vi.mock('@udyaibase/database', () => ({ prisma: { eventTeamMember: member, eventOrganizer: organizer, eventOrganizerSession: sessions } }));
 vi.mock('@/lib/rate-limit', () => ({ authRateLimit: null, apiRateLimit: null, checkRateLimit: async () => ({ success: true }), getClientIdentifier: () => 'ip' }));
 vi.mock('@/lib/workspace-activity', () => ({ logOrganizerActivity: vi.fn(async () => {}) }));
 
@@ -19,7 +20,8 @@ const invite = (over: Record<string, unknown> = {}) => ({
 const post = (body: unknown) => POST(new NextRequest('http://x/api/organizer/team/accept', { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } }));
 
 beforeEach(() => {
-  member.findUnique.mockReset(); member.updateMany.mockReset(); organizer.findUnique.mockReset(); organizer.create.mockReset(); organizer.update.mockReset();
+  member.findUnique.mockReset(); member.updateMany.mockReset(); organizer.findUnique.mockReset(); organizer.create.mockReset(); organizer.update.mockReset(); member.update.mockReset(); organizer.create.mockResolvedValue({ id: 'new-org' });
+  organizer.findFirst.mockReset(); organizer.findFirst.mockResolvedValue(null); sessions.deleteMany.mockReset();
   member.updateMany.mockResolvedValue({ count: 1 });
 });
 
@@ -55,7 +57,7 @@ describe('password rules', () => {
 describe('organizer invite accept', () => {
   it('previews the team, role and whether an account exists, without needing a password', async () => {
     member.findUnique.mockResolvedValue(invite());
-    organizer.findUnique.mockResolvedValue({ passwordHash: 'hash' });
+    organizer.findUnique.mockResolvedValue({ passwordHash: 'hash', emailVerified: true });
     const d = await (await GET(new NextRequest('http://x/api/organizer/team/accept?token=t'))).json();
     expect(d).toMatchObject({ state: 'pending', email: 'priya@acme.ai', team: 'Acme Events', role: 'Manager', hasAccount: true });
   });
@@ -82,16 +84,40 @@ describe('organizer invite accept', () => {
     const d = await (await post({ token: 't', password: 'Blue-River-42', name: ' Priya Sharma ' })).json();
     expect(d).toMatchObject({ success: true, email: 'priya@acme.ai', existingAccount: false });
     expect(organizer.create.mock.calls[0][0].data).toMatchObject({ email: 'priya@acme.ai', name: 'Priya Sharma' });
+    // The membership is bound to the account that accepted it, not just the email address.
+    expect(member.update).toHaveBeenCalledWith(expect.objectContaining({ data: { memberOrganizerId: 'new-org' } }));
   });
 
   it('an existing account joins without a password and keeps its own', async () => {
     member.findUnique.mockResolvedValue(invite());
-    organizer.findUnique.mockResolvedValue({ id: 'o9', passwordHash: 'existing-hash' });
+    organizer.findUnique.mockResolvedValue({ id: 'o9', passwordHash: 'existing-hash', emailVerified: true });
     const d = await (await post({ token: 't' })).json();
     expect(d).toMatchObject({ success: true, existingAccount: true });
-    expect(member.updateMany.mock.calls[0][0].data.passwordHash).toBe('existing-hash');
+    // Only a pending invite can be accepted, and the member row no longer keeps a copy of the password.
+    expect(member.updateMany.mock.calls[0][0].where).toMatchObject({ status: 'PENDING' });
+    expect(member.updateMany.mock.calls[0][0].data.passwordHash).toBeUndefined();
     expect(organizer.update).not.toHaveBeenCalled();
     expect(organizer.create).not.toHaveBeenCalled();
+  });
+
+  it('an account that never confirmed its email does not keep its password: the invite sets a new one', async () => {
+    member.findUnique.mockResolvedValue(invite());
+    organizer.findUnique.mockResolvedValue({ id: 'o9', passwordHash: 'someone-elses-hash', emailVerified: false });
+    // Without a password the accept is refused: the old one can't be trusted.
+    expect((await post({ token: 't' })).status).toBe(400);
+    const d = await (await post({ token: 't', password: 'Blue-River-42' })).json();
+    expect(d).toMatchObject({ success: true, existingAccount: false });
+    expect(sessions.deleteMany).toHaveBeenCalledWith({ where: { organizerId: 'o9' } });
+    const saved = organizer.update.mock.calls[0][0].data;
+    expect(saved.emailVerified).toBe(true);
+    expect(saved.passwordHash).not.toBe('someone-elses-hash');
+  });
+
+  it('a removed teammate cannot use their old invite link', async () => {
+    member.findUnique.mockResolvedValue(invite({ status: 'REVOKED' }));
+    expect((await (await GET(new NextRequest('http://x/api/organizer/team/accept?token=t'))).json()).state).toBe('invalid');
+    expect((await post({ token: 't', password: 'Blue-River-42' })).status).toBe(400);
+    expect(member.updateMany).not.toHaveBeenCalled();
   });
 
   it('a second accept of the same invite changes nothing', async () => {

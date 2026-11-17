@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     if (error instanceof RegistrationError) {
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: error.message, code: error.code, field: error.field },
         { status: error.statusCode }
       );
     }

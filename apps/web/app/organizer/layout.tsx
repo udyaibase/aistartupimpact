@@ -1,10 +1,6 @@
-import { jwtSecret } from '@/lib/jwt-secret';
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
-import { jwtVerify } from "jose";
 import { sql } from '@/lib/db';
 import { getOrganizerSession } from "@/lib/organizer-auth";
-import { getUnifiedSession } from "@/lib/unified-auth";
 import OrganizerSidebar from "@/components/organizer/OrganizerSidebar";
 import OrganizerHeader from "@/components/organizer/OrganizerHeader";
 import OrganizerMobileNav from "@/components/organizer/OrganizerMobileNav";
@@ -19,57 +15,14 @@ import { activeMembership, OWN_WORKSPACE } from "@/lib/organizer-auth/workspace"
 import { getPermissions } from "@/lib/organizer-auth/permissions";
 import { accessFor, canOpen } from "@/lib/organizer-auth/nav";
 
-const USER_JWT_SECRET = jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET');
-
 export default async function OrganizerWorkspaceLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  let session: any = null;
-
-  // 1. Try unified session
-  const unifiedSession = await getUnifiedSession();
-  if (unifiedSession?.organizerId) {
-    session = {
-      id: unifiedSession.organizerId,
-      name: unifiedSession.name,
-      email: unifiedSession.email,
-      avatar: unifiedSession.avatar || undefined,
-    };
-  }
-
-  // 2. Fallback: legacy organizer session
-  if (!session) {
-    session = await getOrganizerSession();
-  }
-
-  // 3. Fallback: user-token → find organizer by email
-  if (!session) {
-    try {
-      const cookieStore = await cookies();
-      const userToken = cookieStore.get("user-token")?.value;
-      if (userToken) {
-        const { payload } = await jwtVerify(userToken, USER_JWT_SECRET);
-        const email = (payload as any).email;
-        if (email) {
-          const organizers = await sql`
-            SELECT id, email, name, avatar FROM "EventOrganizer"
-            WHERE email = ${email.toLowerCase()} AND status != 'SUSPENDED'
-            LIMIT 1
-          `;
-          if (organizers.length > 0) {
-            session = {
-              id: organizers[0].id,
-              name: organizers[0].name,
-              email: organizers[0].email,
-              avatar: organizers[0].avatar || undefined,
-            };
-          }
-        }
-      }
-    } catch {}
-  }
+  // The same resolver every organizer API route uses, so a page never shows one account while its buttons act
+  // as another (and deactivated or suspended accounts are refused in one place).
+  const session = await getOrganizerSession();
 
   if (!session) redirect("/organizer/login");
   // People who are also on another host's team choose which workspace they are working in.

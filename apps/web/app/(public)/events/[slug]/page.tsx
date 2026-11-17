@@ -3,11 +3,18 @@ import { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { sql } from "@/lib/db";
 import EventDetailClient from "./EventDetailClient";
+import EventRecap from "@/components/events/EventRecap";
+import { cleanRecapLinks, RECAP_MIN_ATTENDED } from "@/lib/events/recap";
+import { cfpIsOpen, cfpSettings } from "@/lib/events/cfp";
+import EventSponsors from "@/components/events/EventSponsors";
+import Link from "next/link";
 import TrackView from '@/components/TrackView';
 import { sanitizeHtml } from "@/lib/sanitize";
 import { descriptionHtml, descriptionText, metaSnippet } from "@/lib/events/description";
 
 export const revalidate = 3600;
+
+const PUBLIC_STATUSES = ["PUBLISHED", "COMPLETED", "POSTPONED", "CANCELLED"];
 
 async function getEvent(slug: string) {
   try {
@@ -24,12 +31,14 @@ async function getEvent(slug: string) {
         e."approvalRequired",
         e."metaTitle", e."metaDescription", e."socialImageUrl",
         e."sourceUrl", e."sourceName",
-        e."organizerId", e."deletedAt",
+        e."organizerId", e."deletedAt", e."recapSummary", e."recapLinks", e."agendaTracks", e."cfpSettings",
         o.name AS "organizerName", o.avatar AS "organizerAvatar", (o."verifiedAt" IS NOT NULL) AS "organizerVerified",
-        st.name AS "hostStartupName", st.slug AS "hostStartupSlug"
+        st.name AS "hostStartupName", st.slug AS "hostStartupSlug",
+        ser.name AS "seriesName", ser.slug AS "seriesSlug"
       FROM "Event" e
       LEFT JOIN "EventOrganizer" o ON o.id = e."organizerId"
       LEFT JOIN "Startup" st ON st.id = e."startupId" AND st."isVerified" = true AND st."deletedAt" IS NULL
+      LEFT JOIN "EventSeries" ser ON ser.id = e."seriesId"
       WHERE e.slug = ${slug}
       LIMIT 1
     `;
@@ -39,7 +48,9 @@ async function getEvent(slug: string) {
       // Soft-deleted → 410 Gone (handled via notFound for now)
       if (event.deletedAt) return { __gone: true };
       // Not published / not visible
-      if (event.status !== "PUBLISHED" || !["PUBLIC", "UNLISTED"].includes(event.visibility)) return null;
+      // Published events, and ones that already happened or changed plans: a completed event keeps its recap
+      // page, and a cancelled or postponed one says so instead of a dead link. Drafts, reviews and archived don't show.
+      if (!PUBLIC_STATUSES.includes(event.status) || !["PUBLIC", "UNLISTED"].includes(event.visibility)) return null;
       return event;
     }
 
@@ -80,12 +91,12 @@ async function getEventSpeakers(eventId: string) {
 async function getEventAgenda(eventId: string) {
   try {
     const rows = await sql`
-      SELECT a.id, a."dayNumber", a."startTime", a."endTime", a.title, a.description,
+      SELECT a.id, a."dayNumber", a."startTime", a."endTime", a.title, a.description, a."recordingUrl", a."slidesUrl", a.track,
              s.name AS "speakerName"
       FROM "EventAgendaItem" a
       LEFT JOIN "EventSpeaker" s ON s.id = a."speakerId"
       WHERE a."eventId" = ${eventId}
-      ORDER BY a."dayNumber" ASC, a."sortOrder" ASC
+      ORDER BY a."dayNumber" ASC, a."startTime" ASC, a."sortOrder" ASC
     `;
     return rows;
   } catch {
@@ -127,7 +138,7 @@ async function getEventCustomQuestions(eventId: string) {
     const rows = await sql`
       SELECT id, "questionText", "questionType", options, required, "sortOrder"
       FROM "EventCustomQuestion"
-      WHERE "eventId" = ${eventId}
+      WHERE "eventId" = ${eventId} AND "hiddenAt" IS NULL
       ORDER BY "sortOrder" ASC
     `;
     return rows;
@@ -194,6 +205,8 @@ export async function generateMetadata(
     title,
     description,
     alternates: { canonical: url },
+    // A cancelled event's page stays for people with the link, but shouldn't be found in search.
+    ...(event.status === "CANCELLED" ? { robots: { index: false, follow: true } } : {}),
     openGraph: {
       title,
       description,
@@ -254,6 +267,65 @@ export default async function EventDetailPage(
       getSimilarEvents(event.id, event.category),
     ]);
 
+  // Recap mode once a native event has ended: totals only, never who attended.
+  let recap: React.ReactNode = null;
+  if (!event.sourceUrl && event.endAt && new Date(event.endAt) < new Date()) {
+    const stats = (await sql`
+      SELECT
+        (SELECT count(*)::int FROM "EventRegistration" r WHERE r."eventId" = ${event.id} AND r."checkedInAt" IS NOT NULL AND r."deletedAt" IS NULL) AS attended,
+        (SELECT count(*)::int FROM "EventFeedback" f WHERE f."eventId" = ${event.id}) AS responses,
+        (SELECT avg(f.rating)::float FROM "EventFeedback" f WHERE f."eventId" = ${event.id}) AS average
+    `.catch(() => [])) as { attended: number; responses: number; average: number | null }[];
+    const st = stats[0];
+    recap = (
+      <EventRecap
+        summary={event.recapSummary ?? null}
+        gallery={Array.isArray(event.galleryImageUrls) ? event.galleryImageUrls : []}
+        links={cleanRecapLinks(event.recapLinks)}
+        sessions={(agenda as any[]).map((a) => ({ id: a.id, title: a.title, dayNumber: a.dayNumber, startTime: a.startTime, recordingUrl: a.recordingUrl ?? null, slidesUrl: a.slidesUrl ?? null }))}
+        attended={st && st.attended >= RECAP_MIN_ATTENDED ? st.attended : null}
+        rating={st && st.responses >= RECAP_MIN_ATTENDED && st.average ? { average: st.average, responses: st.responses } : null}
+      />
+    );
+  }
+
+  // Call for speakers banner while proposals are open.
+  const cfp = cfpSettings(event.cfpSettings);
+  if (!event.sourceUrl && cfpIsOpen(cfp, { endAt: new Date(event.endAt), status: event.status, deletedAt: null })) {
+    recap = (
+      <>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-2xl border border-brand/30 bg-brand/5">
+          <p className="flex-1 text-sm text-gray-800 dark:text-gray-200"><strong>Call for speakers is open.</strong> Have something to share? Propose a talk{cfp.closesAt ? ` by ${new Date(cfp.closesAt).toLocaleDateString("en-IN", { day: "numeric", month: "long" })}` : ""}.</p>
+          <Link href={`/events/${event.slug}/speak`} className="inline-flex items-center justify-center min-h-[40px] px-4 rounded-lg bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-semibold">Propose a talk</Link>
+        </div>
+        {recap}
+      </>
+    );
+  }
+
+  // Part of a series: link to every edition and the follow button.
+  if (event.seriesSlug) {
+    recap = (
+      <>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+          <p className="flex-1 text-sm text-gray-800 dark:text-gray-200">Part of <strong>{event.seriesName}</strong>. Follow the series to hear when the next one opens.</p>
+          <Link href={`/series/${event.seriesSlug}`} className="inline-flex items-center justify-center min-h-[40px] px-4 rounded-lg border border-gray-300 dark:border-gray-700 text-sm font-semibold text-gray-900 dark:text-white">See the series</Link>
+        </div>
+        {recap}
+      </>
+    );
+  }
+
+  // Sponsors (Pro). A link exists when the sponsor has a website or a linked startup page.
+  const sponsorRows = (event.sourceUrl ? [] : await sql`
+    SELECT s.id, s.name, s.tier, s."logoUrl", (s."websiteUrl" IS NOT NULL OR st.slug IS NOT NULL) AS "hasLink"
+    FROM "EventSponsor" s
+    LEFT JOIN "Startup" st ON st.id = s."startupId" AND st."deletedAt" IS NULL
+    WHERE s."eventId" = ${event.id}
+    ORDER BY s."sortOrder" ASC
+    LIMIT 30
+  `.catch(() => [])) as { id: string; name: string; tier: string; logoUrl: string | null; hasLink: boolean }[];
+
   const eventUrl = `https://udyaibase.com/events/${event.slug}`;
   const schemaDescription = metaSnippet(descriptionText(event.description), 300) || event.subtitle || event.title;
 
@@ -264,7 +336,7 @@ export default async function EventDetailPage(
     "description": schemaDescription,
     "startDate": event.startAt,
     "url": eventUrl,
-    "eventStatus": "https://schema.org/EventScheduled",
+    "eventStatus": event.status === "CANCELLED" ? "https://schema.org/EventCancelled" : event.status === "POSTPONED" ? "https://schema.org/EventPostponed" : "https://schema.org/EventScheduled",
     "eventAttendanceMode": event.format === "VIRTUAL"
       ? "https://schema.org/OnlineEventAttendanceMode"
       : event.format === "HYBRID"
@@ -346,6 +418,8 @@ export default async function EventDetailPage(
         ticketTiers={ticketTiers as any}
         customQuestions={customQuestions as any}
         similarEvents={similarEvents as any}
+        recap={recap}
+        sponsors={sponsorRows.length ? <EventSponsors eventId={event.id} sponsors={sponsorRows} /> : null}
       />
     </>
   );

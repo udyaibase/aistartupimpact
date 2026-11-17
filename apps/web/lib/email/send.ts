@@ -46,7 +46,27 @@ async function logEmail(opts: { type: string; to: string; subject: string; statu
   }
 }
 
+/**
+ * Reserved test domains (RFC 2606/6761) used by the dev seed data: never sent, since they can't receive mail and
+ * bounces hurt our sending reputation. In local development the message is printed to the server log instead, so
+ * sign-in codes and links for seeded accounts can still be used.
+ */
+export function isTestAddress(to: string): boolean {
+  const domain = to.trim().toLowerCase().split('@').pop() ?? '';
+  return /\.(test|invalid|example|localhost)$/.test(domain) || /(^|\.)example\.(com|org|net)$/.test(domain);
+}
+
+function skipTestEmail(opts: { to: string; subject: string; html: string; type?: string }): SendResult {
+  if (process.env.NODE_ENV !== 'production') {
+    const text = opts.html.replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+    console.info(`[email:test-inbox] to=${opts.to} type=${opts.type || 'unknown'}\n  subject: ${opts.subject}\n  ${text.slice(0, 600)}`);
+  }
+  logEmail({ type: opts.type || 'unknown', to: opts.to, subject: opts.subject, status: 'skipped_test_address' });
+  return { success: true };
+}
+
 export async function sendEmail(opts: SendEmailOptions): Promise<SendResult> {
+  if (isTestAddress(opts.to)) return skipTestEmail(opts);
   const client = getResend();
   if (!client) {
     console.warn('Resend API key not configured, skipping email send');
@@ -122,6 +142,14 @@ export async function sendEmailBatch(
   if (!client) return items.map(() => ({ success: false, error: 'Resend not configured' }));
   if (items.length === 0) return [];
   if (items.length > 100) throw new Error('sendEmailBatch: max 100 emails per call');
+
+  // Seed/test addresses are skipped; the rest go out as one batch and results keep the original order.
+  if (items.some((o) => isTestAddress(o.to))) {
+    const real = items.filter((o) => !isTestAddress(o.to));
+    const sent = real.length ? await sendEmailBatch(real, opts) : [];
+    let j = 0;
+    return items.map((o) => (isTestAddress(o.to) ? skipTestEmail(o) : sent[j++]));
+  }
 
   try {
     const { data, error } = await client.batch.send(

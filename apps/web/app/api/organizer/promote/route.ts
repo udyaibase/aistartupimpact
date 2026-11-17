@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@udyaibase/database";
-import { requirePermission } from "@/lib/organizer-auth/require-permission";
+import { canAccessEvent, eventScope, requirePermission } from "@/lib/organizer-auth/require-permission";
 import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
 import { hostPlanStatus } from "@/lib/events/billing";
 import { promoAudienceSize, startPromo, NOTE_MAX } from "@/lib/events/promote";
@@ -15,6 +15,8 @@ export async function GET(request: NextRequest) {
   const organizerId = result.organizerId;
 
   const eventId = request.nextUrl.searchParams.get("eventId");
+  // Teammates limited to some events only see and promote those (they'd otherwise spend credits on any event).
+  if (eventId && !canAccessEvent(result, eventId)) return NextResponse.json({ success: false, error: "Event not found." }, { status: 404 });
   if (eventId) {
     const size = await promoAudienceSize(organizerId, eventId);
     if (size == null) return NextResponse.json({ success: false, error: "Event not found." }, { status: 404 });
@@ -24,12 +26,12 @@ export async function GET(request: NextRequest) {
   const [status, events, campaigns] = await Promise.all([
     hostPlanStatus(organizerId),
     prisma.event.findMany({
-      where: { organizerId, status: "PUBLISHED", visibility: "PUBLIC", deletedAt: null, endAt: { gt: new Date() } },
+      where: { ...eventScope(result), status: "PUBLISHED", visibility: "PUBLIC", deletedAt: null, endAt: { gt: new Date() } },
       orderBy: { startAt: "asc" },
       select: { id: true, title: true, startAt: true, format: true, promoCredits: true, boostedAt: true },
     }),
     prisma.eventEmailCampaign.findMany({
-      where: { organizerId },
+      where: { organizerId, ...(eventScope(result).id ? { eventId: eventScope(result).id } : {}) },
       orderBy: { createdAt: "desc" },
       take: 20,
       select: { id: true, subject: true, status: true, recipientCount: true, createdAt: true, creditSource: true, event: { select: { title: true } } },
@@ -46,6 +48,7 @@ export async function POST(request: NextRequest) {
   if (!success) return NextResponse.json({ success: false, error: "Too many requests. Try again in a minute." }, { status: 429 });
 
   const body = await request.json().catch(() => ({}));
+  if (!canAccessEvent(result, String(body.eventId ?? ""))) return NextResponse.json({ success: false, error: "Event not found." }, { status: 404 });
   const out = await startPromo(result.organizerId, String(body.eventId ?? ""), typeof body.note === "string" ? body.note : "");
   if (!out.ok) return NextResponse.json({ success: false, error: out.error }, { status: out.status });
   after(() => out.send!().catch((err) => console.error("[host promo send]", err instanceof Error ? err.message : err)));

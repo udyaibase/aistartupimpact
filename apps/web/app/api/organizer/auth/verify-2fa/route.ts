@@ -1,15 +1,12 @@
-import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from 'next/server';
-import { jwtVerify } from 'jose';
 import { prisma } from '@udyaibase/database';
 import { createOrganizerSession } from '@/lib/organizer-auth';
+import { CHALLENGE_COOKIE, readChallengeToken } from '@/lib/organizer-auth/challenge';
 import { isTwoFactorOn, verifyAccountCode } from '@/lib/auth/account-two-factor';
 import { checkRateLimit, getClientIdentifier, authRateLimit, twoFactorRateLimit } from '@/lib/rate-limit';
 import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
 
 export const dynamic = 'force-dynamic';
-
-const CHALLENGE_SECRET = jwtSecret(process.env.ORGANIZER_JWT_SECRET || process.env.USER_JWT_SECRET, 'ORGANIZER_JWT_SECRET');
 
 export async function POST(request: NextRequest) {
   const identifier = getClientIdentifier(request);
@@ -19,21 +16,17 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { challengeToken, token, isBackupCode } = await request.json();
+    const body = await request.json();
+    const { token, isBackupCode } = body;
+    // From the sign-in form, or (after Google sign-in) from the short-lived cookie set on the way back.
+    const challengeToken = body.challengeToken || request.cookies.get(CHALLENGE_COOKIE)?.value;
 
     if (!challengeToken || !token) {
       return NextResponse.json({ success: false, error: 'Challenge token and verification code are required' }, { status: 400 });
     }
 
-    let userId: string;
-
-    try {
-      const { payload } = await jwtVerify(challengeToken, CHALLENGE_SECRET);
-      if (payload.purpose !== '2fa-challenge') {
-        return NextResponse.json({ success: false, error: 'Invalid challenge token' }, { status: 400 });
-      }
-      userId = payload.userId as string;
-    } catch {
+    const userId = await readChallengeToken(challengeToken);
+    if (!userId) {
       return NextResponse.json({ success: false, error: 'Challenge expired. Please log in again.' }, { status: 401 });
     }
 
@@ -45,12 +38,10 @@ export async function POST(request: NextRequest) {
 
     const organizer = await prisma.eventOrganizer.findUnique({
       where: { id: userId },
-      select: {
-        id: true, email: true, name: true,
-      },
+      select: { id: true, email: true, name: true, status: true, deactivatedAt: true },
     });
 
-    if (!organizer || !(await isTwoFactorOn(organizer.email))) {
+    if (!organizer || organizer.status === 'SUSPENDED' || organizer.deactivatedAt || !(await isTwoFactorOn(organizer.email))) {
       return NextResponse.json({ success: false, error: 'Invalid challenge' }, { status: 400 });
     }
 
@@ -69,10 +60,12 @@ export async function POST(request: NextRequest) {
 
     await createOrganizerSession(organizer.id);
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       success: true,
       data: { id: organizer.id, name: organizer.name, email: organizer.email },
     });
+    res.cookies.set(CHALLENGE_COOKIE, '', { path: '/api/organizer/auth', maxAge: 0 });
+    return res;
   } catch (error) {
     console.error('Error verifying organizer 2FA:', error);
     return NextResponse.json({ success: false, error: 'Failed to verify 2FA code' }, { status: 500 });

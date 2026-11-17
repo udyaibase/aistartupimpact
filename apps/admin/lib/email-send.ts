@@ -39,7 +39,18 @@ async function logEmail(opts: { type: string; to: string; subject: string; statu
   }
 }
 
+/** Reserved test domains used by dev seed data: never sent (see apps/web/lib/email/send.ts). */
+function isTestAddress(to: string): boolean {
+  const domain = to.trim().toLowerCase().split('@').pop() ?? '';
+  return /\.(test|invalid|example|localhost)$/.test(domain) || /(^|\.)example\.(com|org|net)$/.test(domain);
+}
+
 export async function sendEmail(opts: SendEmailOptions): Promise<SendResult> {
+  if (isTestAddress(opts.to)) {
+    if (process.env.NODE_ENV !== 'production') console.info(`[email:test-inbox] to=${opts.to} subject: ${opts.subject}`);
+    logEmail({ type: opts.type || 'unknown', to: opts.to, subject: opts.subject, status: 'skipped_test_address' });
+    return { success: true };
+  }
   const client = getResend();
   if (!client) {
     console.warn('Resend API key not configured, skipping email send');

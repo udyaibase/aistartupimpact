@@ -40,6 +40,10 @@ export default function OnboardingClient({
   const [cityResults, setCityResults] = useState<CityResult[]>([]);
   const [cityName, setCityName] = useState('');
   const [searchingCity, setSearchingCity] = useState(false);
+  /** What the last finished search found: nothing matched, or the search itself failed. */
+  const [cityNotice, setCityNotice] = useState<'' | 'none' | 'error'>('');
+  /** Why Finish or Skip didn't go through (shown above the buttons). */
+  const [finishError, setFinishError] = useState('');
   const [showCityDropdown, setShowCityDropdown] = useState(false);
 
   const firstName = userName.split(' ')[0];
@@ -59,9 +63,11 @@ export default function OnboardingClient({
   }, []);
 
   useEffect(() => {
-    if (cityQuery.length < 2) {
+    setCityNotice('');
+    if (cityQuery.trim().length < 2) {
       setCityResults([]);
       setShowCityDropdown(false);
+      setSearchingCity(false);
       return;
     }
     const controller = new AbortController();
@@ -71,47 +77,59 @@ export default function OnboardingClient({
         const res = await fetch(`/api/cities/search?q=${encodeURIComponent(cityQuery)}`, {
           signal: controller.signal,
         });
-        if (res.ok) {
-          const data = await res.json();
-          setCityResults(data);
-          setShowCityDropdown(data.length > 0);
-        }
+        const data = res.ok ? await res.json() : null;
+        if (!Array.isArray(data)) throw new Error('search failed');
+        setCityResults(data);
+        setShowCityDropdown(data.length > 0);
+        setCityNotice(data.length ? '' : 'none');
+        setSearchingCity(false);
       } catch (e) {
-        if ((e as Error).name !== 'AbortError') {
-          setCityResults([]);
-          setShowCityDropdown(false);
-        }
+        // A newer keystroke cancelled this search; that search reports its own result.
+        if ((e as Error).name === 'AbortError') return;
+        setCityResults([]);
+        setShowCityDropdown(false);
+        setCityNotice('error');
+        setSearchingCity(false);
       }
-      setSearchingCity(false);
     }, 300);
     return () => { clearTimeout(timeout); controller.abort(); };
   }, [cityQuery]);
 
   const handleFinish = async () => {
     setLoading(true);
+    setFinishError('');
     try {
       const result = await completeOnboarding({
         primaryIntent: primaryIntent || undefined,
         categoryIds: selectedCategories.size > 0 ? Array.from(selectedCategories) : undefined,
         cityId: cityId || undefined,
       });
-      if (result.success) {
+      if ('success' in result) {
         router.push(returnTo);
         router.refresh();
+        return;
       }
-    } catch {}
+      setFinishError(result.error);
+    } catch {
+      setFinishError('Couldn’t reach the server. Check your connection and try again.');
+    }
     setLoading(false);
   };
 
   const handleSkip = async () => {
     setLoading(true);
+    setFinishError('');
     try {
       const result = await skipOnboarding();
-      if (result.success) {
+      if ('success' in result) {
         router.push(returnTo);
         router.refresh();
+        return;
       }
-    } catch {}
+      setFinishError(result.error);
+    } catch {
+      setFinishError('Couldn’t reach the server. Check your connection and try again.');
+    }
     setLoading(false);
   };
 
@@ -171,6 +189,9 @@ export default function OnboardingClient({
           >
             Skip for now
           </button>
+          {finishError && (
+            <p role="alert" className="mt-3 text-center text-sm text-red-600 dark:text-red-400">{finishError}</p>
+          )}
         </div>
       )}
 
@@ -285,7 +306,17 @@ export default function OnboardingClient({
               </div>
             )}
           </div>
+          {!cityId && !searchingCity && cityNotice && (
+            <p role="status" className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+              {cityNotice === 'none'
+                ? `No city matches “${cityQuery.trim()}”. Try another spelling (for example Bengaluru or Bangalore), or skip this step.`
+                : 'City search isn’t working right now. Try again in a moment, or skip this step.'}
+            </p>
+          )}
 
+          {finishError && (
+            <p role="alert" className="mt-6 text-sm text-red-600 dark:text-red-400">{finishError}</p>
+          )}
           <div className="mt-8 flex gap-3">
             <button
               onClick={() => handleFinish()}

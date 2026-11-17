@@ -4,6 +4,9 @@ import { requirePermission, canAccessEvent } from "@/lib/organizer-auth/require-
 import { generateQrToken } from "@/lib/events/qr-token";
 import { sendEmailFireAndForget } from "@/lib/email/send";
 import { eventRegistrationHtml } from "@udyaibase/utils";
+import { apiRateLimit, checkRateLimit, rateLimitMessage, retryAfterHeaders } from "@/lib/rate-limit";
+import { logOrganizerActivity, organizerActor } from "@/lib/workspace-activity";
+import { maskEmail } from "@/lib/mask";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +18,18 @@ export async function POST(request: NextRequest) {
   if (result instanceof NextResponse) return result;
   const session = result;
 
-  const { eventId, name, email, phone, company, emailConsent } = await request.json();
+  const { success: allowed, reset } = await checkRateLimit(apiRateLimit, `walk-in:${session.organizerId}`);
+  if (!allowed) return NextResponse.json({ success: false, error: rateLimitMessage(reset) }, { status: 429, headers: retryAfterHeaders(reset) });
+
+  const body = await request.json().catch(() => ({}));
+  const eventId = typeof body.eventId === "string" ? body.eventId : "";
+  const name = typeof body.name === "string" ? body.name.trim().slice(0, 120) : "";
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  const phone = typeof body.phone === "string" ? body.phone.trim().slice(0, 20) : "";
+  const company = typeof body.company === "string" ? body.company.trim().slice(0, 120) : "";
+  const emailConsent = body.emailConsent === true;
   if (!eventId || !name || !email) return NextResponse.json({ success: false, error: "Name and email required" }, { status: 400 });
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return NextResponse.json({ success: false, error: "Enter a valid email address" }, { status: 400 });
 
   if (!canAccessEvent(session, eventId)) {
     return NextResponse.json({ success: false, error: "Not authorized for this event" }, { status: 403 });
@@ -25,7 +38,7 @@ export async function POST(request: NextRequest) {
   // Verify organizer owns event
   const event = await prisma.event.findFirst({
     where: { id: eventId, organizerId: session.organizerId, deletedAt: null },
-    select: { id: true, title: true, slug: true, startAt: true, endAt: true, timezone: true, venueName: true, address: true, format: true, capacity: true, registrationCount: true },
+    select: { id: true, title: true, slug: true, startAt: true, endAt: true, timezone: true, venueName: true, address: true, venueMapUrl: true, format: true, capacity: true, registrationCount: true },
   });
   if (!event) return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 });
 
@@ -35,17 +48,35 @@ export async function POST(request: NextRequest) {
   }
 
   // Check duplicate
-  const existing = await prisma.eventRegistration.findFirst({ where: { eventId, guestEmail: email, deletedAt: null } });
+  const existing = await prisma.eventRegistration.findFirst({ where: { eventId, guestEmail: { equals: email, mode: "insensitive" }, deletedAt: null } });
   if (existing) return NextResponse.json({ success: false, error: "Already registered", qrToken: existing.qrToken }, { status: 409 });
 
+  // One statement: FOR UPDATE serialises with online registrations on the event row, and the row is only inserted
+  // while there is room, so two walk-ins at the door can't both take the last seat (see lib/events/register-event.ts).
   const qrToken = generateQrToken(16);
-  const reg = await prisma.eventRegistration.create({
-    data: {
-      eventId, guestName: name, guestEmail: email, guestPhone: phone || null,
-      guestCompany: company || null, status: "CONFIRMED", qrToken,
-      registrationSource: "WALK_IN",
-    },
-  });
+  let rows: { id: string; qrToken: string }[];
+  try {
+    rows = await prisma.$queryRaw<{ id: string; qrToken: string }[]>`
+      WITH e AS (
+        SELECT id, capacity, "registrationCount" FROM "Event" WHERE id = ${eventId} FOR UPDATE
+      )
+      INSERT INTO "EventRegistration" (
+        id, "eventId", "guestName", "guestEmail", "guestPhone", "guestCompany", status, "qrToken", "registrationSource", "updatedAt"
+      )
+      SELECT gen_random_uuid(), e.id, ${name}, ${email}, ${phone || null}, ${company || null}, 'CONFIRMED'::"RegistrationStatus", ${qrToken}, 'WALK_IN', NOW()
+      FROM e
+      WHERE e.capacity IS NULL OR e."registrationCount" < e.capacity
+      RETURNING id, "qrToken"`;
+  } catch (err) {
+    if (String((err as Error)?.message).includes("23505")) {
+      return NextResponse.json({ success: false, error: "This email is already registered for this event." }, { status: 409 });
+    }
+    throw err;
+  }
+  if (!rows.length) return NextResponse.json({ success: false, error: "Event is full" }, { status: 400 });
+  const reg = rows[0];
+
+  await logOrganizerActivity(session.organizerId, "registrations_changed", { actor: organizerActor(session), request, metadata: { what: `Added a walk-in (${maskEmail(email)})`, event: event.title } });
 
   // Only send confirmation email if organizer confirmed attendee consent
   if (!emailConsent) {
@@ -73,7 +104,8 @@ export async function POST(request: NextRequest) {
       eventTime: timeStr,
       eventTimezone: tz,
       venueName: event.venueName || undefined,
-      address: event.address || undefined,
+      address: event.address?.split("|||")[0] || undefined,
+      mapUrl: event.venueMapUrl || undefined,
       format: event.format,
       qrToken,
       googleCalendarUrl,

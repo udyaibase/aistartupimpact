@@ -11,6 +11,15 @@
       "port": 3000
     },
     {
+      "name": "web-dev-testkeys",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "source \"$HOME/.nvm/nvm.sh\" && nvm use --silent default && NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA UPSTASH_REDIS_REST_URL= UPSTASH_REDIS_REST_TOKEN= npm run dev --workspace=apps/web"
+      ],
+      "port": 3000
+    },
+    {
       "name": "admin-dev",
       "runtimeExecutable": "bash",
       "runtimeArgs": [

@@ -21,6 +21,7 @@ type Registration = {
 };
 
 const STATUSES = ["CONFIRMED", "PENDING_APPROVAL", "CHECKED_IN", "WAITLISTED", "CANCELLED"] as const;
+const PAGE_SIZE = 100;
 
 export default function AttendeesPage() {
   const [regs, setRegs] = useState<Registration[]>([]);
@@ -31,29 +32,42 @@ export default function AttendeesPage() {
   const [bulkAction, setBulkAction] = useState("");
   const [processing, setProcessing] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  // Search, filter and paging run on the server, so every registration is reachable however many there are.
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [counts, setCounts] = useState({ all: 0, pending: 0, waitlisted: 0 });
+  const [query, setQuery] = useState("");
+  const [error, setError] = useState("");
+  const [canExport, setCanExport] = useState(false);
+
+  // Wait for typing to pause before searching.
+  useEffect(() => {
+    const t = setTimeout(() => { setQuery(search.trim()); setPage(1); }, 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const fetchRegistrations = useCallback(async () => {
-    const res = await fetch("/api/organizer/registrations");
-    const data = await res.json();
-    if (data.success) setRegs(data.registrations);
+    const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
+    if (query) params.set("q", query);
+    if (statusFilter) params.set("status", statusFilter);
+    try {
+      const res = await fetch(`/api/organizer/registrations?${params}`);
+      const data = await res.json();
+      if (data.success) {
+        setRegs(data.registrations); setTotal(data.total); setHasMore(data.hasMore);
+        if (data.counts) setCounts(data.counts);
+        setCanExport(data.canExport === true);
+        setError("");
+      } else setError(data.error || "Couldn’t load registrations.");
+    } catch { setError("You seem to be offline."); }
     setLoading(false);
-  }, []);
+  }, [page, query, statusFilter]);
 
   useEffect(() => { fetchRegistrations(); }, [fetchRegistrations]);
+  useEffect(() => { setSelected(new Set()); }, [page, query, statusFilter]);
 
-  const filtered = regs.filter(r => {
-    if (statusFilter && r.status !== statusFilter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      return (
-        r.guestName?.toLowerCase().includes(q) ||
-        r.guestEmail?.toLowerCase().includes(q) ||
-        r.guestCompany?.toLowerCase().includes(q) ||
-        r.eventTitle?.toLowerCase().includes(q)
-      );
-    }
-    return true;
-  });
+  const filtered = regs;
 
   const toggleSelect = (id: string) =>
     setSelected(prev => {
@@ -103,8 +117,10 @@ export default function AttendeesPage() {
     await fetchRegistrations();
   };
 
-  const pendingCount = regs.filter(r => r.status === "PENDING_APPROVAL").length;
-  const waitlistCount = regs.filter(r => r.status === "WAITLISTED").length;
+  const pendingCount = counts.pending;
+  const waitlistCount = counts.waitlisted;
+  const first = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const last = Math.min(total, page * PAGE_SIZE);
 
   if (loading) {
     return (
@@ -121,11 +137,12 @@ export default function AttendeesPage() {
         <div>
           <h1 className="portal-title">All Attendees</h1>
           <p className="portal-subtitle">
-            {regs.length} total registrations
+            {counts.all.toLocaleString("en-IN")} total registrations
             {pendingCount > 0 && <span className="ml-2 text-amber-600 font-semibold">· {pendingCount} pending approval</span>}
             {waitlistCount > 0 && <span className="ml-2 text-yellow-600 font-semibold">· {waitlistCount} waitlisted</span>}
           </p>
         </div>
+        {canExport && (
         <a
           data-tour="attendee-export"
           href="/api/organizer/attendees"
@@ -134,6 +151,7 @@ export default function AttendeesPage() {
         >
           <Download className="w-3.5 h-3.5" /> Export CSV
         </a>
+        )}
       </div>
 
       {/* Filters */}
@@ -152,7 +170,7 @@ export default function AttendeesPage() {
         </div>
         <select
           value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value)}
+          onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
           aria-label="Filter by status"
           className="flex-1 sm:flex-none min-h-[44px] px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-jakarta"
         >
@@ -161,7 +179,8 @@ export default function AttendeesPage() {
             <option key={s} value={s}>{statusLabel(s)}</option>
           ))}
         </select>
-        <span className="text-xs text-gray-400 font-jakarta">{filtered.length} results</span>
+        <span className="text-xs text-gray-400 font-jakarta">{total === 0 ? "0 results" : `${first.toLocaleString("en-IN")}–${last.toLocaleString("en-IN")} of ${total.toLocaleString("en-IN")}`}</span>
+        {error && <p role="alert" className="w-full text-sm text-red-700 dark:text-red-400">{error}</p>}
       </div>
 
       {/* Bulk Actions */}
@@ -289,6 +308,18 @@ export default function AttendeesPage() {
           </>
         )}
       </div>
+
+      {(page > 1 || hasMore) && (
+        <nav aria-label="Pages" className="flex items-center justify-between gap-3">
+          <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="min-h-[44px] px-4 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-semibold font-jakarta disabled:opacity-40">
+            Previous
+          </button>
+          <span className="text-xs text-gray-500 font-jakarta">Page {page} of {Math.max(1, Math.ceil(total / PAGE_SIZE))}</span>
+          <button type="button" onClick={() => setPage((p) => p + 1)} disabled={!hasMore} className="min-h-[44px] px-4 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-semibold font-jakarta disabled:opacity-40">
+            Next
+          </button>
+        </nav>
+      )}
     </div>
   );
 }

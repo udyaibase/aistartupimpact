@@ -24,6 +24,18 @@
     {
       "path": "/api/admin/verification-lifecycle",
       "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/admin/event-follow-ups",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/admin/event-summaries",
+      "schedule": "30 4 * * *"
+    },
+    {
+      "path": "/api/admin/event-series",
+      "schedule": "5 * * * *"
     }
   ]
 }

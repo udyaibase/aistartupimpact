@@ -1,11 +1,12 @@
 "use client";
 
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useEditor, EditorContent, Extension } from "@tiptap/react";
+import { Plugin } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Bold, Italic, List, ListOrdered, Heading2, Link as LinkIcon, Undo, Redo, Minus } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface RichTextEditorProps {
   content: string;
@@ -14,9 +15,47 @@ interface RichTextEditorProps {
   maxLength?: number;
 }
 
+
+/**
+ * Hard character limit. Typing stops at the limit, and a paste is cut to the space left, so what's on screen is
+ * always exactly what gets saved. (Before, text past the limit stayed on screen but was silently not saved.)
+ * Deleting is always allowed, even for older text that is already over the limit.
+ */
+const characterLimit = (limit: number, onBlocked: () => void) =>
+  Extension.create({
+    name: "characterLimit",
+    addProseMirrorPlugins() {
+      return [
+        new Plugin({
+          filterTransaction: (tr, state) => {
+            if (!tr.docChanged) return true;
+            const next = tr.doc.textContent.length;
+            if (next <= limit || next <= state.doc.textContent.length) return true;
+            onBlocked();
+            return false;
+          },
+          props: {
+            handlePaste: (view, event) => {
+              const text = event.clipboardData?.getData("text/plain") ?? "";
+              const { from, to } = view.state.selection;
+              const room = limit - (view.state.doc.textContent.length - view.state.doc.textBetween(from, to).length);
+              if (text.length <= room) return false; // fits: let the normal (formatted) paste happen
+              if (room > 0) view.dispatch(view.state.tr.insertText(text.slice(0, room), from, to));
+              onBlocked();
+              return true;
+            },
+          },
+        }),
+      ];
+    },
+  });
+
 export default function RichTextEditor({ content, onChange, placeholder = "Write your event description...", maxLength = 5000 }: RichTextEditorProps) {
+  const [atLimit, setAtLimit] = useState(false);
+  const blockedRef = useRef(() => setAtLimit(true));
   const editor = useEditor({
     extensions: [
+      ...(maxLength ? [characterLimit(maxLength, () => blockedRef.current())] : []),
       StarterKit.configure({
         heading: { levels: [2, 3] },
       }),
@@ -33,10 +72,9 @@ export default function RichTextEditor({ content, onChange, placeholder = "Write
       },
     },
     onUpdate: ({ editor }) => {
-      const html = editor.getHTML();
-      if (!maxLength || editor.state.doc.textContent.length <= maxLength) {
-        onChange(html);
-      }
+      // Always report what's on screen; the limit itself is enforced above.
+      onChange(editor.getHTML());
+      if (maxLength && editor.state.doc.textContent.length < maxLength) setAtLimit(false);
     },
   });
 
@@ -131,8 +169,11 @@ export default function RichTextEditor({ content, onChange, placeholder = "Write
       {/* Character count */}
       {maxLength && (
         <div className="px-3 py-1 border-t border-gray-100 dark:border-gray-800">
-          <span className={`text-xs font-jakarta ${charCount > maxLength * 0.9 ? "text-red-500" : "text-gray-400"}`}>
-            {charCount}/{maxLength}
+          <span aria-live="polite" className={`text-xs font-jakarta ${charCount > maxLength * 0.9 ? "text-red-500" : "text-gray-400"}`}>
+            {charCount.toLocaleString("en-IN")}/{maxLength.toLocaleString("en-IN")}
+            {charCount > maxLength
+              ? ` · ${(charCount - maxLength).toLocaleString("en-IN")} over the limit. Shorten it to save.`
+              : atLimit ? " · Limit reached. Extra text wasn’t added." : ""}
           </span>
         </div>
       )}

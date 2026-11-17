@@ -5,6 +5,7 @@ import { generateQrToken } from "@/lib/events/qr-token";
 import { sendRegistrationConfirmationEmail, sendNewsletterWelcomeEmail } from "@/lib/events/email";
 import { generateGoogleCalendarUrl } from "@/lib/events/calendar";
 import { refreshPaths } from "@/lib/revalidate";
+import { cleanRegistrationInput, RegistrationInputError } from "@/lib/events/registration-input";
 
 const CONSENT_TEXT =
   "Keep me updated about upcoming AI events, conferences, and opportunities in my area. You can unsubscribe anytime.";
@@ -44,10 +45,11 @@ export async function registerForEvent(
   params: RegisterForEventParams
 ): Promise<RegisterForEventResult> {
   const {
-    eventId, name, email, phone, company, role, occupation,
-    ticketTierId, answers, newsletterConsent, whatsappConsent,
+    eventId, role, ticketTierId, newsletterConsent, whatsappConsent,
     locationCity, registrationSource, referrerUrl, embedWidgetId, utmSource, utmMedium, utmCampaign,
   } = params;
+  const name = String(params.name ?? '').trim().replace(/\s+/g, ' ').slice(0, 100);
+  if (!name) throw new RegistrationError("Enter your name.", 400, "invalid", "name");
 
   const event = await prisma.event.findUnique({
     where: { id: eventId },
@@ -69,14 +71,31 @@ export async function registerForEvent(
 
   // Paid tickets only through checkout: no free registration with a paid tier, or on an all-paid event.
   // Walk-ins are added by the host at the door (they may have paid there), so they're exempt.
-  const tiers = registrationSource === "WALK_IN" ? [] : await prisma.eventTicketTier.findMany({ where: { eventId }, select: { id: true, priceCents: true } });
+  const tiers = registrationSource === "WALK_IN" ? [] : await prisma.eventTicketTier.findMany({ where: { eventId }, select: { id: true, name: true, priceCents: true, saleStart: true, saleEnd: true } });
   if (ticketTierId && registrationSource !== "WALK_IN") {
     const t = tiers.find((x) => x.id === ticketTierId);
     if (!t) throw new RegistrationError("Choose a valid ticket.", 400, "invalid_tier");
     if (t.priceCents > 0) throw new RegistrationError("This ticket needs to be paid for.", 402, "payment_required");
+    const nowTs = Date.now();
+    if ((t.saleStart && t.saleStart.getTime() > nowTs) || (t.saleEnd && t.saleEnd.getTime() < nowTs)) {
+      throw new RegistrationError(`${t.name} isn't available right now. Choose another ticket.`, 400, "invalid_tier", "ticketTierId");
+    }
   } else if (tiers.length > 0 && tiers.every((x) => x.priceCents > 0)) {
     throw new RegistrationError("This event needs a paid ticket.", 402, "payment_required");
   }
+
+  // Same rules for the event page, the widget and walk-ins: lowercase email, one phone format, valid answers.
+  let cleaned;
+  try {
+    cleaned = await cleanRegistrationInput(
+      { eventId, email: params.email, phone: params.phone, company: params.company, occupation: params.occupation, answers: params.answers },
+      { enforceRequired: registrationSource !== "WALK_IN" },
+    );
+  } catch (err) {
+    if (err instanceof RegistrationInputError) throw new RegistrationError(err.message, 400, "invalid", err.field);
+    throw err;
+  }
+  const { email, phone, company, occupation, answers } = cleaned;
 
   const qrToken = generateQrToken(16);
   // The host's own capacity, capped by their plan (raised by an Event Boost). Over the limit → waitlist.
@@ -181,10 +200,13 @@ export async function registerForEvent(
 export class RegistrationError extends Error {
   statusCode: number;
   code?: string;
-  constructor(message: string, statusCode: number, code?: string) {
+  /** The form field to point at (name, email, phone, q_<questionId>). */
+  field?: string;
+  constructor(message: string, statusCode: number, code?: string, field?: string) {
     super(message);
     this.statusCode = statusCode;
     this.code = code;
+    this.field = field;
   }
 }
 
@@ -284,7 +306,7 @@ export async function sendConfirmationEmail(eventId: string, email: string, name
     where: { id: eventId },
     select: {
       title: true, slug: true, startAt: true, endAt: true,
-      timezone: true, venueName: true, address: true, format: true,
+      timezone: true, venueName: true, address: true, venueMapUrl: true, format: true,
     },
   });
 
@@ -319,7 +341,8 @@ export async function sendConfirmationEmail(eventId: string, email: string, name
     eventDate, eventTime,
     eventTimezone: eventForEmail.timezone,
     venueName: eventForEmail.venueName || undefined,
-    address: eventForEmail.address || undefined,
+    address: eventForEmail.address?.split("|||")[0] || undefined,
+    mapUrl: eventForEmail.venueMapUrl || undefined,
     format: eventForEmail.format,
     qrToken,
     googleCalendarUrl: googleCalUrl,

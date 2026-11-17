@@ -108,8 +108,8 @@ export async function middleware(request: NextRequest) {
         pathname.startsWith('/api/admin/data-retention') ||
         pathname.startsWith('/api/webhook');
       // RFC 8058 one-click unsubscribe: mail providers POST server-to-server. The route verifies the signed token.
-      const isSignedUnsubscribe = (pathname === '/api/founder/email-preferences' || pathname === '/api/events/unsubscribe' || pathname === '/api/newsletter/unsubscribe') &&
-        request.nextUrl.searchParams.has('token');
+      const isSignedUnsubscribe = ((pathname === '/api/founder/email-preferences' || pathname === '/api/events/unsubscribe' || pathname === '/api/newsletter/unsubscribe') &&
+        request.nextUrl.searchParams.has('token')) || ((pathname === '/api/events/stop-emails' || pathname === '/api/series/follow/stop') && request.nextUrl.searchParams.has('t'));
       // Talent pool one-click leave (List-Unsubscribe-Post): signed id + t, verified by the route.
       const isTalentPoolLeave = pathname === '/api/talent-pool/leave' &&
         request.nextUrl.searchParams.has('id') && request.nextUrl.searchParams.has('t');
