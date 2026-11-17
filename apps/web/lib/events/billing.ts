@@ -69,6 +69,11 @@ export async function activateOrganizerPayment(orderId: string, paymentId: strin
       });
       await tx.organizerPayment.update({ where: { id: pay.id }, data: { periodStart: new Date(base), periodEnd: end } });
       await featureUpcoming(tx, pay.organizerId, new Date(end.getTime() + HOST_GRACE_DAYS * 864e5));
+    } else if (pay.kind === 'CERTIFICATES' && pay.eventId) {
+      const ev = await tx.event.findFirst({ where: { id: pay.eventId, organizerId: pay.organizerId, deletedAt: null }, select: { id: true } });
+      if (ev) await tx.event.update({ where: { id: ev.id }, data: { certificatesPaidAt: new Date() } });
+      // Event deleted between checkout and payment: refunded like a Boost that can't be applied.
+      else boostVoid = { id: pay.id, organizerId: pay.organizerId, totalPaise: pay.totalPaise };
     } else if (pay.kind === 'BOOST' && pay.eventId) {
       const ev = await tx.event.findFirst({ where: { id: pay.eventId, organizerId: pay.organizerId, deletedAt: null }, select: { endAt: true, featuredUntil: true } });
       if (ev && ev.endAt.getTime() > now) {
@@ -93,15 +98,20 @@ export async function activateOrganizerPayment(orderId: string, paymentId: strin
     await emailInvoice('organizer', done.paymentId).catch((e) => console.error('[invoice] organizer', e));
     // Recorded once, after the payment is committed (checkout callback or webhook, whichever is first).
     const actor = done.by ? { email: done.by } : null;
-    if (done.kind === 'BOOST') {
+    if (done.kind === 'CERTIFICATES') {
+      const ev = done.eventId ? await prisma.event.findUnique({ where: { id: done.eventId }, select: { title: true } }).catch(() => null) : null;
+      await logOrganizerActivity(done.organizerId, 'certificates_purchased', { actor, metadata: { event: ev?.title ?? '', amount: paiseLabel(done.totalPaise) } });
+    } else if (done.kind === 'BOOST') {
       const ev = done.eventId ? await prisma.event.findUnique({ where: { id: done.eventId }, select: { title: true } }).catch(() => null) : null;
       await logOrganizerActivity(done.organizerId, 'boost_purchased', { actor, metadata: { event: ev?.title ?? '', amount: paiseLabel(done.totalPaise) } });
     } else {
       await logOrganizerActivity(done.organizerId, 'plan_purchased', { actor, metadata: { plan: `Pro plan${done.cycle === 'ANNUAL' ? ' (1 year)' : ' (30 days)'}`, amount: paiseLabel(done.totalPaise) } });
     }
     // Outside the payment transaction: a slow email or a busy waitlist must never undo a payment.
-    const fill = done.kind === 'BOOST' && done.eventId ? promoteWaitlist(done.eventId) : promoteWaitlistsForOrganizer(done.organizerId);
-    await fill.catch((e) => console.error('promoteWaitlist after payment failed', e));
+    if (done.kind !== 'CERTIFICATES') {
+      const fill = done.kind === 'BOOST' && done.eventId ? promoteWaitlist(done.eventId) : promoteWaitlistsForOrganizer(done.organizerId);
+      await fill.catch((e) => console.error('promoteWaitlist after payment failed', e));
+    }
   }
   return result;
 }

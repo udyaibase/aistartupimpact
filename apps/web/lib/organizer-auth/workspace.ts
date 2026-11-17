@@ -27,9 +27,19 @@ export interface TeamMembership {
 
 /** Active team memberships on other hosts' workspaces, newest first. */
 export async function teamMemberships(ownOrganizerId: string, email: string): Promise<TeamMembership[]> {
-  if (!email) return [];
+  if (!ownOrganizerId) return [];
+  const address = typeof email === "string" ? email.trim() : "";
   const rows = await prisma.eventTeamMember.findMany({
-    where: { email: { equals: email.trim(), mode: "insensitive" }, status: "ACTIVE", organizerId: { not: ownOrganizerId } },
+    // Bound to the account that accepted the invite; older memberships (accepted before that was recorded) still
+    // match by email, which is safe now that only confirmed accounts get a session.
+    where: {
+      status: "ACTIVE",
+      organizerId: { not: ownOrganizerId },
+      OR: [
+        { memberOrganizerId: ownOrganizerId },
+        ...(address ? [{ memberOrganizerId: null, email: { equals: address, mode: "insensitive" as const } }] : []),
+      ],
+    },
     orderBy: [{ acceptedAt: "desc" }, { createdAt: "desc" }],
     select: {
       id: true, organizerId: true, role: true,

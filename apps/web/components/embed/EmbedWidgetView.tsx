@@ -149,7 +149,9 @@ export default function EmbedWidgetView({ config: initialConfig, events, pastEve
       setConfig((c) => ({ ...c, ...patch }));
     }
     window.addEventListener("message", onMessage);
-    if (window.parent !== window) window.parent.postMessage({ type: "udyaibase:preview-ready" }, window.location.origin);
+    // Only Udyaibase's own preview listens for this. On a company's website the parent is another origin, and
+    // posting to it just logged "target origin does not match" warnings in their console.
+    if (parentIsUdyaibase()) window.parent.postMessage({ type: "udyaibase:preview-ready" }, window.location.origin);
     return () => window.removeEventListener("message", onMessage);
   }, []);
 
@@ -427,3 +429,12 @@ html, body { background: transparent !important; }
 .embed-root .embed-input[aria-invalid="true"] { border-color: #dc2626; }
 @media (prefers-reduced-motion: reduce) { .embed-root * { transition: none !important; animation: none !important; } }
 `;
+
+/** True when this widget is framed by a Udyaibase page (the portal preview), not by a company's website. */
+function parentIsUdyaibase(): boolean {
+  try {
+    return window.parent !== window && window.parent.location.origin === window.location.origin;
+  } catch {
+    return false; // reading another origin's location throws: a company's website
+  }
+}

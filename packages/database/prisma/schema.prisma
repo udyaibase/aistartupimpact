@@ -2431,8 +2431,10 @@ model EventOrganizer {
   sessionsValidAfter DateTime?
 
   // Account lifecycle
-  deactivatedAt DateTime?
-  deletedAt     DateTime?
+  deactivatedAt       DateTime?
+  deletedAt           DateTime?
+  /// Deletion requested: the account is deactivated and is removed for good at this time unless reactivated.
+  deletionScheduledAt DateTime?
 
   // Plan (Free / Pro). A Pro plan past planExpiresAt counts as Free.
   plan                OrganizerPlan        @default(FREE)
@@ -2479,15 +2481,40 @@ model EventOrganizer {
   unifiedUser   UnifiedUser? @relation("OrganizerToUnified", fields: [unifiedUserId], references: [id], onDelete: SetNull)
 
   // Relations
-  events      Event[]
-  sessions    EventOrganizerSession[]
-  teamMembers EventTeamMember[]
-  widgets     EmbedWidget[]
-  payments    OrganizerPayment[]
-  campaigns   EventEmailCampaign[]
+  events       Event[]
+  sessions     EventOrganizerSession[]
+  teamMembers  EventTeamMember[]
+  widgets      EmbedWidget[]
+  payments     OrganizerPayment[]
+  campaigns    EventEmailCampaign[]
+  series       EventSeries[]
+  integrations OrganizerIntegration[]
 
   @@index([status])
   @@index([deactivatedAt])
+}
+
+/// A workspace owner handing the workspace to one of its Admins. The Admin accepts from an emailed link; on accept
+/// the Admin takes over the workspace's sign-in and the old owner gets an account of their own, kept as an Admin.
+model OrganizerOwnershipTransfer {
+  id            String    @id @default(dbgenerated("gen_random_uuid()"))
+  /// The workspace (EventOrganizer) being handed over.
+  organizerId   String
+  /// The Admin's team membership and own account at the time of the request.
+  toMemberId    String
+  toAccountId   String
+  toEmail       String
+  /// sha256 of the link token.
+  tokenHash     String    @unique
+  /// PENDING | ACCEPTED | CANCELLED | EXPIRED
+  status        String    @default("PENDING")
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
+  decidedAt     DateTime?
+  /// After acceptance: the account the previous owner now signs in with.
+  previousOwnerAccountId String?
+
+  @@index([organizerId, status])
 }
 
 model EventOrganizerSession {
@@ -2498,6 +2525,8 @@ model EventOrganizerSession {
   ipAddress   String?
   userAgent   String?
   createdAt   DateTime       @default(now())
+  /// Last request on this session (updated at most every few minutes), for the signed-in devices list.
+  lastSeenAt  DateTime?
   organizer   EventOrganizer @relation(fields: [organizerId], references: [id], onDelete: Cascade)
 
   @@index([organizerId])
@@ -2573,6 +2602,8 @@ model EventTeamMember {
   status       TeamMemberStatus @default(PENDING)
   inviteToken  String           @unique
   expiresAt    DateTime
+  /// The organizer account that accepted the invite; access follows this account, not the email address.
+  memberOrganizerId String?
   passwordHash String?
   acceptedAt   DateTime?
   createdAt    DateTime         @default(now())
@@ -2583,6 +2614,7 @@ model EventTeamMember {
 
   @@unique([organizerId, email])
   @@index([email])
+  @@index([memberOrganizerId])
   @@index([inviteToken])
   @@index([organizerId])
 }
@@ -2855,6 +2887,8 @@ model Event {
   // Location (in-person/hybrid)
   venueName                   String?
   address                     String?
+  /// Map link for the venue (Google Maps etc.), sent to registered attendees with the address.
+  venueMapUrl                 String?
   latitude                    Float?
   longitude                   Float?
   // Virtual (virtual/hybrid)
@@ -2906,8 +2940,41 @@ model Event {
   slugHistory     EventSlugHistory[]
   teamAssignments EventTeamAssignment[]
 
-  siteAnnouncements SiteAnnouncement[]
-  savedBy           SavedEvent[]
+  // After the event
+  /// Certificate design and rules: { template, audience, signerName, signerTitle, signatureUrl, autoIssue }.
+  certificateSettings Json?
+  /// Certificates bought for this one event (Free hosts; Pro hosts have them included).
+  certificatesPaidAt  DateTime?
+  /// Follow-up emails: { auto, attendedSubject, attendedBody, missedSubject, missedBody, includeMissed }.
+  followUpSettings    Json?
+  /// When the automatic follow-up went out (so it's sent once).
+  followUpAutoSentAt  DateTime?
+  /// Feedback survey: { enabled, questions: string[] (up to 3 short-answer questions) }.
+  feedbackSettings    Json?
+  /// Recap shown on the event page after it ends: a few lines of highlights.
+  recapSummary        String?
+  /// Recap links: [{ kind: "recording" | "slides" | "other", title, url }], up to 10.
+  recapLinks          Json?
+  /// The day-after summary email to the host went out.
+  summarySentAt       DateTime?
+  /// Agenda tracks in display order, e.g. ["Main stage", "Workshop room"]. Empty = one track.
+  agendaTracks        String[]              @default([])
+  /// Call for speakers: { open, closesAt, intro, formats: string[] }.
+  cfpSettings         Json?
+  /// Part of a series ("Bengaluru AI Meetup #42").
+  seriesId            String?
+  series              EventSeries?          @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+  /// When followers of the series were emailed about this event (once).
+  seriesAnnouncedAt   DateTime?
+  /// Meeting made through a connected Zoom or Google account ("zoom" | "google"), so it can follow time changes.
+  meetingProvider     String?
+  meetingExternalId   String?
+  sponsors            EventSponsor[]
+  talkSubmissions     EventTalkSubmission[]
+  feedback            EventFeedback[]
+  certificates        EventCertificate[]
+  siteAnnouncements   SiteAnnouncement[]
+  savedBy             SavedEvent[]
 
   @@index([status, visibility])
   @@index([startAt])
@@ -2933,17 +3000,22 @@ model EventSlugHistory {
 }
 
 model EventSpeaker {
-  id          String   @id @default(dbgenerated("gen_random_uuid()"))
-  eventId     String
-  name        String
-  title       String?
-  company     String?
-  headshotUrl String?
-  bio         String?
-  talkTitle   String?
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(dbgenerated("gen_random_uuid()"))
+  eventId      String
+  name         String
+  title        String?
+  company      String?
+  headshotUrl  String?
+  bio          String?
+  talkTitle    String?
+  /// Private: for the speaker's portal link and emails (never shown publicly).
+  email        String?
+  /// Talk submission this speaker came from (call for speakers), if any.
+  submissionId String?
+  slidesUrl    String?
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   event       Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
   agendaItems EventAgendaItem[]
@@ -2952,17 +3024,22 @@ model EventSpeaker {
 }
 
 model EventAgendaItem {
-  id          String   @id @default(dbgenerated("gen_random_uuid()"))
-  eventId     String
-  speakerId   String?
-  dayNumber   Int      @default(1)
-  startTime   String // "09:00" format for flexible time display
-  endTime     String // "10:00"
-  title       String
-  description String?
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(dbgenerated("gen_random_uuid()"))
+  eventId      String
+  speakerId    String?
+  dayNumber    Int      @default(1)
+  startTime    String // "09:00" format for flexible time display
+  endTime      String // "10:00"
+  title        String
+  description  String?
+  /// Track name (one of the event's agendaTracks); null = all tracks / single track.
+  track        String?
+  /// After the event: replay (YouTube, Vimeo, Drive) and slides for this session.
+  recordingUrl String?
+  slidesUrl    String?
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   event   Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
   speaker EventSpeaker? @relation(fields: [speakerId], references: [id], onDelete: SetNull)
@@ -2999,6 +3076,8 @@ model EventCustomQuestion {
   required     Boolean                 @default(false)
   sortOrder    Int                     @default(0)
   createdAt    DateTime                @default(now())
+  /// Removed by the host after people answered it: kept (with the answers) for exports, no longer asked.
+  hiddenAt     DateTime?
 
   event   Event                     @relation(fields: [eventId], references: [id], onDelete: Cascade)
   answers EventRegistrationAnswer[]
@@ -3054,11 +3133,15 @@ model EventRegistration {
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
 
+  /// Asked not to get further emails from this host about this event (follow-ups, surveys).
+  hostEmailsOptOutAt DateTime?
   // Relations
-  event       Event                     @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  ticketTier  EventTicketTier?          @relation(fields: [ticketTierId], references: [id], onDelete: SetNull)
-  embedWidget EmbedWidget?              @relation(fields: [embedWidgetId], references: [id], onDelete: SetNull)
-  answers     EventRegistrationAnswer[]
+  event              Event                     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  ticketTier         EventTicketTier?          @relation(fields: [ticketTierId], references: [id], onDelete: SetNull)
+  embedWidget        EmbedWidget?              @relation(fields: [embedWidgetId], references: [id], onDelete: SetNull)
+  answers            EventRegistrationAnswer[]
+  certificate        EventCertificate?
+  feedback           EventFeedback?
 
   @@unique([eventId, guestEmail]) // Prevent duplicate registrations by email per event
   @@index([eventId])
@@ -3068,6 +3151,137 @@ model EventRegistration {
   @@index([status])
   @@index([deletedAt])
   @@index([razorpayOrderId])
+}
+
+/// A certificate of attendance/participation. The code is random and unguessable; the public verify page shows
+/// only the name, event and date.
+model EventCertificate {
+  id             String    @id @default(cuid())
+  code           String    @unique
+  eventId        String
+  registrationId String    @unique
+  /// Name printed on the certificate, frozen at issue time.
+  recipientName  String
+  issuedAt       DateTime  @default(now())
+  revokedAt      DateTime?
+
+  event        Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  registration EventRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+}
+
+/// One attendee's feedback on an event, from the signed link in the follow-up email (no sign-in needed).
+model EventFeedback {
+  id             String   @id @default(cuid())
+  eventId        String
+  registrationId String   @unique
+  /// 1-5
+  rating         Int
+  /// 0-10 "how likely are you to recommend"
+  recommend      Int?
+  /// Answers to the host's short questions, in order: [{ question, answer }]
+  answers        Json?
+  comment        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  event        Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  registration EventRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+}
+
+/// A talk proposed through an event's call for speakers.
+model EventTalkSubmission {
+  id          String    @id @default(cuid())
+  eventId     String
+  name        String
+  email       String
+  company     String?
+  jobTitle    String?
+  bio         String?
+  headshotUrl String?
+  linkedinUrl String?
+  title       String
+  abstract    String
+  /// "Talk", "Workshop", "Panel", "Lightning talk"...
+  format      String?
+  track       String?
+  /// SUBMITTED | ACCEPTED | WAITLISTED | REJECTED
+  status      String    @default("SUBMITTED")
+  /// Reviewer rating 1-5 and private notes (never shown to the speaker).
+  rating      Int?
+  notes       String?
+  reviewedAt  DateTime?
+  /// Speaker created when accepted.
+  speakerId   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, email, title])
+  @@index([eventId, status])
+}
+
+/// A sponsor shown on an event's page and recap (Pro).
+model EventSponsor {
+  id          String   @id @default(cuid())
+  eventId     String
+  name        String
+  /// GOLD | SILVER | BRONZE | PARTNER
+  tier        String   @default("PARTNER")
+  logoUrl     String?
+  websiteUrl  String?
+  /// Linked startup from the Udyaibase directory, if any.
+  startupId   String?
+  sortOrder   Int      @default(0)
+  impressions Int      @default(0)
+  clicks      Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+}
+
+/// A run of related events ("Bengaluru AI Meetup #41, #42..."), each still its own event.
+model EventSeries {
+  id               String    @id @default(cuid())
+  organizerId      String
+  slug             String    @unique
+  name             String
+  description      String?
+  coverImageUrl    String?
+  /// Repeat rule: { freq: "WEEKLY" | "MONTHLY", interval, weekday?, monthWeek?, createAheadDays, templateEventId }.
+  recurrence       Json?
+  /// Last date a repeat was created for (so each date is created once).
+  lastGeneratedFor DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  organizer EventOrganizer        @relation(fields: [organizerId], references: [id], onDelete: Cascade)
+  events    Event[]
+  followers EventSeriesFollower[]
+
+  @@index([organizerId])
+}
+
+/// Someone who wants an email when the next event in a series opens. Double opt-in.
+model EventSeriesFollower {
+  id             String    @id @default(cuid())
+  seriesId       String
+  email          String
+  confirmedAt    DateTime?
+  unsubscribedAt DateTime?
+  createdAt      DateTime  @default(now())
+
+  series EventSeries @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+
+  @@unique([seriesId, email])
+  @@index([seriesId])
 }
 
 model EventRegistrationAnswer {
@@ -3158,6 +3372,8 @@ model EventSubscriberInterest {
 model EventEmailCampaign {
   id             String              @id @default(dbgenerated("gen_random_uuid()"))
   eventId        String? // null for non-event campaigns
+  /// null for promotions; "FOLLOW_UP" for after-event emails to the event's own registrants.
+  kind           String?
   subject        String
   bodyHtml       String?
   bodyJson       Json? // React Email template data
@@ -4425,4 +4641,26 @@ model JobBoardCareersSubscriber {
 
   @@unique([employerId, email])
   @@index([employerId, confirmedAt])
+}
+
+/// A workspace's connected Zoom or Google account, used to create meeting links. Tokens are encrypted.
+model OrganizerIntegration {
+  id               String    @id @default(cuid())
+  organizerId      String
+  /// "zoom" | "google"
+  provider         String
+  accountEmail     String?
+  accessTokenEnc   String
+  refreshTokenEnc  String?
+  expiresAt        DateTime?
+  scope            String?
+  /// Set when the provider rejected our tokens; the host needs to connect again.
+  needsReconnectAt DateTime?
+  connectedBy      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  organizer EventOrganizer @relation(fields: [organizerId], references: [id], onDelete: Cascade)
+
+  @@unique([organizerId, provider])
 }

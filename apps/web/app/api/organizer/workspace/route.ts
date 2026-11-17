@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@udyaibase/database";
 import { getOrganizerSession } from "@/lib/organizer-auth";
+import { logOrganizerActivity, organizerActor } from "@/lib/workspace-activity";
+import { maskEmail } from "@/lib/mask";
 import { activeMembership, OWN_WORKSPACE, teamMemberships, WORKSPACE_COOKIE } from "@/lib/organizer-auth/workspace";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +33,24 @@ export async function POST(request: NextRequest) {
   }
   const res = NextResponse.json({ success: true, active: workspace });
   res.cookies.set(WORKSPACE_COOKIE, workspace, {
+    httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 90,
+  });
+  return res;
+}
+
+/** Leave another host's team: { workspace: <host id> }. The person goes back to their own workspace. */
+export async function DELETE(request: NextRequest) {
+  const session = await getOrganizerSession();
+  if (!session) return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 });
+  const { workspace } = await request.json().catch(() => ({}));
+  const membership = (await teamMemberships(session.id, session.email)).find((m) => m.organizerId === workspace);
+  if (!membership) return NextResponse.json({ success: false, error: "You’re not on that team." }, { status: 404 });
+
+  await prisma.eventTeamMember.update({ where: { id: membership.teamMemberId }, data: { status: "REVOKED" } });
+  await logOrganizerActivity(membership.organizerId, "team_member_left", { actor: organizerActor(session), request, metadata: { member: maskEmail(session.email) } });
+
+  const res = NextResponse.json({ success: true, active: OWN_WORKSPACE });
+  res.cookies.set(WORKSPACE_COOKIE, OWN_WORKSPACE, {
     httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 90,
   });
   return res;

@@ -28,17 +28,26 @@ async function getAuthenticatedUnifiedUserId(): Promise<string | null> {
   try {
     const { payload } = await jwtVerify(userToken, USER_JWT_SECRET);
     const userId = (payload as any).userId;
-    const email = (payload as any).email;
+    const email = typeof (payload as any).email === 'string' ? ((payload as any).email as string).toLowerCase() : '';
+    if (!email || typeof userId !== 'string') return null;
 
-    if (!email) return null;
-
-    // Find UnifiedUser by email
-    const unifiedUser = await prisma.unifiedUser.findUnique({ where: { email: email.toLowerCase() } });
+    const unifiedUser = await prisma.unifiedUser.findUnique({ where: { email } });
     if (unifiedUser) return unifiedUser.id;
 
-    // No UnifiedUser yet — this shouldn't happen after migration, but handle gracefully
-    return null;
-  } catch {
+    // Site accounts (Google or email sign-up) never got a unified account, so opening a workspace failed with
+    // "Not authenticated". Create it now, from the signed-in, active site account. Its email is proven: site
+    // sign-up requires the emailed code and Google sign-in requires a Google-verified address.
+    const webUser = await prisma.webUser.findUnique({ where: { id: userId }, select: { email: true, name: true, avatar: true, isActive: true } });
+    if (!webUser || !webUser.isActive || webUser.email.toLowerCase() !== email) return null;
+    const created = await prisma.unifiedUser.upsert({
+      where: { email },
+      update: {},
+      create: { email, name: webUser.name || email.split('@')[0], avatar: webUser.avatar, emailVerified: true },
+      select: { id: true },
+    });
+    return created.id;
+  } catch (err) {
+    console.error('[workspace/unlock] could not resolve the account:', err instanceof Error ? err.message : err);
     return null;
   }
 }
@@ -53,7 +62,7 @@ export async function POST(request: NextRequest) {
 
   const unifiedUserId = await getAuthenticatedUnifiedUserId();
   if (!unifiedUserId) {
-    return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 });
+    return NextResponse.json({ success: false, error: "Please sign in again to continue." }, { status: 401 });
   }
 
   const { workspace } = await request.json();

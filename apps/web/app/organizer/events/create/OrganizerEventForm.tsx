@@ -13,6 +13,10 @@ import {
 } from "lucide-react";
 import CitySelect from "@/components/events/CitySelect";
 
+import ImageCropDialog from "@/components/organizer/ImageCropDialog";
+import MeetingLinkButtons from "@/components/organizer/MeetingLinkButtons";
+import { EVENT_DESCRIPTION_MAX } from "@/lib/events/limits";
+import { cleanTimeZone, DEFAULT_EVENT_TIMEZONE, utcToZoned, zonedToUtc } from "@/lib/events/zoned-time";
 const RichTextEditor = dynamic(() => import("@/components/organizer/RichTextEditor"), { ssr: false });
 
 const CATEGORIES = [
@@ -54,7 +58,7 @@ const TIMEZONES = [
   { v: "Pacific/Noumea", l: "(GMT+11:00) New Caledonia" },
   { v: "Pacific/Auckland", l: "(GMT+12:00) Auckland" },
 ];
-const MAX_DESC = 2000;
+const MAX_DESC = EVENT_DESCRIPTION_MAX;
 const STEPS = [
   { num: 1, label: "Basics" },
   { num: 2, label: "Date & time" },
@@ -108,7 +112,10 @@ interface EventData {
   timezone: string;
   venueName?: string | null;
   address?: string | null;
+  venueMapUrl?: string | null;
   meetingLink?: string | null;
+  meetingProvider?: string | null;
+  meetingExternalId?: string | null;
   coverImageUrl?: string | null;
   description?: any;
   capacity?: number | null;
@@ -116,10 +123,10 @@ interface EventData {
   approvalRequired: boolean;
   metaTitle?: string | null;
   metaDescription?: string | null;
-  speakers?: { name: string; title?: string | null; company?: string | null; headshotUrl?: string | null; bio?: string | null }[];
-  agendaItems?: { startTime: string; title: string; description?: string | null }[];
+  speakers?: { id?: string; name: string; title?: string | null; company?: string | null; headshotUrl?: string | null; bio?: string | null }[];
+  agendaItems?: { startTime: string; endTime?: string | null; dayNumber?: number | null; title: string; description?: string | null }[];
   ticketTiers?: { id?: string; name: string; tierType: string; quantity?: number | null; description?: string | null; priceCents?: number }[];
-  customQuestions?: { questionText: string; questionType: string; required: boolean; options?: any }[];
+  customQuestions?: { id?: string; questionText: string; questionType: string; required: boolean; options?: any }[];
   tags?: { tag: { name: string } }[];
   startupId?: string | null;
 }
@@ -144,8 +151,10 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
   });
 
   // Helper to extract date/time from ISO string
-  const extractDate = (iso?: string) => iso ? new Date(iso).toISOString().slice(0, 10) : "";
-  const extractTime = (iso?: string) => iso ? new Date(iso).toTimeString().slice(0, 5) : "";
+  // Saved times are shown in the event's own time zone (IST by default), not the computer's.
+  const eventTz = cleanTimeZone(event?.timezone);
+  const extractDate = (iso?: string) => utcToZoned(iso, eventTz).date;
+  const extractTime = (iso?: string) => utcToZoned(iso, eventTz).time;
 
   // 1. Basics
   const [title, setTitle] = useState(event?.title ?? "");
@@ -162,30 +171,34 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
   const [endTime, setEndTime] = useState(extractTime(event?.endAt));
   const [endDate, setEndDate] = useState(() => {
     if (!event?.startAt || !event?.endAt) return "";
-    const sd = new Date(event.startAt).toISOString().slice(0, 10);
-    const ed = new Date(event.endAt).toISOString().slice(0, 10);
+    const sd = extractDate(event.startAt);
+    const ed = extractDate(event.endAt);
     return sd !== ed ? ed : "";
   });
   const [multiDay, setMultiDay] = useState(() => {
     if (!event?.startAt || !event?.endAt) return tpl?.multiDay ?? false;
-    return new Date(event.startAt).toISOString().slice(0, 10) !== new Date(event.endAt).toISOString().slice(0, 10);
+    return extractDate(event.startAt) !== extractDate(event.endAt);
   });
-  const [timezone, setTimezone] = useState(() => {
-    if (event?.timezone) return event.timezone;
-    try {
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      if (tz) return tz;
-    } catch {}
-    return "Asia/Kolkata";
-  });
+  /** Days the agenda can use (1 for a single-day event, up to 14). */
+  const agendaDays = (() => {
+    if (!multiDay || !startDate || !endDate) return 1;
+    const n = Math.round((Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000) + 1;
+    return Math.min(14, Math.max(1, Number.isFinite(n) ? n : 1));
+  })();
+  // India Standard Time unless the event already has its own (most events on Udyaibase are in India).
+  const [timezone, setTimezone] = useState(() => (event?.timezone ? cleanTimeZone(event.timezone) : DEFAULT_EVENT_TIMEZONE));
 
   // 3. Location
   const [format, setFormat] = useState(event?.format ?? tpl?.format ?? "IN_PERSON");
   const [venueName, setVenueName] = useState(event?.venueName ?? "");
   const [address, setAddress] = useState(event?.address?.split("|||")[0] ?? "");
   const [city, setCity] = useState("");
-  const [venueMapUrl, setVenueMapUrl] = useState(event?.address?.split("|||")[1] ?? "");
+  const [venueMapUrl, setVenueMapUrl] = useState(event?.venueMapUrl ?? event?.address?.split("|||")[1] ?? "");
   const [meetingLink, setMeetingLink] = useState(event?.meetingLink ?? "");
+  // Set when the link was made with a connected Zoom/Google account (so time changes move the meeting too).
+  const [meeting, setMeeting] = useState<{ provider: string; externalId: string; proof?: string } | null>(
+    event?.meetingProvider && event?.meetingExternalId ? { provider: event.meetingProvider, externalId: event.meetingExternalId } : null,
+  );
 
   // 4. Tickets
   const [unlimited, setUnlimited] = useState(event ? !event.capacity : tpl?.unlimited ?? true);
@@ -217,17 +230,35 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
     if (typeof event.description === "string") return event.description;
     return "";
   });
-  const [speakers, setSpeakers] = useState<{ name: string; title: string; company: string; linkedin: string; photo: string; photoError: string }[]>(
-    event?.speakers?.map(s => ({ name: s.name, title: s.title ?? "", company: s.company ?? "", linkedin: s.bio ?? "", photo: s.headshotUrl ?? "", photoError: "" })) ?? []
+  const [speakers, setSpeakers] = useState<{ id?: string; name: string; title: string; company: string; linkedin: string; photo: string; photoError: string; uploading?: boolean }[]>(
+    event?.speakers?.map(s => ({ id: s.id, name: s.name, title: s.title ?? "", company: s.company ?? "", linkedin: s.bio ?? "", photo: s.headshotUrl ?? "", photoError: "" })) ?? []
   );
-  const [agenda, setAgenda] = useState<{ time: string; title: string; speaker: string }[]>(
-    event?.agendaItems?.map(a => ({ time: a.startTime, title: a.title, speaker: a.description ?? "" })) ?? []
+  /** Speaker photo waiting in the crop dialog, before upload. */
+  const [cropFor, setCropFor] = useState<{ index: number; file: File } | null>(null);
+  const setSpeakerPhoto = (index: number, patch: { photo?: string; photoError: string; uploading?: boolean }) =>
+    setSpeakers((list) => list.map((sp, j) => (j === index ? { ...sp, ...patch } : sp)));
+  async function uploadSpeakerPhoto(index: number, blob: Blob) {
+    setSpeakerPhoto(index, { photoError: "", uploading: true });
+    try {
+      const fd = new FormData();
+      fd.append("file", new File([blob], `speaker-${index + 1}.jpg`, { type: "image/jpeg" }));
+      const r = await fetch("/api/organizer/upload", { method: "POST", body: fd });
+      const d = await r.json().catch(() => ({}));
+      setSpeakerPhoto(index, d.success ? { photo: d.url, photoError: "", uploading: false } : { photoError: d.error || "Upload failed", uploading: false });
+    } catch {
+      setSpeakerPhoto(index, { photoError: "Upload failed. Check your connection.", uploading: false });
+    }
+  }
+
+  // Agenda: built here when creating; an existing event's agenda (days, tracks, recordings) is edited on its own page.
+  const [agenda, setAgenda] = useState<{ day: number; time: string; endTime: string; title: string; speaker: string }[]>(
+    event?.agendaItems?.map(a => ({ day: a.dayNumber ?? 1, time: a.startTime, endTime: a.endTime ?? "", title: a.title, speaker: "" })) ?? []
   );
   const [contactEmail, setContactEmail] = useState("");
   const [website, setWebsite] = useState("");
   const [socialLinks, setSocialLinks] = useState({ twitter: "", linkedin: "", instagram: "" });
-  const [customQuestions, setCustomQuestions] = useState<{ text: string; type: string; required: boolean; options: string }[]>(
-    event?.customQuestions?.map(q => ({ text: q.questionText, type: q.questionType, required: q.required, options: Array.isArray(q.options) ? q.options.join(", ") : "" })) ?? []
+  const [customQuestions, setCustomQuestions] = useState<{ id?: string; text: string; type: string; required: boolean; options: string }[]>(
+    event?.customQuestions?.map(q => ({ id: q.id, text: q.questionText, type: q.questionType, required: q.required, options: Array.isArray(q.options) ? q.options.join(", ") : "" })) ?? []
   );
   const [seoTitle, setSeoTitle] = useState(event?.metaTitle ?? "");
   const [seoDescription, setSeoDescription] = useState(event?.metaDescription ?? "");
@@ -337,6 +368,15 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
     if (!startAtISO) errs.startAt = "Start date/time is required";
     if (!endAtISO) errs.endAt = "End time is required";
     if (startAtISO && endAtISO && new Date(endAtISO) <= new Date(startAtISO)) errs.endAt = "End must be after start";
+    if (!isEdit) {
+      const bad = agenda.findIndex(a => (a.title.trim() || a.time) && (!a.title.trim() || !a.time || (a.endTime && a.endTime <= a.time)));
+      if (bad >= 0) {
+        const a = agenda[bad];
+        setError(`Agenda, session ${bad + 1}: ${!a.title.trim() ? "add a title" : !a.time ? "add a start time" : "it ends before it starts"}.`);
+        goToStep(5);
+        return;
+      }
+    }
     if (Object.keys(errs).length > 0) {
       setFieldErrors(errs);
       if (errs.title) goToStep(1);
@@ -346,12 +386,16 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
     setLoading(true);
     const payload = {
       title, slug: eventSlug, subtitle, category, format, timezone,
-      startAt: new Date(startAtISO).toISOString(),
-      endAt: new Date(endAtISO).toISOString(),
-      venueName, address: venueMapUrl ? `${address}|||${venueMapUrl}` : address, meetingLink,
+      // The typed date and time are in the chosen time zone, whatever zone this computer is in.
+      startAt: zonedToUtc(startDate, startTime, timezone)!.toISOString(),
+      endAt: zonedToUtc(multiDay ? endDate : startDate, endTime, timezone)!.toISOString(),
+      venueName, address, venueMapUrl, meetingLink,
+      meetingProvider: meeting?.provider ?? null, meetingExternalId: meeting?.externalId ?? null, meetingProof: meeting?.proof ?? null,
       description, capacity: unlimited ? null : capacity, coverImageUrl, visibility,
       approvalRequired,
-      tags: topics.join(", "), contactEmail, website, city, speakers, agenda, socialLinks,
+      // New events send the agenda built here. Existing events never resend it (it's edited on its own page), so saving can't wipe it.
+      ...(!isEdit ? { agenda: agenda.filter(a => a.title.trim() || a.time).map(a => ({ dayNumber: a.day, startTime: a.time, endTime: a.endTime, title: a.title.trim(), speaker: a.speaker })) } : {}),
+      tags: topics.join(", "), contactEmail, website, city, speakers, socialLinks,
       customQuestions, ticketTiers,
       seoTitle: seoTitle || undefined,
       seoDescription: seoDescription || undefined,
@@ -693,7 +737,7 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
                           {TIMEZONES.map(t => <option key={t.v} value={t.v}>{t.l}</option>)}
                         </select>
                         <span className="text-xs text-gray-400 font-jakarta flex items-center gap-1 whitespace-nowrap">
-                          <Clock className="w-3 h-3" /> Detected from your browser
+                          <Clock className="w-3 h-3" /> {timezone === DEFAULT_EVENT_TIMEZONE ? "India Standard Time (default)" : "Times are in this time zone"}
                         </span>
                       </div>
                     </div>
@@ -762,7 +806,16 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
                     {showVirtual && (
                       <div>
                         <label className="text-sm font-semibold text-gray-700 dark:text-gray-200 font-jakarta mb-1.5 block">Meeting link</label>
-                        <input type="url" value={meetingLink} onChange={e => setMeetingLink(e.target.value)} placeholder="Zoom, Google Meet or other link" className={ic} />
+                        <input type="url" value={meetingLink} onChange={e => { setMeetingLink(e.target.value); setMeeting(null); }} placeholder="Zoom, Google Meet or other link" className={ic} />
+                        <MeetingLinkButtons
+                          title={title}
+                          startAt={startDate && startTime ? zonedToUtc(startDate, startTime, timezone)?.toISOString() ?? "" : ""}
+                          endAt={startDate && endTime ? zonedToUtc(multiDay ? endDate : startDate, endTime, timezone)?.toISOString() ?? "" : ""}
+                          timezone={timezone}
+                          eventId={event?.id}
+                          onCreated={(m) => { setMeetingLink(m.joinUrl); setMeeting({ provider: m.provider, externalId: m.externalId, proof: m.meetingProof }); }}
+                        />
+                        {meeting && <p className="mt-1.5 text-xs text-gray-500">If you change the date or time, we’ll update this {meeting.provider === "zoom" ? "Zoom meeting" : "Google Meet"} too.</p>}
                       </div>
                     )}
                   </div>
@@ -910,22 +963,18 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
                               {s.photo ? <Image src={s.photo} alt="" width={56} height={56} unoptimized className="w-full h-full object-cover" /> : <User className="w-5 h-5 text-gray-400" />}
                             </div>
                             <div>
-                              <input type="file" accept="image/jpeg,image/png,image/webp" id={`speaker-photo-${i}`} className="hidden" onChange={async e => {
-                                const file = e.target.files?.[0]; if (!file) return;
-                                const u = [...speakers];
-                                if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) { u[i] = { ...u[i], photoError: "Only JPG, PNG, WebP" }; setSpeakers(u); e.target.value = ""; return; }
-                                if (file.size > 2 * 1024 * 1024) { u[i] = { ...u[i], photoError: "Max 2MB" }; setSpeakers(u); e.target.value = ""; return; }
-                                u[i] = { ...u[i], photoError: "" }; setSpeakers(u);
-                                const fd = new FormData(); fd.append("file", file);
-                                const r = await fetch("/api/organizer/upload", { method: "POST", body: fd });
-                                const d = await r.json();
-                                const u2 = [...speakers];
-                                if (d.success) u2[i] = { ...u2[i], photo: d.url, photoError: "" };
-                                else u2[i] = { ...u2[i], photoError: d.error || "Upload failed" };
-                                setSpeakers(u2); e.target.value = "";
+                              <input type="file" accept="image/jpeg,image/png,image/webp" id={`speaker-photo-${i}`} className="hidden" onChange={e => {
+                                const file = e.target.files?.[0];
+                                e.target.value = "";
+                                if (!file) return;
+                                if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) { setSpeakerPhoto(i, { photoError: "Only JPG, PNG, WebP" }); return; }
+                                // The crop makes a small square image, so larger originals (phone photos) are fine here.
+                                if (file.size > 15 * 1024 * 1024) { setSpeakerPhoto(i, { photoError: "Max 15MB" }); return; }
+                                setSpeakerPhoto(i, { photoError: "" });
+                                setCropFor({ index: i, file });
                               }} />
                               <label htmlFor={`speaker-photo-${i}`} className="inline-flex items-center gap-1.5 min-h-[40px] px-3.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-600 rounded-md text-sm font-semibold text-gray-600 dark:text-gray-300 font-jakarta cursor-pointer hover:bg-gray-100 transition-colors">
-                                <Upload className="w-3 h-3" /> {s.photo ? "Change" : "Upload photo"}
+                                {s.uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} {s.uploading ? "Uploading..." : s.photo ? "Change" : "Upload photo"}
                               </label>
                               {s.photoError && <p className="text-xs text-red-500 font-jakarta mt-1">{s.photoError}</p>}
                             </div>
@@ -938,6 +987,69 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
                           </div>
                         </div>
                       ))}
+                    </div>
+
+                    {/* Agenda: built on its own page (days, tracks, session times), so it's never lost when this form saves. */}
+                    <div className="rounded-md border border-gray-200 dark:border-gray-700 p-4">
+                      <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 font-jakarta">Agenda</p>
+                      {event?.id ? (
+                        <>
+                          <p className="mt-1 text-xs text-gray-500 font-jakarta">Sessions with times, days and tracks. Attendees can build their own schedule from it.</p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Link href={`/organizer/events/${event.id}/agenda`} className="inline-flex items-center gap-1.5 min-h-[40px] px-3 rounded-md border border-gray-300 dark:border-gray-600 text-sm font-semibold text-gray-800 dark:text-gray-200 font-jakarta hover:bg-gray-50 dark:hover:bg-gray-800">
+                              <Calendar className="w-4 h-4" /> {agenda.length ? `Edit agenda (${agenda.length} sessions)` : "Add agenda"}
+                            </Link>
+                            <Link href={`/organizer/events/${event.id}/speakers`} className="inline-flex items-center gap-1.5 min-h-[40px] px-3 rounded-md border border-gray-300 dark:border-gray-600 text-sm font-semibold text-gray-800 dark:text-gray-200 font-jakarta hover:bg-gray-50 dark:hover:bg-gray-800">
+                              <Mic className="w-4 h-4" /> Call for speakers
+                            </Link>
+                          </div>
+                          <p className="mt-2 text-xs text-gray-500 font-jakarta">Save your changes here first: those pages open separately.</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="mt-1 text-xs text-gray-500 font-jakarta">Optional. Add sessions now, or later from <strong>Agenda</strong> in the event’s menu, where you can also add tracks.</p>
+                          {agenda.length > 0 && (
+                            <div className="mt-3 space-y-3">
+                              {agenda.map((a, i) => (
+                                <div key={i} className="rounded-md border border-gray-200 dark:border-gray-700 p-3">
+                                  <div className="flex items-start gap-2">
+                                    <input value={a.title} onChange={e => setAgenda(l => l.map((x, j) => j === i ? { ...x, title: e.target.value } : x))} placeholder="Session title *" maxLength={200} aria-label={`Session ${i + 1} title`} className={ic} />
+                                    <button type="button" onClick={() => setAgenda(l => l.filter((_, j) => j !== i))} aria-label={`Remove session ${i + 1}`} className="w-10 h-10 shrink-0 flex items-center justify-center rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 className="w-4 h-4" /></button>
+                                  </div>
+                                  <div className={`mt-2 grid gap-2 ${agendaDays > 1 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2 sm:grid-cols-3"}`}>
+                                    {agendaDays > 1 && (
+                                      <select value={Math.min(a.day, agendaDays)} onChange={e => setAgenda(l => l.map((x, j) => j === i ? { ...x, day: Number(e.target.value) } : x))} aria-label={`Session ${i + 1} day`} className={ic}>
+                                        {Array.from({ length: agendaDays }, (_, d) => <option key={d} value={d + 1}>Day {d + 1}</option>)}
+                                      </select>
+                                    )}
+                                    <label className="block">
+                                      <span className="sr-only">Starts</span>
+                                      <input type="time" value={a.time} onChange={e => setAgenda(l => l.map((x, j) => j === i ? { ...x, time: e.target.value } : x))} aria-label={`Session ${i + 1} start time`} className={ic} />
+                                    </label>
+                                    <label className="block">
+                                      <span className="sr-only">Ends</span>
+                                      <input type="time" value={a.endTime} onChange={e => setAgenda(l => l.map((x, j) => j === i ? { ...x, endTime: e.target.value } : x))} aria-label={`Session ${i + 1} end time`} className={ic} />
+                                    </label>
+                                    <select value={a.speaker} onChange={e => setAgenda(l => l.map((x, j) => j === i ? { ...x, speaker: e.target.value } : x))} aria-label={`Session ${i + 1} speaker`} className={`${ic} col-span-2 sm:col-span-1`}>
+                                      <option value="">No speaker</option>
+                                      {speakers.filter(sp => sp.name.trim()).map(sp => <option key={sp.name} value={sp.name.trim()}>{sp.name.trim()}</option>)}
+                                    </select>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <button type="button" disabled={agenda.length >= 100}
+                            onClick={() => setAgenda(l => {
+                              const last = l[l.length - 1];
+                              // Next session starts when the previous one ends, on the same day.
+                              return [...l, { day: last?.day ?? 1, time: last?.endTime || "", endTime: "", title: "", speaker: "" }];
+                            })}
+                            className="mt-3 inline-flex items-center gap-1 min-h-[40px] px-1 text-sm text-brand font-semibold font-jakarta hover:underline disabled:opacity-50">
+                            <Plus className="w-4 h-4" /> Add session
+                          </button>
+                        </>
+                      )}
                     </div>
 
                     {/* Contact */}
@@ -1246,9 +1358,9 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
                   <div>
                     <h2 className="text-sm font-bold text-gray-900 dark:text-white font-jakarta uppercase tracking-wider mb-4">Agenda</h2>
                     <div className="space-y-0">
-                      {agenda.map((item, i) => (
+                      {agenda.filter(item => item.title.trim()).map((item, i) => (
                         <div key={i} className="flex gap-4 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0">
-                          <span className="text-sm font-semibold text-brand font-jakarta w-16 shrink-0">{item.time || "TBD"}</span>
+                          <span className="text-sm font-semibold text-brand font-jakarta w-20 shrink-0">{agendaDays > 1 ? `D${item.day} ` : ""}{item.time || "TBD"}</span>
                           <div>
                             <p className="text-sm font-semibold text-gray-800 dark:text-white font-jakarta">{item.title}</p>
                             {item.speaker && <p className="text-xs text-gray-500 font-jakarta mt-0.5">{item.speaker}</p>}
@@ -1346,6 +1458,15 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
             </div>
           </div>
         </div>
+      )}
+
+      {cropFor && (
+        <ImageCropDialog
+          file={cropFor.file}
+          title="Adjust speaker photo"
+          onCancel={() => setCropFor(null)}
+          onCropped={(blob) => { const { index } = cropFor; setCropFor(null); void uploadSpeakerPhoto(index, blob); }}
+        />
       )}
     </div>
   );

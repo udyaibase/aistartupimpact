@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { passwordProblem } from "@/lib/password-rules";
 import { verifyTurnstileToken } from "@/lib/turnstile";
 import { prisma } from "@udyaibase/database";
-import { createOrganizerSession, hashPassword, generateToken } from "@/lib/organizer-auth";
+import { hashPassword, normalizeEmail, findOrganizerByEmail } from "@/lib/organizer-auth";
+import { newVerifyToken } from "@/lib/organizer-auth/verify-token";
+import { sendEmailFireAndForget } from "@/lib/email/send";
 import { sendOrganizerVerificationEmail } from "@/lib/organizer-auth/emails";
 import { checkRateLimit, getClientIdentifier } from "@/lib/rate-limit";
-import { authRateLimit } from "@/lib/rate-limit";
+import { authRateLimit, strictRateLimit } from "@/lib/rate-limit";
+
+const SIGNED_UP_MESSAGE = "Check your email. We sent a link to confirm your address: open it, then sign in.";
 import { isDisposableEmail } from "@udyaibase/utils";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +23,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, email, password, company } = body;
+    const { name, password, company } = body;
+    // One form everywhere (trimmed, lower case), so "Bob@x.com" can never be a second account next to "bob@x.com".
+    const email = normalizeEmail(body.email);
     if (!body.turnstileToken) {
       return NextResponse.json({ success: false, error: "CAPTCHA verification required. Please complete the challenge." }, { status: 403 });
     }
@@ -28,7 +34,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Human verification failed. Please try again." }, { status: 403 });
     }
 
-    if (!name || !email || !password) {
+    if (!name || typeof name !== 'string' || !email || !password || typeof password !== 'string') {
       return NextResponse.json({ success: false, error: "Name, email, and password are required." }, { status: 400 });
     }
 
@@ -54,40 +60,54 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Disposable email addresses are not allowed. Please use a permanent email." }, { status: 400 });
     }
 
-    // Check existing
-    const existing = await prisma.eventOrganizer.findUnique({ where: { email } });
-    if (existing) {
-      return NextResponse.json({ success: false, error: "An account with this email already exists. Try signing in." }, { status: 409 });
+    // An account whose email was confirmed is taken. One that never confirmed proves nothing about who owns the
+    // address, so a new sign-up replaces it (new password, old sessions ended) and the confirmation goes out again.
+    const existing = await findOrganizerByEmail(email);
+    // The reply is the same as for a new sign-up, so this form can't be used to learn who has an account. The
+    // real owner gets an email pointing them to sign-in and password reset instead (a few times an hour at most).
+    if (existing && (existing.emailVerified || existing.googleId)) {
+      const { success: maySend } = await checkRateLimit(strictRateLimit, `organizer-signup-exists:${existing.id}`);
+      if (maySend) {
+        const site = process.env.NEXT_PUBLIC_SITE_URL || "https://udyaibase.com";
+        sendEmailFireAndForget({
+          to: existing.email,
+          subject: "You already have an Udyaibase Events account",
+          html: `<p>Someone tried to create an Udyaibase Events account with this email address. You already have one.</p><p><a href="${site}/organizer/login">Sign in</a>, or <a href="${site}/organizer/forgot-password">reset your password</a> if you've forgotten it.</p><p>If this wasn't you, you can ignore this email: nothing has changed on your account.</p>`,
+          type: "security_alert",
+        });
+      }
+      return NextResponse.json({ success: true, needsVerification: true, message: SIGNED_UP_MESSAGE });
     }
 
-    // Create organizer with pending verification
     const passwordHash = await hashPassword(password);
-    const verifyToken = generateToken();
+    // The time is part of the token, so the link can expire; only a hash is stored (see ../verify).
+    const { link: verifyLink, stored: verifyToken } = newVerifyToken();
+    const cleanName = name.trim().slice(0, 100);
+    const cleanCompany = typeof company === 'string' && company.trim() ? company.trim().slice(0, 100) : null;
 
-    const organizer = await prisma.eventOrganizer.create({
-      data: {
-        email,
-        name,
-        passwordHash,
-        company: company || null,
-        emailVerified: false,
-        verifyToken,
-        status: "PENDING_VERIFICATION",
-      },
-    });
+    if (existing) {
+      await prisma.$transaction([
+        prisma.eventOrganizerSession.deleteMany({ where: { organizerId: existing.id } }),
+        prisma.eventOrganizer.update({
+          where: { id: existing.id },
+          data: { email, name: cleanName, passwordHash, company: cleanCompany, verifyToken, failedLoginAttempts: 0, lockedUntil: null },
+        }),
+      ]);
+    } else {
+      await prisma.eventOrganizer.create({
+        data: { email, name: cleanName, passwordHash, company: cleanCompany, emailVerified: false, verifyToken, status: "PENDING_VERIFICATION" },
+      });
+    }
 
-    // Send verification email (fire and forget)
-    sendOrganizerVerificationEmail(email, name, verifyToken).catch((err) => {
+    sendOrganizerVerificationEmail(email, cleanName, verifyLink).catch((err) => {
       console.error("Failed to send verification email:", err);
     });
 
-    // Create session immediately (they can use the platform, but we'll remind them to verify)
-    await createOrganizerSession(organizer.id);
-
+    // No session yet: the portal opens once the email is confirmed.
     return NextResponse.json({
       success: true,
-      data: { id: organizer.id, name: organizer.name, email: organizer.email },
-      message: "Account created! Check your email to verify your address.",
+      needsVerification: true,
+      message: SIGNED_UP_MESSAGE,
     });
   } catch (error: any) {
     console.error("Organizer signup error:", error);

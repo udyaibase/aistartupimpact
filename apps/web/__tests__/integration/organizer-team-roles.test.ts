@@ -23,6 +23,7 @@ vi.mock('@/lib/organizer-auth/require-permission', async () => {
 vi.mock('@/lib/workspace-activity', () => ({ logOrganizerActivity: vi.fn(), organizerActor: () => null }));
 vi.mock('@/lib/events/billing', () => ({ hostPlanStatus: vi.fn(async () => null) }));
 vi.mock('@/lib/email/send', () => ({ sendEmailFireAndForget: vi.fn() }));
+vi.mock('@/lib/rate-limit', () => ({ apiRateLimit: null, checkRateLimit: async () => ({ success: true }), rateLimitMessage: () => '', retryAfterHeaders: () => ({}) }));
 vi.mock('@udyaibase/utils', () => ({ teamInviteHtml: () => '<p>invite</p>' }));
 
 import { GET, POST } from '@/app/api/organizer/team/route';

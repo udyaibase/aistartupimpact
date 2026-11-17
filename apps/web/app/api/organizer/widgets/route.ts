@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
-import { requirePermission } from "@/lib/organizer-auth/require-permission";
+import { requirePermission, canAccessEvent, isEventLimited } from "@/lib/organizer-auth/require-permission";
+import { logOrganizerActivity, organizerActor } from "@/lib/workspace-activity";
 import {
   ensureDefaultWidget, syncWidgetCsp, parseWidgetInput, WidgetInputError,
 } from "@/lib/embed/widgets";
@@ -25,6 +26,7 @@ export async function POST(request: NextRequest) {
   if (result instanceof NextResponse) return result;
   const session = result;
 
+  const limited = isEventLimited(session);
   try {
     const body = await request.json().catch(() => ({}));
     await ensureDefaultWidget(session.organizerId);
@@ -34,7 +36,7 @@ export async function POST(request: NextRequest) {
         where: { id: String(body.forEventId), organizerId: session.organizerId, deletedAt: null },
         select: { id: true, title: true },
       });
-      if (!event) {
+      if (!event || !canAccessEvent(session, event.id)) {
         return NextResponse.json({ success: false, error: "Event not found." }, { status: 404 });
       }
       const existing = await prisma.embedWidget.findFirst({
@@ -58,8 +60,12 @@ export async function POST(request: NextRequest) {
         },
       });
       await syncWidgetCsp(widget);
+      await logOrganizerActivity(session.organizerId, "event_content_changed", { actor: organizerActor(session), request, metadata: { what: "Created a widget", event: event.title } });
       return NextResponse.json({ success: true, data: widget }, { status: 201 });
     }
+
+    // Teammates limited to some events can make a widget for one of their events (above), not workspace-wide ones.
+    if (limited) return NextResponse.json({ success: false, error: "Your role in this workspace doesn’t allow this." }, { status: 403 });
 
     let copyFrom: Record<string, unknown> = {};
     if (body.duplicateOf) {
@@ -81,6 +87,7 @@ export async function POST(request: NextRequest) {
       data: { ...(data as object), organizerId: session.organizerId, allowedDomains: (data.allowedDomains as string[]) ?? [] } as any,
     });
     await syncWidgetCsp(widget);
+    await logOrganizerActivity(session.organizerId, "event_content_changed", { actor: organizerActor(session), request, metadata: { what: `Created the widget “${widget.name}”` } });
     return NextResponse.json({ success: true, data: widget }, { status: 201 });
   } catch (error) {
     if (error instanceof WidgetInputError) {

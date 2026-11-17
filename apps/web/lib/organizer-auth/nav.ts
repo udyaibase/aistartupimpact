@@ -18,6 +18,7 @@ const RULES: Rule[] = [
   { prefix: "/organizer/events/create", need: "events.create" },
   { prefix: "/organizer/events/import", need: "events.create" },
   { prefix: "/organizer/events", need: "events.view" },
+  { prefix: "/organizer/series", need: "events.view" },
   { prefix: "/organizer/attendees", need: "registrations.view" },
   { prefix: "/organizer/check-in", need: "checkin" },
   { prefix: "/organizer/on-site", need: "registrations.manage" },

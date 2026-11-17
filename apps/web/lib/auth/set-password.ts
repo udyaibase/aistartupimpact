@@ -17,7 +17,7 @@ export async function setAccountPassword(
 
   await sql`UPDATE "WebUser" SET "passwordHash" = ${passwordHash}, "failedLoginAttempts" = 0, "lockedUntil" = NULL, "updatedAt" = NOW() WHERE email = ${address}`;
   await sql`UPDATE "UnifiedUser" SET "passwordHash" = ${passwordHash} WHERE email = ${address}`;
-  await sql`UPDATE "EventOrganizer" SET "passwordHash" = ${passwordHash}, "failedLoginAttempts" = 0, "lockedUntil" = NULL WHERE email = ${address}`;
+  await sql`UPDATE "EventOrganizer" SET "passwordHash" = ${passwordHash}, "failedLoginAttempts" = 0, "lockedUntil" = NULL WHERE lower(email) = ${address}`;
   const founders = await sql`
     UPDATE "FounderUser"
     SET "passwordHash" = ${passwordHash}, "failedLoginAttempts" = 0, "lockedUntil" = NULL,
@@ -32,7 +32,7 @@ export async function setAccountPassword(
     await sql`DELETE FROM "WebUserSession" WHERE "webUserId" IN (SELECT id FROM "WebUser" WHERE email = ${address})`;
   }
   await sql`DELETE FROM "UnifiedSession" WHERE "userId" IN (SELECT id FROM "UnifiedUser" WHERE email = ${address})`;
-  await sql`DELETE FROM "EventOrganizerSession" WHERE "organizerId" IN (SELECT id FROM "EventOrganizer" WHERE email = ${address})`;
+  await sql`DELETE FROM "EventOrganizerSession" WHERE "organizerId" IN (SELECT id FROM "EventOrganizer" WHERE lower(email) = ${address})`;
   await sql`DELETE FROM "FounderSession" WHERE "userId" IN (SELECT id FROM "FounderUser" WHERE email = ${address})`;
 
   if (founders.length === 0) return null;

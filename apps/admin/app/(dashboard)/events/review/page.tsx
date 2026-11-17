@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AlertTriangle, BadgeCheck, Check, ExternalLink, Loader2, ShieldCheck, ShieldOff, X } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, Check, ChevronDown, ExternalLink, Loader2, ShieldCheck, ShieldOff, X } from 'lucide-react';
+import EventReviewDetails from './EventReviewDetails';
 import { approveEventAction, declineEventAction, listReviewQueueAction, suspendOrganizerAction, type ReviewItem } from './actions';
 
 const fmt = (iso: string) => new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -16,10 +17,13 @@ export default function EventReviewPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
+  /** Events whose full details are open (the first in the queue opens by itself). */
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggle = (id: string) => setOpen((o) => { const n = new Set(o); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const load = async () => {
     const r = await listReviewQueueAction();
-    if (r.success) setItems(r.items); else { setError(r.error ?? 'Failed to load.'); setItems([]); }
+    if (r.success) { setItems(r.items); if (r.items[0]) setOpen((o) => (o.size ? o : new Set([r.items[0].id]))); } else { setError(r.error ?? 'Failed to load.'); setItems([]); }
   };
   useEffect(() => { load(); }, []);
 
@@ -54,7 +58,7 @@ export default function EventReviewPage() {
       {items === null ? (
         <div className="py-16 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
       ) : items.length === 0 ? (
-        <div className={`${card} p-10 text-center text-sm text-gray-500`}>Nothing to review. 🎉</div>
+        <div className={`${card} p-10 text-center text-sm text-gray-500`}>Nothing to review.</div>
       ) : (
         <ul className="space-y-3">
           {items.map((e) => (
@@ -113,6 +117,15 @@ export default function EventReviewPage() {
                     </ul>
                   )}
                 </div>
+              </div>
+
+              <div className="mt-3 border-t border-gray-200 dark:border-gray-800 pt-3">
+                <button type="button" onClick={() => toggle(e.id)} aria-expanded={open.has(e.id)} aria-controls={`review-${e.id}`}
+                  className="inline-flex items-center gap-1.5 min-h-[36px] text-sm font-semibold text-gray-800 dark:text-gray-200 hover:text-brand">
+                  <ChevronDown className={`w-4 h-4 transition-transform ${open.has(e.id) ? 'rotate-180' : ''}`} aria-hidden />
+                  {open.has(e.id) ? 'Hide full event' : 'Review full event'}
+                </button>
+                {open.has(e.id) && <div id={`review-${e.id}`} className="mt-3"><EventReviewDetails eventId={e.id} /></div>}
               </div>
             </li>
           ))}

@@ -9,6 +9,7 @@ import { sendEmailFireAndForget } from "@/lib/email/send";
 import crypto from "crypto";
 import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
 import { maskEmail } from '@/lib/mask';
+import { apiRateLimit, checkRateLimit, rateLimitMessage, retryAfterHeaders } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,10 @@ export async function POST(request: NextRequest) {
   const result = await requirePermission("team.manage");
   if (result instanceof NextResponse) return result;
   const session = result;
+
+  // Each invite sends an email: keep it to a human pace.
+  const { success: allowed, reset } = await checkRateLimit(apiRateLimit, `team-invite:${session.organizerId}`);
+  if (!allowed) return NextResponse.json({ success: false, error: rateLimitMessage(reset) }, { status: 429, headers: retryAfterHeaders(reset) });
 
   const body = await request.json().catch(() => ({}));
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
@@ -94,7 +99,7 @@ export async function POST(request: NextRequest) {
   if (existing) {
     member = await prisma.eventTeamMember.update({
       where: { id: existing.id },
-      data: { email, role: assignedRole, status: "PENDING", inviteToken, expiresAt, acceptedAt: null, passwordHash: null },
+      data: { email, role: assignedRole, status: "PENDING", inviteToken, expiresAt, acceptedAt: null, passwordHash: null, memberOrganizerId: null },
     });
   } else {
     member = await prisma.eventTeamMember.create({

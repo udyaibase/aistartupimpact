@@ -6,22 +6,7 @@ import { Clock, X, CheckCircle, Loader2, Calendar, MapPin, Video } from "lucide-
 import CitySelect from "@/components/events/CitySelect";
 import TurnstileWidget from "@/components/shared/TurnstileWidget";
 import { payWithRazorpay } from "@/lib/billing/checkout-client";
-
-const OCCUPATIONS = [
-  "Founder / CEO",
-  "Student",
-  "Software Engineer",
-  "Product Manager",
-  "Investor",
-  "Researcher",
-  "Designer",
-  "Data Scientist",
-  "Freelancer",
-  "Marketing / Growth",
-  "Business Analyst",
-  "Content Creator",
-  "Other",
-];
+import { availableTiers, CHECKBOX_NO, CHECKBOX_YES, COUNTRY_CODES, formatPhone, OCCUPATIONS, phoneProblem } from "@/lib/events/registration-fields";
 
 interface Props {
   event: any;
@@ -40,19 +25,25 @@ export default function RegistrationModal({ event, customQuestions, ticketTiers,
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState("");
+  const [countryCode, setCountryCode] = useState("+91");
   const [phone, setPhone] = useState("");
+  const [phoneError, setPhoneError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [company, setCompany] = useState("");
   const [occupation, setOccupation] = useState("");
   const [locationCity, setLocationCity] = useState("");
   const [newsletterConsent, setNewsletterConsent] = useState(false);
   const [whatsappConsent, setWhatsappConsent] = useState(false);
-  const [ticketTierId, setTicketTierId] = useState(ticketTiers.length > 0 ? ticketTiers[0].id : "");
+  // Same as the widget: only ticket types on sale right now and not sold out.
+  const openTiers = availableTiers(ticketTiers);
+  const [ticketTierId, setTicketTierId] = useState(openTiers.length > 0 ? openTiers[0].id : "");
+  const hostName = event.hostStartupName || event.organizerName || "the organizer";
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [turnstileToken, setTurnstileToken] = useState("");
   // Bot-check tokens are single-use: remount the widget for a fresh one after each attempt.
   const [captchaKey, setCaptchaKey] = useState(0);
   const [paid, setPaid] = useState(false);
-  const tier = ticketTiers.find((t: any) => t.id === ticketTierId);
+  const tier = openTiers.find((t: any) => t.id === ticketTierId);
   const price = tier?.priceCents > 0 ? tier.priceCents : 0;
 
   const validateEmail = (val: string) => {
@@ -69,11 +60,15 @@ export default function RegistrationModal({ event, customQuestions, ticketTiers,
     e.preventDefault();
     setError("");
     if (emailError) return;
+    const pp = phoneProblem(countryCode, phone);
+    setPhoneError(pp);
+    setFieldErrors({});
+    if (pp) return;
     setLoading(true);
     const payload = {
-      eventId: event.id, name, email, phone: phone || null,
+      eventId: event.id, name: name.trim(), email: email.trim(), phone: formatPhone(countryCode, phone) || null,
       company: company || null, role: null, occupation: occupation || null,
-      locationCity: locationCity || null, newsletterConsent, whatsappConsent,
+      locationCity: locationCity || null, newsletterConsent, whatsappConsent: !!phone.replace(/\D/g, "") && whatsappConsent,
       ticketTierId: ticketTierId || null,
       answers: Object.entries(answers).map(([questionId, answerText]) => ({ questionId, answerText })),
       turnstileToken,
@@ -83,7 +78,7 @@ export default function RegistrationModal({ event, customQuestions, ticketTiers,
         // Paid ticket: hold a seat, pay through Razorpay, then the ticket is confirmed by email.
         const res = await fetch("/api/events/tickets/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         const data = await res.json();
-        if (!res.ok || !data.success) { setError(data.error || "Couldn’t start the payment."); return; }
+        if (!res.ok || !data.success) { if (data.field) setFieldErrors({ [data.field]: data.error }); if (data.field === "phone") setPhoneError(data.error); setError(data.error || "Couldn’t start the payment."); return; }
         const out = await payWithRazorpay(data.data, "/api/events/tickets/verify");
         if (out.ok) { setPaid(true); setStep("success"); }
         else if (out.cancelled) setError(`Payment not completed. Your seat is held for ${data.data.holdMinutes} minutes. Try again to finish.`);
@@ -92,7 +87,7 @@ export default function RegistrationModal({ event, customQuestions, ticketTiers,
       }
       const res = await fetch("/api/events/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const data = await res.json();
-      if (!res.ok || !data.success) { setError(data.error || "Registration failed."); return; }
+      if (!res.ok || !data.success) { if (data.field) setFieldErrors({ [data.field]: data.error }); if (data.field === "phone") setPhoneError(data.error); setError(data.error || "Registration failed."); return; }
       setOutcome({ status: data.data?.status ?? "CONFIRMED", position: data.data?.waitlistPosition, reason: data.data?.waitlistReason });
       setStep("success");
     } catch { setError("Something went wrong."); }
@@ -195,47 +190,55 @@ export default function RegistrationModal({ event, customQuestions, ticketTiers,
               {emailError && <p className="text-xs text-red-500 font-jakarta mt-0.5">{emailError}</p>}
             </div>
 
-            {/* Phone */}
+            {/* Phone (same format and check as the widget) */}
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1 font-jakarta">Phone <span className="normal-case text-gray-400">(Optional)</span></label>
-              <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand text-sm font-jakarta" />
-              <p className="text-xs text-gray-400 font-jakarta mt-0.5">Used for event reminders and important updates</p>
+              <label htmlFor="reg-phone" className="block text-xs font-semibold text-gray-500 uppercase mb-1 font-jakarta">Phone <span className="normal-case text-gray-400">(Optional)</span></label>
+              <div className="flex gap-2">
+                <select aria-label="Country code" value={countryCode} onChange={(e) => { setCountryCode(e.target.value); setPhoneError(""); }} className="w-[104px] shrink-0 px-2 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-jakarta focus:outline-none focus:ring-2 focus:ring-brand/30">
+                  {COUNTRY_CODES.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
+                </select>
+                <input id="reg-phone" type="tel" inputMode="tel" autoComplete="tel-national" value={phone} onChange={(e) => { setPhone(e.target.value); setPhoneError(""); }} placeholder="98765 43210" aria-invalid={phoneError ? true : undefined} aria-describedby={phoneError ? "reg-phone-err" : undefined} className={`w-full px-4 py-2.5 rounded-xl border bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 text-sm font-jakarta ${phoneError ? "border-red-300 focus:ring-red-200" : "border-gray-200 dark:border-gray-700 focus:ring-brand/30 focus:border-brand"}`} />
+              </div>
+              {phoneError ? <p id="reg-phone-err" className="text-xs text-red-500 font-jakarta mt-0.5">{phoneError}</p> : <p className="text-xs text-gray-400 font-jakarta mt-0.5">Used for event reminders and important updates</p>}
             </div>
 
             {/* Company / Organization */}
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1 font-jakarta">Company / Organization</label>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1 font-jakarta">Company / Organization <span className="normal-case text-gray-400">(Optional)</span></label>
               <input type="text" value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Where do you work or study?" className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand text-sm font-jakarta" />
             </div>
 
             {/* Occupation - searchable dropdown */}
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1 font-jakarta">Occupation *</label>
-              <select required value={occupation} onChange={(e) => setOccupation(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-jakarta focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand appearance-none">
-                <option value="" disabled>Select your occupation</option>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1 font-jakarta">Occupation <span className="normal-case text-gray-400">(Optional)</span></label>
+              <select value={occupation} onChange={(e) => setOccupation(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-jakarta focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand appearance-none">
+                <option value="">Select your occupation</option>
                 {OCCUPATIONS.map((occ) => <option key={occ} value={occ}>{occ}</option>)}
               </select>
             </div>
 
             {/* City */}
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1 font-jakarta">Your City</label>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1 font-jakarta">Your City <span className="normal-case text-gray-400">(Optional)</span></label>
               <CitySelect value={locationCity} onChange={(city) => setLocationCity(city.name)} placeholder="Search your city..." />
               <p className="text-xs text-gray-400 font-jakarta mt-0.5">Helps us notify you about events near you</p>
             </div>
 
             {/* Ticket Tier */}
-            {ticketTiers.length === 1 && price > 0 && (
+            {ticketTiers.length > 0 && openTiers.length === 0 && (
+              <p className="text-sm font-jakarta text-amber-800 dark:text-amber-300 rounded-xl bg-amber-50 dark:bg-amber-900/20 px-4 py-2.5">No tickets are on sale right now.</p>
+            )}
+            {openTiers.length === 1 && price > 0 && (
               <p className="text-sm font-jakarta text-gray-700 dark:text-gray-300 rounded-xl bg-gray-50 dark:bg-gray-800 px-4 py-2.5">
                 <span className="font-semibold">{tier.name}</span> · ₹{(price / 100).toLocaleString("en-IN")}
                 <span className="block text-xs text-gray-500">Paid securely via Razorpay. Refunded in full if the host cancels.</span>
               </p>
             )}
-            {ticketTiers.length > 1 && (
+            {openTiers.length > 1 && (
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase mb-1 font-jakarta">Ticket Type</label>
                 <select value={ticketTierId} onChange={(e) => setTicketTierId(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-jakarta focus:outline-none focus:ring-2 focus:ring-brand/30">
-                  {ticketTiers.map((tier: any) => (
+                  {openTiers.map((tier: any) => (
                     <option key={tier.id} value={tier.id}>{tier.name} — {tier.priceCents === 0 ? "Free" : `₹${tier.priceCents / 100}`}{tier.quantity && ` (${tier.quantity - tier.soldCount} left)`}</option>
                   ))}
                 </select>
@@ -246,6 +249,7 @@ export default function RegistrationModal({ event, customQuestions, ticketTiers,
             {customQuestions.map((q: any) => (
               <div key={q.id}>
                 <label className="block text-xs font-semibold text-gray-500 uppercase mb-1 font-jakarta">{q.questionText} {q.required && "*"}</label>
+                {fieldErrors[`q_${q.id}`] && <p className="text-xs text-red-500 font-jakarta mb-1">{fieldErrors[`q_${q.id}`]}</p>}
                 {q.questionType === "TEXT" && (
                   <input type="text" required={q.required} value={answers[q.id] || ""} onChange={(e) => setAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-jakarta focus:outline-none focus:ring-2 focus:ring-brand/30" />
                 )}
@@ -257,15 +261,14 @@ export default function RegistrationModal({ event, customQuestions, ticketTiers,
                 )}
                 {q.questionType === "CHECKBOX" && (
                   <label className="flex items-center gap-2 mt-1 cursor-pointer">
-                    <input type="checkbox" checked={answers[q.id] === "yes"} onChange={(e) => setAnswers((prev) => ({ ...prev, [q.id]: e.target.checked ? "yes" : "no" }))} className="w-4 h-4 rounded border-gray-300 text-brand focus:ring-brand" />
+                    <input type="checkbox" checked={answers[q.id] === CHECKBOX_YES} onChange={(e) => setAnswers((prev) => ({ ...prev, [q.id]: e.target.checked ? CHECKBOX_YES : CHECKBOX_NO }))} className="w-4 h-4 rounded border-gray-300 text-brand focus:ring-brand" />
                     <span className="text-sm text-gray-600 dark:text-gray-300 font-jakarta">Yes</span>
                   </label>
                 )}
               </div>
             ))}
 
-            {/* Newsletter Consent */}
-            {/* Newsletter Consent */}
+            {/* Udyaibase event alerts (only on udyaibase.com, not in organizers' widgets) */}
             <div className="bg-brand/5 dark:bg-brand/10 rounded-xl p-3 border border-brand/10">
               <label className="flex items-start gap-2.5 cursor-pointer">
                 <input type="checkbox" checked={newsletterConsent} onChange={(e) => setNewsletterConsent(e.target.checked)} className="w-4 h-4 mt-0.5 rounded border-gray-300 text-brand focus:ring-brand" />
@@ -273,24 +276,26 @@ export default function RegistrationModal({ event, customQuestions, ticketTiers,
               </label>
             </div>
 
-            {/* WhatsApp Consent */}
+            {/* WhatsApp reminders: only with a phone number, never pre-ticked (same as the widget) */}
+            {phone.replace(/\D/g, "").length >= 6 && (
             <div className="bg-green-50 dark:bg-green-900/10 rounded-xl p-3 border border-green-100 dark:border-green-900/20">
               <label className="flex items-start gap-2.5 cursor-pointer">
                 <input type="checkbox" checked={whatsappConsent} onChange={(e) => setWhatsappConsent(e.target.checked)} className="w-4 h-4 mt-0.5 rounded border-gray-300 text-green-600 focus:ring-green-500" />
                 <span className="text-xs text-gray-600 dark:text-gray-300 font-jakarta leading-relaxed">Send me event reminders and updates on WhatsApp. You can opt out anytime.</span>
               </label>
             </div>
+            )}
 
             {/* Turnstile CAPTCHA */}
             <TurnstileWidget key={captchaKey} onSuccess={setTurnstileToken} />
 
             {error && <p className="text-sm text-red-500 font-jakarta bg-red-50 dark:bg-red-900/20 p-3 rounded-xl">{error}</p>}
 
-            <button type="submit" disabled={loading || !name || !email || !occupation || !!emailError || !turnstileToken} className="w-full py-3 bg-brand hover:bg-brand-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold font-jakarta text-sm rounded-xl transition-colors flex items-center justify-center gap-2">
+            <button type="submit" disabled={loading || !name.trim() || !email || !!emailError || !turnstileToken || (ticketTiers.length > 0 && !tier)} className="w-full py-3 bg-brand hover:bg-brand-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold font-jakarta text-sm rounded-xl transition-colors flex items-center justify-center gap-2">
               {loading ? <><Loader2 className="w-4 h-4 animate-spin" />{price > 0 ? "Opening payment…" : "Registering..."}</> : price > 0 ? `Pay ₹${(price / 100).toLocaleString("en-IN")} and register` : "Complete Registration"}
             </button>
 
-            <p className="text-xs text-gray-400 font-jakarta text-center">By registering, you agree to our terms of service and privacy policy.</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta text-center">By registering, you agree to share your details with {hostName}, who will use them to manage this event. Processed by Udyaibase under its <a href="/privacy" target="_blank" rel="noopener" className="underline">Privacy Policy</a>.</p>
           </form>
         )}
       </div>

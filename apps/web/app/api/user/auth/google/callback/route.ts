@@ -70,6 +70,10 @@ export async function GET(request: NextRequest) {
     if (!googleUser.email) {
       return NextResponse.redirect(new URL('/?error=oauth_no_email', request.url));
     }
+    // Only a Google-verified address may sign in as that email (it decides which account and workspaces open).
+    if (googleUser.verified_email === false) {
+      return NextResponse.redirect(new URL('/?error=oauth_no_email', request.url));
+    }
 
     const existingUsers = await sql`
       SELECT id, email, name, avatar, slug, "isActive", "onboardingCompleted"

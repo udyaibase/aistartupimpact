@@ -145,20 +145,73 @@ export async function GET(request: NextRequest) {
         return redirectWithMessage('Verification link has expired. Please request a new one.');
       }
 
+      const newEmail = organizer.pendingEmail.trim().toLowerCase();
+      const oldEmail = organizer.email;
+      // Someone may have taken the address since the change was requested.
+      const taken = await prisma.eventOrganizer.findFirst({ where: { id: { not: organizer.id }, email: { equals: newEmail, mode: 'insensitive' } }, select: { id: true } });
+      if (taken) {
+        await prisma.eventOrganizer.update({ where: { id: organizer.id }, data: { pendingEmail: null, emailChangeToken: null, emailChangeTokenExpiry: null } });
+        return redirectWithMessage('That email is already in use by another account.');
+      }
+
       await prisma.$transaction(async (tx) => {
         await tx.newsletterSubscriber.updateMany({
-          where: { email: organizer.email },
-          data: { email: organizer.pendingEmail! },
+          where: { email: oldEmail },
+          data: { email: newEmail },
         });
         await tx.eventOrganizer.update({
           where: { id: organizer.id },
           data: {
-            email: organizer.pendingEmail!,
+            email: newEmail,
             pendingEmail: null,
             emailChangeToken: null,
             emailChangeTokenExpiry: null,
           },
         });
+        // Team access is matched by email: carry this person's memberships over, so they keep their teams and the
+        // old address (which anyone could now register) doesn't inherit them. Where the new address is already on
+        // a team, the old row is removed instead.
+        const memberships = await tx.eventTeamMember.findMany({
+          where: { email: { equals: oldEmail, mode: 'insensitive' }, OR: [{ memberOrganizerId: null }, { memberOrganizerId: organizer.id }] },
+          select: { id: true, organizerId: true },
+        });
+        for (const m of memberships) {
+          const clash = await tx.eventTeamMember.findFirst({ where: { organizerId: m.organizerId, id: { not: m.id }, email: { equals: newEmail, mode: 'insensitive' } }, select: { id: true } });
+          if (clash) await tx.eventTeamMember.update({ where: { id: m.id }, data: { status: 'REVOKED' } });
+          else await tx.eventTeamMember.update({ where: { id: m.id }, data: { email: newEmail } });
+        }
+        // Every device signs in again with the new address.
+        await tx.eventOrganizerSession.deleteMany({ where: { organizerId: organizer.id } });
+        // The linked sign-in identity follows, unless it also serves a founder profile (whose sign-in email is
+        // separate) or the new address already has its own identity.
+        if (organizer.unifiedUserId) {
+          const unified = await tx.unifiedUser.findUnique({ where: { id: organizer.unifiedUserId }, select: { id: true, founderProfile: { select: { id: true } } } });
+          const newTaken = await tx.unifiedUser.findFirst({ where: { email: { equals: newEmail, mode: 'insensitive' } }, select: { id: true } });
+          if (unified && !unified.founderProfile && !newTaken) {
+            await tx.unifiedUser.update({ where: { id: unified.id }, data: { email: newEmail } });
+            await tx.unifiedSession.deleteMany({ where: { userId: unified.id } });
+          } else if (unified) {
+            // Can't follow: unlink, so the old address's identity no longer opens this workspace.
+            await tx.eventOrganizer.update({ where: { id: organizer.id }, data: { unifiedUserId: null } });
+          }
+        }
+      });
+
+      // 2FA is stored once per email. Carry it to the new address unless another of this person's accounts still
+      // signs in with the old one (then it stays there).
+      const stillUsed = (await prisma.webUser.count({ where: { email: oldEmail.toLowerCase() } })) + (await prisma.founderUser.count({ where: { email: oldEmail.toLowerCase() } }));
+      if (!stillUsed) {
+        const { moveTwoFactor } = await import('@/lib/auth/account-two-factor');
+        await moveTwoFactor(oldEmail, newEmail).catch(() => {});
+      }
+
+      // Tell the old address, in case the change wasn't theirs.
+      const { sendEmailFireAndForget } = await import('@/lib/email/send');
+      sendEmailFireAndForget({
+        to: oldEmail,
+        subject: 'Your Udyaibase organizer email was changed',
+        html: `<p>The sign-in email for your Udyaibase organizer account was changed to a new address.</p><p>If this was you, there is nothing to do. If it wasn't, contact support right away.</p>`,
+        type: 'security_alert',
       });
 
       return redirectWithMessage('Email changed successfully! Please log in again.', true);

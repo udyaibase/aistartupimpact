@@ -40,7 +40,7 @@ export async function requirePermission(
   // Check permission for their role
   if (!hasPermission(teamMember.role, permission)) {
     return NextResponse.json(
-      { success: false, error: `Insufficient permissions. Required: ${permission}` },
+      { success: false, error: "Your role in this workspace doesn’t allow this." },
       { status: 403 }
     );
   }
@@ -61,6 +61,11 @@ export function canAccessEvent(session: AuthorizedSession, eventId: string): boo
   if (session.role === "OWNER" || session.role === "ADMIN") return true;
   if (!session.assignedEventIds) return true;
   return session.assignedEventIds.includes(eventId);
+}
+
+/** A teammate limited to some events (not owner or admin): they can't manage workspace-wide things. */
+export function isEventLimited(session: AuthorizedSession): boolean {
+  return session.role !== "OWNER" && session.role !== "ADMIN" && !!session.assignedEventIds;
 }
 
 /**

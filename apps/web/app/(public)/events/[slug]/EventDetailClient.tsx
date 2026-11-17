@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import ScheduleView from "@/components/events/ScheduleView";
 import {
   Calendar,
   Clock,
@@ -26,6 +27,8 @@ import { descriptionHtml, descriptionText } from "@/lib/events/description";
 interface Event {
   id: string;
   slug: string;
+  /** PUBLISHED, or COMPLETED / POSTPONED / CANCELLED (the page stays up so old links still explain what happened). */
+  status?: string;
   shortCode?: string;
   title: string;
   subtitle?: string;
@@ -75,6 +78,9 @@ interface AgendaItem {
   title: string;
   description?: string;
   speakerName?: string;
+  track?: string | null;
+  recordingUrl?: string | null;
+  slidesUrl?: string | null;
 }
 
 interface EventTag {
@@ -120,22 +126,22 @@ interface Props {
   ticketTiers: TicketTier[];
   customQuestions: CustomQuestion[];
   similarEvents: SimilarEvent[];
+  /** After the event: highlights, photos, recordings (rendered on the server). */
+  recap?: React.ReactNode;
+  sponsors?: React.ReactNode;
 }
 
-function formatDate(dateStr: string) {
-  const d = new Date(dateStr);
-  const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+/** Dates and times in the event's own time zone (never the server's or the visitor's). */
+function safeZone(timezone?: string) {
+  try { new Intl.DateTimeFormat("en-IN", { timeZone: timezone || "Asia/Kolkata" }); return timezone || "Asia/Kolkata"; } catch { return "Asia/Kolkata"; }
+}
+
+function formatDate(dateStr: string, timezone?: string) {
+  return new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: safeZone(timezone) }).format(new Date(dateStr));
 }
 
 function formatTime(dateStr: string, timezone: string) {
-  const d = new Date(dateStr);
-  const h = d.getHours();
-  const m = d.getMinutes().toString().padStart(2, "0");
-  const ampm = h >= 12 ? "PM" : "AM";
-  const hour = h % 12 || 12;
-  return `${hour}:${m} ${ampm}`;
+  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: safeZone(timezone) }).format(new Date(dateStr));
 }
 
 function isUpcoming(dateStr: string) {
@@ -143,6 +149,7 @@ function isUpcoming(dateStr: string) {
 }
 
 function isRegistrationOpen(event: Event) {
+  if (event.status && event.status !== "PUBLISHED") return false;
   if (!isUpcoming(event.startAt)) return false;
   if (event.registrationDeadline && new Date(event.registrationDeadline) < new Date()) return false;
   if (event.capacity && event.registrationCount >= event.capacity) return false;
@@ -157,6 +164,8 @@ export default function EventDetailClient({
   ticketTiers,
   customQuestions,
   similarEvents,
+  recap,
+  sponsors,
 }: Props) {
   const [showRegistration, setShowRegistration] = useState(false);
 
@@ -169,13 +178,6 @@ export default function EventDetailClient({
     ? `https://udyaibase.com/e/${event.shortCode}`
     : `https://udyaibase.com/events/${event.slug}`;
 
-  // Group agenda by day
-  const agendaByDay = agenda.reduce((acc, item) => {
-    const day = item.dayNumber;
-    if (!acc[day]) acc[day] = [];
-    acc[day].push(item);
-    return acc;
-  }, {} as Record<number, AgendaItem[]>);
 
   return (
     <div className="max-w-5xl mx-auto px-6 sm:px-10 lg:px-16 py-6 sm:py-8">
@@ -253,6 +255,13 @@ export default function EventDetailClient({
 
         {/* Right: All details + CTA (4 cols) */}
         <div className="md:col-span-4 flex flex-col">
+          {(event.status === "CANCELLED" || event.status === "POSTPONED") && (
+            <p role="status" className={`mb-3 rounded-xl border px-3 py-2 text-sm font-medium ${event.status === "CANCELLED" ? "border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300" : "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"}`}>
+              {event.status === "CANCELLED"
+                ? "This event was cancelled. Registered attendees were emailed, and paid tickets are refunded."
+                : "This event is postponed. The host will share the new date; registration is paused until then."}
+            </p>
+          )}
           {/* Title */}
           <div className="flex items-start justify-between gap-3 mb-1.5">
             <h1 className="font-sora font-bold text-xl sm:text-2xl text-navy dark:text-white leading-tight">
@@ -268,7 +277,7 @@ export default function EventDetailClient({
           <div className="space-y-2 mb-4">
             <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 font-jakarta">
               <Calendar className="w-4 h-4 text-brand shrink-0" />
-              <span>{formatDate(event.startAt)}</span>
+              <span>{formatDate(event.startAt, event.timezone)}</span>
             </div>
             <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 font-jakarta">
               <Clock className="w-4 h-4 text-brand shrink-0" />
@@ -372,55 +381,17 @@ export default function EventDetailClient({
 
       {/* ─── Below-fold: Agenda, Tags, Similar ─── */}
       <div className="space-y-8 max-w-4xl mt-8">
+          {recap}
           {/* Agenda */}
           {agenda.length > 0 && (
-            <div>
-              <h2 className="font-sora font-bold text-lg text-navy dark:text-white mb-4">
-                Schedule
-              </h2>
-              {Object.entries(agendaByDay).map(([day, items]) => (
-                <div key={day} className="mb-6">
-                  {Object.keys(agendaByDay).length > 1 && (
-                    <p className="text-xs font-bold uppercase text-gray-400 font-jakarta mb-2">
-                      Day {day}
-                    </p>
-                  )}
-                  <div className="space-y-2">
-                    {items.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex gap-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4"
-                      >
-                        <div className="min-w-[80px] text-right">
-                          <p className="text-xs font-mono text-gray-500 dark:text-gray-400">
-                            {item.startTime}
-                          </p>
-                          <p className="text-xs font-mono text-gray-400">
-                            {item.endTime}
-                          </p>
-                        </div>
-                        <div className="border-l-2 border-brand/20 pl-4 flex-1">
-                          <p className="text-sm font-semibold text-navy dark:text-white font-jakarta">
-                            {item.title}
-                          </p>
-                          {item.speakerName && (
-                            <p className="text-xs text-brand font-jakarta mt-0.5">
-                              {item.speakerName}
-                            </p>
-                          )}
-                          {item.description && (
-                            <p className="text-xs text-gray-400 font-jakarta mt-1">
-                              {item.description}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <ScheduleView
+              sessions={agenda}
+              tracks={Array.isArray((event as { agendaTracks?: unknown }).agendaTracks) ? ((event as { agendaTracks?: string[] }).agendaTracks ?? []) : []}
+              event={{ slug: event.slug, title: event.title, startAt: event.startAt, timezone: event.timezone, location: event.format === "VIRTUAL" ? "Online" : [event.venueName, event.address?.split("|||")[0]].filter(Boolean).join(", "), ended: new Date(event.endAt) < new Date() }}
+            />
           )}
+
+          {sponsors}
 
           {/* Tags */}
           {tags.length > 0 && (

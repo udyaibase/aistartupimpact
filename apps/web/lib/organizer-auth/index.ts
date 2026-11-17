@@ -1,6 +1,7 @@
 import { jwtSecret } from '@/lib/jwt-secret';
 import { SignJWT, jwtVerify } from "jose";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { clientIpFromHeaders } from "@/lib/client-ip";
 import { prisma } from "@udyaibase/database";
 import crypto from "crypto";
 
@@ -14,7 +15,23 @@ export interface OrganizerSession {
   email: string;
   name: string;
   company?: string;
+  avatar?: string;
   onboardingCompleted?: boolean;
+}
+
+/** Emails are stored and compared in one form: trimmed, lower case. */
+export function normalizeEmail(email: unknown): string {
+  return typeof email === "string" ? email.trim().toLowerCase() : "";
+}
+
+/** The organizer account for an email, whatever case it was saved in (older rows kept the typed case). */
+export async function findOrganizerByEmail(email: string) {
+  const address = normalizeEmail(email);
+  if (!address) return null;
+  return (
+    (await prisma.eventOrganizer.findUnique({ where: { email: address } })) ??
+    (await prisma.eventOrganizer.findFirst({ where: { email: { equals: address, mode: "insensitive" } }, orderBy: { createdAt: "asc" } }))
+  );
 }
 
 /**
@@ -25,11 +42,22 @@ export async function createOrganizerSession(organizerId: string): Promise<strin
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + SESSION_EXPIRY_DAYS);
 
+  // Where the session was started, for the owner's records.
+  let ipAddress: string | null = null;
+  let userAgent: string | null = null;
+  try {
+    const h = await headers();
+    ipAddress = clientIpFromHeaders(h) || null;
+    userAgent = h.get("user-agent")?.slice(0, 300) ?? null;
+  } catch {}
+
   await prisma.eventOrganizerSession.create({
     data: {
       organizerId,
       token,
       expiresAt,
+      ipAddress,
+      userAgent,
     },
   });
 
@@ -51,15 +79,29 @@ export async function createOrganizerSession(organizerId: string): Promise<strin
   return token;
 }
 
+const SESSION_SELECT = { id: true, email: true, name: true, company: true, avatar: true, status: true, deactivatedAt: true, onboardingCompleted: true, emailVerified: true } as const;
+
+type OrganizerRow = { id: string; email: string; name: string; company: string | null; avatar: string | null; status: string; deactivatedAt: Date | null; onboardingCompleted: boolean; emailVerified: boolean };
+
+/** A usable account: not suspended, not deactivated. `needVerified` also requires a confirmed email. */
+function asSession(o: OrganizerRow | null | undefined, needVerified: boolean): OrganizerSession | null {
+  if (!o || o.status === "SUSPENDED" || o.deactivatedAt) return null;
+  if (needVerified && !o.emailVerified) return null;
+  return { id: o.id, email: o.email, name: o.name, company: o.company || undefined, avatar: o.avatar || undefined, onboardingCompleted: o.onboardingCompleted };
+}
+
 /**
- * Get the current organizer from the session cookie.
- * Checks: organizer_session cookie → user-token cookie (email match).
- * Returns null if not authenticated.
+ * The signed-in organizer, or null. One resolver for pages and API routes, in this order:
+ * 1. organizer_session cookie (the account's email must be confirmed: an unconfirmed sign-up proves nothing
+ *    about who owns the address, and team access and startup tags are matched by email);
+ * 2. user-token cookie (the main site's sign-in, whose email was confirmed by a code) → organizer with that email;
+ * 3. unified_session cookie → its linked organizer profile.
  */
 export async function getOrganizerSession(): Promise<OrganizerSession | null> {
-  // 1. Try organizer_session cookie
+  const cookieStore = await cookies();
+
+  // 1. organizer_session cookie
   try {
-    const cookieStore = await cookies();
     const cookie = cookieStore.get(COOKIE_NAME);
     if (cookie?.value) {
       const { payload } = await jwtVerify(cookie.value, JWT_SECRET);
@@ -67,47 +109,35 @@ export async function getOrganizerSession(): Promise<OrganizerSession | null> {
       if (sessionToken) {
         const session = await prisma.eventOrganizerSession.findUnique({
           where: { token: sessionToken },
-          include: {
-            organizer: {
-              select: { id: true, email: true, name: true, company: true, status: true, deactivatedAt: true, onboardingCompleted: true },
-            },
-          },
+          include: { organizer: { select: SESSION_SELECT } },
         });
-
-        if (session && session.expiresAt >= new Date() && session.organizer.status !== "SUSPENDED" && !session.organizer.deactivatedAt) {
-          return {
-            id: session.organizer.id,
-            email: session.organizer.email,
-            name: session.organizer.name,
-            company: session.organizer.company || undefined,
-            onboardingCompleted: session.organizer.onboardingCompleted,
-          };
+        if (session && session.expiresAt >= new Date()) {
+          const found = asSession(session.organizer, true);
+          if (found) {
+            // For the signed-in devices list; written at most every 5 minutes, never blocking the request.
+            if (!session.lastSeenAt || Date.now() - session.lastSeenAt.getTime() > 5 * 60 * 1000) {
+              prisma.eventOrganizerSession.update({ where: { id: session.id }, data: { lastSeenAt: new Date() } }).catch(() => {});
+            }
+            return found;
+          }
         }
       }
     }
   } catch {}
 
-  // 2. Fallback: user-token cookie → find organizer by email
+  // 2. user-token cookie → organizer by email
+  const fromUserToken = await getOrganizerSessionFromUserToken();
+  if (fromUserToken) return fromUserToken;
+
+  // 3. unified_session cookie → linked organizer profile
   try {
-    const cookieStore = await cookies();
-    const userToken = cookieStore.get("user-token")?.value;
-    if (userToken) {
-      const { payload } = await jwtVerify(userToken, USER_JWT_SECRET);
-      const email = (payload as any).email;
-      if (email) {
-        const organizer = await prisma.eventOrganizer.findUnique({
-          where: { email: email.toLowerCase() },
-          select: { id: true, email: true, name: true, company: true, status: true, deactivatedAt: true, onboardingCompleted: true },
-        });
-        if (organizer && organizer.status !== "SUSPENDED" && !organizer.deactivatedAt) {
-          return {
-            id: organizer.id,
-            email: organizer.email,
-            name: organizer.name,
-            company: organizer.company || undefined,
-            onboardingCompleted: organizer.onboardingCompleted,
-          };
-        }
+    if (cookieStore.get("unified_session")?.value) {
+      const { getUnifiedSession } = await import("@/lib/unified-auth");
+      const unified = await getUnifiedSession();
+      if (unified?.organizerId) {
+        const organizer = await prisma.eventOrganizer.findUnique({ where: { id: unified.organizerId }, select: SESSION_SELECT });
+        const found = asSession(organizer, false);
+        if (found) return found;
       }
     }
   } catch {}
@@ -116,8 +146,7 @@ export async function getOrganizerSession(): Promise<OrganizerSession | null> {
 }
 
 /**
- * Fallback: Get organizer session from user-token cookie (unified flow).
- * Call this after getOrganizerSession() returns null.
+ * Organizer session from the main site's user-token cookie (its email was confirmed when that account was made).
  */
 export async function getOrganizerSessionFromUserToken(): Promise<OrganizerSession | null> {
   try {
@@ -126,23 +155,27 @@ export async function getOrganizerSessionFromUserToken(): Promise<OrganizerSessi
     if (!userToken) return null;
 
     const { payload } = await jwtVerify(userToken, USER_JWT_SECRET);
-    const email = (payload as any).email;
+    const email = normalizeEmail((payload as any).email);
     if (!email) return null;
 
-    const organizer = await prisma.eventOrganizer.findUnique({
-      where: { email: email.toLowerCase() },
-      select: { id: true, email: true, name: true, company: true, status: true, deactivatedAt: true, onboardingCompleted: true },
+    const organizer = await prisma.eventOrganizer.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
+      orderBy: { createdAt: "asc" },
+      select: SESSION_SELECT,
     });
+    return asSession(organizer, false);
+  } catch {
+    return null;
+  }
+}
 
-    if (!organizer || organizer.status === "SUSPENDED" || organizer.deactivatedAt) return null;
-
-    return {
-      id: organizer.id,
-      email: organizer.email,
-      name: organizer.name,
-      company: organizer.company || undefined,
-      onboardingCompleted: organizer.onboardingCompleted,
-    };
+/** The session token of this browser's organizer_session cookie, or null. */
+export async function currentOrganizerSessionToken(): Promise<string | null> {
+  try {
+    const cookie = (await cookies()).get(COOKIE_NAME);
+    if (!cookie?.value) return null;
+    const { payload } = await jwtVerify(cookie.value, JWT_SECRET);
+    return typeof payload.sessionToken === "string" ? payload.sessionToken : null;
   } catch {
     return null;
   }

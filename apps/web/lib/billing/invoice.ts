@@ -115,6 +115,10 @@ async function loadPayment(table: InvoiceTable, id: string) {
     const ev = p.eventId ? await prisma.event.findUnique({ where: { id: p.eventId }, select: { title: true } }) : null;
     description = `Event Boost${ev ? `: ${ev.title}` : ''}`;
   }
+  if (p.kind === 'CERTIFICATES') {
+    const ev = p.eventId ? await prisma.event.findUnique({ where: { id: p.eventId }, select: { title: true } }) : null;
+    description = `Event certificates${ev ? `: ${ev.title}` : ''}`;
+  }
   return { pay: p as PaymentRow, ownerId: p.organizerId, accountName: p.organizer.company || p.organizer.name, account: p.organizer, description };
 }
 

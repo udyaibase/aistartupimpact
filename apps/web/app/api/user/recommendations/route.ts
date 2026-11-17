@@ -33,11 +33,14 @@ export async function GET(req: NextRequest) {
     `;
     const categoryIds = interests.map((i: any) => i.categoryId);
 
+    // Each item viewed in the last week once, most recently viewed first.
+    // (GROUP BY, not DISTINCT: Postgres can't order DISTINCT rows by a column that isn't selected.)
     const recentInteractions = await sql`
-      SELECT DISTINCT "entityType", "entityId"
+      SELECT "entityType", "entityId"
       FROM "WebUserInteraction"
       WHERE "userId" = ${userId} AND action = 'view' AND "createdAt" > NOW() - INTERVAL '7 days'
-      ORDER BY "createdAt" DESC
+      GROUP BY "entityType", "entityId"
+      ORDER BY MAX("createdAt") DESC
       LIMIT 50
     `;
     const viewedToolIds = recentInteractions.filter((i: any) => i.entityType === 'tool').map((i: any) => i.entityId);
@@ -48,7 +51,7 @@ export async function GET(req: NextRequest) {
     // Tools — prioritize user's interests, exclude recently viewed
     if (categoryIds.length > 0) {
       const tools = await sql`
-        SELECT id, name, slug, "logoUrl", "shortDescription", "avgRating", "pricingModel", 'tool' as "entityType"
+        SELECT id, name, slug, "logoUrl", tagline AS "shortDescription", "avgRating", "pricingModel", 'tool' as "entityType"
         FROM "AiTool"
         WHERE status = 'APPROVED' AND "deletedAt" IS NULL
           AND "categoryId" = ANY(${categoryIds})
@@ -64,7 +67,7 @@ export async function GET(req: NextRequest) {
       const existingIds = items.filter(i => i.entityType === 'tool').map(i => i.id);
       const excludeIds = [...existingIds, ...viewedToolIds];
       const popular = await sql`
-        SELECT id, name, slug, "logoUrl", "shortDescription", "avgRating", "pricingModel", 'tool' as "entityType"
+        SELECT id, name, slug, "logoUrl", tagline AS "shortDescription", "avgRating", "pricingModel", 'tool' as "entityType"
         FROM "AiTool"
         WHERE status = 'APPROVED' AND "deletedAt" IS NULL
           ${excludeIds.length > 0 ? sql`AND id != ALL(${excludeIds})` : sql``}

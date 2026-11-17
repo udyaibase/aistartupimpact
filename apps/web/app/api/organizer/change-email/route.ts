@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { authRateLimit, checkRateLimit } from '@/lib/rate-limit';
 import { prisma } from '@udyaibase/database';
 import { getOrganizerSession, verifyPassword } from '@/lib/organizer-auth';
 import { sendEmailFireAndForget } from '@/lib/email/send';
@@ -14,6 +15,9 @@ export async function POST(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
     }
+    // Needs the current password: limit guesses per account, so an open session can't be used to find it.
+    const { success: allowed } = await checkRateLimit(authRateLimit, `organizer-change-email:${session.id}`);
+    if (!allowed) return NextResponse.json({ success: false, error: 'Too many attempts. Try again in 15 minutes.' }, { status: 429 });
 
     const body = await request.json();
     const validation = validateInput(changeEmailSchema, body);
@@ -37,11 +41,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Incorrect password' }, { status: 401 });
     }
 
-    if (organizer.email === emailLower) {
+    if (organizer.email.toLowerCase() === emailLower) {
       return NextResponse.json({ success: false, error: 'New email is the same as current' }, { status: 400 });
     }
 
-    const existing = await prisma.eventOrganizer.findUnique({ where: { email: emailLower } });
+    const existing = await prisma.eventOrganizer.findFirst({ where: { email: { equals: emailLower, mode: 'insensitive' } }, select: { id: true } });
     if (existing) {
       return NextResponse.json({ success: false, error: 'Email is already in use' }, { status: 409 });
     }

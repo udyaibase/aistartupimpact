@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@udyaibase/database";
-import { requirePermission } from "@/lib/organizer-auth/require-permission";
+import { requirePermission, isEventLimited } from "@/lib/organizer-auth/require-permission";
+import { logOrganizerActivity, organizerActor } from "@/lib/workspace-activity";
 import {
   syncWidgetCsp, parseWidgetInput, WidgetInputError, widgetStatus,
 } from "@/lib/embed/widgets";
@@ -28,6 +29,7 @@ export async function PUT(request: NextRequest, { params }: Ctx) {
   const result = await requirePermission("embed.manage");
   if (result instanceof NextResponse) return result;
   const { widgetId } = await params;
+  if (isEventLimited(result)) return NextResponse.json({ success: false, error: "Your role in this workspace doesn’t allow this." }, { status: 403 });
 
   const existing = await prisma.embedWidget.findFirst({
     where: { id: widgetId, organizerId: result.organizerId },
@@ -42,7 +44,7 @@ export async function PUT(request: NextRequest, { params }: Ctx) {
 
     if (Array.isArray(data.eventIds) && (data.eventIds as string[]).length > 0) {
       const owned = await prisma.event.count({
-        where: { id: { in: data.eventIds as string[] }, organizerId: result.organizerId },
+        where: { id: { in: data.eventIds as string[] }, organizerId: result.organizerId, deletedAt: null },
       });
       if (owned !== (data.eventIds as string[]).length) {
         return NextResponse.json({ success: false, error: "One of the selected events isn't yours." }, { status: 400 });
@@ -52,6 +54,7 @@ export async function PUT(request: NextRequest, { params }: Ctx) {
     const widget = await prisma.embedWidget.update({ where: { id: widgetId }, data });
     await syncWidgetCsp(widget);
     revalidatePath(`/embed/${widgetId}`);
+    await logOrganizerActivity(result.organizerId, "event_content_changed", { actor: organizerActor(result), request, metadata: { what: `Edited the widget “${widget.name}”` } });
 
     return NextResponse.json({ success: true, data: { ...widget, status: widgetStatus(widget) } });
   } catch (error) {
@@ -63,10 +66,11 @@ export async function PUT(request: NextRequest, { params }: Ctx) {
   }
 }
 
-export async function DELETE(_request: NextRequest, { params }: Ctx) {
+export async function DELETE(request: NextRequest, { params }: Ctx) {
   const result = await requirePermission("embed.manage");
   if (result instanceof NextResponse) return result;
   const { widgetId } = await params;
+  if (isEventLimited(result)) return NextResponse.json({ success: false, error: "Your role in this workspace doesn’t allow this." }, { status: 403 });
 
   const existing = await prisma.embedWidget.findFirst({
     where: { id: widgetId, organizerId: result.organizerId },
@@ -84,6 +88,7 @@ export async function DELETE(_request: NextRequest, { params }: Ctx) {
   await prisma.embedWidget.delete({ where: { id: widgetId } });
   await syncWidgetCsp({ id: widgetId, active: false, allowedDomains: [] });
   revalidatePath(`/embed/${widgetId}`);
+  await logOrganizerActivity(result.organizerId, "event_content_changed", { actor: organizerActor(result), request, metadata: { what: `Deleted the widget “${existing.name}”` } });
 
   return NextResponse.json({ success: true });
 }

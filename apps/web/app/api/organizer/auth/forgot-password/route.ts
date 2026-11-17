@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyTurnstileToken } from "@/lib/turnstile";
 import { prisma } from "@udyaibase/database";
-import { generateToken } from "@/lib/organizer-auth";
+import crypto from "crypto";
+import { generateToken, findOrganizerByEmail, normalizeEmail } from "@/lib/organizer-auth";
 import { sendOrganizerPasswordResetEmail } from "@/lib/organizer-auth/emails";
 import { checkRateLimit, getClientIdentifier } from "@/lib/rate-limit";
 import { strictRateLimit } from "@/lib/rate-limit";
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { email } = body;
+    const email = normalizeEmail(body.email);
     if (!body.turnstileToken) {
       return NextResponse.json({ success: false, error: "CAPTCHA verification required. Please complete the challenge." }, { status: 403 });
     }
@@ -35,17 +36,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Email is required." }, { status: 400 });
     }
 
-    const organizer = await prisma.eventOrganizer.findUnique({
-      where: { email },
-      select: { id: true, name: true, email: true },
-    });
+    const organizer = await findOrganizerByEmail(email);
 
     if (organizer) {
       const resetToken = `${generateToken()}.${Date.now()}`;
 
+      // Only a hash is kept, so reading the database doesn't hand out working reset links.
       await prisma.eventOrganizer.update({
         where: { id: organizer.id },
-        data: { verifyToken: resetToken },
+        data: { verifyToken: `reset:${crypto.createHash("sha256").update(resetToken).digest("hex")}` },
       });
 
       // Send reset email

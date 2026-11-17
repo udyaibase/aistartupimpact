@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import TransferOwnership from "@/components/organizer/TransferOwnership";
 import { Users, Plus, Loader2, Mail, Trash2, X, Pencil } from "lucide-react";
 
 const ROLES = [
   { value: "ADMIN", label: "Admin", desc: "Full access, including team and billing" },
   { value: "MANAGER", label: "Manager", desc: "Edit events, manage registrations" },
-  { value: "STAFF", label: "Staff", desc: "Check-in, view attendees" },
+  { value: "STAFF", label: "Staff", desc: "Check-in, view attendees (no export)" },
   { value: "CHECK_IN", label: "Check-in only", desc: "QR scanner only" },
 ];
 const roleLabel = (r: string) => ROLES.find((x) => x.value === r)?.label ?? r;
@@ -214,6 +215,10 @@ export default function TeamPage() {
           </div>
         )}
       </div>
+
+      {viewer.role === "OWNER" && (
+        <TransferOwnership admins={members.filter((m) => m.role === "ADMIN" && m.status === "ACTIVE").map((m) => ({ id: m.id, email: m.email }))} />
+      )}
     </div>
   );
 }

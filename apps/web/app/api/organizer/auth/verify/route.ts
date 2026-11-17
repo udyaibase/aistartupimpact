@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
+import { storedVerifyToken, verifyTokenIssuedAt } from "@/lib/organizer-auth/verify-token";
 
 export const dynamic = "force-dynamic";
 
@@ -10,22 +11,31 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token");
 
-  if (!token) {
+  // Password-reset tokens share this column but are stored hashed with a "reset:" prefix, so they never match here.
+  if (!token || token.startsWith("reset:") || token.startsWith("verify:")) {
     return NextResponse.redirect(new URL("/organizer/login?error=invalid_token", request.url));
   }
 
   try {
-    const organizer = await prisma.eventOrganizer.findUnique({
-      where: { verifyToken: token },
-      select: { id: true, emailVerified: true },
-    });
+    // New links are stored hashed; links sent before that change were stored as sent.
+    const hashed = storedVerifyToken(token);
+    const organizer =
+      (hashed ? await prisma.eventOrganizer.findUnique({ where: { verifyToken: hashed }, select: { id: true, emailVerified: true } }) : null) ??
+      (await prisma.eventOrganizer.findUnique({ where: { verifyToken: token }, select: { id: true, emailVerified: true } }));
 
     if (!organizer) {
       return NextResponse.redirect(new URL("/organizer/login?error=invalid_token", request.url));
     }
 
     if (organizer.emailVerified) {
-      return NextResponse.redirect(new URL("/organizer?verified=already", request.url));
+      return NextResponse.redirect(new URL("/organizer/login?verified=already", request.url));
+    }
+
+    // Links last 24 hours, as the email says (the time is the token's last part; older links without one are
+    // still accepted). Signing in again sends a fresh link.
+    const stamp = verifyTokenIssuedAt(token);
+    if (stamp && Date.now() - stamp > 24 * 60 * 60 * 1000) {
+      return NextResponse.redirect(new URL("/organizer/login?error=verify_expired", request.url));
     }
 
     // Mark as verified and activate
@@ -38,7 +48,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    return NextResponse.redirect(new URL("/organizer?verified=true", request.url));
+    return NextResponse.redirect(new URL("/organizer/login?verified=1", request.url));
   } catch (error) {
     console.error("Email verification error:", error);
     return NextResponse.redirect(new URL("/organizer/login?error=verification_failed", request.url));

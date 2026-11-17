@@ -9,6 +9,7 @@ import { finishRecentlyApprovedEvents, processSuspendedEvents } from '@/lib/even
 import { expireTicketHolds } from '@/lib/events/tickets';
 import { refreshPendingPayouts } from '@/lib/events/payouts';
 import { trackCronRoute } from '@/lib/ops/cron';
+import { runScheduledOrganizerDeletions } from '@/lib/organizer-auth/account-deletion';
 import { sizePendingLogos } from '@/lib/media/logo-sizes';
 import { refreshPaths, refreshSections } from '@/lib/revalidate';
 import { sendPendingCreditNotes, sendPendingInvoices } from '@/lib/billing/invoice';
@@ -75,6 +76,9 @@ async function runCleanup(request: NextRequest) {
     } catch (err) {
       console.error('[data-retention] logo sizing failed', err);
     }
+
+    // Organizer accounts whose deletion grace period is over.
+    try { results.organizerAccountsDeleted = await runScheduledOrganizerDeletions(); } catch (err) { console.error('[data-retention] organizer deletions', err); }
 
     // Soft-deleted event registrations older than 30 days
     const softDeleteCutoff = new Date(now);

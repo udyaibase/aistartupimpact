@@ -1,7 +1,22 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { QrCode, Search, Loader2, CheckCircle, AlertTriangle, XCircle, RotateCcw, Camera, Keyboard } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { QrCode, Search, Loader2, CheckCircle, AlertTriangle, XCircle, RotateCcw, Camera, Keyboard, CloudDownload, CloudUpload, WifiOff, IdCard } from "lucide-react";
+import { BLOCKED_STATUSES, findInRoster, parseScanValue, searchRoster, type RosterRow } from "@/lib/events/checkin-rules";
+import { getRoster, saveRoster, queueScan, pendingScans, removeScans, type Roster } from "@/lib/events/offline-checkin-store";
+
+const TITLES: Record<string, string> = {
+  CHECKED_IN: "Checked in",
+  ALREADY_CHECKED_IN: "Already checked in",
+  NOT_FOUND: "No matching registration",
+  CANCELLED: "Registration cancelled",
+  WAITLISTED: "On the waitlist, not confirmed",
+  UNPAID: "Ticket not paid yet",
+  PENDING_APPROVAL: "Registration pending approval",
+};
+const BLOCKED_CODE: Record<string, string> = { CANCELLED: "CANCELLED", WAITLISTED: "WAITLISTED", PENDING_PAYMENT: "UNPAID", PENDING_APPROVAL: "PENDING_APPROVAL" };
+const asAttendee = (r: RosterRow, status: string) => ({ id: r.id, guestName: r.name, guestEmail: r.email, guestCompany: r.company, guestOccupation: r.occupation, ticketTier: r.tier ? { name: r.tier } : null, status });
+const timeText = (iso: string) => new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
 
 export default function CheckInPage() {
   const [events, setEvents] = useState<any[]>([]);
@@ -16,6 +31,14 @@ export default function CheckInPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scanIntervalRef = useRef<any>(null);
+  // Offline list for this event (kept on this device) and scans waiting to upload.
+  const [roster, setRoster] = useState<Roster | null>(null);
+  const [pending, setPending] = useState(0);
+  const [offlineBusy, setOfflineBusy] = useState<"" | "download" | "sync">("");
+  const [offlineNote, setOfflineNote] = useState("");
+  const [online, setOnline] = useState(true);
+  const rosterRef = useRef<Roster | null>(null);
+  rosterRef.current = roster;
 
   useEffect(() => {
     fetch("/api/organizer/events").then(r => r.json()).then(d => {
@@ -67,7 +90,7 @@ export default function CheckInPage() {
         if (barcodes.length > 0) {
           const code = barcodes[0].rawValue;
           // Extract token from URL or use as-is
-          const token = code.includes("/e/") ? code.split("/e/").pop() : code.includes("token=") ? new URL(code).searchParams.get("token") : code;
+          const token = parseScanValue(code);
           if (token && token !== input) {
             setInput(token);
             doCheckIn(token);
@@ -83,29 +106,142 @@ export default function CheckInPage() {
     return () => stopCamera();
   }, [mode, selectedEvent]);
 
-  const doCheckIn = async (value?: string) => {
+  // ── Offline list ──
+  const refreshPending = useCallback(async (eventId: string) => {
+    try { setPending((await pendingScans(eventId)).length); } catch { setPending(0); }
+  }, []);
+
+  useEffect(() => {
+    setRoster(null); setPending(0); setOfflineNote("");
+    if (!selectedEvent) return;
+    getRoster(selectedEvent).then((r) => setRoster(r ?? null)).catch(() => {});
+    refreshPending(selectedEvent);
+  }, [selectedEvent, refreshPending]);
+
+  /** Remember a status change in the offline list too, so a later offline scan of the same ticket is caught. */
+  const markInRoster = (id: string, status: string, checkedInAt: string | null) => {
+    const r = rosterRef.current;
+    if (!r) return;
+    const next = { ...r, rows: r.rows.map((x) => (x.id === id ? { ...x, status, checkedInAt } : x)) };
+    setRoster(next);
+    saveRoster(next).catch(() => {});
+  };
+
+  const downloadList = async () => {
+    if (!selectedEvent) return;
+    setOfflineBusy("download"); setOfflineNote("");
+    try {
+      const res = await fetch(`/api/organizer/check-in/roster?eventId=${encodeURIComponent(selectedEvent)}`);
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.success) { setOfflineNote(d.error || "Couldn’t download the list."); return; }
+      // Scans not yet uploaded stay checked in on this device.
+      const waiting = new Set((await pendingScans(selectedEvent)).map((p) => p.registrationId));
+      const rows: RosterRow[] = d.rows.map((r: RosterRow) => (waiting.has(r.id) && r.status === "CONFIRMED" ? { ...r, status: "CHECKED_IN" } : r));
+      const next: Roster = { eventId: selectedEvent, title: d.event.title, downloadedAt: d.downloadedAt, rows };
+      await saveRoster(next);
+      setRoster(next);
+      setOfflineNote(`${rows.length.toLocaleString("en-IN")} people saved on this device. Check-in keeps working without internet.`);
+    } catch { setOfflineNote("You seem to be offline. Download the list while you have a connection."); }
+    finally { setOfflineBusy(""); }
+  };
+
+  const syncNow = useCallback(async () => {
+    if (!selectedEvent || offlineBusy) return;
+    const scans = await pendingScans(selectedEvent).catch(() => []);
+    if (!scans.length) return;
+    setOfflineBusy("sync");
+    try {
+      for (let i = 0; i < scans.length; i += 500) {
+        const batch = scans.slice(i, i + 500);
+        const res = await fetch("/api/organizer/check-in/sync", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ eventId: selectedEvent, scans: batch.map((b) => ({ registrationId: b.registrationId, scannedAt: b.scannedAt })) }),
+        });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok || !d.success) { setOfflineNote(d.error || "Couldn’t upload scans. They’re kept on this device."); break; }
+        const blocked = (d.results as { status: string }[]).filter((r) => r.status === "BLOCKED" || r.status === "NOT_FOUND").length;
+        if (blocked) setOfflineNote(`${blocked} offline ${blocked === 1 ? "scan was" : "scans were"} not accepted (the registration changed while you were offline).`);
+        await removeScans(batch.map((b) => b.key));
+      }
+    } catch { /* still offline: keep the scans */ }
+    finally { setOfflineBusy(""); refreshPending(selectedEvent); }
+  }, [selectedEvent, offlineBusy, refreshPending]);
+
+  // Upload automatically when the connection comes back, and every 30 seconds while scans are waiting.
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    update();
+    const back = () => { update(); syncNow(); };
+    window.addEventListener("online", back);
+    window.addEventListener("offline", update);
+    const t = setInterval(() => { if (navigator.onLine && pending) syncNow(); }, 30_000);
+    return () => { window.removeEventListener("online", back); window.removeEventListener("offline", update); clearInterval(t); };
+  }, [syncNow, pending]);
+
+  /** Check in from the list on this device. */
+  const localCheckIn = async (value: string, registrationId?: string) => {
+    const r = rosterRef.current;
+    if (!r) return { success: false, status: "ERROR", message: "You’re offline and this event’s list isn’t on this device." };
+    const row = registrationId ? r.rows.find((x) => x.id === registrationId) ?? null : findInRoster(r.rows, parseScanValue(value));
+    if (!row) {
+      // A name only searches: the right person is picked from the list, never admitted on a partial match.
+      const matches = registrationId ? [] : searchRoster(r.rows, value);
+      if (matches.length) return { success: false, status: "CHOOSE", message: matches.length === 1 ? "Is this the person? Tap to check in." : "More than one match. Tap the right person.", matches: matches.map((m) => asAttendee(m, m.status)) };
+      return { success: false, status: "NOT_FOUND", message: "No registration found" };
+    }
+    if (row.status === "CHECKED_IN") return { success: false, status: "ALREADY_CHECKED_IN", message: `Already checked in${row.checkedInAt ? ` at ${timeText(row.checkedInAt)}` : ""}`, attendee: asAttendee(row, "CHECKED_IN") };
+    if (BLOCKED_STATUSES[row.status]) return { success: false, status: BLOCKED_CODE[row.status] ?? "ERROR", message: BLOCKED_STATUSES[row.status], attendee: asAttendee(row, row.status) };
+    const at = new Date().toISOString();
+    await queueScan(r.eventId, row.id, at);
+    markInRoster(row.id, "CHECKED_IN", at);
+    refreshPending(r.eventId);
+    return { success: true, status: "CHECKED_IN", offline: true, message: "Checked in on this device", attendee: asAttendee(row, "CHECKED_IN") };
+  };
+
+  const doCheckIn = async (value?: string, registrationId?: string) => {
     const searchValue = value || input.trim();
-    if (!selectedEvent || !searchValue) return;
+    if (!selectedEvent || (!searchValue && !registrationId)) return;
     setLoading(true); setResult(null);
-    const res = await fetch("/api/organizer/check-in", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ eventId: selectedEvent, input: searchValue }),
-    });
-    const d = await res.json();
+    let d: any;
+    if (typeof navigator !== "undefined" && !navigator.onLine) d = await localCheckIn(searchValue, registrationId);
+    else {
+      try {
+        const res = await fetch("/api/organizer/check-in", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ eventId: selectedEvent, input: searchValue, registrationId }),
+        });
+        d = await res.json();
+        if (d.attendee?.id && (d.status === "CHECKED_IN" || d.status === "ALREADY_CHECKED_IN")) markInRoster(d.attendee.id, "CHECKED_IN", d.attendee.checkedInAt ?? new Date().toISOString());
+      } catch {
+        // Signal dropped mid-request: fall back to the list on this device.
+        d = await localCheckIn(searchValue, registrationId);
+      }
+    }
     setResult(d);
+    // A list to pick from isn't a scan yet.
+    if (d.status === "CHOOSE") { setLoading(false); return; }
     setStats(s => ({ ...s, scans: s.scans + 1 }));
-    if (d.attendee) setRecentScans(prev => [{ ...d.attendee, scanStatus: d.status, time: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) }, ...prev].slice(0, 20));
+    if (d.attendee) setRecentScans(prev => [{ ...d.attendee, scanStatus: d.status, offline: !!d.offline, time: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) }, ...prev].slice(0, 20));
     if (d.success) { setStats(s => ({ ...s, checkedIn: s.checkedIn + 1 })); setInput(""); }
     setLoading(false);
   };
 
   const handleUndo = async (attendee: any) => {
+    if (attendee.offline) {
+      // Not uploaded yet: just drop it from this device.
+      await removeScans([`${selectedEvent}:${attendee.id}`]).catch(() => {});
+      markInRoster(attendee.id, "CONFIRMED", null);
+      refreshPending(selectedEvent);
+      setStats(s => ({ ...s, checkedIn: Math.max(0, s.checkedIn - 1) }));
+      setRecentScans(prev => prev.filter(s => s.id !== attendee.id));
+      return;
+    }
     const res = await fetch("/api/organizer/check-in", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ eventId: selectedEvent, input: attendee.guestEmail, action: "undo" }),
+      body: JSON.stringify({ eventId: selectedEvent, input: attendee.guestEmail, registrationId: attendee.id, action: "undo" }),
     });
     const d = await res.json();
-    if (d.success) { setStats(s => ({ ...s, checkedIn: Math.max(0, s.checkedIn - 1) })); setRecentScans(prev => prev.filter(s => s.id !== attendee.id)); }
+    if (d.success) { markInRoster(attendee.id, "CONFIRMED", null); setStats(s => ({ ...s, checkedIn: Math.max(0, s.checkedIn - 1) })); setRecentScans(prev => prev.filter(s => s.id !== attendee.id)); }
   };
 
   // Haptic feedback so door staff don't need to look at the screen.
@@ -144,6 +280,27 @@ export default function CheckInPage() {
 
       {selectedEvent && (
         <>
+          {/* Offline list */}
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex-1 min-w-0 text-sm font-jakarta">
+              {!online && <p className="flex items-center gap-1.5 font-semibold text-amber-700 dark:text-amber-400"><WifiOff className="w-4 h-4" aria-hidden /> Offline. Checking in from the list on this device.</p>}
+              {roster
+                ? <p className="text-gray-600 dark:text-gray-300">Offline list: {roster.rows.length.toLocaleString("en-IN")} people, saved {timeText(roster.downloadedAt)}{pending ? <> · <strong className="text-gray-900 dark:text-white">{pending} waiting to upload</strong></> : null}</p>
+                : <p className="text-gray-600 dark:text-gray-300">Weak signal at the venue? Save the list on this device so check-in works offline.</p>}
+              {offlineNote && <p role="status" className="mt-1 text-xs text-gray-500">{offlineNote}</p>}
+            </div>
+            <div className="flex gap-2 shrink-0">
+              {pending > 0 && online && (
+                <button onClick={syncNow} disabled={!!offlineBusy} className="inline-flex items-center gap-1.5 min-h-[40px] px-3 rounded-lg bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-semibold font-jakarta disabled:opacity-50">
+                  {offlineBusy === "sync" ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <CloudUpload className="w-4 h-4" aria-hidden />} Upload
+                </button>
+              )}
+              <button onClick={downloadList} disabled={!!offlineBusy || !online} className="inline-flex items-center gap-1.5 min-h-[40px] px-3 rounded-lg border border-gray-300 dark:border-gray-700 text-sm font-semibold text-gray-800 dark:text-gray-200 font-jakarta disabled:opacity-50">
+                {offlineBusy === "download" ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <CloudDownload className="w-4 h-4" aria-hidden />} {roster ? "Refresh list" : "Save list offline"}
+              </button>
+            </div>
+          </div>
+
           {/* Camera Mode */}
           {mode === "camera" && (
             <div className="bg-black rounded-xl overflow-hidden relative">
@@ -194,8 +351,26 @@ export default function CheckInPage() {
             </div>
           )}
 
+          {/* Name search: pick the person */}
+          {result?.status === "CHOOSE" && (
+            <div role="status" aria-live="polite" className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+              <p className="text-sm font-semibold text-gray-900 dark:text-white font-jakarta mb-2">{result.message}</p>
+              <ul className="space-y-2">
+                {(result.matches ?? []).map((m: any) => (
+                  <li key={m.id}>
+                    <button type="button" disabled={loading || m.status === "CHECKED_IN"} onClick={() => doCheckIn(m.guestName || "", m.id)}
+                      className="w-full min-h-[48px] px-3 py-2 text-left rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-60 font-jakarta">
+                      <span className="block text-sm font-semibold text-gray-900 dark:text-white">{m.guestName}{m.status === "CHECKED_IN" ? " · already checked in" : ""}</span>
+                      <span className="block text-xs text-gray-500">{[m.guestEmail, m.guestCompany, m.ticketTier?.name].filter(Boolean).join(" · ")}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* Result */}
-          {result && (
+          {result && result.status !== "CHOOSE" && (
             <div role="status" aria-live="assertive" className={`p-4 rounded-xl flex items-start gap-3 ${
               result.status === "CHECKED_IN" ? "bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900/30" :
               result.status === "ALREADY_CHECKED_IN" ? "bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-900/30" :
@@ -203,20 +378,22 @@ export default function CheckInPage() {
             }`}>
               {result.status === "CHECKED_IN" && <CheckCircle className="w-6 h-6 text-green-600 shrink-0"/>}
               {result.status === "ALREADY_CHECKED_IN" && <AlertTriangle className="w-6 h-6 text-yellow-600 shrink-0"/>}
-              {["NOT_FOUND","CANCELLED","WAITLISTED","ERROR"].includes(result.status) && <XCircle className="w-6 h-6 text-red-600 shrink-0"/>}
+              {!["CHECKED_IN","ALREADY_CHECKED_IN"].includes(result.status) && <XCircle className="w-6 h-6 text-red-600 shrink-0"/>}
               <div className="flex-1">
                 <p className={`text-base font-bold font-jakarta ${result.status === "CHECKED_IN" ? "text-green-700" : result.status === "ALREADY_CHECKED_IN" ? "text-yellow-700" : "text-red-700"}`}>
-                  {result.status === "CHECKED_IN" && "Checked in"}
-                  {result.status === "ALREADY_CHECKED_IN" && "Already checked in"}
-                  {result.status === "NOT_FOUND" && "No matching registration"}
-                  {result.status === "CANCELLED" && "Registration cancelled"}
-                  {result.status === "WAITLISTED" && "On the waitlist, not confirmed"}
-                  {result.status === "ERROR" && result.message}
+                  {TITLES[result.status] ?? result.message ?? "Something went wrong"}
+                  {result.offline && <span className="ml-2 text-xs font-semibold text-gray-500">(saved on this device)</span>}
                 </p>
                 {result.attendee && (
                   <div className="mt-1">
                     <p className="text-sm text-gray-700 dark:text-gray-200 font-jakarta font-medium">{result.attendee.guestName}</p>
                     <p className="text-xs text-gray-500 font-jakarta">{[result.attendee.guestCompany, result.attendee.guestOccupation, result.attendee.ticketTier?.name].filter(Boolean).join(" · ")}</p>
+                    {result.status === "CHECKED_IN" && online && result.attendee.id && (
+                      <a href={`/api/organizer/events/${selectedEvent}/badges?layout=label&registrationId=${encodeURIComponent(result.attendee.id)}`} target="_blank" rel="noopener"
+                        className="mt-2 inline-flex items-center gap-1.5 min-h-[36px] px-3 rounded-lg border border-gray-300 dark:border-gray-700 text-sm font-semibold text-gray-800 dark:text-gray-200 font-jakarta">
+                        <IdCard className="w-4 h-4" aria-hidden /> Print badge
+                      </a>
+                    )}
                   </div>
                 )}
               </div>

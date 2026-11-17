@@ -65,7 +65,7 @@ export default async function HostBillingPage(props: { searchParams: Promise<{ b
         limit: registrationLimit(status!.plan, e), waitlisted: e._count.registrations,
       }))}
       payments={payments.map((p) => ({
-        id: p.id, label: p.kind === "PRO" ? `Pro plan${p.cycle === "ANNUAL" ? " (annual)" : ""}` : `Event Boost${p.eventId && titles[p.eventId] ? ` · ${titles[p.eventId]}` : ""}`,
+        id: p.id, label: p.kind === "PRO" ? `Pro plan${p.cycle === "ANNUAL" ? " (annual)" : ""}` : `${p.kind === "CERTIFICATES" ? "Certificates" : "Event Boost"}${p.eventId && titles[p.eventId] ? ` · ${titles[p.eventId]}` : ""}`,
         status: p.status, date: (p.paidAt ?? p.createdAt).toISOString(),
         periodStart: p.kind === "PRO" ? p.periodStart?.toISOString() ?? null : null, periodEnd: p.kind === "PRO" ? p.periodEnd?.toISOString() ?? null : null,
         amountPaise: p.amountPaise, gstPaise: p.gstPaise, totalPaise: p.totalPaise, refundedPaise: p.refundAmountPaise ?? 0,

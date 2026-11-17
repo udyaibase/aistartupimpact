@@ -6,7 +6,7 @@ import { prisma } from "@udyaibase/database";
  * OWNER    = the organizer who created the org (full access, implicit)
  * ADMIN    = full access to all features
  * MANAGER  = events, registrations, promote, analytics — no team/settings/billing
- * STAFF    = view attendees, check-in, view analytics — no create/edit/delete
+ * STAFF    = view attendees, check-in, view analytics — no create/edit/delete, no attendee export
  * CHECK_IN = only check-in scanner
  */
 
@@ -17,6 +17,8 @@ export type Permission =
   | "events.view"
   | "registrations.view"
   | "registrations.manage"
+  /** Download the attendee list (names, emails, phones) as a file. */
+  | "registrations.export"
   | "checkin"
   | "analytics.view"
   | "promote"
@@ -31,19 +33,19 @@ export type Permission =
 const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   OWNER: [
     "events.create", "events.edit", "events.delete", "events.view",
-    "registrations.view", "registrations.manage",
+    "registrations.view", "registrations.manage", "registrations.export",
     "checkin", "analytics.view", "promote",
     "team.view", "team.manage", "settings", "upload", "embed.manage", "embed.view", "billing",
   ],
   ADMIN: [
     "events.create", "events.edit", "events.delete", "events.view",
-    "registrations.view", "registrations.manage",
+    "registrations.view", "registrations.manage", "registrations.export",
     "checkin", "analytics.view", "promote",
     "team.view", "team.manage", "settings", "upload", "embed.manage", "embed.view", "billing",
   ],
   MANAGER: [
     "events.create", "events.edit", "events.view",
-    "registrations.view", "registrations.manage",
+    "registrations.view", "registrations.manage", "registrations.export",
     "checkin", "analytics.view", "promote", "upload",
     "team.view", "embed.manage", "embed.view",
   ],

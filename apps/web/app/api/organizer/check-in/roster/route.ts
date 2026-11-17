@@ -1,0 +1,34 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@udyaibase/database';
+import { requirePermission, canAccessEvent } from '@/lib/organizer-auth/require-permission';
+
+export const dynamic = 'force-dynamic';
+
+const MAX_ROWS = 20_000;
+
+/** The attendee list for offline check-in at the door. Only what's needed to find and admit someone. */
+export async function GET(request: NextRequest) {
+  const result = await requirePermission('checkin');
+  if (result instanceof NextResponse) return result;
+  const session = result;
+  const eventId = request.nextUrl.searchParams.get('eventId') ?? '';
+  if (!eventId || !canAccessEvent(session, eventId)) return NextResponse.json({ success: false, error: 'Not authorized for this event' }, { status: 403 });
+  const event = await prisma.event.findFirst({ where: { id: eventId, organizerId: session.organizerId, deletedAt: null }, select: { id: true, title: true } });
+  if (!event) return NextResponse.json({ success: false, error: 'Event not found' }, { status: 404 });
+
+  const regs = await prisma.eventRegistration.findMany({
+    where: { eventId, deletedAt: null },
+    orderBy: { createdAt: 'asc' },
+    take: MAX_ROWS,
+    select: { id: true, qrToken: true, guestName: true, guestEmail: true, guestCompany: true, guestOccupation: true, status: true, checkedInAt: true, ticketTier: { select: { name: true } } },
+  });
+  return NextResponse.json({
+    success: true,
+    event,
+    downloadedAt: new Date().toISOString(),
+    rows: regs.map((r) => ({
+      id: r.id, qrToken: r.qrToken, name: r.guestName ?? '', email: r.guestEmail ?? '', company: r.guestCompany, occupation: r.guestOccupation,
+      tier: r.ticketTier?.name ?? null, status: r.status, checkedInAt: r.checkedInAt?.toISOString() ?? null,
+    })),
+  }, { headers: { 'Cache-Control': 'no-store' } });
+}

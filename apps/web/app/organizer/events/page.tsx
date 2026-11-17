@@ -7,6 +7,8 @@ import { Plus, Calendar, Users, MapPin } from "lucide-react";
 import EventActions from "./EventActions";
 import { hasPermission } from "@/lib/organizer-auth/permissions";
 import PublishedModal from "@/components/organizer/embed/PublishedModal";
+import RestoreEventButton from "./RestoreEventButton";
+import { RESTORE_DAYS } from "@/lib/events/restore";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +24,7 @@ export default async function OrganizerEventsPage({
   const can = (p: Parameters<typeof hasPermission>[1]) => hasPermission(session.role, p);
   const allowed = {
     edit: can("events.edit"), del: can("events.delete"), promote: can("promote"),
-    download: can("registrations.view"), embed: can("embed.view"),
+    download: can("registrations.export"), embed: can("embed.view"),
   };
 
   const events = await prisma.event.findMany({
@@ -34,6 +36,16 @@ export default async function OrganizerEventsPage({
       coverImageUrl: true, venueName: true, heldAt: true,
     },
   });
+
+  // Deleted in the restore window: listed at the bottom for owners and admins.
+  const deleted = allowed.del
+    ? await prisma.event.findMany({
+        where: { ...eventScope(session), deletedAt: { gte: new Date(Date.now() - RESTORE_DAYS * 864e5) } },
+        orderBy: { deletedAt: "desc" },
+        select: { id: true, title: true, deletedAt: true },
+        take: 50,
+      })
+    : [];
 
   const publishedEvent = published ? events.find((e) => e.id === published && e.status === "PUBLISHED") : undefined;
   const liveWidget = publishedEvent
@@ -130,6 +142,27 @@ export default async function OrganizerEventsPage({
             </div>
           ))}
         </div>
+      )}
+
+      {deleted.length > 0 && (
+        <section aria-labelledby="deleted-events" className="pt-2">
+          <h2 id="deleted-events" className="portal-eyebrow mb-2">Recently deleted</h2>
+          <p className="text-xs text-gray-500 font-jakarta mb-3">Deleted events can be restored for {RESTORE_DAYS} days. They come back as drafts.</p>
+          <ul className="space-y-2">
+            {deleted.map((e) => (
+              <li key={e.id} className="flex items-center justify-between gap-3 bg-white dark:bg-gray-900 border border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-gray-700 dark:text-gray-200">{e.title}</p>
+                  <p className="text-xs text-gray-500 font-jakarta">
+                    Deleted {e.deletedAt!.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} · restorable until{" "}
+                    {new Date(e.deletedAt!.getTime() + RESTORE_DAYS * 864e5).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                  </p>
+                </div>
+                <RestoreEventButton eventId={e.id} title={e.title} />
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </div>
   );

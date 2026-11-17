@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { MoreVertical, Edit, Trash2, Share2, ExternalLink, Copy, Check, CodeXml, Send, EyeOff, Loader2 } from "lucide-react";
+import { MoreVertical, Edit, Trash2, Share2, ExternalLink, Copy, Check, CodeXml, Send, EyeOff, Loader2, Award, Repeat, CalendarRange, Mic, Handshake, IdCard } from "lucide-react";
 
 interface Props {
   /** What this person's role can do; defaults to everything (owner). The API checks the same rules. */
@@ -26,6 +26,10 @@ export default function EventActions({ eventId, eventSlug, eventTitle, shortCode
   const [deleting, setDeleting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showUnpublish, setShowUnpublish] = useState(false);
+  const [showRepeat, setShowRepeat] = useState(false);
+  const [repeatDate, setRepeatDate] = useState("");
+  const [repeatBusy, setRepeatBusy] = useState(false);
+  const [repeatError, setRepeatError] = useState("");
   const [statusBusy, setStatusBusy] = useState(false);
   const [statusError, setStatusError] = useState("");
   const isDraft = status === "DRAFT";
@@ -53,6 +57,22 @@ export default function EventActions({ eventId, eventSlug, eventTitle, shortCode
       setStatusError("You seem to be offline. Check your connection and try again.");
     } finally {
       setStatusBusy(false);
+    }
+  };
+
+  const runAgain = async () => {
+    if (!repeatDate) { setRepeatError("Choose a date."); return; }
+    setRepeatBusy(true);
+    setRepeatError("");
+    try {
+      const res = await fetch(`/api/organizer/events/${eventId}/duplicate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date: repeatDate }) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.success) { setRepeatError(d.error || "Couldn't copy this event."); return; }
+      router.push(`/organizer/events/${d.id}?copied=1`);
+    } catch {
+      setRepeatError("You seem to be offline. Check your connection and try again.");
+    } finally {
+      setRepeatBusy(false);
     }
   };
 
@@ -137,6 +157,36 @@ export default function EventActions({ eventId, eventSlug, eventTitle, shortCode
             {allowed.edit && (
             <Link href={`/organizer/events/${eventId}`} onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-4 min-h-[44px] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 font-jakarta transition-colors">
               <Edit className="w-3.5 h-3.5 text-gray-400" /> Edit Event
+            </Link>
+            )}
+            {allowed.edit && (
+            <Link href={`/organizer/events/${eventId}/speakers`} onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-4 min-h-[44px] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 font-jakarta transition-colors">
+              <Mic className="w-3.5 h-3.5 text-gray-400" /> Call for speakers
+            </Link>
+            )}
+            {allowed.edit && (
+            <Link href={`/organizer/events/${eventId}/agenda`} onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-4 min-h-[44px] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 font-jakarta transition-colors">
+              <CalendarRange className="w-3.5 h-3.5 text-gray-400" /> Agenda
+            </Link>
+            )}
+            {allowed.edit && (
+            <Link href={`/organizer/events/${eventId}/sponsors`} onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-4 min-h-[44px] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 font-jakarta transition-colors">
+              <Handshake className="w-3.5 h-3.5 text-gray-400" /> Sponsors
+            </Link>
+            )}
+            {allowed.edit && (
+            <Link href={`/organizer/events/${eventId}/badges`} onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-4 min-h-[44px] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 font-jakarta transition-colors">
+              <IdCard className="w-3.5 h-3.5 text-gray-400" /> Badges
+            </Link>
+            )}
+            {allowed.edit && (
+              <button onClick={() => { setOpen(false); setShowRepeat(true); }} className="w-full flex items-center gap-2.5 px-4 min-h-[44px] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 font-jakarta transition-colors">
+                <Repeat className="w-3.5 h-3.5 text-gray-400" /> Run it again
+              </button>
+            )}
+            {!isDraft && (
+            <Link href={`/organizer/events/${eventId}/after`} onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-4 min-h-[44px] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 font-jakarta transition-colors">
+              <Award className="w-3.5 h-3.5 text-gray-400" /> After the event
             </Link>
             )}
             {allowed.promote && (
@@ -239,6 +289,31 @@ export default function EventActions({ eventId, eventSlug, eventTitle, shortCode
               <button onClick={() => setShowUnpublish(false)} className="min-h-[44px] px-4 text-sm text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg font-jakarta">Cancel</button>
               <button onClick={() => changeStatus("DRAFT")} disabled={statusBusy} className="px-4 py-2 text-sm bg-gray-900 hover:bg-gray-800 dark:bg-white dark:text-gray-900 text-white rounded-lg font-jakarta font-semibold disabled:opacity-50">
                 {statusBusy ? "Unpublishing..." : "Unpublish"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Run it again */}
+      {showRepeat && (
+        <div className="fixed inset-0 z-modal flex items-end sm:items-center justify-center sm:p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowRepeat(false)}>
+          <div role="dialog" aria-modal="true" aria-labelledby="repeat-title" className="bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:pb-6 max-w-sm w-full space-y-4 animate-slide-up sm:animate-none" onClick={(e) => e.stopPropagation()}>
+            <h3 id="repeat-title" className="font-sora font-bold text-lg text-navy dark:text-white">Run it again</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-300 font-jakarta">
+              Copies <strong>{eventTitle}</strong> to a new date as a draft: details, speakers, agenda, tickets and questions, at the same time of day. You can review it before publishing.
+            </p>
+            <div>
+              <label htmlFor="repeat-date" className="block text-sm font-semibold text-gray-900 dark:text-white mb-1.5 font-jakarta">New date</label>
+              <input id="repeat-date" type="date" value={repeatDate} min={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => { setRepeatDate(e.target.value); setRepeatError(""); }}
+                className="w-full min-h-[44px] px-3 rounded-[10px] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/25 focus:border-brand" />
+              {repeatError && <p role="alert" className="mt-1.5 text-sm text-red-600 dark:text-red-400 font-jakarta">{repeatError}</p>}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowRepeat(false)} className="min-h-[44px] px-4 text-sm text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg font-jakarta">Cancel</button>
+              <button onClick={runAgain} disabled={repeatBusy || !repeatDate} className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-gray-900 hover:bg-gray-800 dark:bg-white dark:text-gray-900 text-white rounded-lg font-jakarta font-semibold disabled:opacity-50">
+                {repeatBusy && <Loader2 className="w-4 h-4 animate-spin" />} Create copy
               </button>
             </div>
           </div>

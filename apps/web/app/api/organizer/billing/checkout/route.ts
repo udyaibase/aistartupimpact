@@ -5,6 +5,7 @@ import { apiRateLimit, checkRateLimit } from "@/lib/rate-limit";
 import { createRazorpayOrder, razorpayKeys, withGst } from "@/lib/billing/razorpay";
 import { BILLING_SELECT, profileComplete, profileFromRow } from "@/lib/billing/details";
 import { EVENT_BOOST, HOST_PLANS, hostFoundingEligible, hostProPricePaise, isHostBillingCycle } from "@/lib/events/plans";
+import { CERTIFICATE_PRICE_PAISE, certificatesAllowed } from "@/lib/events/after-event";
 
 export const dynamic = "force-dynamic";
 
@@ -22,8 +23,8 @@ export async function POST(request: NextRequest) {
   if (!razorpayKeys()) return NextResponse.json({ success: false, error: "Payments aren’t set up yet. Please contact us." }, { status: 503 });
 
   const body = await request.json().catch(() => ({}));
-  const kind = body.kind === "BOOST" ? "BOOST" : body.kind === "PRO" ? "PRO" : null;
-  if (!kind) return NextResponse.json({ success: false, error: "Choose Pro or an Event Boost." }, { status: 400 });
+  const kind = body.kind === "BOOST" ? "BOOST" : body.kind === "PRO" ? "PRO" : body.kind === "CERTIFICATES" ? "CERTIFICATES" : null;
+  if (!kind) return NextResponse.json({ success: false, error: "Choose Pro, an Event Boost or certificates." }, { status: 400 });
 
   // GST invoices need the buyer's name, address and (for businesses) GSTIN: collected once, before the first payment.
   const host = await prisma.eventOrganizer.findUnique({ where: { id: session.organizerId }, select: { ...BILLING_SELECT, email: true } });
@@ -52,10 +53,21 @@ export async function POST(request: NextRequest) {
     description = `Event Boost · ${ev.title}`.slice(0, 250);
   }
 
-  const price = withGst(kind === "PRO" ? hostProPricePaise(yearly ? "ANNUAL" : "MONTHLY", { founding }) : EVENT_BOOST.pricePaise);
+  if (kind === "CERTIFICATES") {
+    const ev = await prisma.event.findFirst({
+      where: { id: String(body.eventId ?? ""), organizerId: session.organizerId, deletedAt: null },
+      select: { id: true, title: true, organizerId: true, certificatesPaidAt: true },
+    });
+    if (!ev) return NextResponse.json({ success: false, error: "Choose one of your events." }, { status: 400 });
+    if (await certificatesAllowed(ev)) return NextResponse.json({ success: false, error: ev.certificatesPaidAt ? "Certificates are already on for this event." : "Certificates are included in your Pro plan." }, { status: 409 });
+    eventId = ev.id;
+    description = `Certificates · ${ev.title}`.slice(0, 250);
+  }
+
+  const price = withGst(kind === "PRO" ? hostProPricePaise(yearly ? "ANNUAL" : "MONTHLY", { founding }) : kind === "CERTIFICATES" ? CERTIFICATE_PRICE_PAISE : EVENT_BOOST.pricePaise);
   try {
     const { orderId, keyId } = await createRazorpayOrder(price.total, `host_${session.organizerId.slice(-10)}_${Date.now()}`, {
-      purpose: kind === "PRO" ? "ORGANIZER_PLAN" : "ORGANIZER_BOOST", organizerId: session.organizerId, ...(eventId ? { eventId } : {}),
+      purpose: kind === "PRO" ? "ORGANIZER_PLAN" : kind === "CERTIFICATES" ? "ORGANIZER_CERTIFICATES" : "ORGANIZER_BOOST", organizerId: session.organizerId, ...(eventId ? { eventId } : {}),
       ...(kind === "PRO" ? { cycle: yearly ? "ANNUAL" : "MONTHLY", founding: founding ? "yes" : "no" } : {}),
     });
     await prisma.organizerPayment.create({

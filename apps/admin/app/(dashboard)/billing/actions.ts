@@ -34,7 +34,7 @@ export interface BillingPayment {
   creditNoteNumber: string | null;
 }
 
-const PRODUCT: Record<string, string> = { FEATURED: 'Employer · Featured', PREMIUM: 'Employer · Premium', PRO: 'Host · Pro', BOOST: 'Host · Event Boost' };
+const PRODUCT: Record<string, string> = { FEATURED: 'Employer · Featured', PREMIUM: 'Employer · Premium', PRO: 'Host · Pro', BOOST: 'Host · Event Boost', CERTIFICATES: 'Host · Certificates' };
 const FUNDING_PACK: Record<string, string> = { STARTER: 'Starter (50)', GROWTH: 'Growth (250)', PRO: 'Pro (500)', SCALE: 'Scale (1,000)', FULL: 'Full Dataset' };
 
 /** Indian financial year start (1 April, IST) for a date. */
@@ -206,6 +206,9 @@ export async function refundPaymentAction(input: { source: 'EMPLOYER' | 'HOST' |
     if (kind === 'BOOST' && 'eventId' in p && p.eventId) {
       await prisma.event.update({ where: { id: p.eventId }, data: { boostedAt: null, featuredUntil: new Date() } });
       await refreshPublic(['events']);
+    } else if (kind === 'CERTIFICATES') {
+      // Only that event's certificates switch off (already-issued ones stay valid); never the host's plan.
+      if ('eventId' in p && p.eventId) await prisma.event.update({ where: { id: p.eventId }, data: { certificatesPaidAt: null } });
     } else {
       await endPlanNow(input.source, accountId);
     }
@@ -228,7 +231,7 @@ export async function refundPaymentAction(input: { source: 'EMPLOYER' | 'HOST' |
       html: `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1f2937;max-width:560px;margin:0 auto;padding:24px">
 <h1 style="font-size:20px;margin:0 0 8px">We’ve refunded ${rupees(amountPaise)}</h1>
 <p style="margin:0 0 12px;font-size:15px;line-height:1.6">${online ? 'It goes back to the card, UPI or account you paid with, usually within 5–7 working days.' : 'We’ll transfer it to the account you paid from.'}${p.invoiceNumber ? ` This relates to invoice ${p.invoiceNumber}.` : ''}</p>
-${input.endAccess ? `<p style="margin:0 0 12px;font-size:15px;line-height:1.6">${kind === 'BOOST' ? 'The Event Boost on that event has ended.' : 'Your paid plan has ended and your account is on the Free plan.'}</p>` : ''}
+${input.endAccess ? `<p style="margin:0 0 12px;font-size:15px;line-height:1.6">${kind === 'BOOST' ? 'The Event Boost on that event has ended.' : kind === 'CERTIFICATES' ? 'Certificates for that event have been switched off. Certificates already issued stay valid.' : 'Your paid plan has ended and your account is on the Free plan.'}</p>` : ''}
 <p style="margin:0;font-size:13px;color:#6b7280">Questions? Reply to this email.</p></div>`,
     });
   }

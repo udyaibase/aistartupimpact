@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse, after } from "next/server";
+import { hasPermission } from "@/lib/organizer-auth/permissions";
+import { descriptionTooLong, DESCRIPTION_TOO_LONG } from "@/lib/events/description-limit";
+import { cleanTimeZone } from "@/lib/events/zoned-time";
 import { revalidatePath } from "next/cache";
-import { prisma } from "@udyaibase/database";
+import { prisma, Prisma } from "@udyaibase/database";
 import { requirePermission, canAccessEvent } from "@/lib/organizer-auth/require-permission";
 import { eventCancellationHtml } from "@udyaibase/utils";
 import { sendEmailFireAndForget } from "@/lib/email/send";
@@ -12,6 +15,10 @@ import { refreshPaths, refreshSections } from '@/lib/revalidate';
 import { applyFirstEventBoost } from "@/lib/events/free-boost";
 import { canTagStartup, publishDecision } from "@/lib/events/trust";
 import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
+import { syncEventMeeting } from "@/lib/integrations/meetings";
+import { isProvider } from "@/lib/integrations/providers";
+import { meetingProofValid } from "@/lib/integrations/meeting-proof";
+import { cleanEventInput } from "@/lib/events/event-input";
 
 class TierError extends Error {}
 
@@ -32,41 +39,18 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ ev
 
   const event = await prisma.event.findUnique({
     where: { id: params.eventId },
-    select: { organizerId: true, title: true, startAt: true, timezone: true },
+    select: { organizerId: true, title: true, startAt: true, timezone: true, status: true },
   });
   if (!event) return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 });
   if (event.organizerId !== session.organizerId) return NextResponse.json({ success: false, error: "Not authorized" }, { status: 403 });
-
-  // Fetch confirmed attendees before soft-deleting
-  const attendees = await prisma.eventRegistration.findMany({
-    where: { eventId: params.eventId, deletedAt: null, status: { in: ["CONFIRMED", "CHECKED_IN", "PENDING_APPROVAL"] } },
-    select: { guestEmail: true, guestName: true },
-  });
 
   await prisma.event.update({ where: { id: params.eventId }, data: { deletedAt: new Date() } });
   await logOrganizerActivity(session.organizerId, "event_deleted", { actor: organizerActor(session), request, metadata: { title: event.title ?? "" } });
   // Paid tickets are refunded in full (the host's share is reversed too).
   after(() => refundEventTickets(params.eventId).then((r) => { if (r.paid) console.log(`[event delete] refunded ${r.refunded}/${r.paid} tickets`); }));
 
-  // Notify attendees about cancellation
-  if (attendees.length > 0) {
-    const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "no-reply@udyaibase.com";
-    const tz = event.timezone || "Asia/Kolkata";
-    const dateStr = event.startAt
-      ? new Date(event.startAt).toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: tz })
-      : "TBA";
-
-    for (const attendee of attendees) {
-      if (!attendee.guestEmail) continue;
-      sendEmailFireAndForget({
-        to: attendee.guestEmail,
-        from: `Udyaibase Events <${FROM_EMAIL}>`,
-        subject: `Event Cancelled: ${event.title}`,
-        html: eventCancellationHtml(attendee.guestName || "there", event.title, dateStr),
-        type: "event_cancellation",
-      });
-    }
-  }
+  // Notify attendees about cancellation (not for an event that was already cancelled: they were told then).
+  if (event.status !== "CANCELLED") await notifyCancelled(params.eventId, event.title, event.startAt, event.timezone);
 
   return NextResponse.json({ success: true });
 }
@@ -86,15 +70,28 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ event
 
   const event = await prisma.event.findUnique({
     where: { id: params.eventId, deletedAt: null },
-    select: { organizerId: true, slug: true, title: true, startAt: true, endAt: true, status: true, startupId: true, heldAt: true },
+    select: { organizerId: true, slug: true, title: true, startAt: true, endAt: true, timezone: true, status: true, startupId: true, heldAt: true, meetingExternalId: true, meetingProvider: true },
   });
   if (!event) return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 });
   if (event.organizerId !== session.organizerId) return NextResponse.json({ success: false, error: "Not authorized" }, { status: 403 });
 
-  const data = await request.json();
+  const cleaned = cleanEventInput(await request.json().catch(() => null));
+  if (!cleaned.ok) return NextResponse.json({ success: false, field: cleaned.field, error: cleaned.error }, { status: 400 });
+  const data = cleaned.data;
+  // A meeting id is taken only when it's the one the event already has, or this workspace just created it.
+  if (typeof data.meetingExternalId === "string" && data.meetingExternalId
+    && !(data.meetingExternalId === event.meetingExternalId && data.meetingProvider === event.meetingProvider)
+    && !meetingProofValid(session.organizerId, data.meetingProvider, data.meetingExternalId, data.meetingProof)) {
+    data.meetingProvider = null;
+    data.meetingExternalId = null;
+  }
 
   if (data.status !== undefined && !EVENT_STATUSES.includes(data.status)) {
     return NextResponse.json({ success: false, error: "Unknown event status." }, { status: 400 });
+  }
+  // Cancelling refunds every paid ticket and can't be undone, so it needs the same role as deleting.
+  if (data.status === "CANCELLED" && event.status !== "CANCELLED" && !hasPermission(session.role, "events.delete")) {
+    return NextResponse.json({ success: false, error: "Only the owner or an admin can cancel an event." }, { status: 403 });
   }
 
   // "Hosted by <startup>": only a verified startup, tagged by one of its own people. null removes the tag.
@@ -147,6 +144,9 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ event
     return NextResponse.json({ success: false, code: "payouts_required", error: "Set up payouts in Settings → Payments before selling paid tickets." }, { status: 400 });
   }
 
+    if (descriptionTooLong(data.description)) {
+      return NextResponse.json({ success: false, field: "description", error: DESCRIPTION_TOO_LONG }, { status: 400 });
+    }
   try {
   await prisma.$transaction(async (tx) => {
     await tx.event.update({
@@ -158,10 +158,16 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ event
         format: data.format || undefined,
         startAt: data.startAt ? new Date(data.startAt) : undefined,
         endAt: data.endAt ? new Date(data.endAt) : undefined,
-        timezone: data.timezone || undefined,
+        timezone: data.timezone ? cleanTimeZone(data.timezone) : undefined,
         venueName: data.venueName !== undefined ? data.venueName : undefined,
         address: data.address !== undefined ? data.address : undefined,
+        venueMapUrl: data.venueMapUrl !== undefined ? data.venueMapUrl : undefined,
         meetingLink: data.meetingLink !== undefined ? data.meetingLink : undefined,
+        // A meeting made with a connected Zoom/Google account; any other link clears it.
+        ...(data.meetingLink !== undefined && {
+          meetingProvider: data.meetingLink && isProvider(data.meetingProvider) && typeof data.meetingExternalId === "string" ? data.meetingProvider : null,
+          meetingExternalId: data.meetingLink && isProvider(data.meetingProvider) && typeof data.meetingExternalId === "string" ? data.meetingExternalId.slice(0, 200) : null,
+        }),
         description: data.description !== undefined ? (data.description ? { html: sanitizeUserHtml(String(data.description)), text: htmlToPlainText(String(data.description)) } : undefined) : undefined,
         capacity: data.capacity !== undefined ? (data.capacity ? parseInt(data.capacity) : null) : undefined,
         coverImageUrl: data.coverImageUrl !== undefined ? data.coverImageUrl : undefined,
@@ -179,22 +185,25 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ event
       await tx.event.updateMany({ where: { id: params.eventId, OR: [{ featuredUntil: null }, { featuredUntil: { lt: proFeatured } }] }, data: { featuredUntil: proFeatured } });
     }
 
-    // Replace speakers
+    // Speakers: update in place (matched by id, or by name for older forms), so a renamed speaker keeps their id,
+    // agenda sessions and talk details; add new, remove gone.
     if (data.speakers !== undefined) {
-      await tx.eventSpeaker.deleteMany({ where: { eventId: params.eventId } });
-      if (data.speakers.length > 0) {
-        await tx.eventSpeaker.createMany({
-          data: data.speakers.map((s: any, i: number) => ({
-            eventId: params.eventId,
-            name: s.name,
-            title: s.title || null,
-            company: s.company || null,
-            headshotUrl: s.photo || null,
-            bio: s.linkedin || null,
-            sortOrder: i,
-          })),
-        });
+      const existing = await tx.eventSpeaker.findMany({ where: { eventId: params.eventId }, select: { id: true, name: true } });
+      const ids = new Set(existing.map((e) => e.id));
+      const byName = new Map(existing.map((e) => [e.name.trim().toLowerCase(), e.id]));
+      const kept = new Set<string>();
+      for (const [i, s] of (data.speakers as any[]).entries()) {
+        const fields = { name: s.name, title: s.title || null, company: s.company || null, headshotUrl: s.photo || null, bio: s.linkedin || null, sortOrder: i };
+        const id = typeof s.id === "string" && ids.has(s.id) && !kept.has(s.id) ? s.id : byName.get(String(s.name ?? '').trim().toLowerCase());
+        if (id && !kept.has(id)) {
+          kept.add(id);
+          await tx.eventSpeaker.update({ where: { id }, data: fields });
+        } else {
+          await tx.eventSpeaker.create({ data: { eventId: params.eventId, ...fields } });
+        }
       }
+      const gone = existing.filter((e) => !kept.has(e.id)).map((e) => e.id);
+      if (gone.length) await tx.eventSpeaker.deleteMany({ where: { id: { in: gone }, eventId: params.eventId } });
     }
 
     // Replace agenda items
@@ -246,20 +255,34 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ event
       }
     }
 
-    // Replace custom questions
+    // Custom questions: update in place by id, so answers people already gave stay linked. A removed question is
+    // deleted only if nobody answered it; otherwise it's hidden (no longer asked, answers kept for exports).
     if (data.customQuestions !== undefined) {
-      await tx.eventCustomQuestion.deleteMany({ where: { eventId: params.eventId } });
-      if (data.customQuestions.length > 0) {
-        await tx.eventCustomQuestion.createMany({
-          data: data.customQuestions.map((q: any, i: number) => ({
-            eventId: params.eventId,
-            questionText: q.text,
-            questionType: q.type || "TEXT",
-            required: q.required || false,
-            options: q.type === "SELECT" && q.options ? q.options.split(",").map((o: string) => o.trim()) : undefined,
-            sortOrder: i,
-          })),
-        });
+      const existing = await tx.eventCustomQuestion.findMany({
+        where: { eventId: params.eventId, hiddenAt: null },
+        select: { id: true, _count: { select: { answers: true } } },
+      });
+      const ids = new Set(existing.map((e) => e.id));
+      const kept = new Set<string>();
+      for (const [i, q] of (data.customQuestions as any[]).entries()) {
+        const fields = {
+          questionText: q.text,
+          questionType: q.type || "TEXT",
+          required: q.required || false,
+          options: q.type === "SELECT" && q.options ? String(q.options).split(",").map((o: string) => o.trim()).filter(Boolean) : undefined,
+          sortOrder: i,
+        };
+        if (typeof q.id === "string" && ids.has(q.id) && !kept.has(q.id)) {
+          kept.add(q.id);
+          await tx.eventCustomQuestion.update({ where: { id: q.id }, data: { ...fields, options: fields.options ?? Prisma.DbNull } });
+        } else {
+          await tx.eventCustomQuestion.create({ data: { eventId: params.eventId, ...fields } });
+        }
+      }
+      for (const e of existing) {
+        if (kept.has(e.id)) continue;
+        if (e._count.answers > 0) await tx.eventCustomQuestion.update({ where: { id: e.id }, data: { hiddenAt: new Date() } });
+        else await tx.eventCustomQuestion.delete({ where: { id: e.id } });
       }
     }
   });
@@ -268,7 +291,18 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ event
     throw err;
   }
 
+  // Move the Zoom / Google meeting when the time or title changed (it was made for the old ones).
+  const timeChanged = (data.startAt && new Date(data.startAt).getTime() !== event.startAt.getTime())
+    || (data.endAt && new Date(data.endAt).getTime() !== event.endAt.getTime())
+    || (data.title && data.title !== event.title)
+    || (data.timezone && cleanTimeZone(data.timezone) !== event.timezone);
+  if (timeChanged && (event.meetingExternalId || (typeof data.meetingExternalId === "string" && data.meetingExternalId))) {
+    after(() => syncEventMeeting(params.eventId));
+  }
+
   if (data.status === "CANCELLED" && event.status !== "CANCELLED") {
+    // Everyone registered is told, the same as when an event is deleted.
+    await notifyCancelled(params.eventId, event.title, event.startAt, event.timezone);
     after(() => refundEventTickets(params.eventId).then((r) => { if (r.paid) console.log(`[event cancel] refunded ${r.refunded}/${r.paid} tickets`); }));
   }
 
@@ -291,6 +325,29 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ event
     data: { status: nextStatus ?? event.status },
     ...(nextStatus === "PENDING_REVIEW" ? { message: "Your event is waiting for a quick review by our team (usually within a day). We'll email you when it's live." } : {}),
   });
+}
+
+/** Tell everyone still registered that the event is off. */
+async function notifyCancelled(eventId: string, title: string, startAt: Date | null, timezone: string | null) {
+  const attendees = await prisma.eventRegistration.findMany({
+    where: { eventId, deletedAt: null, status: { in: ["CONFIRMED", "CHECKED_IN", "PENDING_APPROVAL", "WAITLISTED"] } },
+    select: { guestEmail: true, guestName: true },
+  });
+  if (!attendees.length) return;
+  const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "no-reply@udyaibase.com";
+  const dateStr = startAt
+    ? new Date(startAt).toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: timezone || "Asia/Kolkata" })
+    : "TBA";
+  for (const attendee of attendees) {
+    if (!attendee.guestEmail) continue;
+    sendEmailFireAndForget({
+      to: attendee.guestEmail,
+      from: `Udyaibase Events <${FROM_EMAIL}>`,
+      subject: `Event Cancelled: ${title}`,
+      html: eventCancellationHtml(attendee.guestName || "there", title, dateStr),
+      type: "event_cancellation",
+    });
+  }
 }
 
 const EVENT_STATUSES = ["DRAFT", "PUBLISHED", "CANCELLED", "POSTPONED", "COMPLETED", "ARCHIVED"];
@@ -327,13 +384,21 @@ export async function GET(request: NextRequest, props: { params: Promise<{ event
       speakers: { orderBy: { sortOrder: "asc" } },
       agendaItems: { orderBy: { sortOrder: "asc" } },
       ticketTiers: { orderBy: { createdAt: "asc" } },
-      customQuestions: { orderBy: { sortOrder: "asc" } },
-      registrations: { where: { deletedAt: null }, orderBy: { registeredAt: "desc" }, select: { id: true, guestName: true, guestEmail: true, guestOccupation: true, status: true, registeredAt: true } },
+      customQuestions: { where: { hiddenAt: null }, orderBy: { sortOrder: "asc" } },
+      // Attendees' names and emails only for roles that may see attendees (not Check-in).
+      ...(hasPermission(session.role, "registrations.view")
+        ? { registrations: { where: { deletedAt: null }, orderBy: { registeredAt: "desc" as const }, select: { id: true, guestName: true, guestEmail: true, guestOccupation: true, status: true, registeredAt: true } } }
+        : {}),
     },
   });
 
   if (!event) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
   if (event.organizerId !== session.organizerId) return NextResponse.json({ success: false, error: "Not authorized" }, { status: 403 });
 
-  return NextResponse.json({ success: true, event });
+  // Staff and Check-in can look but not change: the page shows a read-only view (saving is refused anyway).
+  return NextResponse.json({
+    success: true, event,
+    canEdit: hasPermission(session.role, "events.edit"),
+    canViewAttendees: hasPermission(session.role, "registrations.view"),
+  });
 }

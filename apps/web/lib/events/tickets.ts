@@ -1,4 +1,5 @@
 import { prisma } from '@udyaibase/database';
+import { cleanRegistrationInput, RegistrationInputError } from '@/lib/events/registration-input';
 import { razorpayApi, RazorpayApiError, razorpayKeys, refundPayment } from '@/lib/billing/razorpay';
 import { effectiveHostPlan, registrationLimit } from '@/lib/events/plans';
 import { generateQrToken } from '@/lib/events/qr-token';
@@ -31,7 +32,7 @@ export function splitTicket(amountPaise: number) {
 }
 
 export class TicketError extends Error {
-  constructor(message: string, public status: number, public code?: string) { super(message); }
+  constructor(message: string, public status: number, public code?: string, public field?: string) { super(message); }
 }
 
 export interface CheckoutParams {
@@ -42,8 +43,16 @@ export interface CheckoutParams {
 
 export async function startTicketCheckout(p: CheckoutParams) {
   if (!razorpayKeys()) throw new TicketError('Ticket payments are not available right now.', 503);
-  const email = p.email.trim().toLowerCase();
   const now = new Date();
+  // Same rules as free registration and the widget: lowercase email, one phone format, this event's answers only.
+  let cleaned;
+  try {
+    cleaned = await cleanRegistrationInput({ eventId: p.eventId, email: p.email, phone: p.phone, company: p.company, occupation: p.occupation, answers: p.answers });
+  } catch (err) {
+    if (err instanceof RegistrationInputError) throw new TicketError(err.message, 400, 'invalid', err.field);
+    throw err;
+  }
+  const { email } = cleaned;
 
   const event = await prisma.event.findUnique({
     where: { id: p.eventId },
@@ -91,24 +100,24 @@ export async function startTicketCheckout(p: CheckoutParams) {
       if (tierTaken >= tier.quantity) throw new TicketError(`${tier.name} tickets are sold out.`, 409, 'sold_out');
     }
     const data = {
-      ticketTierId: tier.id, guestName: p.name.trim().slice(0, 100), guestPhone: p.phone?.slice(0, 20) || null, guestCompany: p.company?.slice(0, 100) || null,
-      guestOccupation: p.occupation?.slice(0, 100) || null, whatsappConsent: !!p.whatsappConsent, registrationSource: p.registrationSource ?? 'WEBSITE',
+      ticketTierId: tier.id, guestName: p.name.trim().slice(0, 100), guestPhone: cleaned.phone, guestCompany: cleaned.company,
+      guestOccupation: cleaned.occupation, whatsappConsent: !!p.whatsappConsent, registrationSource: p.registrationSource ?? 'WEBSITE',
       status: 'PENDING_PAYMENT' as const, paymentStatus: 'PENDING', amountPaise: amount.amount, platformFeePaise: amount.fee,
       paymentExpiresAt: new Date(now.getTime() + HOLD_MINUTES * 60_000), razorpayOrderId: null, razorpayPaymentId: null, cancelledAt: null, deletedAt: null,
     };
     const reg = existing
       ? await tx.eventRegistration.update({ where: { id: existing.id }, data })
       : await tx.eventRegistration.create({ data: { ...data, eventId: event.id, guestEmail: email, qrToken: generateQrToken(16) } });
-    if (p.answers?.length) {
+    if (cleaned.answers.length) {
       await tx.eventRegistrationAnswer.deleteMany({ where: { registrationId: reg.id } });
-      await tx.eventRegistrationAnswer.createMany({ data: p.answers.filter((a) => a.answerText).map((a) => ({ registrationId: reg.id, questionId: a.questionId, answerText: a.answerText.slice(0, 2000) })) });
+      await tx.eventRegistrationAnswer.createMany({ data: cleaned.answers.map((a) => ({ registrationId: reg.id, questionId: a.questionId, answerText: a.answerText })) });
     }
     return { id: reg.id, orderId: null as string | null };
   });
   const registrationId = held.id;
   const checkout = (orderId: string, keyId: string) => ({
     registrationId, keyId, orderId, amount: amount.amount, currency: 'INR', name: 'Udyaibase Events',
-    description: `${tier.name} ticket · ${event.title}`.slice(0, 250), prefill: { email, name: p.name, ...(p.phone ? { contact: p.phone } : {}) },
+    description: `${tier.name} ticket · ${event.title}`.slice(0, 250), prefill: { email, name: p.name, ...(cleaned.phone ? { contact: cleaned.phone.replace(/\s/g, '') } : {}) },
     holdMinutes: HOLD_MINUTES,
   });
   if (held.orderId) return checkout(held.orderId, razorpayKeys()!.keyId);

@@ -16,7 +16,6 @@ export async function POST(request: NextRequest) {
   }
   const { eventId, ticketTierId, name, email } = body;
   if (!eventId || !ticketTierId || !name?.trim() || !email) return NextResponse.json({ success: false, error: "Name, email and a ticket are required." }, { status: 400 });
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return NextResponse.json({ success: false, error: "Invalid email address." }, { status: 400 });
   try {
     const order = await startTicketCheckout({
       eventId, ticketTierId, name, email, phone: body.phone, company: body.company, occupation: body.occupation, locationCity: body.locationCity,
@@ -25,7 +24,7 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ success: true, data: order });
   } catch (err) {
-    if (err instanceof TicketError) return NextResponse.json({ success: false, error: err.message, code: err.code }, { status: err.status });
+    if (err instanceof TicketError) return NextResponse.json({ success: false, error: err.message, code: err.code, field: err.field }, { status: err.status });
     console.error("[ticket checkout]", err instanceof Error ? err.message : err);
     return NextResponse.json({ success: false, error: "Something went wrong. Please try again." }, { status: 500 });
   }

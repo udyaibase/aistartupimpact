@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { getOrganizerSession, destroyOrganizerSession, verifyPassword } from '@/lib/organizer-auth';
+import { getOrganizerSession, destroyOrganizerSession } from '@/lib/organizer-auth';
+import { closeAccountProblem, confirmAccountHolder } from '@/lib/organizer-auth/confirm-action';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
 import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
 
@@ -18,14 +19,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { password } = body as { password?: string };
-    if (!password) {
-      return NextResponse.json({ error: 'Password is required' }, { status: 400 });
-    }
 
     const organizer = await prisma.eventOrganizer.findUnique({
       where: { id: session.id },
-      select: { passwordHash: true, deactivatedAt: true },
+      select: { id: true, email: true, passwordHash: true, deactivatedAt: true },
     });
 
     if (!organizer) {
@@ -36,12 +33,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Account is already deactivated' }, { status: 400 });
     }
 
-    if (organizer.passwordHash) {
-      const valid = await verifyPassword(password, organizer.passwordHash);
-      if (!valid) {
-        return NextResponse.json({ error: 'Incorrect password' }, { status: 401 });
-      }
-    }
+    const confirmed = await confirmAccountHolder(organizer, body, 'organizer-deactivate');
+    if (!confirmed.ok) return confirmed.response;
+
+    // Deactivating takes upcoming events offline; not while people are registered for them.
+    const problem = await closeAccountProblem(organizer.id);
+    if (problem) return NextResponse.json({ success: false, error: problem }, { status: 409 });
 
     await prisma.$transaction(async (tx) => {
       await tx.eventOrganizer.update({

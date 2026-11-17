@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/organizer-auth/require-permission";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { apiRateLimit, checkRateLimit, organizerUploadDailyLimit, rateLimitMessage, retryAfterHeaders } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,14 @@ export async function POST(request: NextRequest) {
   const result = await requirePermission("upload");
   if (result instanceof NextResponse) return result;
   const session = result;
+
+  // A burst limit per workspace, so the storage bucket can't be filled from one signed-in browser.
+  const { success: allowed, reset } = await checkRateLimit(apiRateLimit, `organizer-upload:${session.organizerId}`);
+  if (!allowed) return NextResponse.json({ success: false, error: rateLimitMessage(reset) }, { status: 429, headers: retryAfterHeaders(reset) });
+  const daily = await checkRateLimit(organizerUploadDailyLimit, `organizer-upload-day:${session.organizerId}`);
+  if (!daily.success) {
+    return NextResponse.json({ success: false, error: "This workspace has reached today’s upload limit (200 images). Try again tomorrow, or contact support if you need more." }, { status: 429, headers: retryAfterHeaders(daily.reset) });
+  }
 
   try {
     const formData = await request.formData();
@@ -49,7 +58,8 @@ export async function POST(request: NextRequest) {
     });
 
     const uniqueId = crypto.randomUUID();
-    const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+    // From the checked type, never the uploaded file's name (which the browser can set to anything, e.g. ".html").
+    const ext = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" } as Record<string, string>)[file.type] ?? "jpg";
     const fileKey = `events/${session.organizerId}/${uniqueId}.${ext}`;
 
     const arrayBuffer = await file.arrayBuffer();

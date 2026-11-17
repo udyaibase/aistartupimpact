@@ -4,6 +4,7 @@ import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import OrganizerEventForm from "../create/OrganizerEventForm";
+import EventReadOnly from "./EventReadOnly";
 
 export default function EditEventPage(props: { params: Promise<{ eventId: string }> }) {
   const params = use(props.params);
@@ -11,6 +12,8 @@ export default function EditEventPage(props: { params: Promise<{ eventId: string
   const [error, setError] = useState("");
   const [event, setEvent] = useState<any>(null);
   const [organizerId, setOrganizerId] = useState("");
+  const [canEdit, setCanEdit] = useState(true);
+  const [canViewAttendees, setCanViewAttendees] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -20,6 +23,8 @@ export default function EditEventPage(props: { params: Promise<{ eventId: string
       .then(([eventData, sessionData]) => {
         if (eventData.success && eventData.event) {
           setEvent(eventData.event);
+          setCanEdit(eventData.canEdit !== false);
+          setCanViewAttendees(eventData.canViewAttendees === true);
         } else {
           setError("Event not found or unauthorized.");
         }
@@ -50,5 +55,6 @@ export default function EditEventPage(props: { params: Promise<{ eventId: string
     );
   }
 
+  if (!canEdit) return <EventReadOnly event={event} canViewAttendees={canViewAttendees} />;
   return <OrganizerEventForm organizerId={organizerId || event.organizerId} event={event} />;
 }

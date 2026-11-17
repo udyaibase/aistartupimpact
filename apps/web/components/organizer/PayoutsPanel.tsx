@@ -5,7 +5,7 @@ import { CheckCircle2, Clock, Loader2, RefreshCw, ShieldCheck, AlertTriangle } f
 import { BUSINESS_TYPES } from "@/lib/events/payout-options";
 import CitySelect from "@/components/events/CitySelect";
 
-interface Payouts { status: string; bankLast4: string | null; beneficiary: string | null; note: string | null; updatedAt: string | null; started: boolean; feePct: number }
+interface Payouts { status: string; bankLast4: string | null; beneficiary: string | null; note: string | null; updatedAt: string | null; started: boolean; feePct: number; canEdit?: boolean; needsPassword?: boolean }
 
 const input = "w-full min-h-[44px] px-3 rounded-[10px] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-base sm:text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/25 focus:border-brand";
 const label = "block text-sm font-semibold text-gray-900 dark:text-white mb-1.5";
@@ -23,6 +23,8 @@ export default function PayoutsPanel() {
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [password, setPassword] = useState("");
+  const [codeToken, setCodeToken] = useState("");
   const [f, setF] = useState({ legalName: "", businessType: "individual", contactName: "", phone: "", pan: "", businessPan: "", gstin: "", street: "", city: "", state: "", postalCode: "", accountNumber: "", ifsc: "", beneficiaryName: "", acceptTerms: false });
   const set = (k: keyof typeof f, v: string | boolean) => setF((x) => ({ ...x, [k]: v }));
 
@@ -34,10 +36,10 @@ export default function PayoutsPanel() {
     setBusy(true);
     setError("");
     try {
-      const res = await fetch("/api/organizer/payouts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) });
+      const res = await fetch("/api/organizer/payouts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...f, ...(codeToken ? { code: password, codeToken } : { password }) }) });
       const d = await res.json().catch(() => ({}));
-      if (res.ok) { setP(d.payouts); setEditing(false); setF((x) => ({ ...x, accountNumber: "", pan: "" })); }
-      else setError(d.error || "Couldn’t set up payouts.");
+      if (res.ok) { setP(d.payouts); setEditing(false); setF((x) => ({ ...x, accountNumber: "", pan: "" })); setPassword(""); setCodeToken(""); }
+      else { if (d.codeToken) setCodeToken(d.codeToken); setError(d.error || "Couldn’t set up payouts."); }
     } catch { setError("You seem to be offline."); }
     setBusy(false);
   }
@@ -69,7 +71,9 @@ export default function PayoutsPanel() {
       )}
       {!st && p.note && <p role="alert" className="text-sm text-red-700 dark:text-red-400">{p.note}</p>}
 
-      {(!p.started || editing || p.status === "NEEDS_CLARIFICATION") ? (
+      {p.canEdit === false ? (
+        <p className="text-sm text-gray-600 dark:text-gray-400">Only the workspace owner can set up or change payouts.</p>
+      ) : (!p.started || editing || p.status === "NEEDS_CLARIFICATION") ? (
         <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2" noValidate>
           <div className="sm:col-span-2"><label htmlFor="po-legal" className={label}>Legal name (as on PAN)</label><input id="po-legal" value={f.legalName} onChange={(e) => set("legalName", e.target.value)} className={input} /></div>
           <div><label htmlFor="po-type" className={label}>Business type</label>
@@ -97,6 +101,13 @@ export default function PayoutsPanel() {
             <input type="checkbox" checked={f.acceptTerms} onChange={(e) => set("acceptTerms", e.target.checked)} className="mt-0.5 w-5 h-5 accent-[#A50F15]" />
             <span>I agree to Razorpay’s <a href="https://razorpay.com/terms/" target="_blank" rel="noopener noreferrer" className="underline">terms</a> for receiving payouts, and confirm these details are correct.</span>
           </label>
+          {(p.needsPassword || codeToken) && (
+            <div className="sm:col-span-2">
+              <label htmlFor="po-password" className={label}>{codeToken ? "Code we emailed you" : "Your account password"}</label>
+              <input id="po-password" type={codeToken ? "text" : "password"} inputMode={codeToken ? "numeric" : undefined} autoComplete={codeToken ? "one-time-code" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} className={input} />
+              <p className="mt-1 text-xs text-gray-500">Needed to confirm a change to where ticket money is paid.</p>
+            </div>
+          )}
           {error && <p role="alert" className="sm:col-span-2 text-sm text-red-700 dark:text-red-400">{error}</p>}
           <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
             <button type="submit" disabled={busy} className="inline-flex items-center gap-2 min-h-[44px] px-4 rounded-[10px] bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-semibold disabled:opacity-50">
