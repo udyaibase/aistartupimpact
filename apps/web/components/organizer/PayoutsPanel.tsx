@@ -36,7 +36,7 @@ export default function PayoutsPanel() {
     setBusy(true);
     setError("");
     try {
-      const res = await fetch("/api/organizer/payouts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...f, password, codeToken: codeToken || undefined }) });
+      const res = await fetch("/api/organizer/payouts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...f, ...(codeToken ? { code: password, codeToken } : { password }) }) });
       const d = await res.json().catch(() => ({}));
       if (res.ok) { setP(d.payouts); setEditing(false); setF((x) => ({ ...x, accountNumber: "", pan: "" })); setPassword(""); setCodeToken(""); }
       else { if (d.codeToken) setCodeToken(d.codeToken); setError(d.error || "Couldn’t set up payouts."); }

@@ -1,7 +1,7 @@
 /** Minimal iCalendar (.ics) builder for one or more sessions. Client-safe. */
 export type IcsItem = { uid: string; title: string; description?: string; start: Date; end: Date; location?: string; url?: string };
 
-const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/;/g, '\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
 const stamp = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 
 /** Lines longer than 75 octets are folded, as the spec requires. */

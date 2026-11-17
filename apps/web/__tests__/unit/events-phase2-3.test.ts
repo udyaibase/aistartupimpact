@@ -171,7 +171,7 @@ describe('agenda', () => {
   });
   it('.ics escapes text and uses CRLF', () => {
     const ics = buildIcs([{ uid: 'a', title: 'Talk; with, commas', start: new Date('2026-12-02T04:00:00Z'), end: new Date('2026-12-02T04:30:00Z') }]);
-    expect(ics).toContain('SUMMARY:Talk\; with\\, commas');
+    expect(ics).toContain('SUMMARY:Talk\\; with\\, commas');
     expect(ics).toContain('DTSTART:20261202T040000Z');
     expect(ics.split('\r\n')[0]).toBe('BEGIN:VCALENDAR');
   });

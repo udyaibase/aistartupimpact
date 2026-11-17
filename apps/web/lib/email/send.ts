@@ -56,10 +56,28 @@ export function isTestAddress(to: string): boolean {
   return /\.(test|invalid|example|localhost)$/.test(domain) || /(^|\.)example\.(com|org|net)$/.test(domain);
 }
 
+/** One log line's worth of a value: no line breaks, so it can't fake extra log entries. */
+export const logSafe = (value: unknown): string => String(value ?? '').replace(/[\r\n\u2028\u2029]+/g, ' ').slice(0, 300);
+
+/** Readable text of an email for the dev log: style blocks dropped (without a backtracking regex), tags removed. */
+export function emailLogText(html: string): string {
+  const lower = html.toLowerCase();
+  let out = '';
+  let i = 0;
+  while (i < html.length) {
+    const start = lower.indexOf('<style', i);
+    if (start === -1) { out += html.slice(i); break; }
+    out += html.slice(i, start);
+    const end = lower.indexOf('</style>', start);
+    i = end === -1 ? html.length : end + '</style>'.length;
+  }
+  return out.replace(/<[^>]*>/g, ' ').replace(/[<>]/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 function skipTestEmail(opts: { to: string; subject: string; html: string; type?: string }): SendResult {
   if (process.env.NODE_ENV !== 'production') {
-    const text = opts.html.replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
-    console.info(`[email:test-inbox] to=${opts.to} type=${opts.type || 'unknown'}\n  subject: ${opts.subject}\n  ${text.slice(0, 600)}`);
+    const text = emailLogText(opts.html);
+    console.info(`[email:test-inbox] to=${logSafe(opts.to)} type=${logSafe(opts.type || 'unknown')}\n  subject: ${logSafe(opts.subject)}\n  ${logSafe(text.slice(0, 600))}`);
   }
   logEmail({ type: opts.type || 'unknown', to: opts.to, subject: opts.subject, status: 'skipped_test_address' });
   return { success: true };

@@ -30,7 +30,7 @@ export default function TransferOwnership({ admins }: { admins: { id: string; em
     try {
       const res = await fetch("/api/organizer/team/transfer", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ memberId, password: password || undefined, codeToken: codeToken || undefined }),
+        body: JSON.stringify({ memberId, ...(codeToken ? { code: password, codeToken } : { password: password || undefined }) }),
       });
       const d = await res.json().catch(() => ({}));
       if (d.success) {

@@ -47,7 +47,8 @@ function isTestAddress(to: string): boolean {
 
 export async function sendEmail(opts: SendEmailOptions): Promise<SendResult> {
   if (isTestAddress(opts.to)) {
-    if (process.env.NODE_ENV !== 'production') console.info(`[email:test-inbox] to=${opts.to} subject: ${opts.subject}`);
+    const oneLine = (v: unknown) => String(v ?? '').replace(/[\r\n\u2028\u2029]+/g, ' ').slice(0, 300);
+    if (process.env.NODE_ENV !== 'production') console.info(`[email:test-inbox] to=${oneLine(opts.to)} subject: ${oneLine(opts.subject)}`);
     logEmail({ type: opts.type || 'unknown', to: opts.to, subject: opts.subject, status: 'skipped_test_address' });
     return { success: true };
   }

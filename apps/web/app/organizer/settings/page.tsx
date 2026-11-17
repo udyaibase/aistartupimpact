@@ -402,7 +402,7 @@ export default function OrganizerSettingsPage() {
               try {
                 const res = await fetch('/api/organizer/deactivate', {
                   method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ password: deactivatePassword || undefined, codeToken: confirmCodeToken || undefined }),
+                  body: JSON.stringify(confirmCodeToken ? { code: deactivatePassword, codeToken: confirmCodeToken } : { password: deactivatePassword || undefined }),
                 });
                 const data = await res.json();
                 if (data.success) {
@@ -460,7 +460,7 @@ export default function OrganizerSettingsPage() {
               try {
                 const res = await fetch('/api/organizer/delete-account', {
                   method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ password: deletePassword || undefined, codeToken: confirmCodeToken || undefined }),
+                  body: JSON.stringify(confirmCodeToken ? { code: deletePassword, codeToken: confirmCodeToken } : { password: deletePassword || undefined }),
                 });
                 const data = await res.json();
                 if (data.success) {

@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
   if (!owner) return NextResponse.json({ success: false, error: "Account not found." }, { status: 404 });
   const { success: mayTry } = await checkRateLimit(authRateLimit, `payouts-password:${result.organizerId}`);
   if (!mayTry) return NextResponse.json({ success: false, error: "Too many attempts. Try again in 15 minutes." }, { status: 429 });
-  const confirmed = await confirmAccountHolder(owner, { password: body.password, codeToken: body.codeToken }, "organizer-payouts");
+  const confirmed = await confirmAccountHolder(owner, { password: body.password, code: body.code, codeToken: body.codeToken }, "organizer-payouts");
   if (!confirmed.ok) return confirmed.response;
 
   try {

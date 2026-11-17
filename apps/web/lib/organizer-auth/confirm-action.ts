@@ -12,7 +12,7 @@ import { verifyPassword } from "./index";
  */
 export async function confirmAccountHolder(
   organizer: { id: string; email: string; passwordHash: string | null },
-  body: { password?: unknown; codeToken?: unknown },
+  body: { password?: unknown; code?: unknown; codeToken?: unknown },
   action: string,
 ): Promise<{ ok: true } | { ok: false; response: NextResponse }> {
   const typed = typeof body.password === "string" ? body.password : "";
@@ -23,8 +23,10 @@ export async function confirmAccountHolder(
     }
     return { ok: true };
   }
-  if (typeof body.codeToken === "string" && body.codeToken && typed) {
-    const check = verifyOTP(body.codeToken, typed, organizer.id, action);
+  // The emailed code comes in its own field, never mixed up with a password.
+  const emailedCode = typeof body.code === "string" ? body.code : "";
+  if (typeof body.codeToken === "string" && body.codeToken && emailedCode) {
+    const check = verifyOTP(body.codeToken, emailedCode, organizer.id, action);
     if (check.valid) return { ok: true };
     return { ok: false, response: NextResponse.json({ success: false, error: check.error || "Incorrect code", codeToken: body.codeToken }, { status: 401 }) };
   }

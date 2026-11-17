@@ -94,9 +94,8 @@ export async function followUpsLeft(event: { id: string; organizerId: string }):
 /** Unguessable certificate code, easy to read aloud: 16 characters, no 0/O/1/I. ~80 bits. */
 export function newCertificateCode(): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const bytes = crypto.randomBytes(16);
   let out = '';
-  for (let i = 0; i < 16; i++) out += alphabet[bytes[i] % alphabet.length];
+  for (let i = 0; i < 16; i++) out += alphabet[crypto.randomInt(alphabet.length)];
   return out;
 }
 
