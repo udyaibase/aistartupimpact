@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiRateLimit, checkRateLimit, rateLimitMessage, retryAfterHeaders } from "@/lib/rate-limit";
 import { refundTicket } from "@/lib/events/tickets";
 import { prisma } from "@udyaibase/database";
 import { requirePermission, canAccessEvent } from "@/lib/organizer-auth/require-permission";
@@ -15,6 +16,9 @@ type BulkAction = "approve" | "reject" | "promote" | "cancel";
 export async function POST(request: NextRequest) {
   const result = await requirePermission("registrations.manage");
   if (result instanceof NextResponse) return result;
+  // Each action emails attendees (and refunds move money): cap how fast one workspace can fire them.
+  const { success: allowed, reset } = await checkRateLimit(apiRateLimit, `organizer-bulk:${result.organizerId}`);
+  if (!allowed) return NextResponse.json({ success: false, error: rateLimitMessage(reset) }, { status: 429, headers: retryAfterHeaders(reset) });
   const session = result;
 
   const { registrationIds, action } = (await request.json().catch(() => ({}))) as {

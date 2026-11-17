@@ -2,13 +2,19 @@
 
 import { useState } from 'react';
 import { CheckCircle2, Loader2 } from 'lucide-react';
+import TurnstileWidget from '@/components/shared/TurnstileWidget';
 
 const field = 'w-full min-h-[44px] px-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/25 focus:border-brand';
 const label = 'block text-sm font-semibold text-gray-900 dark:text-white mb-1.5';
 
+const HAS_CAPTCHA = !!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+
 export default function SpeakForm({ slug, formats, tracks }: { slug: string; formats: string[]; tracks: string[] }) {
   const [v, setV] = useState({ name: '', email: '', company: '', jobTitle: '', linkedinUrl: '', bio: '', title: '', abstract: '', format: formats[0] ?? '', track: '', website: '' });
   const [state, setState] = useState<'idle' | 'busy' | 'done'>('idle');
+  // Security check: stops bots using this public form to send emails. Single-use, so it's renewed after each try.
+  const [token, setToken] = useState('');
+  const [captchaKey, setCaptchaKey] = useState(0);
   const [error, setError] = useState<{ text: string; field?: string } | null>(null);
   const set = (k: keyof typeof v) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => { setV({ ...v, [k]: e.target.value }); if (error?.field === k) setError(null); };
 
@@ -17,9 +23,9 @@ export default function SpeakForm({ slug, formats, tracks }: { slug: string; for
     setState('busy');
     setError(null);
     try {
-      const r = await fetch(`/api/events/${encodeURIComponent(slug)}/cfp`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(v) });
+      const r = await fetch(`/api/events/${encodeURIComponent(slug)}/cfp`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...v, turnstileToken: token }) });
       const d = await r.json().catch(() => ({}));
-      if (!r.ok || !d.success) { setError({ text: d.error || 'Couldn’t send your proposal.', field: d.field }); setState('idle'); return; }
+      if (!r.ok || !d.success) { setError({ text: d.error || 'Couldn’t send your proposal.', field: d.field }); setState('idle'); setToken(''); setCaptchaKey((k) => k + 1); return; }
       setState('done');
     } catch { setError({ text: 'You seem to be offline. Try again.' }); setState('idle'); }
   }
@@ -59,7 +65,8 @@ export default function SpeakForm({ slug, formats, tracks }: { slug: string; for
         </div>
       </fieldset>
       {error && !error.field && <p role="alert" className="text-sm text-red-600">{error.text}</p>}
-      <button type="submit" disabled={state === 'busy'} className="w-full h-11 inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 hover:bg-gray-800 dark:bg-white dark:text-gray-900 text-white font-medium text-[15px] disabled:opacity-60">
+      <TurnstileWidget key={captchaKey} onSuccess={setToken} onExpire={() => setToken('')} onError={() => setToken('')} />
+      <button type="submit" disabled={state === 'busy' || (HAS_CAPTCHA && !token)} className="w-full h-11 inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 hover:bg-gray-800 dark:bg-white dark:text-gray-900 text-white font-medium text-[15px] disabled:opacity-60">
         {state === 'busy' && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} Send proposal
       </button>
       <p className="text-xs text-center text-gray-500">Your details go to the event host only, to review your proposal.</p>

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { QrCode, Search, Loader2, CheckCircle, AlertTriangle, XCircle, RotateCcw, Camera, Keyboard, CloudDownload, CloudUpload, WifiOff, IdCard } from "lucide-react";
 import { BLOCKED_STATUSES, findInRoster, parseScanValue, searchRoster, type RosterRow } from "@/lib/events/checkin-rules";
-import { getRoster, saveRoster, queueScan, pendingScans, removeScans, type Roster } from "@/lib/events/offline-checkin-store";
+import { getRoster, saveRoster, queueScan, pendingScans, removeScans, pruneRosters, type Roster } from "@/lib/events/offline-checkin-store";
 
 const TITLES: Record<string, string> = {
   CHECKED_IN: "Checked in",
@@ -15,7 +15,7 @@ const TITLES: Record<string, string> = {
   PENDING_APPROVAL: "Registration pending approval",
 };
 const BLOCKED_CODE: Record<string, string> = { CANCELLED: "CANCELLED", WAITLISTED: "WAITLISTED", PENDING_PAYMENT: "UNPAID", PENDING_APPROVAL: "PENDING_APPROVAL" };
-const asAttendee = (r: RosterRow, status: string) => ({ id: r.id, guestName: r.name, guestEmail: r.email, guestCompany: r.company, guestOccupation: r.occupation, ticketTier: r.tier ? { name: r.tier } : null, status });
+const asAttendee = (r: RosterRow, status: string) => ({ id: r.id, guestName: r.name, guestEmail: r.emailHint, guestCompany: r.company, guestOccupation: r.occupation, ticketTier: r.tier ? { name: r.tier } : null, status });
 const timeText = (iso: string) => new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
 
 export default function CheckInPage() {
@@ -111,12 +111,22 @@ export default function CheckInPage() {
     try { setPending((await pendingScans(eventId)).length); } catch { setPending(0); }
   }, []);
 
+  // Who is signed in: a list saved by someone else on this device isn't shown to them, and is removed.
+  const [personId, setPersonId] = useState<string | null>(null);
+  useEffect(() => {
+    fetch("/api/organizer/auth/session").then((r) => r.json()).then((d) => setPersonId(typeof d?.organizer?.id === "string" ? d.organizer.id : null)).catch(() => {});
+  }, []);
+
   useEffect(() => {
     setRoster(null); setPending(0); setOfflineNote("");
-    if (!selectedEvent) return;
-    getRoster(selectedEvent).then((r) => setRoster(r ?? null)).catch(() => {});
+    if (!selectedEvent || !personId) return;
+    // Lists are deleted a day after their event ends, and when saved by someone else.
+    pruneRosters(personId)
+      .then(() => getRoster(selectedEvent))
+      .then((r) => setRoster(r ?? null))
+      .catch(() => {});
     refreshPending(selectedEvent);
-  }, [selectedEvent, refreshPending]);
+  }, [selectedEvent, refreshPending, personId]);
 
   /** Remember a status change in the offline list too, so a later offline scan of the same ticket is caught. */
   const markInRoster = (id: string, status: string, checkedInAt: string | null) => {
@@ -137,7 +147,7 @@ export default function CheckInPage() {
       // Scans not yet uploaded stay checked in on this device.
       const waiting = new Set((await pendingScans(selectedEvent)).map((p) => p.registrationId));
       const rows: RosterRow[] = d.rows.map((r: RosterRow) => (waiting.has(r.id) && r.status === "CONFIRMED" ? { ...r, status: "CHECKED_IN" } : r));
-      const next: Roster = { eventId: selectedEvent, title: d.event.title, downloadedAt: d.downloadedAt, rows };
+      const next: Roster = { eventId: selectedEvent, title: d.event.title, downloadedAt: d.downloadedAt, rows, keepUntil: d.keepUntil, downloadedBy: d.downloadedBy };
       await saveRoster(next);
       setRoster(next);
       setOfflineNote(`${rows.length.toLocaleString("en-IN")} people saved on this device. Check-in keeps working without internet.`);
@@ -182,7 +192,7 @@ export default function CheckInPage() {
   const localCheckIn = async (value: string, registrationId?: string) => {
     const r = rosterRef.current;
     if (!r) return { success: false, status: "ERROR", message: "You’re offline and this event’s list isn’t on this device." };
-    const row = registrationId ? r.rows.find((x) => x.id === registrationId) ?? null : findInRoster(r.rows, parseScanValue(value));
+    const row = registrationId ? r.rows.find((x) => x.id === registrationId) ?? null : await findInRoster(r.rows, r.eventId, parseScanValue(value));
     if (!row) {
       // A name only searches: the right person is picked from the list, never admitted on a partial match.
       const matches = registrationId ? [] : searchRoster(r.rows, value);

@@ -20,7 +20,8 @@ vi.mock('@/lib/events/certificates', () => ({ issueCertificateOnCheckIn: vi.fn()
 vi.mock('next/server', async (orig) => ({ ...(await orig<typeof import('next/server')>()), after: (fn: () => unknown) => { void fn; } }));
 
 import { cleanSponsors, sponsorReportCsv, sponsorTarget } from '@/lib/events/sponsors';
-import { clampScanTime, findInRoster, parseScanValue, searchRoster, type RosterRow } from '@/lib/events/checkin-rules';
+import { createHash } from 'crypto';
+import { clampScanTime, findInRoster, parseScanValue, rosterHash, rosterHashInput, searchRoster, type RosterRow } from '@/lib/events/checkin-rules';
 import { renderBadgesPdf } from '@/lib/events/badges';
 import { cleanRecurrence, describeRecurrence, occurrencesBetween, slugifySeries } from '@/lib/events/series';
 import { seriesFollowToken, verifySeriesFollowToken } from '@/lib/events/after-event';
@@ -53,24 +54,34 @@ describe('sponsors', () => {
 });
 
 describe('offline check-in rules', () => {
-  const rows: RosterRow[] = [
-    { id: 'r1', qrToken: 'tok1', name: 'Asha Rao', email: 'asha@x.com', company: null, occupation: null, tier: null, status: 'CONFIRMED', checkedInAt: null },
-    { id: 'r2', qrToken: 'tok2', name: 'Ravi Kumar', email: 'Ravi@Y.com', company: null, occupation: null, tier: null, status: 'CANCELLED', checkedInAt: null },
-  ];
+  const EV = 'ev1';
+  // Built the way the roster API builds them: hashes of the ticket code and email, never the values themselves.
+  const row = (id: string, token: string, name: string, email: string, status: string): RosterRow => ({
+    id, name, status, company: null, occupation: null, tier: null, checkedInAt: null,
+    tokenHash: createHash('sha256').update(rosterHashInput(EV, 'ticket', token)).digest('hex'),
+    emailHash: createHash('sha256').update(rosterHashInput(EV, 'email', email)).digest('hex'),
+    emailHint: 'x***@x.com',
+  });
+  const rows: RosterRow[] = [row('r1', 'tok1', 'Asha Rao', 'asha@x.com', 'CONFIRMED'), row('r2', 'tok2', 'Ravi Kumar', 'Ravi@Y.com', 'CANCELLED')];
   it('reads tokens from raw codes and ticket links', () => {
     expect(parseScanValue('tok1')).toBe('tok1');
     expect(parseScanValue('https://udyaibase.com/e/tok1?x=1')).toBe('tok1');
     expect(parseScanValue('https://udyaibase.com/ticket?token=tok2')).toBe('tok2');
   });
-  it('finds by token, then email (any case), then name', () => {
-    expect(findInRoster(rows, 'tok2')?.id).toBe('r2');
-    expect(findInRoster(rows, 'ravi@y.COM')?.id).toBe('r2');
+  it('finds by token, then email (any case), never by name', async () => {
+    expect((await findInRoster(rows, EV, 'tok2'))?.id).toBe('r2');
+    expect((await findInRoster(rows, EV, 'ravi@y.COM'))?.id).toBe('r2');
     // A name is a search, never an exact match: it must not admit anyone by itself.
-    expect(findInRoster(rows, 'asha')).toBeNull();
+    expect(await findInRoster(rows, EV, 'asha')).toBeNull();
     expect(searchRoster(rows, 'asha').map((r) => r.id)).toEqual(['r1']);
     expect(searchRoster(rows, 'a')).toEqual([]);
-    expect(findInRoster(rows, 'a')).toBeNull();
-    expect(findInRoster(rows, 'nobody')).toBeNull();
+    expect(await findInRoster(rows, EV, 'a')).toBeNull();
+    expect(await findInRoster(rows, EV, 'nobody')).toBeNull();
+  });
+  it('the saved list holds no ticket codes or emails, and hashes don’t match across events', async () => {
+    expect(JSON.stringify(rows)).not.toMatch(/tok1|asha@x\.com/);
+    expect(await findInRoster(rows, 'another-event', 'tok1')).toBeNull();
+    expect(await rosterHash(EV, 'ticket', 'tok1')).toBe(rows[0].tokenHash);
   });
   it('clamps device times to the last 3 days and never the future', () => {
     const now = new Date('2026-11-16T10:00:00Z');

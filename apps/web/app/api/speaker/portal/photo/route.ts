@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { verifySpeakerPortalToken } from '@/lib/events/after-event';
+import { speakerLinkOpen, verifySpeakerPortalToken } from '@/lib/events/after-event';
 import { putEventImage } from '@/lib/media/event-image';
 import { apiRateLimit, checkRateLimit, getClientIdentifier, rateLimitMessage, retryAfterHeaders } from '@/lib/rate-limit';
 
@@ -13,8 +13,9 @@ export async function POST(request: NextRequest) {
   const form = await request.formData().catch(() => null);
   const speakerId = verifySpeakerPortalToken(form?.get('t'));
   if (!speakerId) return NextResponse.json({ success: false, error: 'This link isn’t valid.' }, { status: 400 });
-  const sp = await prisma.eventSpeaker.findUnique({ where: { id: speakerId }, select: { eventId: true } });
-  if (!sp) return NextResponse.json({ success: false, error: 'This link isn’t valid.' }, { status: 400 });
+  const sp = await prisma.eventSpeaker.findUnique({ where: { id: speakerId }, select: { eventId: true, event: { select: { endAt: true, deletedAt: true } } } });
+  if (!sp || sp.event.deletedAt) return NextResponse.json({ success: false, error: 'This link isn’t valid.' }, { status: 400 });
+  if (!speakerLinkOpen(sp.event)) return NextResponse.json({ success: false, error: 'This link has expired. Ask the host if something needs changing.' }, { status: 410 });
   const r = await putEventImage(form?.get('file') as File | null, `events/speakers/${sp.eventId}`);
   if (!r.ok) return NextResponse.json({ success: false, error: r.error }, { status: r.status });
   return NextResponse.json({ success: true, url: r.url });
