@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { accountCodeRateLimit, checkRateLimit, rateLimitMessage, retryAfterHeaders } from '@/lib/rate-limit';
 import { prisma } from '@udyaibase/database';
 import { getOrganizerSession } from '@/lib/organizer-auth';
 import { createOtp } from '@/lib/otp';
@@ -13,6 +14,9 @@ export async function POST(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ success: false, error: 'Please sign in.' }, { status: 401 });
     }
+    // Codes are limited per address already; this also limits one account sending codes to many addresses.
+    const { success: allowed, reset } = await checkRateLimit(accountCodeRateLimit, `organizer-company-email:${session.id}`);
+    if (!allowed) return NextResponse.json({ success: false, error: rateLimitMessage(reset) }, { status: 429, headers: retryAfterHeaders(reset) });
 
     const { companyEmail } = await request.json();
 

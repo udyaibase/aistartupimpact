@@ -154,3 +154,10 @@ export const feedbackToken = (registrationId: string) => signId('event-feedback'
 export const verifyFeedbackToken = (token: unknown) => verifyId('event-feedback', token);
 export const speakerPortalToken = (speakerId: string) => signId('speaker-portal', speakerId);
 export const verifySpeakerPortalToken = (token: unknown) => verifyId('speaker-portal', token);
+
+/** Speaker page links work until 30 days after the event ends; later the event's done and the link shouldn't edit a public profile. */
+export const SPEAKER_LINK_DAYS_AFTER = 30;
+export function speakerLinkOpen(event: { endAt: Date | string; deletedAt?: Date | string | null }, now = Date.now()): boolean {
+  if (event.deletedAt) return false;
+  return new Date(event.endAt).getTime() + SPEAKER_LINK_DAYS_AFTER * 864e5 > now;
+}

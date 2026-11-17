@@ -68,7 +68,7 @@ export default function WorkspaceSwitcher({ workspaces, active }: { workspaces: 
         >
           {workspaces.map((w) => (
             <option key={w.id} value={w.id}>
-              {w.id === "own" ? `${w.name} (your workspace)` : `${w.name} (${ROLE_LABEL[w.role] ?? w.role})`}
+              {w.id === "own" ? `${w.name} (your own workspace)` : `${w.name} (${ROLE_LABEL[w.role] ?? w.role})`}
             </option>
           ))}
         </select>
@@ -77,6 +77,12 @@ export default function WorkspaceSwitcher({ workspaces, active }: { workspaces: 
         <button type="button" onClick={leave} disabled={busy} className="text-sm font-medium text-red-700 hover:underline disabled:opacity-60 dark:text-red-400">
           Leave team
         </button>
+      )}
+      {current.id === "own" && (
+        <p className="w-full text-xs text-gray-500 dark:text-gray-400">
+          This is your own, separate workspace: its events, plan and billing are yours alone, and nobody else&apos;s data is here.
+          To work on a team&apos;s events, switch to that team above.
+        </p>
       )}
       {error && <p role="alert" className="w-full text-sm text-red-600 dark:text-red-400">{error}</p>}
     </div>

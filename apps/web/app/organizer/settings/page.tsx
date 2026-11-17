@@ -18,11 +18,23 @@ type Tab = "organization" | "preferences" | "payment" | "privacy";
 export default function OrganizerSettingsPage() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("organization");
+  // Working in someone else's workspace as a teammate: this page is only about the person's own account
+  // (sign-in, security, their data). The workspace's organization profile, payouts and plan belong to its owner.
+  const [teamCtx, setTeamCtx] = useState<{ name: string; role: string } | null>(null);
   // Deep link, e.g. /organizer/settings?tab=payment from the event editor.
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
-    if (t === "payment" || t === "preferences" || t === "privacy" || t === "organization") setTab(t as Tab);
+    fetch("/api/organizer/workspace").then((r) => r.json()).catch(() => null).then((d) => {
+      const active = d?.success && d.active !== "own" ? d.workspaces?.find((w: { id: string }) => w.id === d.active) : null;
+      if (active) {
+        setTeamCtx({ name: active.name, role: active.role });
+        setTab(t === "privacy" ? "privacy" : "preferences");
+      } else if (t === "payment" || t === "preferences" || t === "privacy" || t === "organization") {
+        setTab(t as Tab);
+      }
+    });
   }, []);
+  const ROLE_NAME: Record<string, string> = { ADMIN: "an Admin", MANAGER: "a Manager", STAFF: "Staff", CHECK_IN: "Check-in staff" };
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
@@ -119,8 +131,8 @@ export default function OrganizerSettingsPage() {
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div className="min-w-0">
-          <h1 className="portal-title">Settings</h1>
-          <p className="portal-subtitle">Organizer workspace settings</p>
+          <h1 className="portal-title">{teamCtx ? "Your account settings" : "Settings"}</h1>
+          <p className="portal-subtitle">{teamCtx ? "Your own sign-in, security and data" : "Organizer workspace settings"}</p>
         </div>
         <Link href="/organizer/profile" className="inline-flex items-center min-h-[40px] text-sm text-brand hover:underline font-semibold">
           Edit profile →
@@ -129,7 +141,9 @@ export default function OrganizerSettingsPage() {
 
       {/* Tabs */}
       <div data-tour="settings-tabs" role="tablist" className="flex gap-1 border-b border-gray-200 dark:border-gray-800 mb-6 -mx-4 px-4 md:mx-0 md:px-0 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {([["organization", "Organization"], ["preferences", "Preferences"], ["payment", "Payment"], ["privacy", "Data & Privacy"]] as [Tab, string][]).map(([id, label]) => (
+        {((teamCtx
+          ? [["preferences", "Sign-in & security"], ["privacy", "Your data & account"]]
+          : [["organization", "Organization"], ["preferences", "Preferences"], ["payment", "Payment"], ["privacy", "Data & Privacy"]]) as [Tab, string][]).map(([id, label]) => (
           <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={`shrink-0 whitespace-nowrap min-h-[44px] px-4 text-sm font-medium transition-colors relative ${tab === id ? "text-gray-900 dark:text-white" : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}>
             {label}
             {tab === id && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand rounded-t" />}
@@ -137,10 +151,16 @@ export default function OrganizerSettingsPage() {
         ))}
       </div>
 
+      {teamCtx && (
+        <p role="note" className="mb-6 rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/40 px-4 py-3 text-sm text-blue-900 dark:text-blue-200 font-jakarta">
+          You’re working in <strong>{teamCtx.name}</strong> as {ROLE_NAME[teamCtx.role] ?? teamCtx.role}. These settings are for <strong>your own account</strong> only. {teamCtx.name}’s organization profile, payouts and plan are managed by its owner.
+        </p>
+      )}
+
       {msg && <div className={`mb-4 px-4 py-2.5 rounded-lg text-sm font-jakarta ${msg.includes("!") ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400" : "bg-red-50 dark:bg-red-900/20 text-red-600"}`}>{msg}</div>}
 
       {/* Organization */}
-      {tab === "organization" && (
+      {tab === "organization" && !teamCtx && (
         <div className="space-y-6">
           <CompanyEmailSection apiBasePath="/api/organizer" />
           <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
@@ -178,6 +198,7 @@ export default function OrganizerSettingsPage() {
       {/* Preferences */}
       {tab === "preferences" && (
         <div className="space-y-6">
+          {!teamCtx && (
           <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
             <div className="px-4 py-3 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
               <h2 className="portal-eyebrow">Notifications</h2>
@@ -188,6 +209,7 @@ export default function OrganizerSettingsPage() {
               <Toggle label="Weekly digest" desc="Summary of event performance" checked={notifyEmail} onChange={setNotifyEmail} />
             </div>
           </div>
+          )}
 
           <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
             <div className="px-4 py-3 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
@@ -237,7 +259,7 @@ export default function OrganizerSettingsPage() {
       )}
 
       {/* Payment */}
-      {tab === "payment" && (
+      {tab === "payment" && !teamCtx && (
         <div className="space-y-6">
           <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
             <div className="px-4 py-3 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">

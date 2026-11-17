@@ -45,7 +45,12 @@ export function sponsorTarget(s: { websiteUrl: string | null; startupSlug?: stri
 
 /** CSV report for the host to send to sponsors. */
 export function sponsorReportCsv(eventTitle: string, rows: { name: string; tier: string; impressions: number; clicks: number }[]): string {
-  const q = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+  // Text starting with = + - @ (or a tab/return) would run as a formula in Excel or Sheets; numbers stay numbers.
+  const q = (v: string | number) => {
+    let t = String(v);
+    if (typeof v === 'string' && /^[=+\-@\t\r]/.test(t)) t = `'${t}`;
+    return `"${t.replace(/"/g, '""')}"`;
+  };
   const lines = [['Event', 'Sponsor', 'Tier', 'Page views with logo', 'Logo clicks', 'Click rate'].map(q).join(',')];
   for (const r of rows) {
     const rate = r.impressions ? `${((r.clicks / r.impressions) * 100).toFixed(1)}%` : '';

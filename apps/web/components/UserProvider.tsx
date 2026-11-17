@@ -71,6 +71,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
+      import('@/lib/events/offline-checkin-store').then((m) => m.clearOfflineRosters()).catch(() => {}); // attendee lists saved for offline check-in
       await fetch('/api/user/auth/logout', { method: 'POST' });
       setUser(null);
       try { localStorage.removeItem(SESSION_HINT); } catch { /* cosmetic */ }

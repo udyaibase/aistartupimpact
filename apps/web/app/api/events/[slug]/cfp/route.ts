@@ -3,6 +3,7 @@ import { prisma } from '@udyaibase/database';
 import { cfpIsOpen, cfpSettings, cleanSubmission, sendSubmissionReceived } from '@/lib/events/cfp';
 import { authRateLimit, checkRateLimit, getClientIdentifier, rateLimitMessage, retryAfterHeaders } from '@/lib/rate-limit';
 import { sendEmailFireAndForget } from '@/lib/email/send';
+import { verifyTurnstileToken } from '@/lib/turnstile';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
   const body = await request.json().catch(() => ({}));
   // Hidden field people never see; bots fill it.
   if (typeof body?.website === 'string' && body.website.trim()) return NextResponse.json({ success: true });
+  // The form sends emails (to the speaker and the host), so it needs the same security check as registration.
+  if (!(await verifyTurnstileToken(typeof body?.turnstileToken === 'string' ? body.turnstileToken : ''))) {
+    return NextResponse.json({ success: false, error: 'Complete the security check, then try again.', code: 'captcha' }, { status: 403 });
+  }
 
   const event = await prisma.event.findUnique({
     where: { slug },
@@ -33,7 +38,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
   if (perPerson >= 5) return NextResponse.json({ success: false, error: 'You can propose up to 5 talks for one event.' }, { status: 400 });
 
   await prisma.eventTalkSubmission.create({ data: { eventId: event.id, ...input } });
-  sendSubmissionReceived(input.email, input.name.split(' ')[0], input.title, event.title).catch(() => {});
+  // The "we got it" email goes to whatever address was typed, so cap it per address (any event, any visitor):
+  // the form can't be used to send mail to someone over and over.
+  const toAddress = await checkRateLimit(authRateLimit, `cfp-received:${input.email.toLowerCase()}`);
+  if (toAddress.success) sendSubmissionReceived(input.email, input.name.split(' ')[0], input.title, event.title).catch(() => {});
   if (event.organizer?.email && !/@udyaibase\.com$/i.test(event.organizer.email)) {
     sendEmailFireAndForget({ to: event.organizer.email, type: 'cfp_new', subject: `New talk proposal for ${event.title}`, html: `<p>${input.name.replace(/[<>&]/g, '')} proposed “${input.title.replace(/[<>&]/g, '')}”. Review it in your organizer portal under Speakers.</p>` });
   }

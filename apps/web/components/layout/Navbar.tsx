@@ -87,6 +87,7 @@ export default function Navbar() {
 
   const handleLogout = async () => {
     try {
+      import('@/lib/events/offline-checkin-store').then((m) => m.clearOfflineRosters()).catch(() => {}); // attendee lists saved for offline check-in
       await Promise.allSettled([
         fetch('/api/user/auth/logout', { method: 'POST' }),
         fetch('/api/auth/logout', { method: 'POST' }),

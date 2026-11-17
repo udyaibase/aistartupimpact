@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiRateLimit, checkRateLimit, rateLimitMessage, retryAfterHeaders } from "@/lib/rate-limit";
 import { prisma } from "@udyaibase/database";
 import { requirePermission, canAccessEvent } from "@/lib/organizer-auth/require-permission";
 import { refundTicket } from "@/lib/events/tickets";
@@ -12,6 +13,9 @@ export async function POST(_request: NextRequest, props: { params: Promise<{ id:
   const { id } = await props.params;
   const result = await requirePermission("registrations.manage");
   if (result instanceof NextResponse) return result;
+  // Each action emails attendees (and refunds move money): cap how fast one workspace can fire them.
+  const { success: allowed, reset } = await checkRateLimit(apiRateLimit, `organizer-refund:${result.organizerId}`);
+  if (!allowed) return NextResponse.json({ success: false, error: rateLimitMessage(reset) }, { status: 429, headers: retryAfterHeaders(reset) });
   const reg = await prisma.eventRegistration.findUnique({ where: { id }, select: { eventId: true, guestEmail: true, event: { select: { organizerId: true, title: true } } } });
   if (!reg || reg.event.organizerId !== result.organizerId || !canAccessEvent(result, reg.eventId)) {
     return NextResponse.json({ success: false, error: "Registration not found." }, { status: 404 });

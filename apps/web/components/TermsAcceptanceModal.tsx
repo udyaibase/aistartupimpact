@@ -39,6 +39,7 @@ export default function TermsAcceptanceModal({ userName }: TermsAcceptanceModalP
 
   const handleSignOut = async () => {
     try {
+      import('@/lib/events/offline-checkin-store').then((m) => m.clearOfflineRosters()).catch(() => {}); // attendee lists saved for offline check-in
       await fetch('/api/user/auth/logout', { method: 'POST' });
     } catch {}
     document.cookie = 'user-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';

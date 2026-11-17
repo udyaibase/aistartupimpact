@@ -55,7 +55,8 @@ export default async function OrganizerWorkspaceLayout({
           <OrganizerHeader organizer={session} access={access} />
           <main className="relative flex-1 overflow-y-auto overscroll-contain px-4 md:px-8 lg:px-10 py-4 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-4">
             <WorkspaceSwitcher workspaces={workspaces} active={active?.organizerId ?? OWN_WORKSPACE} />
-            <CompanyEmailBanner userType="organizer" />
+            {/* About the person's own workspace badge: not shown while working in someone else's. */}
+            {!active && <CompanyEmailBanner userType="organizer" />}
             {hostPlan && canOpen("/organizer/billing", access) && <PlanBanner phase={hostPlan.phase} planName="Pro" endsAt={hostPlan.endsAt} graceEndsAt={hostPlan.graceEndsAt} billingHref="/organizer/billing" canRenew pausedWhatInGrace="New promo emails are paused." />}
             {children}
           </main>
