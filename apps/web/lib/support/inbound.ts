@@ -15,11 +15,34 @@ export interface InboundEvent { email_id: string; from: string; to?: string[]; r
 export interface InboundEmail { text: string | null; html: string | null; headers: Record<string, string> | null }
 export type InboundResult = 'ignored' | 'duplicate' | 'reply' | 'ticket' | 'forwarded';
 
+/**
+ * "Asha Verma <asha@acme.ai>" or a bare address. Written without a regular expression on purpose: this reads a header
+ * a stranger controls, and the pattern it replaced could be made to take a very long time on a crafted value.
+ */
 export function parseAddress(v: string): { email: string; name: string } {
-  const m = v.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
-  const email = (m ? m[2] : v).trim().toLowerCase();
-  const name = (m?.[1] || email.split('@')[0]).trim().slice(0, 120);
-  return { email, name };
+  const s = String(v ?? '').trim().slice(0, 500);
+  const open = s.lastIndexOf('<');
+  let email = s;
+  let name = '';
+  if (open >= 0 && s.endsWith('>')) {
+    email = s.slice(open + 1, -1);
+    name = s.slice(0, open).trim();
+    if (name.startsWith('"')) name = name.slice(1);
+    if (name.endsWith('"')) name = name.slice(0, -1);
+  }
+  email = email.trim().toLowerCase();
+  return { email, name: (name.trim() || email.split('@')[0]).trim().slice(0, 120) };
+}
+
+/** A plausible address: one @, something before it, a dot inside the domain, no spaces. Checked without a regular expression (see parseAddress). */
+export function looksLikeEmail(email: string): boolean {
+  if (!email || email.length > 254) return false;
+  for (const ch of email) if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') return false;
+  const at = email.indexOf('@');
+  if (at < 1 || at !== email.lastIndexOf('@')) return false;
+  const domain = email.slice(at + 1);
+  const dot = domain.lastIndexOf('.');
+  return dot > 0 && dot < domain.length - 1;
 }
 
 /** The new part of a reply: everything above the quoted earlier message. */
@@ -34,9 +57,43 @@ export function stripQuoted(text: string): string {
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, 5000);
 }
 
+const ENTITIES: Record<string, string> = { '&nbsp;': ' ', '&amp;': '&', '&lt;': '<', '&gt;': '>', '&#39;': "'", '&quot;': '"' };
+const BLOCK_ENDS = new Set(['p', 'div', 'li', 'tr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
+
+/**
+ * The readable text of an HTML email, for the ticket. The result is plain text and is always shown escaped.
+ *
+ * Read one character at a time instead of with chained replacements:
+ * - everything between "<" and ">" is dropped, so there is no pattern to slip a tag past, and a <style> or <script>
+ *   block is skipped whole, contents included;
+ * - entities are turned back into characters in a single pass at the end, so "&amp;lt;" becomes "&lt;", not "<".
+ */
 export function htmlToText(html: string): string {
-  return html.replace(/<(style|script)[^>]*>[\s\S]*?<\/\1>/gi, '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|tr|h\d)>/gi, '\n')
-    .replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+  const src = String(html ?? '').slice(0, 500_000);
+  const lower = src.toLowerCase();
+  let out = '';
+  let i = 0;
+  while (i < src.length) {
+    const lt = src.indexOf('<', i);
+    if (lt === -1) { out += src.slice(i); break; }
+    out += src.slice(i, lt);
+    const gt = src.indexOf('>', lt);
+    if (gt === -1) break; // an unfinished tag: nothing after it is text
+    const tag = lower.slice(lt + 1, gt).trim();
+    const closing = tag.startsWith('/');
+    let name = '';
+    for (const ch of closing ? tag.slice(1) : tag) { if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) name += ch; else break; }
+    i = gt + 1;
+    if (!closing && (name === 'style' || name === 'script')) {
+      const end = lower.indexOf(`</${name}`, i);
+      if (end === -1) break;
+      const endGt = src.indexOf('>', end);
+      i = endGt === -1 ? src.length : endGt + 1;
+      continue;
+    }
+    if (name === 'br' || (closing && BLOCK_ENDS.has(name))) out += '\n';
+  }
+  return out.replace(/&(?:nbsp|amp|lt|gt|quot|#39);/g, (e) => ENTITIES[e] ?? e);
 }
 
 async function fetchEmail(id: string): Promise<InboundEmail | null> {
@@ -56,7 +113,7 @@ export async function handleInboundEmail(ev: InboundEvent, load: (id: string) =>
   if (t || m) return 'duplicate';
 
   const from = parseAddress(ev.from);
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(from.email) || from.email === inbound || /^(mailer-daemon|postmaster|no-?reply)@/.test(from.email)) return 'ignored';
+  if (!looksLikeEmail(from.email) || from.email === inbound || /^(mailer-daemon|postmaster|no-?reply)@/.test(from.email)) return 'ignored';
   const mail = await load(ev.email_id);
   if (!mail) throw new Error('inbound email not found');
   const h = Object.fromEntries(Object.entries(mail.headers ?? {}).map(([k, v]) => [k.toLowerCase(), String(v)]));

@@ -57,7 +57,7 @@ export function isTestAddress(to: string): boolean {
 }
 
 /** One log line's worth of a value: no line breaks, so it can't fake extra log entries. */
-export const logSafe = (value: unknown): string => String(value ?? '').replace(/[\r\n\u2028\u2029]+/g, ' ').slice(0, 300);
+export const logSafe = (value: unknown): string => String(value ?? '').replace(/\n|\r/g, ' ').replace(/[\u2028\u2029]/g, ' ').slice(0, 300);
 
 /** Readable text of an email for the dev log: style blocks dropped (without a backtracking regex), tags removed. */
 export function emailLogText(html: string): string {

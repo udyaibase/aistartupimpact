@@ -33,6 +33,15 @@ export interface CleanSourced {
   currentCompany: string | null; city: string | null; experienceYears: number | null; channel: string; note: string | null;
 }
 
+function isLinkedInUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === 'linkedin.com' || host.endsWith('.linkedin.com');
+  } catch {
+    return false;
+  }
+}
+
 export function cleanSourced(i: SourcedInput): { ok: true; data: CleanSourced } | { ok: false; error: string; field: string } {
   const fullName = clip(i.fullName, 120);
   if (fullName.length < 2) return { ok: false, error: 'Add their name.', field: 'fullName' };
@@ -46,7 +55,9 @@ export function cleanSourced(i: SourcedInput): { ok: true; data: CleanSourced } 
     return /^https:\/\/[^\s]+\.[^\s]+$/.test(u) ? u : null;
   };
   const profile = link(i.linkedinUrl) ?? link(i.profileUrl);
-  const linkedinUrl = profile && /linkedin\.com\//i.test(profile) ? profile : null;
+  // LinkedIn means the link's own host, not the text "linkedin.com/" anywhere in it
+  // ("https://evil.example/linkedin.com/in/x" is not a LinkedIn profile).
+  const linkedinUrl = profile && isLinkedInUrl(profile) ? profile : null;
   const years = Number(i.experienceYears);
   const raw = clip(i.channel, 40);
   const channel = raw === 'Other' ? clip(i.channelOther, 40) || 'Other' : (SOURCING_CHANNELS as readonly string[]).includes(raw) ? raw : 'Other';
