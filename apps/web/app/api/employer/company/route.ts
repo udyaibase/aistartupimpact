@@ -1,23 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
-import { getEmployerSession } from '@/lib/employer-auth';
-import { can, forbidden } from '@/lib/employer/permissions';
 import { refreshPaths, refreshSections } from '@/lib/revalidate';
 import { checkLocation } from '@/lib/locations';
 import { writeLimited } from '@/lib/employer/write-limit';
 import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
 import { cleanPerks } from '@/lib/jobs/perks';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 export async function GET() {
   try {
-    const session = await getEmployerSession();
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (!can(session.role, 'jobs.view')) return forbidden();
+    const guard = await employerApi('jobs.view');
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     const result = await sql`
       SELECT e."companyName", e.email, e.perks, e."startupClaimMethod", e."verifiedCompanyDomain", e.description, e."websiteUrl", e.industry, e."companySize",
-             e.location, e.country, e."linkedinUrl", e."twitterUrl", e."logoUrl", e."startupId",
+             e.location, e.country, e."linkedinUrl", e."twitterUrl", e."logoUrl", e."startupId", e."founderAskEmail", e."founderAskedAt", e."companyReview", e."companyReviewNote",
              s.name AS "startupName", s.slug AS "startupSlug", s."logoUrl" AS "startupLogo", s."isVerified" AS "startupIsVerified",
              s."headquartersCity" AS "startupCity", s.stage AS "startupStage", s."websiteUrl" AS "startupWebsite"
       FROM "JobBoardEmployer" e
@@ -25,7 +24,10 @@ export async function GET() {
       WHERE e.id = ${session.id}
     `;
 
-    return NextResponse.json({ company: result[0] || null });
+    const company = (result[0] as Record<string, unknown> | undefined) ?? null;
+    // The account's sign-in email and the founder contact aren't something a job-limited interviewer needs.
+    if (company && session.jobIds) { company.email = null; company.founderAskEmail = null; }
+    return NextResponse.json({ company });
   } catch (error: any) {
     console.error('[GET /api/employer/company]', error);
     return NextResponse.json({ error: 'Failed to fetch company' }, { status: 500 });
@@ -36,9 +38,9 @@ export async function PUT(request: NextRequest) {
   const limited = await writeLimited(request, 'company');
   if (limited) return limited;
   try {
-    const session = await getEmployerSession();
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (!can(session.role, 'company.manage')) return forbidden();
+    const guard = await employerApi('company.manage');
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     const body = await request.json();
 

@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@udyaibase/database';
-import { getEmployerSession } from '@/lib/employer-auth';
 import { ensureCareersWidget, getCareersCompany, JobsWidgetInputError, parseJobsWidgetInput, syncCareersCsp, toJobsPortalWidget } from '@/lib/jobs/careers';
-import { can, forbidden } from '@/lib/employer/permissions';
 import { parseApplyFormConfig } from '@/lib/jobs/apply-form';
 import type { Prisma } from '@prisma/client';
 import { writeLimited } from '@/lib/employer/write-limit';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,9 +13,9 @@ const unauthorized = () => NextResponse.json({ success: false, error: 'Please lo
 
 /** The employer's careers widget (polled by the portal for install detection). */
 export async function GET() {
-  const session = await getEmployerSession();
-  if (!session) return unauthorized();
-  if (!can(session.role, 'widget.manage')) return forbidden();
+  const guard = await employerApi('widget.manage');
+  if (guard.error) return guard.error;
+  const session = guard.session;
   const widget = await ensureCareersWidget(session.id);
   return NextResponse.json({ success: true, data: toJobsPortalWidget(widget) });
 }
@@ -25,9 +24,9 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   const limited = await writeLimited(request, 'careers/widget');
   if (limited) return limited;
-  const session = await getEmployerSession();
-  if (!session) return unauthorized();
-  if (!can(session.role, 'widget.manage')) return forbidden();
+  const guard = await employerApi('widget.manage');
+  if (guard.error) return guard.error;
+  const session = guard.session;
   const widget = await ensureCareersWidget(session.id);
   const body = await request.json().catch(() => ({}));
 

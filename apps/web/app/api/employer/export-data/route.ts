@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { requireEmployerAuth } from '@/lib/employer-auth';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
-import { can, forbidden } from '@/lib/employer/permissions';
 import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,8 +12,9 @@ export async function GET(request: NextRequest) {
     const { success } = await checkRateLimit(strictRateLimit, identifier);
     if (!success) return NextResponse.json({ error: 'Too many requests. Try again later.' }, { status: 429 });
 
-    const session = await requireEmployerAuth();
-    if (!can(session.role, 'account.manage')) return forbidden();
+    const guard = await employerApi('account.manage');
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     const employer = await prisma.jobBoardEmployer.findUnique({
       where: { id: session.id },
@@ -81,7 +81,10 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Employer data export error:', error);
+    if (error instanceof Error && error.message === 'EMPLOYER_AUTH_REQUIRED') {
+      return NextResponse.json({ success: false, error: 'Please log in again.' }, { status: 401 });
+    }
+    console.error('Employer data export error:', error instanceof Error ? error.message : 'unknown error');
     return NextResponse.json({ success: false, error: 'Failed to export data' }, { status: 500 });
   }
 }

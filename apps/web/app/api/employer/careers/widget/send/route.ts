@@ -1,19 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { getEmployerSession } from '@/lib/employer-auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { embedSendInstructionsRateLimit } from '@/lib/event-rate-limit';
 import { sendDeveloperInstructions } from '@/lib/embed/emails';
 import { ensureCareersWidget } from '@/lib/jobs/careers';
-import { can, forbidden } from '@/lib/employer/permissions';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
 /** Emails the careers widget code and platform steps to the employer's developer. */
 export async function POST(request: NextRequest) {
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ success: false, error: 'Please log in again.' }, { status: 401 });
-  if (!can(session.role, 'widget.manage')) return forbidden();
+  const guard = await employerApi('widget.manage');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const body = await request.json().catch(() => ({}));
   const email = String(body.email || '').trim().toLowerCase();

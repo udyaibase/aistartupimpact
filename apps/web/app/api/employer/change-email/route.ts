@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { requireEmployerAuth } from '@/lib/employer-auth';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { changeEmailSchema, validateInput } from '@/lib/validation';
-import { can, forbidden } from '@/lib/employer/permissions';
 import { writeLimited } from '@/lib/employer/write-limit';
 import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,8 +14,9 @@ export async function POST(request: NextRequest) {
   const limited = await writeLimited(request, 'change-email', 'sensitive');
   if (limited) return limited;
   try {
-    const session = await requireEmployerAuth();
-    if (!can(session.role, 'account.manage')) return forbidden();
+    const guard = await employerApi('account.manage');
+    if (guard.error) return guard.error;
+    const session = guard.session;
     const body = await request.json();
     const validation = validateInput(changeEmailSchema, body);
     if (!validation.success) {

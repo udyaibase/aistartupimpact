@@ -19,15 +19,10 @@ vi.mock('next/server', async () => {
   const actual = await vi.importActual<any>('next/server');
   return { ...actual, after: (fn: () => unknown) => fn() };
 });
-vi.mock('@/lib/employer/permissions', async () => {
-  const roles = await vi.importActual<any>('@/lib/employer/roles');
-  return {
-    requireEmployerPermission: async (p: string) =>
-      roles.can(who.role, p) ? { id: 'emp1', email: 'hr@acme.co', role: who.role, jobIds: who.jobIds, memberName: null, memberId: null } : NextResponse.json({}, { status: 403 }),
-    canSeeJob: (s: { jobIds: string[] | null }, id: string) => !s.jobIds || s.jobIds.includes(id),
-    listingScope: (s: { id: string; jobIds: string[] | null }) => ({ employerId: s.id, ...(s.jobIds ? { id: { in: s.jobIds } } : {}) }),
-  };
-});
+// The session behind the one guard (employerApi); the role and job checks then run for real.
+vi.mock('@/lib/employer-auth', () => ({
+  getEmployerSession: async () => ({ id: 'emp1', email: 'hr@acme.co', role: who.role, jobIds: who.jobIds, memberName: null, memberId: null }),
+}));
 
 import { POST } from '@/app/api/employer/applications/[id]/job/route';
 import { stageCountsByJob } from '@/lib/employer/job-stages';

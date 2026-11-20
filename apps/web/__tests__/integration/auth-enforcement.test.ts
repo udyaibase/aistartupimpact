@@ -24,7 +24,7 @@ vi.mock('@/lib/founder-auth', () => ({
 
 vi.mock('@/lib/employer-auth', () => ({
   getEmployerSession: vi.fn(() => Promise.resolve(null)),
-  requireEmployerAuth: vi.fn(() => { throw 'EMPLOYER_AUTH_REQUIRED'; }),
+  requireEmployerAuth: vi.fn(() => { throw new Error('EMPLOYER_AUTH_REQUIRED'); }),
 }));
 
 vi.mock('@/lib/organizer-auth', () => ({
@@ -149,7 +149,7 @@ describe('auth enforcement — routes return 401 without session', () => {
     it('GET /api/employer/export-data rejects unauthenticated', async () => {
       const { GET } = await import('@/app/api/employer/export-data/route');
       const res = await GET(makeRequest('/api/employer/export-data'));
-      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(res.status).toBe(401);
     });
 
     it('GET /api/employer/2fa-status rejects unauthenticated', async () => {

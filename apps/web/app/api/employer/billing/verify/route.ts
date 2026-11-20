@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { getEmployerSession } from '@/lib/employer-auth';
-import { can, forbidden } from '@/lib/employer/permissions';
 import { activatePayment, checkoutSignatureValid } from '@/lib/employer/billing';
 import { ensureCaptured } from '@/lib/billing/razorpay';
 import { writeLimited } from '@/lib/employer/write-limit';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,9 +11,9 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   const limited = await writeLimited(request, 'billing/verify');
   if (limited) return limited;
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
-  if (!can(session.role, 'account.manage')) return forbidden();
+  const guard = await employerApi('account.manage');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const body = await request.json().catch(() => ({}));
   const orderId = String(body.razorpay_order_id ?? '');

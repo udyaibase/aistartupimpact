@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { prisma } from '@udyaibase/database';
-import { getEmployerSession } from '@/lib/employer-auth';
 import { apiRateLimit, checkRateLimit } from '@/lib/rate-limit';
 import { websiteDomain } from '@/lib/jobs/trust';
 import { employerSubmitter } from '@/lib/startups/ownership';
-import { can, forbidden } from '@/lib/employer/permissions';
+import { can } from '@/lib/employer/permissions';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,9 +15,9 @@ export const dynamic = 'force-dynamic';
  * If a startup with the same website already exists, that one is returned to claim instead.
  */
 export async function POST(request: NextRequest) {
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
-  if (!can(session.role, 'company.manage')) return forbidden();
+  const guard = await employerApi('company.manage');
+  if (guard.error) return guard.error;
+  const session = guard.session;
   const { success } = await checkRateLimit(apiRateLimit, `employer-startup:${session.id}`);
   if (!success) return NextResponse.json({ error: 'Too many requests. Try again shortly.' }, { status: 429 });
 

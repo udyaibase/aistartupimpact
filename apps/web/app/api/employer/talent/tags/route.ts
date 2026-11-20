@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { requireEmployerPermission } from '@/lib/employer/permissions';
 import { writeLimited } from '@/lib/employer/write-limit';
 import { cleanTags } from '@/lib/employer/talent-tags';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,8 +14,9 @@ export const dynamic = 'force-dynamic';
 export async function PUT(request: NextRequest) {
   const limited = await writeLimited(request, 'talent/tags');
   if (limited) return limited;
-  const session = await requireEmployerPermission('candidates.note');
-  if (session instanceof NextResponse) return session;
+  const guard = await employerApi('candidates.note');
+  if (guard.error) return guard.error;
+  const session = guard.session;
   if (session.jobIds) return NextResponse.json({ error: 'The talent pool isn’t available for your role.' }, { status: 403 });
 
   const b = await request.json().catch(() => ({}));

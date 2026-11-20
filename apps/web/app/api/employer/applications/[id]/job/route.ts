@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { requireEmployerPermission, canSeeJob, listingScope } from '@/lib/employer/permissions';
+import { canSeeJob, listingScope } from '@/lib/employer/permissions';
 import { writeLimited } from '@/lib/employer/write-limit';
 import { matchSkills } from '@/lib/jobs/skills';
 import { screenApplication } from '@/lib/jobs/ai-screen';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,8 +16,9 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const limited = await writeLimited(request, 'applications/[id]/job');
   if (limited) return limited;
-  const session = await requireEmployerPermission('candidates.move');
-  if (session instanceof NextResponse) return session;
+  const guard = await employerApi('candidates.move');
+  if (guard.error) return guard.error;
+  const session = guard.session;
   const { id } = await props.params;
 
   const b = await request.json().catch(() => ({}));

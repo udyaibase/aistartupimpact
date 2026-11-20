@@ -88,6 +88,12 @@ describe('CSRF protection middleware', () => {
   });
 
   describe('blocks requests with invalid Referer', () => {
+    it('blocks POST with a Referer that is not a URL (it used to crash the check)', async () => {
+      const req = makeCSRFRequest('/api/employer/auth/logout', 'POST', { referer: 'not a url' });
+      const res = await middleware(req);
+      expect(res!.status).toBe(403);
+    });
+
     it('blocks POST with evil Referer (no Origin)', async () => {
       const req = makeCSRFRequest('/api/founder/content', 'POST', {
         referer: 'https://evil.com/page',

@@ -11,6 +11,13 @@ export async function register() {
       console.error(message);
       Sentry.captureMessage(message, "error");
     }
+    // The same for settings the hiring product needs: several fail silently (see lib/ops/production-config.ts).
+    const { hiringSettingProblems } = await import("./lib/ops/production-config");
+    const problems = hiringSettingProblems();
+    if (problems.length && process.env.NODE_ENV === "production") {
+      for (const p of problems) console.error(`[config] ${p}`);
+      Sentry.captureMessage(`[config] Hiring settings missing: ${problems.length} group(s). See the server log for names.`, "error");
+    }
   }
 
   if (process.env.NEXT_RUNTIME === "edge") {

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getEmployerSession } from '@/lib/employer-auth';
 import { addUserMessage } from '@/lib/support-tickets';
 import { supportMessageSchema, validateInput, sanitizeText } from '@/lib/validation';
 import { writeLimited } from '@/lib/employer/write-limit';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,8 +11,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   if (limited) return limited;
   const params = await props.params;
   try {
-    const session = await getEmployerSession();
-    if (!session) return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
+    const guard = await employerApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     const reqBody = await request.json();
     const validation = validateInput(supportMessageSchema, { content: reqBody.body });

@@ -10,6 +10,7 @@ import { resendPendingInvites, sendMemberLoginCode } from '@/lib/employer/team';
 import { needsTwoFactor, signInMemberships, twoFactorChallenge } from '@/lib/employer/sign-in';
 import { ROLE_LABEL } from '@/lib/employer/roles';
 import { logEmployerActivity } from '@/lib/workspace-activity';
+import { verifyTurnstileToken } from '@/lib/turnstile';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +18,7 @@ const PURPOSE = 'employer_member_login';
 
 /**
  * Email-code sign-in to the employer portal, for owners and teammates alike.
- * { step: 'send', email } then { step: 'verify', email, code, employerId? }.
+ * { step: 'send', email, turnstileToken } then { step: 'verify', email, code, employerId? }.
  * - "send" always answers the same way, so it can't be used to discover who is on a team.
  * - An unexpired invite counts: entering the code accepts it. Expired invites are re-sent instead.
  * - Several teams: the code is checked first, then the person chooses one.
@@ -34,6 +35,11 @@ export async function POST(request: NextRequest) {
   const memberships = await signInMemberships(email, { includeDeactivatedOwners: true });
 
   if (b.step !== 'verify') {
+    // A human check before any code is emailed: without it, a script could use up an address's codes
+    // (three per 15 minutes) and keep that person from signing in.
+    if (!(await verifyTurnstileToken(String(b.turnstileToken ?? '')))) {
+      return NextResponse.json({ error: 'Please complete the check that you’re human, then try again.', code: 'captcha' }, { status: 403 });
+    }
     // Checked for every address (member or not), so the answer never reveals who is on a team.
     if (!(await emailCodeAllowed(email, PURPOSE))) {
       return NextResponse.json({ error: 'Too many codes requested for this email. Try again in 15 minutes.' }, { status: 429 });
@@ -76,13 +82,14 @@ export async function POST(request: NextRequest) {
   const r = await checkDomainCode({ email, purpose: PURPOSE, code });
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
 
-  // An owner signing in brings back the workspace they deactivated. Its jobs stay paused until they choose.
-  if (chosen.Employer.deactivatedAt) {
-    await prisma.jobBoardEmployer.update({ where: { id: chosen.employerId }, data: { deactivatedAt: null } });
-  }
-
   if (needsTwoFactor(chosen)) {
     return NextResponse.json({ requires2FA: true, challengeToken: await twoFactorChallenge(chosen.employerId) });
+  }
+  // An owner signing in brings back the workspace they deactivated. Its jobs stay paused until they choose.
+  // Only once sign-in is complete: with two-step sign-in on, the verify-2fa route does this after the second step.
+  if (chosen.Employer.deactivatedAt) {
+    await prisma.jobBoardEmployer.update({ where: { id: chosen.employerId }, data: { deactivatedAt: null } });
+    await logEmployerActivity(chosen.employerId, 'account_reactivated', { actor: { name: chosen.name ?? null, email: chosen.email }, request });
   }
   // The code proves the address, so a pending invite is accepted now (same as clicking the invite link).
   await prisma.jobBoardTeamMember.update({

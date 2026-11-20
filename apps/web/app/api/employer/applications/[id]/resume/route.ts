@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { getEmployerSession } from '@/lib/employer-auth';
 import { readResume, resumeDownloadUrl } from '@/lib/jobs/resume-storage';
-import { can, forbidden, listingScope } from '@/lib/employer/permissions';
+import { can, listingScope } from '@/lib/employer/permissions';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,9 +17,9 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const view = request.nextUrl.searchParams.get('view') === '1';
   const { id } = await props.params;
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
-  if (!can(session.role, 'candidates.view')) return forbidden();
+  const guard = await employerApi('candidates.view');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const app = await prisma.jobBoardApplication.findFirst({
     where: { id, Listing: listingScope(session) },
@@ -29,7 +29,11 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
 
   // Applications from before private storage kept an external link.
   if (!app.resumeKey) {
-    return app.resumeUrl ? NextResponse.redirect(app.resumeUrl) : NextResponse.json({ error: 'No resume on file.' }, { status: 404 });
+    // The link came from the candidate, so only a plain https address is followed, and without a referrer.
+    let external: URL | null = null;
+    try { external = app.resumeUrl ? new URL(app.resumeUrl) : null; } catch { external = null; }
+    if (external?.protocol !== 'https:' || external.username || external.password) return NextResponse.json({ error: 'No resume on file.' }, { status: 404 });
+    return NextResponse.redirect(external, { headers: { 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'private, no-store' } });
   }
 
   const ext = app.resumeKey.split('.').pop() === 'docx' ? 'docx' : 'pdf';

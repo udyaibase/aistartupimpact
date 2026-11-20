@@ -60,16 +60,30 @@ export async function middleware(request: NextRequest) {
     let frameAncestors = '*';
 
     if (widgetId) {
-      try {
-        const redis = getRedis();
-        if (redis) {
+      const redis = getRedis();
+      let fromRedis = false;
+      if (redis) {
+        try {
           const domains = await redis.get<string>(isJobs ? `embed:csp:jobs:${widgetId}` : `embed:csp:${widgetId}`);
-          if (domains && domains.trim()) {
-            frameAncestors = domains.trim();
-          }
+          fromRedis = true;
+          if (domains && domains.trim()) frameAncestors = domains.trim();
+        } catch {
+          // Redis unavailable: the database below has the same answer.
         }
-      } catch {
-        // Redis unavailable — allow framing as fallback
+      }
+      // Redis missing or down used to mean "any site may frame this widget". The widget's own allowed sites are in
+      // the database, so they still apply; only a widget with no sites set (or a database error) stays open.
+      if (!fromRedis && /^[0-9a-f-]{36}$/i.test(widgetId)) {
+        try {
+          const rows = (isJobs
+            ? await getSql()`SELECT "allowedDomains" FROM "JobBoardCareersWidget" WHERE id = ${widgetId} AND active = true LIMIT 1`
+            : await getSql()`SELECT "allowedDomains" FROM "EmbedWidget" WHERE id = ${widgetId} AND active = true LIMIT 1`) as { allowedDomains: string[] | null }[];
+          const allowed = rows[0]?.allowedDomains ?? [];
+          // Same form as frameAncestorsFor (lib/embed/widgets.ts).
+          if (allowed.length) frameAncestors = ["'self'", 'http://localhost:*', 'http://127.0.0.1:*', ...allowed].join(' ');
+        } catch {
+          // Leave framing open rather than break every installed widget.
+        }
       }
     }
 
@@ -98,8 +112,10 @@ export async function middleware(request: NextRequest) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
     } else if (referer) {
-      const refererOrigin = new URL(referer).origin;
-      if (!allowedOrigins.includes(refererOrigin)) {
+      // A Referer that isn't a URL is treated like one from another site (it used to crash this check).
+      let refererOrigin: string | null = null;
+      try { refererOrigin = new URL(referer).origin; } catch { /* not a URL */ }
+      if (!refererOrigin || !allowedOrigins.includes(refererOrigin)) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
     } else {
@@ -109,9 +125,9 @@ export async function middleware(request: NextRequest) {
         pathname.startsWith('/api/webhook');
       // RFC 8058 one-click unsubscribe: mail providers POST server-to-server. The route verifies the signed token.
       const isSignedUnsubscribe = ((pathname === '/api/founder/email-preferences' || pathname === '/api/events/unsubscribe' || pathname === '/api/newsletter/unsubscribe') &&
-        request.nextUrl.searchParams.has('token')) || ((pathname === '/api/events/stop-emails' || pathname === '/api/series/follow/stop') && request.nextUrl.searchParams.has('t'));
+        request.nextUrl.searchParams.has('token')) || ((pathname === '/api/events/stop-emails' || pathname === '/api/series/follow/stop' || pathname === '/api/jobs/alerts/unsubscribe') && request.nextUrl.searchParams.has('t'));
       // Talent pool one-click leave (List-Unsubscribe-Post): signed id + t, verified by the route.
-      const isTalentPoolLeave = pathname === '/api/talent-pool/leave' &&
+      const isTalentPoolLeave = (pathname === '/api/talent-pool/leave' || pathname === '/api/employer/weekly-report/unsubscribe') &&
         request.nextUrl.searchParams.has('id') && request.nextUrl.searchParams.has('t');
       if (!isCronOrWebhook && !isSignedUnsubscribe && !isTalentPoolLeave) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

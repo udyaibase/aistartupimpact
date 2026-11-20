@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { requireEmployerAuth } from '@/lib/employer-auth';
-import { can, forbidden } from '@/lib/employer/permissions';
 import { passwordSignInOpen } from '@/lib/employer/sign-in-policy';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await requireEmployerAuth();
-    if (!can(session.role, 'account.manage')) return forbidden();
+    const guard = await employerApi('account.manage');
+    if (guard.error) return guard.error;
+    const session = guard.session;
     const employer = await prisma.jobBoardEmployer.findUnique({
       where: { id: session.id },
       select: { twoFactorEnabled: true, passwordHash: true },

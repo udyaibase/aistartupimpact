@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { markStep } from '@/lib/employer/onboarding';
 import { prisma } from '@udyaibase/database';
-import { getEmployerSession } from '@/lib/employer-auth';
 import { draftFromRow, draftToData, defaultClosesOn, type JobDraft } from '@/lib/jobs/composer';
 import { standardJobLocation } from '@/lib/jobs/location';
 import { uniqueJobSlug } from '@/lib/jobs/slug';
-import { can, forbidden, listingScope } from '@/lib/employer/permissions';
+import { listingScope } from '@/lib/employer/permissions';
 import { writeLimited } from '@/lib/employer/write-limit';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,9 +14,9 @@ const MAX_DRAFTS = 50;
 
 // GET: List the employer's own jobs
 export async function GET() {
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!can(session.role, 'jobs.view')) return forbidden();
+  const guard = await employerApi('jobs.view');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const jobs = await prisma.jobBoardListing.findMany({
     where: { ...listingScope(session), deletedAt: null, isGeneral: false },
@@ -37,9 +38,9 @@ export async function POST(request: NextRequest) {
   const limited = await writeLimited(request, 'jobs');
   if (limited) return limited;
   try {
-    const session = await getEmployerSession();
-    if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
-    if (!can(session.role, 'jobs.manage')) return forbidden();
+    const guard = await employerApi('jobs.manage');
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     const body = await request.json().catch(() => ({}));
 
@@ -76,6 +77,7 @@ export async function POST(request: NextRequest) {
       select: { id: true, slug: true, title: true, status: true, draftSavedAt: true },
     });
 
+    await markStep(session.id, 'FIRST_DRAFT');
     return NextResponse.json({ success: true, job }, { status: 201 });
   } catch (error) {
     console.error('[POST /api/employer/jobs]', error);

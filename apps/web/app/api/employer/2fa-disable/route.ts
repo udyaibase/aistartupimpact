@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { requireEmployerAuth } from '@/lib/employer-auth';
 import { verifyTOTPToken, decryptSecret } from '@/lib/two-factor';
-import { can, forbidden } from '@/lib/employer/permissions';
 import { TWO_FACTOR_LOCKED_MESSAGE, clearTwoFactorFailures, isTwoFactorLocked, recordTwoFactorFailure } from '@/lib/auth/two-factor-attempts';
 import { twoFactorRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,8 +13,9 @@ export async function POST(request: NextRequest) {
     const { success: allowed } = await checkRateLimit(twoFactorRateLimit, getClientIdentifier(request));
     if (!allowed) return NextResponse.json({ success: false, error: 'Too many attempts. Please try again later.' }, { status: 429 });
 
-    const session = await requireEmployerAuth();
-    if (!can(session.role, 'account.manage')) return forbidden();
+    const guard = await employerApi('account.manage');
+    if (guard.error) return guard.error;
+    const session = guard.session;
     const { token } = await request.json();
 
     if (!token) {

@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getEmployerSession } from '@/lib/employer-auth';
 import { getTicketDetail } from '@/lib/support-tickets';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   try {
-    const session = await getEmployerSession();
-    if (!session) return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
+    const guard = await employerApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     const ticket = await getTicketDetail(params.id, 'EMPLOYER', session.id);
     if (!ticket) return NextResponse.json({ success: false, error: 'Ticket not found' }, { status: 404 });

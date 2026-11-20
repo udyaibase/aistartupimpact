@@ -1,14 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
+import { notifyClosedJob } from '@/lib/employer/closing';
 import { prisma } from '@udyaibase/database';
-import { getEmployerSession } from '@/lib/employer-auth';
 import { setListingStatus } from '@/lib/jobs/listing-status';
 import { draftFromRow, draftToData, publishProblems, type JobDraft } from '@/lib/jobs/composer';
 import { standardJobLocation } from '@/lib/jobs/location';
 import { uniqueJobSlug } from '@/lib/jobs/slug';
-import { can, forbidden, canSeeJob } from '@/lib/employer/permissions';
+import { canSeeJob } from '@/lib/employer/permissions';
 import { refreshPaths, refreshSections } from '@/lib/revalidate';
 import { writeLimited } from '@/lib/employer/write-limit';
 import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,9 +20,9 @@ async function ownJob(id: string, employerId: string) {
 // GET: A job as composer form state, plus its status
 export async function GET(_request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const { id } = await props.params;
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!can(session.role, 'jobs.view')) return forbidden();
+  const guard = await employerApi('jobs.view');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const job = canSeeJob(session, id) ? await ownJob(id, session.id) : null;
   if (!job) return NextResponse.json({ error: 'Job not found' }, { status: 404 });
@@ -44,9 +45,9 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
   if (limited) return limited;
   const { id } = await props.params;
   try {
-    const session = await getEmployerSession();
-    if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
-    if (!can(session.role, 'jobs.manage')) return forbidden();
+    const guard = await employerApi('jobs.manage');
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     const job = await ownJob(id, session.id);
     if (!job) return NextResponse.json({ error: 'Job not found' }, { status: 404 });
@@ -99,15 +100,19 @@ export async function DELETE(_request: NextRequest, props: { params: Promise<{ i
   const limited = await writeLimited(_request, 'jobs/[id]');
   if (limited) return limited;
   const { id } = await props.params;
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!can(session.role, 'jobs.manage')) return forbidden();
+  const guard = await employerApi('jobs.manage');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const job = await ownJob(id, session.id);
   if (!job) return NextResponse.json({ error: 'Job not found' }, { status: 404 });
 
   await setListingStatus(id, 'CLOSED', 'MANUAL');
   await prisma.jobBoardListing.update({ where: { id }, data: { deletedAt: new Date() } });
+  // A removed job is a closed job for the people waiting on it.
+  if (_request.nextUrl.searchParams.get('notify') !== '0') {
+    after(() => notifyClosedJob(id, session.email).then(() => undefined).catch((e) => console.error('[jobs] closing emails', id, e instanceof Error ? e.message : e)));
+  }
   refreshSections(['jobs', 'home']);
   await logEmployerActivity(session.id, 'job_deleted', { actor: employerActor(session), request: _request, metadata: { title: job.title } });
   return NextResponse.json({ success: true });

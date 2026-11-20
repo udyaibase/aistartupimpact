@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { getEmployerSession } from '@/lib/employer-auth';
-import { can, forbidden } from '@/lib/employer/permissions';
 import { apiRateLimit, checkRateLimit } from '@/lib/rate-limit';
 import { isClaimVerified, VERIFIED_CLAIM_METHODS } from '@/lib/jobs/trust';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,9 +12,9 @@ export const dynamic = 'force-dynamic';
  * Only founders verify startups; there is no employer-side verification.
  */
 export async function POST(request: NextRequest) {
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
-  if (!can(session.role, 'company.manage')) return forbidden();
+  const guard = await employerApi('company.manage');
+  if (guard.error) return guard.error;
+  const session = guard.session;
   const { success } = await checkRateLimit(apiRateLimit, `claim-link:${session.id}`);
   if (!success) return NextResponse.json({ error: 'Too many requests. Try again in a minute.' }, { status: 429 });
 

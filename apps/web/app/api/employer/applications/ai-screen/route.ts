@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { getEmployerSession } from '@/lib/employer-auth';
-import { can, forbidden } from '@/lib/employer/permissions';
 import { apiRateLimit, checkRateLimit } from '@/lib/rate-limit';
 import { screenApplication } from '@/lib/jobs/ai-screen';
 import { planStatus } from '@/lib/employer/billing';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -17,9 +16,9 @@ const CONCURRENCY = 4;
  * unscreened candidates (optionally for one job). The client calls again while `remaining` > 0.
  */
 export async function POST(request: NextRequest) {
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
-  if (!can(session.role, 'candidates.move')) return forbidden();
+  const guard = await employerApi('candidates.move');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const { success } = await checkRateLimit(apiRateLimit, `ai-screen:${session.id}`);
   if (!success) return NextResponse.json({ error: 'Too many requests. Try again in a minute.' }, { status: 429 });
