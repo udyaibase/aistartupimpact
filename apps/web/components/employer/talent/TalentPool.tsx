@@ -1,5 +1,6 @@
 'use client';
 
+import { yearsText } from '@/lib/jobs/format';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Check, Clock, Loader2, MessageSquare, Plus, Search, Send, Tag, Target, UserCheck, X } from 'lucide-react';
@@ -9,7 +10,7 @@ import { cleanTags, MAX_TAGS, MAX_TAG_LENGTH } from '@/lib/employer/talent-tags'
 
 const card = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px]';
 const input = 'min-h-[40px] px-3 rounded-[10px] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#A50F15]/25 focus:border-[#A50F15]';
-const chip = 'inline-flex items-center gap-1 text-[12px] font-medium px-2 py-0.5 rounded-full';
+const chip = 'inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full';
 const fmt = (iso: string) => new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 const PAGE = 50;
 
@@ -99,7 +100,7 @@ export default function TalentPool({ people: initial, jobs, canInvite, canNote, 
       {people.length === 0 ? (
         <div className={`${card} px-4 py-12 text-center`}>
           <UserCheck className="w-8 h-8 text-gray-400 mx-auto mb-2" aria-hidden />
-          <p className="text-[15px] font-semibold text-gray-900 dark:text-white">No one in your talent pool yet</p>
+          <p className="portal-item-title">No one in your talent pool yet</p>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-md mx-auto">When candidates apply, they can choose to hear about your other roles. Those who do appear here, so your next hire can start with people who already know you.</p>
         </div>
       ) : (
@@ -165,7 +166,7 @@ export default function TalentPool({ people: initial, jobs, canInvite, canNote, 
       )}
 
       {toast && (
-        <div role="status" className="fixed z-[130] left-1/2 -translate-x-1/2 bottom-[calc(5rem+env(safe-area-inset-bottom))] md:bottom-6 flex items-center gap-3 px-4 py-3 rounded-[12px] bg-gray-900 text-white text-sm shadow-xl max-w-[92vw]">
+        <div role="status" className="fixed z-toast left-1/2 -translate-x-1/2 bottom-[calc(5rem+env(safe-area-inset-bottom))] md:bottom-6 flex items-center gap-3 px-4 py-3 rounded-[12px] bg-gray-900 text-white text-sm shadow-xl max-w-[92vw]">
           <span>{toast}</span>
           <button onClick={() => setToast('')} aria-label="Dismiss" className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-800"><X className="w-4 h-4" aria-hidden /></button>
         </div>
@@ -218,13 +219,13 @@ function PoolCard({ p, fit, jobs, role, canInvite, canNote, busy, pick, onPick, 
     <li className={`${card} p-4 flex flex-col gap-3`}>
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-[15px] font-semibold text-gray-900 dark:text-white truncate">{p.fullName}</p>
+          <p className="portal-item-title truncate">{p.fullName}</p>
           <p className="text-[13px] text-gray-600 dark:text-gray-400 truncate">
-            {[p.currentTitle, p.currentCompany].filter(Boolean).join(' at ') || 'Applicant'}{p.city ? ` · ${p.city}` : ''}{p.experienceYears != null ? ` · ${p.experienceYears} yrs` : ''}
+            {[p.currentTitle, p.currentCompany].filter(Boolean).join(' at ') || 'Applicant'}{p.city ? ` · ${p.city}` : ''}{p.experienceYears != null ? ` · ${yearsText(p.experienceYears)}` : ''}
           </p>
         </div>
         {fit && (
-          <span className={`shrink-0 text-[12px] font-bold px-2 py-1 rounded-[8px] tabular-nums ${fit.score >= 75 ? 'bg-green-50 text-green-800 dark:bg-green-900/30 dark:text-green-300' : fit.score >= 50 ? 'bg-blue-50 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'}`}
+          <span className={`shrink-0 text-xs font-bold px-2 py-1 rounded-[8px] tabular-nums ${fit.score >= 75 ? 'bg-green-50 text-green-800 dark:bg-green-900/30 dark:text-green-300' : fit.score >= 50 ? 'bg-blue-50 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'}`}
             title="Fit for the chosen role">{Math.min(100, fit.score)}% fit</span>
         )}
       </div>
@@ -238,14 +239,14 @@ function PoolCard({ p, fit, jobs, role, canInvite, canNote, busy, pick, onPick, 
       </div>
 
       {fit && (
-        <p className="text-[12.5px] text-gray-700 dark:text-gray-300">
+        <p className="text-[13px] text-gray-700 dark:text-gray-300">
           {fit.total ? <><span className="font-semibold tabular-nums">{fit.matched}/{fit.total}</span> skills</> : 'No skills listed on the role'}
           {' · '}{fit.mustOk ? 'All must-haves' : <span className="text-amber-800 dark:text-amber-300">Missing {fit.mustMissing.slice(0, 2).join(', ')}{fit.mustMissing.length > 2 ? ` +${fit.mustMissing.length - 2}` : ''}</span>}
           {fit.expOk === false && <> · <span className="text-amber-800 dark:text-amber-300">Experience outside range</span></>}
         </p>
       )}
 
-      {p.skills.length > 0 && <p className="text-[12.5px] text-gray-500 line-clamp-2">{p.skills.join(' · ')}</p>}
+      {p.skills.length > 0 && <p className="text-[13px] text-gray-500 line-clamp-2">{p.skills.join(' · ')}</p>}
 
       {/* Team tags: private, never shown to the candidate */}
       <div className="flex flex-wrap items-center gap-1.5">
@@ -260,7 +261,7 @@ function PoolCard({ p, fit, jobs, role, canInvite, canNote, busy, pick, onPick, 
             <label htmlFor={`tag-${p.id}`} className="sr-only">New tag</label>
             <input id={`tag-${p.id}`} autoFocus value={tagDraft} maxLength={MAX_TAG_LENGTH} onChange={(e) => setTagDraft(e.target.value)}
               onBlur={() => { if (tagDraft.trim()) saveTags([...p.tags, tagDraft]); setTagDraft(''); setTagging(false); }}
-              placeholder="e.g. backend" className="h-7 w-28 px-2 rounded-full border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-[12px]" />
+              placeholder="e.g. backend" className="h-7 w-28 px-2 rounded-full border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-xs" />
           </form>
         ) : (
           <button type="button" onClick={() => setTagging(true)} className={`${chip} min-h-[28px] border border-dashed border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-400`}>
@@ -273,11 +274,11 @@ function PoolCard({ p, fit, jobs, role, canInvite, canNote, busy, pick, onPick, 
       {(p.lastNote || canNote) && (
         <div className="rounded-[10px] bg-gray-50 dark:bg-gray-800/50 px-3 py-2">
           {p.lastNote ? (
-            <p className="text-[12.5px] text-gray-700 dark:text-gray-300">
+            <p className="text-[13px] text-gray-700 dark:text-gray-300">
               <span className="font-semibold">{p.lastNote.authorName}:</span> <span className="line-clamp-2 inline">{p.lastNote.body}</span>
-              <span className="block text-[11.5px] text-gray-500 mt-0.5">{fmt(p.lastNote.createdAt)}{p.noteCount > 1 ? ` · ${p.noteCount} notes in total` : ''}</span>
+              <span className="block text-xs text-gray-500 mt-0.5">{fmt(p.lastNote.createdAt)}{p.noteCount > 1 ? ` · ${p.noteCount} notes in total` : ''}</span>
             </p>
-          ) : !noteOpen && <p className="text-[12.5px] text-gray-500">No team notes yet.</p>}
+          ) : !noteOpen && <p className="text-[13px] text-gray-500">No team notes yet.</p>}
           {canNote && (noteOpen ? (
             <form onSubmit={addNote} className="mt-2 flex flex-col gap-2">
               <label htmlFor={`note-${p.id}`} className="sr-only">Note</label>
@@ -292,7 +293,7 @@ function PoolCard({ p, fit, jobs, role, canInvite, canNote, busy, pick, onPick, 
               </div>
             </form>
           ) : (
-            <button type="button" onClick={() => setNoteOpen(true)} className="mt-1 inline-flex items-center gap-1 min-h-[32px] text-[12.5px] font-semibold text-gray-700 dark:text-gray-300 hover:underline">
+            <button type="button" onClick={() => setNoteOpen(true)} className="mt-1 inline-flex items-center gap-1 min-h-[32px] text-[13px] font-semibold text-gray-700 dark:text-gray-300 hover:underline">
               <MessageSquare className="w-3.5 h-3.5" aria-hidden /> Add note
             </button>
           ))}
@@ -317,7 +318,7 @@ function PoolCard({ p, fit, jobs, role, canInvite, canNote, busy, pick, onPick, 
               </button>
             </div>
           )}
-          {p.invitedTo.length > 0 && <span className="w-full text-[12px] text-gray-500">Invited to {p.invitedTo.map((id) => jobs.find((j) => j.id === id)?.title ?? 'a closed job').join(', ')}</span>}
+          {p.invitedTo.length > 0 && <span className="w-full text-xs text-gray-500">Invited to {p.invitedTo.map((id) => jobs.find((j) => j.id === id)?.title ?? 'a closed job').join(', ')}</span>}
         </div>
       )}
     </li>

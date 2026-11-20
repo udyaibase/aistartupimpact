@@ -9,6 +9,6 @@ export default async function EmployerActivityPage({ searchParams }: { searchPar
   const session = await requirePagePermission('account.manage');
   return (
     <WorkspaceActivityView kind="EMPLOYER" workspaceId={session.id} basePath="/employer/activity" params={await searchParams}
-      workLabel="Jobs" passwordHref="/employer/settings" supportHref="/employer/support" />
+      workLabel="Jobs" passwordHref="/employer/settings" supportHref="/employer/help#report-h" />
   );
 }

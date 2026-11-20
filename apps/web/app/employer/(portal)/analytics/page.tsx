@@ -46,7 +46,7 @@ export default async function InsightsPage(props: { searchParams: Promise<{ rang
       {d.waitingOver5Days > 0 && (
         <Link href="/employer/applications?stage=new" className="flex items-center gap-3 px-4 py-3 rounded-[12px] bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/50 text-sm text-amber-900 dark:text-amber-200 hover:underline">
           <Clock className="w-4 h-4 shrink-0" aria-hidden />
-          {d.waitingOver5Days} candidate{d.waitingOver5Days === 1 ? ' has' : 's have'} been waiting more than 5 days for a reply. Review now
+          {d.waitingOver5Days} candidate{d.waitingOver5Days === 1 ? ' has' : 's have'} been waiting more than 5 days in New. Review now
         </Link>
       )}
 
@@ -61,12 +61,23 @@ export default async function InsightsPage(props: { searchParams: Promise<{ rang
       {d.applications === 0 ? (
         <div className={`${card} px-4 py-12 text-center`}>
           <Users className="w-8 h-8 text-gray-400 mx-auto mb-2" aria-hidden />
-          <p className="text-[15px] font-semibold text-gray-900 dark:text-white">No applications in the last {days} days</p>
+          <p className="portal-item-title">No applications in the last {days} days</p>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Share your open roles or add the widget to your website to start seeing numbers here.</p>
         </div>
       ) : (
         <>
           <DailyChart d={d} />
+          {d.intake.sourced > 0 && (
+            <section aria-labelledby="intake-h" className={`${card} px-4 sm:px-5 py-4`}>
+              <h2 id="intake-h" className="portal-section-title">Applied vs found by your team</h2>
+              <dl className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                <div><dt className="text-gray-500">Applied</dt><dd className="portal-stat-sm">{d.intake.applied}</dd></div>
+                <div><dt className="text-gray-500">Found by your team</dt><dd className="portal-stat-sm">{d.intake.sourced}</dd></div>
+                <div><dt className="text-gray-500">Found and interested</dt><dd className="portal-stat-sm">{d.intake.sourcedInterested}</dd></div>
+                <div><dt className="text-gray-500">Reached Screening</dt><dd className="portal-stat-sm">{d.intake.appliedToScreening} applied · {d.intake.sourcedToScreening} found</dd></div>
+              </dl>
+            </section>
+          )}
           <div className="grid gap-4 lg:grid-cols-2">
             <BarList title="Where candidates come from" rows={d.bySource.map((s) => ({ label: s.label, count: s.count }))} total={d.applications} />
             <BarList title="How far candidates get" rows={d.funnel.map((f) => ({ label: f.label, count: f.count }))} total={d.funnel[0].count}
@@ -81,7 +92,7 @@ export default async function InsightsPage(props: { searchParams: Promise<{ rang
           <table className="w-full text-sm min-w-[680px]">
             <thead>
               <tr className="text-left text-xs text-gray-500 border-b border-gray-100 dark:border-gray-800">
-                {['Job', 'Status', 'Views', 'Applications', 'Apply rate', 'Waiting', 'Median first reply'].map((h, i) => (
+                {['Job', 'Status', 'Views', 'Applications', 'Apply rate', 'In New', 'Median first reply'].map((h, i) => (
                   <th key={h} scope="col" className={`px-4 sm:px-5 py-2 font-semibold ${i >= 2 ? 'text-right' : ''}`}>{h}</th>
                 ))}
               </tr>
@@ -94,7 +105,7 @@ export default async function InsightsPage(props: { searchParams: Promise<{ rang
                   </th>
                   <td className="px-4 sm:px-5 py-2.5 text-gray-600 dark:text-gray-400">{STATUS[j.status] ?? j.status}</td>
                   <td className="px-4 sm:px-5 py-2.5 text-right tabular-nums">{j.views.toLocaleString('en-IN')}</td>
-                  <td className="px-4 sm:px-5 py-2.5 text-right tabular-nums">{j.total.toLocaleString('en-IN')}{j.inRange !== j.total && <span className="text-gray-500"> ({j.inRange} new)</span>}</td>
+                  <td className="px-4 sm:px-5 py-2.5 text-right tabular-nums">{j.total.toLocaleString('en-IN')}{j.inRange !== j.total && <span className="text-gray-500"> ({j.inRange} in this period)</span>}</td>
                   <td className="px-4 sm:px-5 py-2.5 text-right tabular-nums">{pct(j.applyRate)}</td>
                   <td className={`px-4 sm:px-5 py-2.5 text-right tabular-nums ${j.waiting ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-500'}`}>{j.waiting}</td>
                   <td className="px-4 sm:px-5 py-2.5 text-right">{hours(j.medianResponseHours)}</td>
@@ -112,7 +123,7 @@ function Stat({ label, value, note }: { label: string; value: string; note: stri
   return (
     <div className={`${card} p-4`}>
       <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</dt>
-      <dd className="mt-1 text-2xl font-extrabold text-gray-900 dark:text-white tabular-nums">{value}</dd>
+      <dd className="mt-1 portal-stat">{value}</dd>
       <dd className="text-xs text-gray-500 mt-0.5">{note}</dd>
     </div>
   );
@@ -126,7 +137,7 @@ function BarList({ title, rows, total, foot }: { title: string; rows: { label: s
       <ul className="space-y-2.5">
         {rows.map((r) => (
           <li key={r.label} title={`${r.label}: ${r.count} (${total ? Math.round((r.count / total) * 100) : 0}%)`}>
-            <div className="flex items-baseline justify-between gap-2 text-[13.5px]">
+            <div className="flex items-baseline justify-between gap-2 text-sm">
               <span className="text-gray-800 dark:text-gray-200">{r.label}</span>
               <span className="tabular-nums text-gray-900 dark:text-white font-semibold">{r.count}<span className="font-normal text-gray-500"> · {total ? Math.round((r.count / total) * 100) : 0}%</span></span>
             </div>

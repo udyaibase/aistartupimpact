@@ -63,12 +63,16 @@ export default async function WorkspaceActivityView({ kind, workspaceId, basePat
       <div>
         <h1 className="portal-title">Activity log</h1>
         <p className="portal-subtitle">
-          Sign-ins and changes in this workspace, with who made them, kept for one year. Only owners and admins can see this page.
+          Sign-ins and changes in this workspace, with who made them, kept for one year. {kind === 'EMPLOYER' ? 'Only owners can see this page.' : 'Only owners and admins can see this page.'}
         </p>
       </div>
 
       <p className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4">
-        Don’t recognise something? <Link href={passwordHref} className="font-semibold underline">Change your password</Link>, remove anyone you don’t know from the team, and{' '}
+        Don’t recognise something?{' '}
+        {kind === 'EMPLOYER'
+          // Hiring teams sign in with an email code, so there is no password to change: end every session instead.
+          ? <>Choose <strong>Sign out everywhere</strong> in the account menu</>
+          : <Link href={passwordHref} className="font-semibold underline">Change your password</Link>}, remove anyone you don’t know from the team, and{' '}
         <Link href={supportHref} className="font-semibold underline">contact Support</Link> straight away.
       </p>
 

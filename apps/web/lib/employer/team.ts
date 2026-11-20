@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { effectivePlan } from '@/lib/employer/plans';
 import { prisma } from '@udyaibase/database';
+import { seatsUsed } from '@/lib/employer/counts';
 import type { EmployerRole } from '@/lib/employer-auth';
 import { sendEmail } from '@/lib/email/send';
 import { ROLE_LABEL } from '@/lib/employer/roles';
@@ -46,6 +47,17 @@ export interface TeamRow {
 }
 
 /** Workspace account (always an owner) plus active and pending teammates. */
+/**
+ * The team list as this person may see it. An interviewer limited to some jobs sees who is on the team and in what
+ * role, but not everyone's email address, and not who has been invited or has asked to join.
+ */
+export function teamForViewer(team: TeamRow[], viewer: { memberId: string | null; jobIds: string[] | null }): TeamRow[] {
+  if (!viewer.jobIds) return team;
+  return team
+    .filter((t) => t.status === 'ACTIVE' || t.status === 'OWNER_ACCOUNT')
+    .map((t) => (t.id && t.id === viewer.memberId ? t : { ...t, email: '', name: t.name || 'Teammate', jobIds: [] }));
+}
+
 export async function listTeam(employerId: string): Promise<TeamRow[]> {
   const [employer, members] = await Promise.all([
     prisma.jobBoardEmployer.findUnique({ where: { id: employerId }, select: { email: true, FounderUser: { select: { name: true } } } }),
@@ -87,7 +99,7 @@ export async function sendInviteEmail(opts: { employerId: string; to: string; ro
 export async function sendMemberLoginCode(to: string, code: string) {
   return sendEmail({
     to,
-    subject: `${code} is your Udyaibase sign-in code`,
+    subject: 'Your Udyaibase sign-in code',
     type: 'employer_member_login',
     html: shell(`
 <h1 style="font-size:20px;margin:0 0 8px">Your sign-in code</h1>
@@ -100,7 +112,7 @@ export async function sendMemberLoginCode(to: string, code: string) {
 export async function sendAccountActionCode(to: string, code: string) {
   return sendEmail({
     to,
-    subject: `${code} is your Udyaibase confirmation code`,
+    subject: 'Your Udyaibase confirmation code',
     type: 'employer_account_action',
     html: shell(`
 <h1 style="font-size:20px;margin:0 0 8px">Confirm this change to your workspace</h1>
@@ -181,7 +193,7 @@ export async function inviteTeammate(opts: {
   // Seats include the workspace owner. Over the limit after a downgrade, existing people keep access; only new invites stop.
   const plan = effectivePlan(employer);
   const maxSeats = plan.maxSeats ?? MAX_SEATS_CAP;
-  const seats = 1 + await prisma.jobBoardTeamMember.count({ where: { employerId: opts.employerId, status: { in: ['PENDING', 'ACTIVE'] } } });
+  const seats = await seatsUsed(opts.employerId);
   if (!existing && seats >= maxSeats) {
     return {
       ok: false, status: 403, code: 'seat_limit',

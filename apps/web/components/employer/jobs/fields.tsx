@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 
 export const inputCls =
@@ -8,7 +8,7 @@ export const inputCls =
 
 export function Card({ id, title, hint, children }: { id?: string; title: string; hint?: string; children: ReactNode }) {
   return (
-    <section id={id} aria-labelledby={id ? `${id}-title` : undefined} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4 sm:p-5 scroll-mt-4">
+    <section id={id} aria-labelledby={id ? `${id}-title` : undefined} className="scroll-mt-16 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4 sm:p-5 scroll-mt-4">
       <h2 id={id ? `${id}-title` : undefined} className="portal-section-title">{title}</h2>
       {hint && <p className="text-[13px] text-gray-600 dark:text-gray-400 mt-0.5">{hint}</p>}
       <div className="mt-4 space-y-4">{children}</div>
@@ -19,6 +19,21 @@ export function Card({ id, title, hint, children }: { id?: string; title: string
 export function Field({
   label, hint, error, optional, htmlFor, children,
 }: { label: string; hint?: string; error?: string; optional?: boolean; htmlFor: string; children: ReactNode }) {
+  // Link the message to the input for screen readers, even when the input (a picker, say) doesn't wire it itself.
+  useEffect(() => {
+    const el = document.getElementById(htmlFor);
+    if (!el) return;
+    const owned = el.dataset.fieldAria === '1';
+    if (error) {
+      el.setAttribute('aria-invalid', 'true');
+      el.setAttribute('aria-describedby', `${htmlFor}-error`);
+      el.dataset.fieldAria = '1';
+    } else if (owned) {
+      el.removeAttribute('aria-invalid');
+      if (hint) el.setAttribute('aria-describedby', `${htmlFor}-hint`); else el.removeAttribute('aria-describedby');
+      delete el.dataset.fieldAria;
+    }
+  }, [error, hint, htmlFor]);
   return (
     <div>
       <label htmlFor={htmlFor} className="block text-sm font-semibold text-gray-900 dark:text-white mb-1.5">

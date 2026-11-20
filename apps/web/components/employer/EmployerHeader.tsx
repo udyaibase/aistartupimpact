@@ -32,7 +32,7 @@ const PAGES: SearchResult[] = [
   { id: 'team', label: 'Team', description: 'Invite recruiters and interviewers', href: '/employer/team', icon: <Users className="w-4 h-4" />, category: 'page' },
   { id: 'billing', label: 'Plans & billing', description: 'Plan, AI reviews and payments', href: '/employer/billing', icon: <CreditCard className="w-4 h-4" />, category: 'page' },
   { id: 'settings', label: 'Settings', description: 'Account and security', href: '/employer/settings', icon: <Settings className="w-4 h-4" />, category: 'page' },
-  { id: 'help', label: 'Help', description: 'Guides and support', href: '/employer/support', icon: <HelpCircle className="w-4 h-4" />, category: 'page' },
+  { id: 'help', label: 'Help', description: 'Guides and support', href: '/employer/help', icon: <HelpCircle className="w-4 h-4" />, category: 'page' },
 ];
 
 const ACTIONS: SearchResult[] = [
@@ -81,11 +81,11 @@ export default function EmployerHeader({ employer, shell }: Props) {
           </Link>
           <button
             onClick={() => setCommandOpen(true)}
-            className="hidden md:flex items-center gap-2 w-80 lg:w-96 pl-3 pr-3 py-1.5 rounded-md border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 text-sm font-jakarta text-gray-400 hover:border-gray-300 dark:hover:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+            className="hidden md:flex items-center gap-2 w-80 lg:w-96 pl-3 pr-3 min-h-[40px] rounded-[10px] border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 text-sm font-jakarta text-gray-400 hover:border-gray-300 dark:hover:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
           >
             <Search className="w-4 h-4 text-gray-400 shrink-0" />
             <span className="flex-1 text-left">Search jobs, pages...</span>
-            <kbd className="text-[10px] font-jakarta font-medium text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded px-1.5 py-0.5">⌘K</kbd>
+            <kbd className="text-[11px] font-jakarta font-medium text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded px-1.5 py-0.5">⌘K</kbd>
           </button>
           <button
             onClick={() => setCommandOpen(true)}
@@ -101,7 +101,7 @@ export default function EmployerHeader({ employer, shell }: Props) {
           <ThemeToggle />
           <Link
             href="/employer/applications?stage=new"
-            aria-label={shell.newCandidates > 0 ? `${shell.newCandidates} new candidates` : 'Candidates'}
+            aria-label={shell.newCandidates > 0 ? `${shell.newCandidates} unseen candidates` : 'Candidates'}
             className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md relative"
           >
             <Bell className="w-4 h-4" />
@@ -137,8 +137,8 @@ function AccountMenu({ employer, shell }: Props) {
     return () => { document.removeEventListener('mousedown', onClick); document.removeEventListener('keydown', onKey); };
   }, [open]);
 
-  const logout = async () => {
-    await fetch('/api/employer/auth/logout', { method: 'POST' }).catch(() => {});
+  const logout = async (everywhere = false) => {
+    await fetch('/api/employer/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ everywhere }) }).catch(() => {});
     window.location.href = '/employer/login';
   };
 
@@ -213,6 +213,9 @@ function AccountMenu({ employer, shell }: Props) {
           <div className="py-1 border-t border-gray-100 dark:border-gray-800">
             <button onClick={() => { setOpen(false); logout(); }} className={item}>
               <LogOut className="w-4 h-4 text-gray-400" /> Sign out
+            </button>
+            <button onClick={() => { setOpen(false); logout(true); }} className={item} title="Signs you out on every phone and computer">
+              <LogOut className="w-4 h-4 text-gray-400" /> Sign out everywhere
             </button>
           </div>
         </div>

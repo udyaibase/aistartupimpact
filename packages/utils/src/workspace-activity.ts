@@ -63,7 +63,13 @@ const EMPLOYER: Record<EmployerActivity, Display> = {
   ...COMMON,
   job_posted: { category: 'work', title: (m) => `Posted the job ${quoted(m, 'title', '')}`.trim() },
   job_updated: { category: 'work', title: (m) => `Edited the job ${quoted(m, 'title', '')}`.trim() },
-  job_status_changed: { category: 'work', title: (m) => `${text(m, 'status') === 'OPEN' ? 'Reopened' : text(m, 'status') === 'PAUSED' ? 'Paused' : 'Closed'} the job ${quoted(m, 'title', '')}`.trim() },
+  job_status_changed: {
+    category: 'work',
+    // A job that closed by itself when its last opening was filled reads differently from one someone closed.
+    title: (m) => (text(m, 'reason') === 'filled'
+      ? `The job ${quoted(m, 'title', '')} closed by itself: every opening is filled`.replace('  ', ' ')
+      : `${text(m, 'status') === 'OPEN' ? 'Reopened' : text(m, 'status') === 'PAUSED' ? 'Paused' : 'Closed'} the job ${quoted(m, 'title', '')}`.trim()),
+  },
   job_deleted: { category: 'work', title: (m) => `Deleted the job ${quoted(m, 'title', '')}`.trim() },
   applications_exported: { category: 'security', title: (m) => `Exported ${text(m, 'count') || ''} applications`.replace('  ', ' ') },
 };

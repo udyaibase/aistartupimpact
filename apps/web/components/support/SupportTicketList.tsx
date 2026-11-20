@@ -19,6 +19,11 @@ interface Ticket {
 interface SupportTicketListProps {
   apiBasePath: string;
   portalPath: string;
+  /**
+   * Where a new ticket is written, when the portal has one place for it (the employer Help page). The buttons
+   * here then lead there instead of opening a second form, and this page is just the list of tickets.
+   */
+  newTicketHref?: string;
 }
 
 const STATUS_TABS = ['ALL', 'OPEN', 'IN_PROGRESS', 'AWAITING_USER', 'RESOLVED', 'CLOSED'];
@@ -39,7 +44,7 @@ const PRIORITY_COLORS: Record<string, string> = {
 const CATEGORIES = ['ACCOUNT', 'BILLING', 'BUG_REPORT', 'FEATURE_REQUEST', 'LISTING', 'EVENT', 'JOB_BOARD', 'OTHER'];
 const CATEGORY_LABELS: Record<string, string> = { ACCOUNT: 'Account', BILLING: 'Billing', BUG_REPORT: 'Bug Report', FEATURE_REQUEST: 'Feature Request', LISTING: 'Listing', EVENT: 'Event', JOB_BOARD: 'Job Board', OTHER: 'Other' };
 
-export default function SupportTicketList({ apiBasePath, portalPath }: SupportTicketListProps) {
+export default function SupportTicketList({ apiBasePath, portalPath, newTicketHref }: SupportTicketListProps) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -104,12 +109,18 @@ export default function SupportTicketList({ apiBasePath, portalPath }: SupportTi
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Support</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Get help or report an issue</p>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white">{newTicketHref ? 'Your tickets' : 'Support'}</h1>
+          <p className="text-sm text-gray-500 mt-0.5">{newTicketHref ? 'Everything you’ve asked us, and our replies.' : 'Get help or report an issue'}</p>
         </div>
-        <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-4 py-2 bg-brand text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity">
-          <Plus className="w-4 h-4" /> New Ticket
-        </button>
+        {newTicketHref ? (
+          <Link href={newTicketHref} className="flex items-center gap-2 px-4 py-2 bg-brand text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity">
+            <Plus className="w-4 h-4" aria-hidden /> Ask for help
+          </Link>
+        ) : (
+          <button onClick={() => setShowNew(true)} className="flex items-center gap-2 px-4 py-2 bg-brand text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity">
+            <Plus className="w-4 h-4" /> New Ticket
+          </button>
+        )}
       </div>
 
       {error && (
@@ -135,7 +146,9 @@ export default function SupportTicketList({ apiBasePath, portalPath }: SupportTi
           <HelpCircle className="w-10 h-10 text-gray-300 mx-auto mb-3" />
           <p className="text-[15px] font-semibold text-gray-900 dark:text-white">No tickets here</p>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Stuck on something? Tell us what’s going on and we’ll get back to you.</p>
-          <button onClick={() => setShowNew(true)} className="text-sm text-brand font-medium mt-2 hover:underline">Raise a ticket</button>
+          {newTicketHref
+            ? <Link href={newTicketHref} className="inline-block text-sm text-brand font-medium mt-2 hover:underline">Ask for help</Link>
+            : <button onClick={() => setShowNew(true)} className="text-sm text-brand font-medium mt-2 hover:underline">Raise a ticket</button>}
         </div>
       ) : (
         <div className="space-y-2">
