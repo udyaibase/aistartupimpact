@@ -93,7 +93,7 @@ export default function InvoicesTable({ rows, invoicesOn, apiBase, invoiceEmail 
               const s = statusOf(r);
               return (
                 <tr key={r.id} className="align-top">
-                  <td className="px-4 sm:px-5 py-3 font-mono text-[12.5px] text-gray-900 dark:text-white whitespace-nowrap">{r.invoiceNumber ?? (invoiceable(r) ? 'Issued on download' : '—')}</td>
+                  <td className="px-4 sm:px-5 py-3 font-mono text-[13px] text-gray-900 dark:text-white whitespace-nowrap">{r.invoiceNumber ?? (invoiceable(r) ? 'Issued on download' : '—')}</td>
                   <td className="px-4 sm:px-5 py-3 whitespace-nowrap">{fmt(r.date)}</td>
                   <td className="px-4 sm:px-5 py-3">{r.label}<span className="block text-xs text-gray-500">{period(r)}</span></td>
                   <td className="px-4 sm:px-5 py-3 text-right tabular-nums">{rupees(r.amountPaise)}</td>

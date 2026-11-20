@@ -7,6 +7,8 @@ import PasswordField from "@/components/ui/PasswordField";
 import { passwordProblem } from "@/lib/password-rules";
 import { Loader2, CalendarDays, Mail, Lock, User, Building2, CheckCircle, ArrowLeft, Shield, Users, BarChart3, Ticket, UserPlus, Globe, Zap, AlertTriangle } from "lucide-react";
 import TurnstileWidget from "@/components/shared/TurnstileWidget";
+import CodeInput from "@/components/ui/CodeInput";
+import { CONTROL_FIELD, CONTROL_LABEL, CONTROL_LINK, CONTROL_OUTLINE, CONTROL_PRIMARY_BRAND } from "@/lib/ui/form-controls";
 
 type Mode = "login" | "signup" | "forgot";
 
@@ -283,37 +285,35 @@ function OrganizerAuthContent() {
                 </div>
 
                 {error && (
-                  <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-xl">
+                  <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-md">
                     <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" aria-hidden />
                     <p className="text-sm text-red-600 dark:text-red-400 font-jakarta">{error}</p>
                   </div>
                 )}
 
-                <input
-                  type="text"
-                  value={twoFACode}
-                  onChange={(e) => setTwoFACode(e.target.value.replace(/\D/g, "").slice(0, useBackupCode ? 20 : 6))}
-                  placeholder={useBackupCode ? "Backup code" : "000000"}
-                  maxLength={useBackupCode ? 20 : 6}
-                  className="w-full px-4 py-3 text-center text-xl font-mono tracking-widest border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
-                  autoFocus
-                />
+                {useBackupCode ? (
+                  <input type="text" value={twoFACode} autoFocus maxLength={20} placeholder="Backup code" aria-label="Backup code"
+                    onChange={(e) => setTwoFACode(e.target.value.replace(/\D/g, "").slice(0, 20))}
+                    className={`${CONTROL_FIELD} text-center font-mono tracking-widest`} />
+                ) : (
+                  <CodeInput autoFocus value={twoFACode} onChange={setTwoFACode} label="Authenticator code" />
+                )}
 
                 <button
                   onClick={handleVerify2FA}
                   disabled={loading || (!useBackupCode && twoFACode.length !== 6) || (useBackupCode && !twoFACode)}
-                  className="w-full py-3 bg-brand hover:bg-red-700 text-white font-bold font-jakarta text-sm rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  className={CONTROL_PRIMARY_BRAND}
                 >
                   {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                   {loading ? "Verifying..." : "Verify"}
                 </button>
 
-                <div className="flex items-center justify-between text-xs">
-                  <button onClick={() => { setUseBackupCode(!useBackupCode); setTwoFACode(""); }} className="text-brand font-semibold hover:underline">
-                    {useBackupCode ? "Use authenticator code" : "Use backup code"}
+                <div className="flex items-center justify-center gap-2">
+                  <button onClick={() => { setUseBackupCode(!useBackupCode); setTwoFACode(""); }} className={CONTROL_LINK}>
+                    {useBackupCode ? "Use authenticator code" : "Use a backup code"}
                   </button>
-                  <button onClick={() => { setRequires2FA(false); setTwoFACode(""); setChallengeToken(""); setError(""); }} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
-                    Back to login
+                  <button onClick={() => { setRequires2FA(false); setTwoFACode(""); setChallengeToken(""); setError(""); }} className={CONTROL_LINK}>
+                    Back
                   </button>
                 </div>
               </div>
@@ -324,7 +324,7 @@ function OrganizerAuthContent() {
               <>
                 <button
                   onClick={handleGoogleSignIn}
-                  className="w-full flex items-center justify-center gap-3 py-3 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors font-jakarta text-sm font-semibold text-gray-700 dark:text-gray-200"
+                  className={`${CONTROL_OUTLINE} gap-2.5`}
                 >
                   <svg className="w-5 h-5" viewBox="0 0 24 24">
                     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -351,7 +351,7 @@ function OrganizerAuthContent() {
               {mode === "signup" && (
                 <>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 font-jakarta mb-1.5">Full Name</label>
+                    <label className={CONTROL_LABEL}>Full name</label>
                     <div className="relative">
                       <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                       <input
@@ -359,13 +359,13 @@ function OrganizerAuthContent() {
                         required
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        placeholder="John Doe"
-                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-jakarta focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand focus:bg-white dark:focus:bg-gray-800 placeholder-gray-400 transition-colors"
+                        placeholder="Your name"
+                        className={`${CONTROL_FIELD} pl-10`}
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 font-jakarta mb-1.5">Organization <span className="text-gray-400 font-normal">(optional)</span></label>
+                    <label className={CONTROL_LABEL}>Organization <span className="text-gray-400 font-normal">(optional)</span></label>
                     <div className="relative">
                       <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                       <input
@@ -373,7 +373,7 @@ function OrganizerAuthContent() {
                         value={company}
                         onChange={(e) => setCompany(e.target.value)}
                         placeholder="Your company or org"
-                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-jakarta focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand focus:bg-white dark:focus:bg-gray-800 placeholder-gray-400 transition-colors"
+                        className={`${CONTROL_FIELD} pl-10`}
                       />
                     </div>
                   </div>
@@ -381,7 +381,7 @@ function OrganizerAuthContent() {
               )}
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 font-jakarta mb-1.5">Email Address</label>
+                <label className={CONTROL_LABEL}>Email</label>
                 <div className="relative">
                   <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
@@ -390,7 +390,7 @@ function OrganizerAuthContent() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@company.com"
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-jakarta focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand focus:bg-white dark:focus:bg-gray-800 placeholder-gray-400 transition-colors"
+                    className={`${CONTROL_FIELD} pl-10`}
                   />
                 </div>
               </div>
@@ -398,7 +398,7 @@ function OrganizerAuthContent() {
               {mode !== "forgot" && (
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label htmlFor="organizer-password" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 font-jakarta">Password</label>
+                    <label htmlFor="organizer-password" className="block text-sm font-medium text-gray-800 dark:text-gray-200">Password</label>
                     {mode === "login" && (
                       <button
                         type="button"
@@ -420,20 +420,20 @@ function OrganizerAuthContent() {
                     email={email}
                     personName={name}
                     showRules={mode === "signup" && password.length > 0}
-                    placeholder={mode === "signup" ? "At least 8 characters" : "Enter your password"}
+                    
                   />
                 </div>
               )}
 
               {error && (
-                <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-xl">
+                <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-md">
                   <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" aria-hidden />
                   <p className="text-sm text-red-600 dark:text-red-400 font-jakarta">{error}</p>
                 </div>
               )}
 
               {successMsg && (
-                <div className="flex items-start gap-2 p-3 bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-900/30 rounded-xl">
+                <div className="flex items-start gap-2 p-3 bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-900/30 rounded-md">
                   <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 shrink-0" />
                   <p className="text-sm text-green-700 dark:text-green-400 font-jakarta">{successMsg}</p>
                 </div>
@@ -447,7 +447,7 @@ function OrganizerAuthContent() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 bg-brand hover:bg-red-700 text-white font-bold font-jakarta text-sm rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2 mt-2"
+                className={`${CONTROL_PRIMARY_BRAND} mt-2`}
               >
                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                 {mode === "login" && "Sign In"}

@@ -1,3 +1,5 @@
+import { referrerFor } from '@/lib/employer/referrals';
+import { markStep } from '@/lib/employer/onboarding';
 import { NextRequest, NextResponse, after } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@udyaibase/database';
@@ -9,6 +11,7 @@ import { matchSkills } from '@/lib/jobs/skills';
 import { applyConsentText } from '@/lib/jobs/consent';
 import { sendApplicationReceived, sendNewApplicationAlert } from '@/lib/jobs/apply-emails';
 import { isClaimVerified } from '@/lib/jobs/trust';
+import { getCandidate } from '@/lib/jobs/candidate-account';
 import { cleanOptions, type ScreeningQuestion } from '@/lib/jobs/composer';
 import { screenApplication } from '@/lib/jobs/ai-screen';
 import { parseApplyFormConfig, requiredFieldErrors, withoutHiddenFields } from '@/lib/jobs/apply-form';
@@ -108,9 +111,14 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
   else if (att.source === 'careers') source = 'CAREERS_PAGE';
   else if (referrerUrl && /(^|\.)google\./i.test(new URL(referrerUrl).hostname)) source = 'GOOGLE';
   else if (att.source === 'referral') source = 'REFERRAL';
+  // A teammate's referral link wins over everything else: someone at the company vouched for them.
+  const referrer = await referrerFor(att.rc, listing.employerId);
+  if (referrer) source = 'REFERRAL';
 
   const company = (isClaimVerified(listing.Employer) && listing.Employer.Startup?.name) || listing.Employer.companyName;
   const statusToken = crypto.randomBytes(24).toString('base64url');
+  // Applying while signed in puts it in their "My applications" straight away (their own session, so no email check).
+  const candidate = await getCandidate().catch(() => null);
 
   let applicationId: string;
   try {
@@ -118,6 +126,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
       const app = await tx.jobBoardApplication.create({
         data: {
           listingId: listing.id,
+          webUserId: candidate?.id ?? null,
           fullName,
           email,
           phone: clip(b.phone, 30) || null,
@@ -138,6 +147,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
           source,
           widgetId,
           referrerUrl,
+          referrerId: referrer?.id ?? null,
           utmSource: clip(att.utm_source, 100) || null,
           utmMedium: clip(att.utm_medium, 100) || null,
           utmCampaign: clip(att.utm_campaign, 100) || null,
@@ -154,7 +164,11 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
     });
   } catch (err: any) {
     if (err?.code === 'P2002') {
-      return NextResponse.json({ error: 'You’ve already applied for this job. Check your email for the link to track it.' }, { status: 409 });
+      // Signed in: their applications are in the account. Guests: the email we sent has their private link.
+      return NextResponse.json({
+        error: candidate ? 'You’ve already applied for this job.' : 'You’ve already applied for this job with this email. Check your email for the link to track it.',
+        code: 'duplicate', ...(candidate ? { trackUrl: '/my-applications' } : {}),
+      }, { status: 409 });
     }
     console.error('[POST /api/jobs/apply]', err);
     return NextResponse.json({ error: 'We couldn’t submit your application. Please try again.' }, { status: 500 });
@@ -172,7 +186,13 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
   // Auto-screening on, with quota left on any plan: review runs after the response, so the candidate never waits.
   const employerId = listing.employerId;
   // General applications have no role to screen against.
+  after(() => markStep(employerId, 'FIRST_APPLICATION'));
   if (!listing.isGeneral) after(() => screenApplication(applicationId, employerId, { auto: true }).then(() => undefined));
 
-  return NextResponse.json({ success: true, applicationId }, { status: 201 });
+  // The candidate's own tracking link (also emailed), so the confirmation screen can offer it straight away.
+  // Signed in: track it in their account. Guests: the private status link (also emailed).
+  return NextResponse.json({
+    success: true, applicationId, inAccount: !!candidate,
+    trackUrl: candidate ? `/my-applications/${applicationId}` : `/applications/${statusToken}`,
+  }, { status: 201 });
 }

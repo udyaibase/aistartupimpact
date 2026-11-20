@@ -67,7 +67,7 @@ export default function JobSearchBar({ initialQuery, initialLocation }: { initia
           className="w-full h-10 sm:h-auto pl-10 pr-8 sm:py-3 text-base sm:text-sm placeholder:text-[14px] sm:placeholder:text-sm font-jakarta bg-transparent text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none"
         />
         {query && (
-          <button type="button" onClick={() => handleQueryChange('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+          <button type="button" onClick={() => handleQueryChange('')} aria-label="Clear search" className="absolute right-1 top-1/2 -translate-y-1/2 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
             <X className="w-3.5 h-3.5 text-gray-400" />
           </button>
         )}
@@ -83,7 +83,7 @@ export default function JobSearchBar({ initialQuery, initialLocation }: { initia
           className="w-full pl-10 pr-8 py-3 text-sm font-jakarta bg-transparent text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none"
         />
         {location && (
-          <button type="button" onClick={() => handleLocationChange('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+          <button type="button" onClick={() => handleLocationChange('')} aria-label="Clear location" className="absolute right-1 top-1/2 -translate-y-1/2 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
             <X className="w-3.5 h-3.5 text-gray-400" />
           </button>
         )}

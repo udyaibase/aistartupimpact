@@ -69,14 +69,15 @@ export default function EmailChangeModal({ apiPath, onClose, onSuccess, onError 
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Current Password</label>
+            <label htmlFor="email-change-password" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Current password</label>
             <input
+              id="email-change-password"
               type="password"
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              placeholder="Enter your password to confirm"
+              placeholder="Enter your password"
               className="w-full px-4 py-3 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand transition-all"
             />
           </div>

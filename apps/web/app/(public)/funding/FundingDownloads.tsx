@@ -6,6 +6,8 @@ import Modal from '@/components/ui/Modal';
 import { payWithRazorpay } from '@/lib/billing/checkout-client';
 import { GST_STATES } from '@/lib/billing/gst-states';
 import { GSTIN_RE, gstinChecksumValid, panFromGstin } from '@/lib/billing/details';
+import CodeInput from '@/components/ui/CodeInput';
+import { CONTROL_FIELD, CONTROL_PRIMARY_BRAND } from '@/lib/ui/form-controls';
 import {
   DEFAULT_FILTERS, PACKS, PERIOD_LABELS, PERIODS, SHEET_LABELS, SHEETS, rupees, suggestedPack,
   type FundingFilters, type PackKey, type Period, type SheetKey,
@@ -52,7 +54,6 @@ function EmailStep({ onVerified }: { onVerified: (pass: string, email: string) =
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [cooldown, setCooldown] = useState(0);
-  const codeRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -66,7 +67,6 @@ function EmailStep({ onVerified }: { onVerified: (pass: string, email: string) =
     setBusy(false);
     if (!r.ok) return setError(r.data.error || 'Couldn’t send the code.');
     setSent(true); setCooldown(r.data.cooldown ?? 60);
-    setTimeout(() => codeRef.current?.focus(), 50);
   };
   const verify = async () => {
     setBusy(true); setError('');
@@ -87,25 +87,20 @@ function EmailStep({ onVerified }: { onVerified: (pass: string, email: string) =
         <input
           type="email" required autoComplete="email" value={email} disabled={sent}
           onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com"
-          className="input-field w-full text-base disabled:opacity-70"
+          className={`${CONTROL_FIELD} disabled:opacity-70`}
         />
       </label>
       {sent && (
         <>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
+          <p className="text-sm text-gray-600 dark:text-gray-400 text-center">
             We sent a 6-digit code to <strong className="text-navy dark:text-white">{email}</strong>.{' '}
             <button type="button" className="text-brand font-semibold hover:underline" onClick={() => { setSent(false); setCode(''); setError(''); }}>Change</button>
           </p>
-          <input
-            ref={codeRef} inputMode="numeric" autoComplete="one-time-code" maxLength={6} required value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="6-digit code"
-            aria-label="Verification code"
-            className="input-field w-full text-center text-xl tracking-[0.4em] font-semibold"
-          />
+          <CodeInput autoFocus value={code} onChange={setCode} />
         </>
       )}
       {error && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-      <button type="submit" disabled={busy || (sent && code.length !== 6)} className="btn-brand w-full justify-center gap-2 disabled:opacity-60">
+      <button type="submit" disabled={busy || (sent && code.length !== 6)} className={CONTROL_PRIMARY_BRAND}>
         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
         {sent ? 'Verify email' : 'Send code'}
       </button>

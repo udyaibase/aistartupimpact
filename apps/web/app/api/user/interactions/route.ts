@@ -13,8 +13,9 @@ const VALID_ENTITY_TYPES = ['tool', 'startup', 'article', 'event', 'job', 'searc
 export async function POST(req: NextRequest) {
   try {
     const token = req.cookies.get('user-token')?.value;
+    // Signed-out visitors: nothing to record. Answer quietly so every public page isn't logging a 401.
     if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return new NextResponse(null, { status: 204 });
     }
 
     const { payload } = await jwtVerify(token, JWT_SECRET);

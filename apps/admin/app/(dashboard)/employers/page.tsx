@@ -5,6 +5,8 @@ import { Building2, Globe, Briefcase, CheckCircle, XCircle, Crown, Search, Loade
 import { getEmployersAction, toggleEmployerVerifyAction, toggleEmployerActiveAction } from './actions';
 import { Pagination } from '@/components/Pagination';
 import { TableEmptyState } from '@/components/EmptyState';
+import Link from 'next/link';
+import CompanyChecks from './CompanyChecks';
 
 const PAGE_SIZE = 20;
 
@@ -83,7 +85,10 @@ export default function AdminEmployersPage() {
             {employers.length} registered employers &bull; {verifiedCount} verified
           </p>
         </div>
+        <Link href="/employers/onboarding" className="text-sm font-semibold text-brand hover:underline font-jakarta">Onboarding funnel</Link>
       </div>
+
+      <CompanyChecks />
 
       {/* Search */}
       <div className="relative">

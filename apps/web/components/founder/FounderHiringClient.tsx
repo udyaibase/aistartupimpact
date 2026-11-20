@@ -7,6 +7,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import FounderTeamPanel from '@/components/founder/FounderTeamPanel';
 import { ArrowRight, BadgeCheck, Briefcase, Building2, Loader2, ShieldCheck, Clock } from 'lucide-react';
+import CodeInput from '@/components/ui/CodeInput';
+import { CONTROL_PRIMARY_BRAND } from '@/lib/ui/form-controls';
 
 interface StartupRow {
   id: string;
@@ -26,7 +28,7 @@ function domainOf(url?: string | null) {
   try { return new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`).hostname.replace(/^www\./, ''); } catch { return null; }
 }
 
-const inputCls = 'w-full min-h-[44px] px-3 rounded-[10px] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/25 focus:border-brand';
+const inputCls = 'w-full h-11 px-3.5 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-base sm:text-[15px] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/25 focus:border-brand';
 
 export default function FounderHiringClient({ startups, suggestedEmail }: { startups: StartupRow[]; suggestedEmail: string }) {
   return (
@@ -137,10 +139,8 @@ export function EmailVerify({ startupId, startupName, domain, suggestedEmail, on
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [cooldown, setCooldown] = useState(0);
-  const codeRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { if (cooldown <= 0) return; const t = setTimeout(() => setCooldown((c) => c - 1), 1000); return () => clearTimeout(t); }, [cooldown]);
-  useEffect(() => { if (step === 'code') codeRef.current?.focus(); }, [step]);
 
   async function call(body: Record<string, string>) {
     setBusy(true);
@@ -174,7 +174,7 @@ export function EmailVerify({ startupId, startupName, domain, suggestedEmail, on
       <label htmlFor={`ve-${startupId}`} className="block text-sm font-semibold text-gray-900 dark:text-white mb-1.5">Your work email at {domain}</label>
       <div className="flex flex-col sm:flex-row gap-2">
         <input id={`ve-${startupId}`} type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={`you@${domain}`} className={inputCls} />
-        <button type="submit" disabled={busy || !email.trim() || cooldown > 0} className="btn-brand gap-2 shrink-0 disabled:opacity-50">
+        <button type="submit" disabled={busy || !email.trim() || cooldown > 0} className="btn-brand !rounded-md h-11 gap-2 shrink-0 disabled:opacity-50">
           {busy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} {cooldown > 0 ? `Wait ${formatCountdown(cooldown)}` : 'Send code'}
         </button>
       </div>
@@ -182,22 +182,17 @@ export function EmailVerify({ startupId, startupName, domain, suggestedEmail, on
       {error && <p role="alert" className="mt-2 text-sm text-red-700 dark:text-red-400">{error}</p>}
     </form>
   ) : (
-    <form onSubmit={async (e) => { e.preventDefault(); await submitCode(code); }} noValidate>
-      <label htmlFor={`vc-${startupId}`} className="block text-sm font-semibold text-gray-900 dark:text-white mb-1.5">Enter the 6-digit code sent to {maskEmail(email)}</label>
-      <div className="flex flex-col sm:flex-row gap-2">
-        <input ref={codeRef} id={`vc-${startupId}`} inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]*" maxLength={6} value={code}
-          onChange={(e) => {
-            const next = e.target.value.replace(/\D/g, '').slice(0, 6);
-            setCode(next);
-            // Submit as soon as the 6th digit lands (typed, pasted or autofilled).
-            if (next.length === 6 && !busy) submitCode(next);
-          }}
-          className={`${inputCls} sm:w-44 text-center tracking-[0.3em] font-semibold text-base`} aria-describedby={`vh-${startupId}`} />
-        <button type="submit" disabled={busy || code.length !== 6} className="btn-brand gap-2 disabled:opacity-50">
+    <form onSubmit={async (e) => { e.preventDefault(); await submitCode(code); }} className="max-w-sm text-center" noValidate>
+      <label htmlFor={`vc-${startupId}`} className="block text-sm font-semibold text-gray-900 dark:text-white mb-2">Enter the 6-digit code sent to <span className="block font-normal">{maskEmail(email)}</span></label>
+      <div className="space-y-2">
+        {/* Submits as soon as the 6th digit lands (typed, pasted or autofilled). */}
+        <CodeInput id={`vc-${startupId}`} autoFocus value={code} onChange={setCode} disabled={busy}
+          onComplete={(v) => { if (!busy) submitCode(v); }} />
+        <button type="submit" disabled={busy || code.length !== 6} className={CONTROL_PRIMARY_BRAND}>
           {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <ShieldCheck className="w-4 h-4" aria-hidden />} Verify
         </button>
         <button type="button" onClick={() => call({ step: 'send', email }).then((d) => d && setCooldown(d.cooldown ?? 60))} disabled={busy || cooldown > 0}
-          className="min-h-[44px] px-3 rounded-[10px] text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-60">
+          className="min-h-[44px] px-3 rounded-md text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-60">
           {cooldown > 0 ? `Resend in ${formatCountdown(cooldown)}` : 'Resend code'}
         </button>
       </div>

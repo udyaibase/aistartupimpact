@@ -1,4 +1,9 @@
+import { sweepSourced } from '@/lib/employer/sourcing';
+import { assessmentReminders } from '@/lib/employer/assessments';
+import { offerMaintenance } from '@/lib/employer/offers';
+import { holdReturns } from '@/lib/employer/hold';
 import { prisma } from '@udyaibase/database';
+import { IN_PIPELINE } from '@/lib/employer/stages';
 import { isRealInbox } from '@/lib/employer/owners';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 import { screenApplication } from '@/lib/jobs/ai-screen';
@@ -34,7 +39,7 @@ export async function runHiringMaintenance(now = new Date(), opts: { onlyEmploye
   const waiting = await prisma.jobBoardApplication.groupBy({
     by: ['listingId'],
     where: {
-      status: { in: ['APPLIED', 'REVIEWED'] }, withdrawnAt: null, appliedAt: { lt: new Date(t - 5 * DAY) },
+      status: { in: ['APPLIED', 'REVIEWED'] }, withdrawnAt: null, appliedAt: { lt: new Date(t - 5 * DAY) }, ...IN_PIPELINE,
       NOT: { email: { endsWith: '@deleted.invalid' } },
       Listing: { status: 'OPEN', deletedAt: null, Employer: { ...real, OR: [{ reviewNudgeAt: null }, { reviewNudgeAt: { lt: new Date(t - 3 * DAY) } }] } },
     },
@@ -171,7 +176,17 @@ export async function runHiringMaintenance(now = new Date(), opts: { onlyEmploye
     }
   }
 
-  return { aiRetried, poolRemindersSent: reminded.size, reviewNudgesSent: byEmployer.size, closingNudgesSent: closingBy.size, adminClosingJobs: adminClosing.length, applicationsErased: erased };
+  // Pipeline v2: sourced records nobody followed up, assessment deadline reminders, offers (firm expiry, joining
+  // reminders) and On hold come-back tasks. Each is independent; one failing never stops the others.
+  const step = <T,>(name: string, fn: () => Promise<T>) => fn().catch((err) => { console.error(`[hiring] ${name}`, err instanceof Error ? err.message : err); return null; });
+  const [sourcedRemoved, assessmentReminded, offers, holdsDue] = opts.onlyEmployerId
+    ? [null, null, null, null]
+    : await Promise.all([step('sourced sweep', () => sweepSourced(now)), step('assessment reminders', () => assessmentReminders(now)), step('offers', () => offerMaintenance(now)), step('hold returns', () => holdReturns(now))]);
+
+  return {
+    aiRetried, poolRemindersSent: reminded.size, reviewNudgesSent: byEmployer.size, closingNudgesSent: closingBy.size, adminClosingJobs: adminClosing.length, applicationsErased: erased,
+    sourcedRemoved, assessmentReminded, offersExpired: offers?.expired ?? null, joiningReminders: offers?.joiningReminders ?? null, holdsDue,
+  };
 }
 
 /** Workspace email plus active owners and recruiters (the people who can act on candidates and jobs). */

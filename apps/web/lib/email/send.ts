@@ -3,7 +3,7 @@ import { isQuotaError } from '@/lib/email/quota';
 
 let resendClient: Resend | null = null;
 
-function getResend(): Resend | null {
+export function getResend(): Resend | null {
   if (!resendClient && process.env.RESEND_API_KEY) {
     resendClient = new Resend(process.env.RESEND_API_KEY);
   }

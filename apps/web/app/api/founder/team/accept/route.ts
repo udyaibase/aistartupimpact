@@ -28,7 +28,7 @@ async function openInvite(token: unknown) {
   return member;
 }
 
-const INVALID = { success: false, error: "This invite is no longer valid. Ask for a new one." };
+const INVALID = { success: false, error: "It may have expired, been used already, or been cancelled. Ask the person who invited you to send a new one." };
 
 /** What the invite is, so the page can say who's inviting and whether a password is needed. */
 export async function GET(request: NextRequest) {
@@ -43,6 +43,8 @@ export async function GET(request: NextRequest) {
     invitedBy: member.founder?.name ?? "A founder",
     startup: startup?.name ?? member.founder?.company ?? null,
     role: member.role,
+    email: member.email,
+    expiresAt: member.expiresAt,
     needsPassword: !(await hasAccount(member.email.toLowerCase())),
   });
 }

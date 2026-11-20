@@ -35,15 +35,20 @@ export default function CollapsibleSidebar({ logoHref, children, bottomSlot, col
         collapsed ? 'w-[68px]' : 'w-[240px]'
       }`}
     >
-      {/* Logo */}
-      <div className={`h-16 flex items-center border-b border-gray-100 dark:border-gray-800 ${collapsed ? 'justify-center px-2' : 'px-4'}`}>
-        <Link href={logoHref} className="flex items-center gap-2.5 overflow-hidden">
-          <Image src="/logo-light.svg" alt="Udyaibase" width={64} height={64} sizes="64px" className="h-14 w-auto shrink-0 dark:hidden" />
-          <Image src="/logo-dark.svg" alt="Udyaibase" width={64} height={64} sizes="64px" className="h-14 w-auto shrink-0 hidden dark:block" />
+      {/* Logo: same height as the portal header (h-14) so the two borders line up. */}
+      <div className={`h-14 shrink-0 flex items-center border-b border-gray-100 dark:border-gray-800 ${collapsed ? 'justify-center px-2' : 'px-4'}`}>
+        <Link href={logoHref} className="flex items-center gap-2 overflow-hidden">
+          <Image src="/logo-light.svg" alt={collapsed ? 'Udyaibase' : ''} width={56} height={56} sizes="56px" className="h-12 w-auto shrink-0 dark:hidden" />
+          <Image src="/logo-dark.svg" alt={collapsed ? 'Udyaibase' : ''} width={56} height={56} sizes="56px" className="h-12 w-auto shrink-0 hidden dark:block" />
           {!collapsed && (
-            <span className="font-sora font-bold text-[13px] text-navy dark:text-white whitespace-nowrap">
-              Udyai<span className="text-brand">base</span>
-            </span>
+            <>
+              {/* Wordmark: each A is the font’s own V flipped vertically (not rotated, which would move the letter spacing to its left), so it matches the other letters' height and weight
+                  (Greek Λ isn't in Sora and falls back to another font). Screen readers get the plain name. */}
+              <span aria-hidden="true" className="font-sora font-semibold text-[17px] leading-none tracking-[0.14em] text-black dark:text-white whitespace-nowrap">
+                UDY<span className="relative -top-[0.05em] inline-block -scale-y-100">V</span>IB<span className="relative -top-[0.05em] inline-block -scale-y-100">V</span>SE
+              </span>
+              <span className="sr-only">Udyaibase</span>
+            </>
           )}
         </Link>
       </div>

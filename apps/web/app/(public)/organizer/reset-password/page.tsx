@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, CheckCircle } from "lucide-react";
 import PasswordField from "@/components/ui/PasswordField";
 import { passwordProblem } from "@/lib/password-rules";
+import { CONTROL_PRIMARY } from "@/lib/ui/form-controls";
 
 function ResetPasswordContent() {
   const router = useRouter();
@@ -87,7 +88,7 @@ function ResetPasswordContent() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full h-11 inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900 font-medium text-[15px] transition-colors disabled:opacity-60"
+            className={CONTROL_PRIMARY}
           >
             {loading && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />}
             {loading ? "Saving…" : "Reset password"}

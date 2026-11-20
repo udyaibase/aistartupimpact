@@ -18,6 +18,8 @@ interface Ticket {
   ticketNumber: string;
   subject: string;
   description: string;
+  context?: Record<string, string> | null;
+  planAtOpen?: string | null;
   category: string;
   priority: string;
   status: string;
@@ -148,6 +150,14 @@ export default function SupportDetailClient({ ticketId, adminId, adminName }: Pr
                   <span className="text-xs text-gray-400">{formatDate(ticket.createdAt)}</span>
                 </div>
                 <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap pl-9">{ticket.description}</p>
+                {ticket.context && (
+                  <dl className="mt-3 ml-9 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs text-gray-500">
+                    {Object.entries(ticket.context).filter(([, v]) => v).map(([k, v]) => (
+                      <div key={k} className="contents"><dt className="font-semibold capitalize">{k === 'jobId' ? 'Job' : k}</dt><dd className="break-all">{String(v)}</dd></div>
+                    ))}
+                    {ticket.planAtOpen && <div className="contents"><dt className="font-semibold">Plan</dt><dd>{ticket.planAtOpen}</dd></div>}
+                  </dl>
+                )}
               </div>
 
               {ticket.messages.map((msg) => (

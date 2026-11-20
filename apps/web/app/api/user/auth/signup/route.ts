@@ -9,6 +9,9 @@ import { authRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-l
 import { signupSchema, validateInput } from '@/lib/validation';
 import { isDisposableEmail } from '@udyaibase/utils';
 import { CURRENT_TERMS_VERSION } from '@/lib/terms-version';
+import { startWebUserSession } from '@/lib/auth/web-user-session';
+import { isJobSeekerPath } from '@/lib/jobs/candidate-account';
+import { safeReturnPath } from '@/lib/safe-return';
 
 export const dynamic = 'force-dynamic';
 function generateId(): string {
@@ -139,8 +142,21 @@ export async function POST(request: NextRequest) {
       `.catch((err: unknown) => console.error('[signup] newsletter', err instanceof Error ? err.message : 'failed'));
     }
 
-    return NextResponse.json({
+    // The emailed code (checked above) proves the address: past job applications sent with it can be linked.
+    await sql`UPDATE "WebUser" SET "emailVerifiedAt" = NOW() WHERE id = ${userId}`;
+    // Signing up from a job page: they're here for jobs, so skip the "what brings you here" step (as with job sign-in).
+    let onboardingCompleted = false;
+    if (typeof body.returnTo === 'string' && isJobSeekerPath(safeReturnPath(body.returnTo, '/'))) {
+      await sql`UPDATE "WebUser" SET "onboardingCompleted" = true, "primaryIntent" = 'looking_for_jobs' WHERE id = ${userId}`;
+      onboardingCompleted = true;
+    }
+
+    // Signed in straight away: they just proved the email and chose a password. (Logging in again here used to fail:
+    // the security check token is single-use and sign-up had already spent it.)
+    const res = NextResponse.json({
       success: true,
+      signedIn: true,
+      onboardingCompleted,
       message: 'Account created successfully',
       user: {
         id: userId,
@@ -149,6 +165,8 @@ export async function POST(request: NextRequest) {
         slug: userSlug,
       },
     });
+    await startWebUserSession(request, res, { id: userId, email: signupEmail, name, onboardingCompleted });
+    return res;
   } catch (error) {
     console.error('Signup error:', error);
     return NextResponse.json(

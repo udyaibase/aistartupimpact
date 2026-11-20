@@ -4,16 +4,18 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, Building2, Check, Loader2, Mail, Search, ShieldCheck } from 'lucide-react';
 import TurnstileWidget from '@/components/shared/TurnstileWidget';
+import CodeInput from '@/components/ui/CodeInput';
+import { CONTROL_FIELD, CONTROL_LABEL, CONTROL_OUTLINE, CONTROL_PRIMARY_BRAND } from '@/lib/ui/form-controls';
 
 type Startup = { id: string; name: string; logoUrl: string | null; city: string | null; tagline: string; domain: string | null; hasTeam: boolean };
 type Team = { employerId: string; companyName: string; logoUrl: string | null; role: string; invited: boolean };
 type Options = { email: string; domain: string | null; freeMail: boolean; matches: Startup[]; teams: Team[] };
 type Step = 'email' | 'code' | 'company' | 'add' | 'requested';
 
-const input = 'w-full min-h-[44px] px-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-base sm:text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30';
-const primary = 'w-full min-h-[44px] rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold inline-flex items-center justify-center gap-2 disabled:opacity-50';
-const secondary = 'w-full min-h-[44px] rounded-xl border border-gray-300 dark:border-gray-700 text-sm font-semibold text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 inline-flex items-center justify-center gap-2 disabled:opacity-50';
-const label = 'block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5';
+const input = CONTROL_FIELD;
+const primary = CONTROL_PRIMARY_BRAND;
+const secondary = CONTROL_OUTLINE;
+const label = CONTROL_LABEL;
 
 /** Company name and website guessed from a work-email domain: "neural-pay.in" → "Neural Pay", "neural-pay.in". */
 function guessFromDomain(domain: string | null) {
@@ -45,9 +47,7 @@ export default function SignupFlow() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const turnstile = useRef('');
-  const codeRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { if (step === 'code') codeRef.current?.focus(); }, [step]);
 
   async function post(action: string, body: Record<string, unknown> = {}, key = action) {
     setBusy(key);
@@ -115,10 +115,9 @@ export default function SignupFlow() {
           setOpts(d);
           setCompany(guessFromDomain(d.domain));
           setStep('company');
-        }} className="space-y-3" noValidate>
-          <label htmlFor="su-code" className={label}>Enter the 6-digit code we sent to {email}</label>
-          <input id="su-code" ref={codeRef} inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} className={`${input} text-center tracking-[0.3em] font-semibold`} />
+        }} className="space-y-3 text-center" noValidate>
+          <label htmlFor="su-code" className={label}>Enter the 6-digit code we sent to <span className="block font-normal truncate">{email}</span></label>
+          <CodeInput id="su-code" autoFocus value={code} onChange={setCode} />
           <button type="submit" disabled={!!busy || code.length !== 6} className={primary}>
             {busy === 'verify' && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} Verify
           </button>
@@ -133,7 +132,7 @@ export default function SignupFlow() {
               <p className="text-sm font-semibold text-gray-900 dark:text-white">You’re already on {opts.teams.length === 1 ? 'a hiring team' : 'these hiring teams'}</p>
               {opts.teams.map((t) => (
                 <button key={t.employerId} type="button" disabled={!!busy} onClick={async () => { const d = await post('continue', { employerId: t.employerId }, t.employerId); if (d) done(d); }}
-                  className="w-full min-h-[56px] px-3 flex items-center gap-3 rounded-xl border border-gray-300 dark:border-gray-700 text-left hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
+                  className="w-full min-h-[56px] px-3 flex items-center gap-3 rounded-md border border-gray-300 dark:border-gray-700 text-left hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
                   <Logo src={t.logoUrl} name={t.companyName} />
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-semibold text-gray-900 dark:text-white truncate">Continue to {t.companyName}</span>
@@ -150,7 +149,7 @@ export default function SignupFlow() {
             <div className="space-y-2">
               <p className="text-sm font-semibold text-gray-900 dark:text-white">Is this your company?</p>
               {opts.matches.map((s) => (
-                <div key={s.id} className="p-3 rounded-xl border border-gray-200 dark:border-gray-800">
+                <div key={s.id} className="p-3 rounded-md border border-gray-200 dark:border-gray-800">
                   <div className="flex items-center gap-3">
                     <Logo src={s.logoUrl} name={s.name} />
                     <div className="min-w-0">
@@ -184,7 +183,7 @@ export default function SignupFlow() {
                 {results.map((s) => (
                   <li key={s.id}>
                     <button type="button" onClick={() => pick(s)} disabled={!!busy}
-                      className="w-full min-h-[52px] px-3 flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-800 text-left hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
+                      className="w-full min-h-[52px] px-3 flex items-center gap-3 rounded-md border border-gray-200 dark:border-gray-800 text-left hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
                       <Logo src={s.logoUrl} name={s.name} />
                       <span className="min-w-0 flex-1">
                         <span className="block text-sm font-semibold text-gray-900 dark:text-white truncate">{s.name}</span>
@@ -238,7 +237,7 @@ export default function SignupFlow() {
       {error && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       {step === 'email' && (
         <p className="text-center text-sm text-gray-500 dark:text-gray-400 pt-1">
-          Already hiring with us? <Link href="/employer/login" className="text-blue-600 font-semibold hover:underline">Sign in</Link>
+          Already hiring with us? <Link href="/employer/login" className="text-[#A50F15] dark:text-red-400 font-semibold hover:underline">Sign in</Link>
         </p>
       )}
     </div>

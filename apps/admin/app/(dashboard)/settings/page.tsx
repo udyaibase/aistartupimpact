@@ -20,7 +20,7 @@ interface SettingsData {
   socialTwitter: string; socialLinkedin: string; socialInstagram: string; socialFacebook: string;
   metaTitle: string; metaDescription: string; autoSitemap: boolean;
   seo_twitterHandle: string; seo_gaId: string; seo_gscVerification: string;
-  canonicalDomain: string; seo_noindex: boolean; socialYoutube: string;
+  canonicalDomain: string; seo_noindex: boolean; socialYoutube: string; socialWhatsappChannel?: string;
   brandColor: string; brandSecondary: string; brandTertiary: string; darkDefault: boolean;
   notifArticle: boolean; notifPublish: boolean; notifSubscriber: boolean; notifPlacement: boolean;
   require2FA: boolean; sessionTimeout: number;
@@ -135,6 +135,8 @@ export default function SettingsPage() {
                   <input type="url" className="input-field text-sm" placeholder="LinkedIn URL" value={settings.socialLinkedin} onChange={(e) => updateSetting('socialLinkedin', e.target.value)} />
                   <input type="url" className="input-field text-sm" placeholder="Instagram URL" value={settings.socialInstagram} onChange={(e) => updateSetting('socialInstagram', e.target.value)} />
                   <input type="url" className="input-field text-sm" placeholder="Facebook URL" value={settings.socialFacebook} onChange={(e) => updateSetting('socialFacebook', e.target.value)} />
+                  <input type="url" className="input-field text-sm" placeholder="WhatsApp jobs channel (https://whatsapp.com/channel/…)" aria-label="WhatsApp jobs channel link" value={settings.socialWhatsappChannel ?? ''} onChange={(e) => updateSetting('socialWhatsappChannel', e.target.value)} />
+                  <p className="text-xs text-gray-500 dark:text-gray-400">The WhatsApp channel link shows a “Join on WhatsApp” prompt after candidates apply and on AI Jobs pages. Leave empty to hide it.</p>
                 </div>
               </div>
             </div>

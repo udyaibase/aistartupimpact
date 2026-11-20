@@ -16,6 +16,10 @@ export const CRON_JOBS: Record<string, { label: string; maxGapHours: number }> =
   'event-follow-ups': { label: 'Automatic event follow-up emails (every 15 minutes)', maxGapHours: 2 },
   'event-summaries': { label: 'Day-after event summary emails to hosts (daily)', maxGapHours: 26 },
   'event-series': { label: 'Event series: new-event emails to followers and repeat drafts (hourly)', maxGapHours: 3 },
+  'weekly-hiring-report': { label: 'Monday hiring report to employers (weekly)', maxGapHours: 170 },
+  'job-alerts': { label: 'Weekly job alert emails to site visitors (weekly)', maxGapHours: 170 },
+  // Saturday 16:00 to Monday 10:00 IST is the longest gap.
+  'support-triage': { label: 'Support triage digest to the support inbox (Mon–Sat 10:00 and 16:00 IST)', maxGapHours: 44 },
 };
 
 /** Resend plan limits from env: RESEND_DAILY_LIMIT (default 100, the free plan) and RESEND_MONTHLY_LIMIT (default 3000). */

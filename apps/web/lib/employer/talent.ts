@@ -35,8 +35,9 @@ export interface TalentPoolData {
 export const POOL_LIMIT = 3000;
 const DAY = 864e5;
 
-const RANK: Record<string, number> = { APPLIED: 0, REVIEWED: 0, SHORTLISTED: 1, INTERVIEW: 2, OFFER: 3 };
-const LABEL = ['Applied', 'Shortlisted', 'Interviewed', 'Got an offer'];
+// Furthest stage reached, in the board's order (Assessment and Final decision included).
+const RANK: Record<string, number> = { APPLIED: 0, REVIEWED: 0, SHORTLISTED: 1, ASSESSMENT: 2, INTERVIEW: 3, DECISION: 4, OFFER: 5 };
+const LABEL = ['Applied', 'Screened', 'Took the assessment', 'Interviewed', 'Reached the final decision', 'Got an offer'];
 
 /**
  * Candidates who opted in to hear about other roles. One entry per person, however many roles they applied to.

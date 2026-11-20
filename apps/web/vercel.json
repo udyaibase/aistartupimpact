@@ -1,5 +1,7 @@
 {
-  "regions": ["sin1"],
+  "regions": [
+    "sin1"
+  ],
   "crons": [
     {
       "path": "/api/admin/founder-engagement",
@@ -36,6 +38,18 @@
     {
       "path": "/api/admin/event-series",
       "schedule": "5 * * * *"
+    },
+    {
+      "path": "/api/admin/weekly-hiring-report",
+      "schedule": "30 3 * * 1"
+    },
+    {
+      "path": "/api/admin/job-alerts",
+      "schedule": "30 4 * * 1"
+    },
+    {
+      "path": "/api/admin/support-triage",
+      "schedule": "30 4,10 * * 1-6"
     }
   ]
 }

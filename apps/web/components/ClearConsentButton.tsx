@@ -3,9 +3,11 @@
 import { useState } from 'react';
 import { Cookie } from 'lucide-react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 export default function ClearConsentButton() {
   const [show, setShow] = useState(false);
+  const path = usePathname() ?? '';
 
   const clearConsent = () => {
     if (typeof window !== 'undefined') {
@@ -22,8 +24,8 @@ export default function ClearConsentButton() {
     }
   };
 
-  // Only show in development
-  if (process.env.NODE_ENV !== 'development') {
+  // Only show in development, and not in the signed-in portals, where it sits on top of save bars.
+  if (process.env.NODE_ENV !== 'development' || /^\/(employer|founder|organizer)(\/|$)/.test(path)) {
     return null;
   }
 

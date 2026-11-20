@@ -50,6 +50,7 @@ export async function getSettingsAction() {
       canonicalDomain: 'https://udyaibase.com',
       seo_noindex: false,
       socialYoutube: 'https://www.youtube.com/@udyaibase',
+      socialWhatsappChannel: '',
       brandColor: '#FF3131',
       brandSecondary: '#1B3A5C',
       brandTertiary: '#F59E0B',
@@ -82,6 +83,15 @@ export async function saveSettingsAction(settings: Record<string, any>) {
     if (!me?.twoFactorEnabled) {
       return { success: false, error: "Turn on two-factor authentication for your own account first, then require it for the team." };
     }
+  }
+
+  // The WhatsApp jobs channel must be a real channel invite link (or empty to turn the prompts off).
+  if (typeof settings.socialWhatsappChannel === 'string') {
+    const v = settings.socialWhatsappChannel.trim();
+    if (v && !/^https:\/\/(www\.)?whatsapp\.com\/channel\/[A-Za-z0-9_-]{10,}\/?$/.test(v)) {
+      return { success: false, error: 'WhatsApp jobs channel: paste the channel’s invite link, like https://whatsapp.com/channel/0029Va…' };
+    }
+    settings.socialWhatsappChannel = v;
   }
 
   try {

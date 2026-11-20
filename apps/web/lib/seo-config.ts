@@ -1,5 +1,6 @@
 import { prisma } from "@udyaibase/database";
 import { cache } from "react";
+import { isWhatsappChannelUrl } from "@/lib/whatsapp-channel";
 
 export interface SeoConfig {
   metaTitle: string;
@@ -16,13 +17,15 @@ export interface SeoConfig {
   socialInstagram: string;
   socialFacebook: string;
   socialYoutube: string;
+  /** WhatsApp jobs channel invite link; '' when not set (the prompts stay hidden). */
+  socialWhatsappChannel: string;
 }
 
 const SEO_KEYS = [
   "metaTitle", "metaDescription", "canonicalDomain",
   "seo_twitterHandle", "seo_gaId", "seo_gscVerification", "seo_noindex",
   "autoSitemap", "contactEmail",
-  "socialTwitter", "socialLinkedin", "socialInstagram", "socialFacebook", "socialYoutube",
+  "socialTwitter", "socialLinkedin", "socialInstagram", "socialFacebook", "socialYoutube", "socialWhatsappChannel",
 ];
 
 const DEFAULTS: SeoConfig = {
@@ -40,6 +43,7 @@ const DEFAULTS: SeoConfig = {
   socialInstagram: "https://www.instagram.com/udyaibase/",
   socialFacebook: "https://facebook.com/udyaibase",
   socialYoutube: "https://www.youtube.com/@udyaibase",
+  socialWhatsappChannel: "",
 };
 
 export const getSeoConfig = cache(async (): Promise<SeoConfig> => {
@@ -70,6 +74,8 @@ export const getSeoConfig = cache(async (): Promise<SeoConfig> => {
       socialInstagram: (map.socialInstagram as string) || DEFAULTS.socialInstagram,
       socialFacebook: (map.socialFacebook as string) || DEFAULTS.socialFacebook,
       socialYoutube: (map.socialYoutube as string) || DEFAULTS.socialYoutube,
+      // Only a real channel link counts; anything else keeps the prompts hidden.
+      socialWhatsappChannel: isWhatsappChannelUrl(map.socialWhatsappChannel) ? String(map.socialWhatsappChannel).trim() : '',
     };
   } catch {
     return { ...DEFAULTS };
