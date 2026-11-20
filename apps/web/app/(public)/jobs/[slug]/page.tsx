@@ -4,15 +4,18 @@ import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import Image from 'next/image';
-import { MapPin, DollarSign, Clock, Building2, ExternalLink, Briefcase, Users, CheckCircle2, ChevronRight } from 'lucide-react';
+import { MapPin, Clock, Building2, ExternalLink, Briefcase, Users, CheckCircle2, ChevronRight } from 'lucide-react';
 import JobActions from '@/components/jobs/JobActions';
 import JobDescription from '@/components/jobs/JobDescription';
 import TrackView from '@/components/TrackView';
 import SubscribeForm from '@/components/SubscribeForm';
+import WhatsAppChannelCard from '@/components/jobs/WhatsAppChannelCard';
+import { getSeoConfig } from '@/lib/seo-config';
 import ReportJobButton from '@/components/jobs/ReportJobButton';
-import { isClaimVerified } from '@/lib/jobs/trust';
+import { showsVerifiedTick } from '@/lib/jobs/trust';
 import { jobPostingSalary } from '@/lib/jobs/public';
 import { categoryText } from '@/lib/jobs/composer';
+import { salaryText } from '@/lib/jobs/format';
 import { fitTitle, metaSnippet } from '@/lib/seo-text';
 
 function listingIsOpen(job: { status?: string; expiresAt?: string | null; moderationHold?: boolean }): boolean {
@@ -21,15 +24,6 @@ function listingIsOpen(job: { status?: string; expiresAt?: string | null; modera
   return !job.expiresAt || new Date(job.expiresAt + 'Z').getTime() > Date.now();
 }
 
-function formatSalaryRange(min: number, max: number | null, currency: string | null): string {
-  if ((currency || 'INR') === 'INR') {
-    const l = (n: number) => (n / 100000).toLocaleString('en-IN', { maximumFractionDigits: 1 });
-    return max && max !== min ? `₹${l(min)}–${l(max)} L` : `₹${l(min)} L`;
-  }
-  const sym = currency === 'USD' ? '$' : `${currency} `;
-  const k = (n: number) => `${Math.round(n / 1000)}K`;
-  return max && max !== min ? `${sym}${k(min)}–${k(max)}` : `${sym}${k(min)}`;
-}
 interface PageProps {
   params: Promise<{ slug: string }>;
 }
@@ -81,14 +75,14 @@ function jobDescription(job: any): string {
 export async function generateMetadata(props: PageProps): Promise<Metadata> {
   const params = await props.params;
   const jobs = await sql`
-    SELECT jl.title, jl."shortDescription", jl.description, jl.status, jl."moderationHold", jl."expiresAt"::text AS "expiresAt",
+    SELECT jl.title, jl."shortDescription", jl.description, jl.status, jl."publishedAt", jl."moderationHold", jl."expiresAt"::text AS "expiresAt",
            jl.city, jl."workType", jl."employmentType", jl."experienceMin", jl."experienceMax", jl.skills, e."companyName"
     FROM "JobBoardListing" jl
     JOIN "JobBoardEmployer" e ON e.id = jl."employerId"
     WHERE jl.slug = ${params.slug} AND jl."deletedAt" IS NULL AND jl."isGeneral" = false
     LIMIT 1
   `;
-  if (jobs.length === 0 || (jobs[0] as any).status === 'DRAFT') return { title: 'Job Not Found' };
+  if (jobs.length === 0 || (jobs[0] as any).status === 'DRAFT' || ((jobs[0] as any).status === 'CLOSED' && !(jobs[0] as any).publishedAt)) return { title: 'Job Not Found' };
   const job = jobs[0] as any;
   return {
     ...(listingIsOpen(job) ? {} : { robots: { index: false, follow: true } }),
@@ -103,7 +97,7 @@ export default async function JobDetailPage(props: PageProps) {
   const jobs = await sql`
     SELECT jl.*, e."companyName", e.slug AS "companySlug", e."logoUrl",
            e."websiteUrl", e.description AS "companyDescription",
-           e."companySize", e.industry, e."linkedinUrl", e."startupId", e."isVerified", e."startupClaimMethod", e.perks AS "companyPerks"
+           e."companySize", e.industry, e."linkedinUrl", e."startupId", e."isVerified", e."startupClaimMethod", e."companyReview", e.perks AS "companyPerks"
     FROM "JobBoardListing" jl
     JOIN "JobBoardEmployer" e ON e.id = jl."employerId"
     WHERE jl.slug = ${params.slug} AND jl."deletedAt" IS NULL AND jl."isGeneral" = false
@@ -112,11 +106,12 @@ export default async function JobDetailPage(props: PageProps) {
 
   if (jobs.length === 0) notFound();
   const job = jobs[0] as any;
-  // Drafts were never public; they must not leak through a guessed slug.
-  if (job.status === 'DRAFT') notFound();
+  // Drafts were never public; they must not leak through a guessed slug. Nor closed jobs that never went live
+  // (kept only to hold imported candidates).
+  if (job.status === 'DRAFT' || (job.status === 'CLOSED' && !job.publishedAt)) notFound();
   const isOpen = listingIsOpen(job);
   // Only domain-verified (or admin-managed) companies get the Verified label and Google job markup.
-  const companyVerified = job.isVerified || isClaimVerified(job);
+  const companyVerified = showsVerifiedTick(job);
 
   // Get other jobs from same employer
   let otherJobs: any[] = [];
@@ -157,6 +152,7 @@ export default async function JobDetailPage(props: PageProps) {
     : `/jobs/${job.slug}/apply`;
 
   const jobUrl = `https://udyaibase.com/jobs/${job.slug}`;
+  const { socialWhatsappChannel } = await getSeoConfig();
   const jobSchema: Record<string, any> = {
     "@context": "https://schema.org",
     "@type": "JobPosting",
@@ -267,7 +263,10 @@ export default async function JobDetailPage(props: PageProps) {
                   {companyVerified ? (
                     <CheckCircle2 className="w-3.5 h-3.5 text-blue-500" aria-label="Verified company" />
                   ) : (
-                    <span className="text-[11px] font-jakarta font-medium text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">Unverified company</span>
+                    <span className="text-[11px] font-jakarta font-medium text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded"
+                      title={job.companyReview === 'APPROVED' ? 'The team uses a work email on the company’s domain, and Udyaibase checked the company. Its founder hasn’t verified it yet.' : undefined}>
+                      {job.companyReview === 'APPROVED' ? 'Email verified' : 'Unverified company'}
+                    </span>
                   )}
                 </div>
               </div>
@@ -275,10 +274,10 @@ export default async function JobDetailPage(props: PageProps) {
 
             {/* Key info strip */}
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-              {job.showSalary && job.salaryMin && (
+              {job.showSalary && salaryText(job) && (
                 <div>
                   <p className="font-sora font-bold text-lg sm:text-xl text-navy dark:text-white">
-                    {formatSalaryRange(job.salaryMin, job.salaryMax, job.salaryCurrency)}
+                    {salaryText(job)}
                   </p>
                   <p className="text-[10px] text-gray-400 font-jakarta uppercase tracking-wider">per annum</p>
                 </div>
@@ -311,13 +310,20 @@ export default async function JobDetailPage(props: PageProps) {
                   <p className="text-[10px] text-gray-400 font-jakarta uppercase tracking-wider">openings</p>
                 </div>
               )}
+                          {/* The main action, visible without scrolling: last in the strip, right-aligned (full width on phones). */}
+              {isOpen && (
+                <div data-apply-anchor className="w-full sm:w-auto sm:ml-auto">
+                  <JobActions variant="button" applyUrl={applyUrl} isExternal={job.applicationType === 'EXTERNAL'} jobTitle={job.title} jobUrl={jobUrl}
+                    companyName={job.companyName} jobSlug={job.slug} jobId={job.id} />
+                </div>
+              )}
             </div>
 
             {/* Meta badges */}
             <div className="flex flex-wrap gap-2 mt-3">
               <span className="inline-flex items-center gap-1 text-xs font-jakarta bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 px-2.5 py-1 rounded-md">
                 <MapPin className="w-3 h-3" />
-                {job.workType === 'REMOTE' ? 'Remote' : `${job.city || ''} ${job.country || ''}`.trim() || job.workType}
+                {job.workType === 'REMOTE' ? 'Remote' : [job.city, job.country].filter(Boolean).join(', ') || job.workType}
               </span>
               <span className="text-xs font-jakarta bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2.5 py-1 rounded-md">
                 {categoryText(job.category, job.categoryLabel)}
@@ -338,7 +344,7 @@ export default async function JobDetailPage(props: PageProps) {
 
           {/* Description */}
           <div className="card p-5 sm:p-6">
-            <h2 className="font-sora font-bold text-base text-navy dark:text-white mb-4">About the Role</h2>
+            <h2 className="font-sora font-bold text-base text-navy dark:text-white mb-4">Job description</h2>
             {job.hiringManagerName && (
               <p className="text-sm text-gray-600 dark:text-gray-400 font-jakarta -mt-2 mb-4">Reports to <span className="font-semibold text-gray-900 dark:text-white">{job.hiringManagerName}</span></p>
             )}
@@ -383,6 +389,7 @@ export default async function JobDetailPage(props: PageProps) {
               <Link href="/jobs" className="inline-flex items-center gap-1 mt-3 min-h-[44px] text-sm font-semibold text-brand hover:underline">Browse open AI jobs <ChevronRight className="w-4 h-4" /></Link>
             </div>
           ) : (
+          <div data-apply-anchor>
           <JobActions
             applyUrl={applyUrl}
             isExternal={job.applicationType === 'EXTERNAL'}
@@ -392,6 +399,12 @@ export default async function JobDetailPage(props: PageProps) {
             jobSlug={job.slug}
             jobId={job.id}
           />
+          </div>
+          )}
+          {/* Phones: Apply stays one tap away while reading a long description. */}
+          {isOpen && (
+            <JobActions variant="bar" applyUrl={applyUrl} isExternal={job.applicationType === 'EXTERNAL'} jobTitle={job.title} jobUrl={jobUrl}
+              companyName={job.companyName} jobSlug={job.slug} jobId={job.id} />
           )}
         </div>
 
@@ -510,8 +523,6 @@ export default async function JobDetailPage(props: PageProps) {
               <p><strong>Category:</strong> {categoryText(job.category, job.categoryLabel)}</p>
               {job.department && <p><strong>Department:</strong> {job.department}</p>}
               <p><strong>Posted:</strong> {job.publishedAt ? new Date(job.publishedAt + 'Z').toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' }) : 'Recently'}</p>
-              <p><strong>Views:</strong> {job.viewsCount}</p>
-              <p><strong>Applications:</strong> {job.applicationsCount}</p>
             </div>
             <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
               <p className="text-[11px] text-gray-500 font-jakarta mb-1">Udyaibase never asks candidates to pay. If this job does, let us know.</p>
@@ -526,6 +537,9 @@ export default async function JobDetailPage(props: PageProps) {
               Weekly AI jobs, startup news, and industry insights — straight to your inbox.
             </p>
             <SubscribeForm source="sidebar" buttonText="Subscribe" />
+            {socialWhatsappChannel && (
+              <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800"><WhatsAppChannelCard from="job" variant="inline" /></div>
+            )}
           </div>
         </div>
       </div>
@@ -566,10 +580,9 @@ export default async function JobDetailPage(props: PageProps) {
                         <MapPin className="w-2.5 h-2.5" />
                         {rj.workType === 'REMOTE' ? 'Remote' : rj.city || rj.country || rj.workType}
                       </span>
-                      {rj.showSalary && rj.salaryMin && (
+                      {rj.showSalary && salaryText(rj) && (
                         <span className="inline-flex items-center gap-1 text-[10px] font-jakarta text-gray-400">
-                          <DollarSign className="w-2.5 h-2.5" />
-                          {rj.salaryCurrency} {(rj.salaryMin / 1000).toFixed(0)}K–{(rj.salaryMax / 1000).toFixed(0)}K
+                          {salaryText(rj)}
                         </span>
                       )}
                     </div>

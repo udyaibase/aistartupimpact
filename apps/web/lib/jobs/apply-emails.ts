@@ -29,7 +29,8 @@ export function sendApplicationReceived(opts: { to: string; name: string; jobTit
 <h1 style="font-size:20px;margin:0 0 8px">Thanks for applying, ${esc(opts.name.split(' ')[0] || opts.name)}</h1>
 <p style="margin:0 0 20px;font-size:15px;line-height:1.6">Your application for <strong>${esc(opts.jobTitle)}</strong> at <strong>${esc(opts.company)}</strong> has been sent. You can check its status, withdraw it, or delete your data at any time:</p>
 <p style="margin:0 0 24px">${button(link, 'Track your application')}</p>
-<p style="margin:0;font-size:13px;color:#6b7280;line-height:1.6">Keep this email private: anyone with the link can see your application status. We'll email you when ${esc(opts.company)} moves you forward.</p>`),
+<p style="margin:0;font-size:13px;color:#6b7280;line-height:1.6">Keep this email private: anyone with the link can see your application status. We'll email you when ${esc(opts.company)} moves you forward.</p>
+<p style="margin:14px 0 0;font-size:13px;color:#6b7280;line-height:1.6"><strong>Didn't apply?</strong> Someone may have used your email address. Open the link above and choose “Delete my data” to remove the application; we'll send a code to this address to confirm it's you.</p>`),
   });
 }
 

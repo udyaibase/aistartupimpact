@@ -1,7 +1,11 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useId, useRef, useState } from 'react';
-import { ArrowLeft, Check, CheckCircle2, FileText, Loader2, Sparkles, UploadCloud, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, FileText, Loader2, Sparkles, UploadCloud, X } from 'lucide-react';
+import JobAlertSignup from '@/components/jobs/JobAlertSignup';
+import WhatsAppChannelCard from '@/components/jobs/WhatsAppChannelCard';
+import CandidateSignIn from '@/components/jobs/CandidateSignIn';
 import TurnstileWidget from '@/components/shared/TurnstileWidget';
 import { AUTOFILL_CONSENT_TEXT } from '@/lib/jobs/consent';
 import { parseApplyFormConfig, type ApplyFieldKey, type ApplyFormConfig } from '@/lib/jobs/apply-form';
@@ -19,6 +23,20 @@ export interface ApplyJob {
   form?: ApplyFormConfig;
 }
 
+/**
+ * What to offer after applying, on Udyaibase's own job pages only (never a company's widget or careers page):
+ * the WhatsApp jobs channel, a one-tap alert for this role and city, and a few similar open jobs.
+ */
+export interface AfterApply {
+  channel: boolean;
+  alert: { category: string | null; city: string | null; remote: boolean } | null;
+  similar: { slug: string; title: string; company: string; place: string }[];
+  /** Whether `similar` starts with jobs in the same role (else they're just the newest open jobs). */
+  sameRole?: boolean;
+  /** Applied as a guest: offer to keep it in an account ("My applications"). */
+  saveToAccount?: boolean;
+}
+
 export interface ApplyAttribution {
   source?: string;
   widgetId?: string;
@@ -26,6 +44,8 @@ export interface ApplyAttribution {
   utm_source?: string;
   utm_medium?: string;
   utm_campaign?: string;
+  /** A teammate's referral code (?rc=). */
+  rc?: string;
 }
 
 interface Details {
@@ -57,8 +77,17 @@ const fieldStyle = { background: 'var(--af-surface)', color: 'var(--af-text)', b
  * skills and screening answers. Used on the job page and inside the website widget.
  */
 export default function JobApplyForm({
-  job, attribution, variant = 'page', style, onBack, onDone, preview, showBackLink = true,
+  job, attribution, variant = 'page', style, onBack, onDone, preview, showBackLink = true, afterApply, prefill, signedInAs, lastResume, prefillFromLast,
 }: {
+  /** The details came from their last application (not just the account name and email). */
+  prefillFromLast?: boolean;
+  /** Signed in with a resume on file: offered instead of uploading again ("Resume from your … application, 19 Nov"). */
+  lastResume?: { label: string };
+  afterApply?: AfterApply;
+  /** Signed in: their details from the last application (resume excluded). The resume's autofill only fills gaps. */
+  prefill?: Partial<Record<keyof Details, string>>;
+  /** Signed in: their account email, shown so they know where this application will appear. */
+  signedInAs?: string;
   job: ApplyJob;
   attribution: ApplyAttribution;
   variant?: 'page' | 'embed';
@@ -76,20 +105,25 @@ export default function JobApplyForm({
   const [liveStep, setStep] = useState<'upload' | 'details' | 'done'>('upload');
   const step = preview ?? liveStep;
   const [captcha, setCaptcha] = useState('');
+  const [trackUrl, setTrackUrl] = useState<string | null>(null);
+  const [inAccount, setInAccount] = useState(false);
+  const doneRef = useRef<HTMLHeadingElement>(null);
   const [uploading, setUploading] = useState(false);
   const [liveFile, setFile] = useState<{ name: string; sizeBytes: number } | null>(null);
   const file = preview ? { name: 'your-resume.pdf', sizeBytes: 0 } : liveFile;
   const [autofillOk, setAutofillOk] = useState(false);
+  const [reuseGone, setReuseGone] = useState(false);
   const [token, setToken] = useState('');
   const [pool, setPool] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [filledCount, setFilledCount] = useState(0);
-  const [d, setD] = useState<Details>(EMPTY);
+  const [d, setD] = useState<Details>(() => ({ ...EMPTY, ...Object.fromEntries(Object.entries(prefill ?? {}).filter(([, v]) => v)) }));
   const [skills, setSkills] = useState<string[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [agree, setAgree] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
+  const [errorLink, setErrorLink] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const touched = useRef<Set<keyof Details>>(new Set());
   const topRef = useRef<HTMLDivElement>(null);
@@ -118,6 +152,25 @@ export default function JobApplyForm({
       const res = await fetch('/api/jobs/apply/session', { method: 'POST', body: fd });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { setError(data.error || 'Upload failed. Try again.'); setUploading(false); return; }
+      setToken(data.token);
+      setFile(data.file);
+      setStep('details');
+      if (autofillOk) autofill(data.token);
+    } catch {
+      setError('You seem to be offline. Check your connection and try again.');
+    }
+    setUploading(false);
+  }
+
+  /** Signed in: copy the resume from their last application instead of uploading (same result as upload). */
+  async function reuse() {
+    setError('');
+    if (HAS_CAPTCHA && !captcha) { setError('Please complete the security check first.'); return; }
+    setUploading(true);
+    try {
+      const res = await fetch('/api/jobs/apply/reuse', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug: job.slug, turnstileToken: captcha }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data.error || 'Couldn’t use your last resume. Upload it instead.'); if (data.code === 'gone') setReuseGone(true); setUploading(false); return; }
       setToken(data.token);
       setFile(data.file);
       setStep('details');
@@ -170,6 +223,7 @@ export default function JobApplyForm({
       return;
     }
     setSubmitting(true);
+    setErrorLink(null);
     try {
       const res = await fetch(`/api/jobs/${job.slug}/apply`, {
         method: 'POST',
@@ -181,10 +235,12 @@ export default function JobApplyForm({
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok) { setStep('done'); onDone?.(); }
+      if (res.ok) { setTrackUrl(typeof data.trackUrl === 'string' ? data.trackUrl : null); setInAccount(data.inAccount === true); setStep('done'); document.getElementById('apply-account-card')?.setAttribute('hidden', ''); onDone?.(); }
       else {
         if (data.code === 'session') { setStep('upload'); setToken(''); setFile(null); }
         if (data.errors) setErrors(data.errors);
+        // Already applied while signed in: point to the application instead of their inbox.
+        if (data.code === 'duplicate' && typeof data.trackUrl === 'string' && variant === 'page') setErrorLink(data.trackUrl);
         setError(data.error || 'We couldn’t submit your application. Try again.');
       }
     } catch {
@@ -192,6 +248,12 @@ export default function JobApplyForm({
     }
     setSubmitting(false);
   }
+
+  // After sending, announce the confirmation (the step change already scrolls it into view).
+  useEffect(() => {
+    if (liveStep !== 'done' || preview) return;
+    doneRef.current?.focus({ preventScroll: true });
+  }, [liveStep, preview]);
 
   const id = (k: string) => `${uid}-${k}`;
   const label = 'block text-sm font-semibold mb-1.5';
@@ -208,10 +270,10 @@ export default function JobApplyForm({
   const Tag = ({ k, note }: { k: ApplyFieldKey; note?: string }) => (form.fields[k] === 'optional'
     ? <span className="font-normal" style={{ color: 'var(--af-muted)' }}>{note ? `(${note}, optional)` : '(optional)'}</span>
     : note ? <span className="font-normal" style={{ color: 'var(--af-muted)' }}>({note})</span> : null);
-  const Err = ({ k }: { k: string }) => (errors[k] ? <p id={`${id(k)}-err`} className={`${help} text-red-700`}>{errors[k]}</p> : null);
+  const Err = ({ k }: { k: string }) => (errors[k] ? <p id={`${id(k)}-err`} className={`${help} text-red-700 dark:text-red-400`}>{errors[k]}</p> : null);
 
   return (
-    <div ref={topRef} className={`font-[inherit] scroll-mt-4 ${variant === 'page' ? PAGE_VARS : ''}`} style={{ color: 'var(--af-text)', ...style }}>
+    <div ref={topRef} className={`font-[inherit] ${variant === 'page' ? `scroll-mt-24 ${PAGE_VARS}` : 'scroll-mt-4'}`} style={{ color: 'var(--af-text)', ...style }}>
       {onBack && showBackLink && step !== 'done' && (
         <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 min-h-[40px] -ml-1 px-1 text-sm font-semibold mb-2" style={{ color: 'var(--af-muted)' }}>
           <ArrowLeft className="w-4 h-4" aria-hidden /> Back to jobs
@@ -221,10 +283,47 @@ export default function JobApplyForm({
       {step === 'done' ? (
         <div role="status" className="text-center py-8">
           <CheckCircle2 className="w-12 h-12 mx-auto text-green-600" aria-hidden />
-          <h2 className="text-xl font-bold mt-3">Application sent</h2>
+          <h2 ref={doneRef} tabIndex={-1} className="text-xl font-bold mt-3 focus:outline-none">Application sent</h2>
           <p className="mt-1.5 text-[0.9375rem]" style={{ color: 'var(--af-muted)' }}>
-            {form.successMessage || `${job.company} has your application for ${job.title}.`} We emailed you a private link to track it.
+            {form.successMessage || `${job.company} has your application for ${job.title}.`}{inAccount ? ' It’s in My applications, and we’ve emailed you the details too.' : ' We emailed you a private link to track it.'}
           </p>
+          {trackUrl && (
+            <a href={trackUrl} className="mt-5 inline-flex items-center justify-center gap-2 min-h-[44px] px-5 text-sm font-semibold" style={primaryStyle}>
+              Track your application <ArrowRight className="w-4 h-4" aria-hidden />
+            </a>
+          )}
+          {afterApply && (afterApply.saveToAccount || afterApply.channel || afterApply.alert || afterApply.similar.length > 0) && (
+            <div className="mt-8 pt-6 border-t text-left space-y-4" style={{ borderColor: 'var(--af-border)' }}>
+              <h3 className="text-base font-bold">While you wait</h3>
+              {afterApply.saveToAccount && (
+                <CandidateSignIn returnTo="/my-applications" initialEmail={d.email} applyToken={token}
+                  title="Keep track of this application" subtitle={`One tap: we email a 6-digit code to ${d.email}. Enter it and this application is saved in My applications, with your details ready for next time.`} />
+              )}
+              {afterApply.channel && <WhatsAppChannelCard from="apply" />}
+              {afterApply.alert && (
+                <JobAlertSignup category={afterApply.alert.category} city={afterApply.alert.city} remote={afterApply.alert.remote}
+                  initialEmail={d.email} startOpen />
+              )}
+              {afterApply.similar.length > 0 && (
+                <div>
+                  <p className="text-sm font-semibold mb-2">{afterApply.sameRole ? 'Similar open jobs' : 'More open jobs'}</p>
+                  <ul className="divide-y border rounded-[10px]" style={{ borderColor: 'var(--af-border)' }}>
+                    {afterApply.similar.map((j) => (
+                      <li key={j.slug} style={{ borderColor: 'var(--af-border)' }}>
+                        <a href={`/jobs/${j.slug}`} className="flex items-center gap-3 px-3 min-h-[56px] hover:bg-black/[0.03] dark:hover:bg-white/[0.04]">
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-sm font-semibold truncate">{j.title}</span>
+                            <span className="block text-xs truncate" style={{ color: 'var(--af-muted)' }}>{j.company}{j.place ? ` · ${j.place}` : ''}</span>
+                          </span>
+                          <ArrowRight className="w-4 h-4 shrink-0" style={{ color: 'var(--af-muted)' }} aria-hidden />
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
           {onBack && (
             <button type="button" onClick={onBack} className="mt-5 inline-flex items-center justify-center min-h-[44px] px-5 border text-sm font-semibold"
               style={{ borderColor: 'var(--af-border)', borderRadius: 'var(--af-btn-radius)' }}>
@@ -256,22 +355,43 @@ export default function JobApplyForm({
 
           {step === 'upload' && (
             <div className="space-y-4">
-              <p className="text-[0.875rem] leading-relaxed p-3 border" style={{ borderColor: 'var(--af-border)', borderRadius: 'var(--af-radius)', background: 'var(--af-subtle)', color: 'var(--af-muted)' }}>
-                {job.consentText}
-              </p>
+              {signedInAs && (
+                <p className="text-[0.8125rem]" style={{ color: 'var(--af-muted)' }}>
+                  Signed in as <strong style={{ color: 'var(--af-text)' }}>{signedInAs}</strong>. This application will appear in <Link href="/my-applications" className="underline font-semibold">My applications</Link>{prefillFromLast ? ', and we’ve filled in your details from last time' : ''}.
+                </p>
+              )}
+              {/* Layered notice: the key point up front, the full notice (the text recorded with the application) one tap away. */}
+              <div className="text-[0.875rem] leading-relaxed p-3 border" style={{ borderColor: 'var(--af-border)', borderRadius: 'var(--af-radius)', background: 'var(--af-subtle)', color: 'var(--af-muted)' }}>
+                <p>Your resume and details go to <strong>{job.company}</strong> for this role. A person makes every decision, and you can withdraw or delete your application at any time.</p>
+                <details className="mt-1.5">
+                  <summary className="cursor-pointer font-semibold underline underline-offset-2" style={{ color: 'var(--af-text, inherit)' }}>How we handle your data</summary>
+                  <p className="mt-2">{job.consentText}</p>
+                </details>
+              </div>
               <label htmlFor={id('autofill')} className="flex items-start gap-3 cursor-pointer">
                 <input id={id('autofill')} type="checkbox" checked={autofillOk} onChange={(e) => setAutofillOk(e.target.checked)}
                   className="mt-0.5 w-5 h-5 shrink-0" style={{ accentColor: 'var(--af-accent)' }} />
                 <span className="text-[0.875rem]"><span className="font-semibold">Optional:</span> {AUTOFILL_CONSENT_TEXT}</span>
               </label>
               {HAS_CAPTCHA && !preview && <TurnstileWidget onSuccess={setCaptcha} onExpire={() => setCaptcha('')} onError={() => setCaptcha('')} />}
+              {lastResume && !reuseGone && !preview && (
+                <button type="button" onClick={reuse} disabled={uploading || (HAS_CAPTCHA && !captcha)}
+                  className="w-full flex items-center gap-3 p-3 border-2 text-left disabled:opacity-60 disabled:cursor-not-allowed"
+                  style={{ borderColor: 'var(--af-accent)', borderRadius: 'var(--af-radius)' }}>
+                  {uploading ? <Loader2 className="w-5 h-5 shrink-0 animate-spin" aria-hidden style={{ color: 'var(--af-accent)' }} /> : <FileText className="w-5 h-5 shrink-0" aria-hidden style={{ color: 'var(--af-accent)' }} />}
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-[0.9375rem] font-semibold">Use my last resume</span>
+                    <span className="block text-[0.8125rem] truncate" style={{ color: 'var(--af-muted)' }}>{lastResume.label}</span>
+                  </span>
+                </button>
+              )}
               <label htmlFor={id('file')}
                 className={`flex flex-col items-center justify-center gap-2 text-center px-4 py-8 border-2 border-dashed cursor-pointer ${HAS_CAPTCHA && !captcha && !preview ? 'opacity-60 cursor-not-allowed' : ''}`}
                 style={{ borderColor: 'var(--af-border)', borderRadius: 'var(--af-radius)' }}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f && !preview) upload(f); }}>
                 {uploading ? <Loader2 className="w-7 h-7 animate-spin" aria-hidden style={{ color: 'var(--af-accent)' }} /> : <UploadCloud className="w-7 h-7" aria-hidden style={{ color: 'var(--af-accent)' }} />}
-                <span className="text-[0.9375rem] font-semibold">{uploading ? 'Uploading…' : 'Upload your resume'}</span>
+                <span className="text-[0.9375rem] font-semibold">{uploading ? 'Uploading…' : lastResume && !reuseGone ? 'Or upload a new resume' : 'Upload your resume'}</span>
                 <span className="text-[0.8125rem]" style={{ color: 'var(--af-muted)' }}>PDF or Word, up to 5 MB.</span>
                 <input id={id('file')} type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   className="sr-only" disabled={uploading || !!preview || (HAS_CAPTCHA && !captcha)}
@@ -431,14 +551,18 @@ export default function JobApplyForm({
                 </label>
               </div>
 
-              {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+              {error && (
+                <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+                  {error}{errorLink && <> <a href={errorLink} className="font-semibold underline">See it in My applications</a></>}
+                </p>
+              )}
               <button type="submit" disabled={submitting} className={`${primaryBtn} w-full sm:w-auto`} style={primaryStyle}>
                 {submitting && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} {form.submitLabel}
               </button>
             </form>
           )}
 
-          {step === 'upload' && error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
+          {step === 'upload' && error && <p role="alert" className="mt-3 text-sm text-red-700 dark:text-red-400">{error}</p>}
         </>
       )}
     </div>

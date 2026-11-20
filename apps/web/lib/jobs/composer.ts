@@ -159,7 +159,7 @@ export interface JobDraft {
 
 export function salaryUnit(currency: string): { factor: number; suffix: string; symbol: string } {
   if (currency === 'INR') return { factor: 100_000, suffix: 'L', symbol: '₹' };
-  const symbol = ({ USD: '$', EUR: '€', GBP: '£' } as Record<string, string>)[currency] ?? `${currency} `;
+  const symbol = ({ USD: '$', EUR: '€', GBP: '£', SGD: 'S$' } as Record<string, string>)[currency] ?? `${currency} `;
   return { factor: 1_000, suffix: 'K', symbol };
 }
 
@@ -410,13 +410,21 @@ export function daysUntil(date: Date, now = new Date()): number {
   return Math.round((day(date) - day(now)) / 86_400_000);
 }
 
+/**
+ * The salary as candidates will see it, from what is typed in the form ("₹3–4.8 L per annum", "$90K–120K per annum").
+ * Written the same way as salaryText (lib/jobs/format.ts) writes it on the job page; a test keeps the two in step.
+ */
 export function formatSalaryDraft(d: Pick<JobDraft, 'salaryCurrency' | 'salaryMin' | 'salaryMax'>): string | null {
-  const { symbol, suffix } = salaryUnit(d.salaryCurrency);
-  const min = d.salaryMin.trim();
-  const max = d.salaryMax.trim();
+  const { symbol } = salaryUnit(d.salaryCurrency);
+  const inr = d.salaryCurrency === 'INR';
+  const num = (v: string) => Number(v.trim());
+  const ok = (v: string) => v.trim() !== '' && Number.isFinite(num(v)) && num(v) > 0;
+  const one = (v: string) => (inr ? num(v).toLocaleString('en-IN', { maximumFractionDigits: 1 }) : `${Math.round(num(v))}K`);
+  const min = ok(d.salaryMin) ? d.salaryMin : '';
+  const max = ok(d.salaryMax) ? d.salaryMax : '';
   if (!min && !max) return null;
-  if (min && max && min !== max) return `${symbol}${min}–${max}${suffix} per annum`;
-  return `${symbol}${min || max}${suffix} per annum`;
+  const range = min && max && num(min) !== num(max) ? `${one(min)}–${one(max)}` : one(min || max);
+  return `${symbol}${range}${inr ? ' L' : ''} per annum`;
 }
 
 export interface JobTemplate {
