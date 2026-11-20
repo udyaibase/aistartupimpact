@@ -15,7 +15,7 @@ export function employerNav(newCandidates: number, role: EmployerRole = 'OWNER',
     { label: 'Home', href: '/employer/dashboard', icon: Home, exact: true },
     { type: 'divider', label: 'Hiring' },
     { label: 'Jobs', href: '/employer/jobs', icon: Briefcase, perm: 'jobs.view' },
-    { label: 'Candidates', href: '/employer/applications', icon: Users, badge: newCandidates > 0 ? `${newCandidates} new` : undefined, perm: 'candidates.view' },
+    { label: 'Candidates', href: '/employer/applications', icon: Users, badge: newCandidates > 0 ? `${newCandidates} unseen` : undefined, perm: 'candidates.view' },
     { label: 'Talent pool', href: '/employer/talent', icon: UserCheck, perm: 'candidates.view' },
     { label: 'Careers page', href: '/employer/careers-page', icon: LayoutTemplate, perm: 'company.manage' },
     { label: 'Website widget', href: '/employer/careers', icon: Globe, perm: 'widget.manage' },
@@ -26,7 +26,7 @@ export function employerNav(newCandidates: number, role: EmployerRole = 'OWNER',
     { label: 'Plans & billing', href: '/employer/billing', icon: CreditCard, perm: 'account.manage' },
     { label: 'Settings', href: '/employer/settings', icon: Settings, perm: 'account.manage' },
     { label: 'Activity log', href: '/employer/activity', icon: History, perm: 'account.manage' },
-    { label: 'Help', href: '/employer/support', icon: HelpCircle },
+    { label: 'Help & support', href: '/employer/help', icon: HelpCircle, alsoActive: ['/employer/support'] },
   ];
   return items
     .filter((i) => (!i.perm || can(role, i.perm)) && !(jobScoped && 'href' in i && WORKSPACE_WIDE_PAGES.includes(i.href as string)))
@@ -55,6 +55,14 @@ export function VerificationLine({ shell }: { shell: EmployerShell }) {
       </span>
     );
   }
+  if (shell.companyVerified) {
+    return (
+      <span className="flex items-center gap-1 text-xs text-green-700 dark:text-green-400">
+        <BadgeCheck className="w-3.5 h-3.5 shrink-0" aria-hidden /> Verified company
+      </span>
+    );
+  }
+  if (shell.role === 'INTERVIEWER') return null;
   return (
     <Link href="/employer/company" className="flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400 hover:underline">
       <AlertTriangle className="w-3.5 h-3.5 shrink-0" aria-hidden />
@@ -71,7 +79,7 @@ function CompanyCard({ shell }: { shell: EmployerShell }) {
       <div className="flex flex-col items-center gap-2 px-2 pt-3 pb-1">
         <Link href="/employer/company" title={shell.companyName}><CompanyAvatar shell={shell} /></Link>
         {canPost && <Link href="/employer/jobs/new" aria-label="Post a job" title="Post a job"
-          className="w-10 h-10 rounded-xl bg-gray-900 dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-100 text-white dark:text-gray-900 flex items-center justify-center transition-colors">
+          className="w-10 h-10 rounded-xl bg-brand hover:bg-brand-600 text-white flex items-center justify-center transition-colors">
           <Plus className="w-5 h-5" aria-hidden />
         </Link>}
       </div>
@@ -88,7 +96,7 @@ function CompanyCard({ shell }: { shell: EmployerShell }) {
       </div>
       {canPost && (
         <Link href="/employer/jobs/new" data-tour="employer:post-job"
-          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-gray-900 dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-100 text-white dark:text-gray-900 rounded-lg font-jakarta font-semibold text-sm transition-colors">
+          className="flex items-center justify-center gap-2 w-full px-4 min-h-[40px] bg-brand hover:bg-brand-600 text-white rounded-[10px] font-jakarta font-semibold text-sm transition-colors">
           <Plus className="w-4 h-4" aria-hidden /> Post a job
         </Link>
       )}

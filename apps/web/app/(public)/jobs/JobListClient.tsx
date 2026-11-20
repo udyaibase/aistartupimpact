@@ -3,10 +3,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { MapPin, Building2, ExternalLink, Bookmark, Loader2, Users } from 'lucide-react';
+import { MapPin, Building2, CheckCircle2, Bookmark, Loader2, Users } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useUser } from '@/components/UserProvider';
+import { useAppliedJobs, type AppliedJob } from '@/hooks/useAppliedJobs';
 import { JOBS_PAGE_SIZE as PAGE_SIZE } from '@/lib/jobs/search-keys';
+import { salaryText } from '@/lib/jobs/format';
 
 const AVATAR_COLORS = [
   'bg-blue-600', 'bg-green-600', 'bg-purple-600', 'bg-red-600',
@@ -17,7 +19,10 @@ function getTimeAgo(dateStr: string): string {
   const date = new Date(dateStr + 'Z');
   const diffMs = Date.now() - date.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return 'today';
+  if (diffDays === 0) {
+    const h = Math.floor(diffMs / 3_600_000);
+    return h < 1 ? 'just now' : `${h}h ago`;
+  }
   if (diffDays === 1) return '1d ago';
   if (diffDays < 7) return `${diffDays}d ago`;
   if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
@@ -72,8 +77,9 @@ function SaveButton({ slug, initialSaved, onToggle }: { slug: string; initialSav
   };
 
   return (
-    <button onClick={toggle} disabled={loading} title={saved ? 'Unsave job' : 'Save job'} className="group/save disabled:opacity-50">
-      <Bookmark className={clsx('w-4 h-4 transition-colors', saved ? 'text-brand fill-brand' : 'text-gray-300 dark:text-gray-600 group-hover/save:text-gray-500')} />
+    <button type="button" onClick={toggle} disabled={loading} aria-pressed={saved} aria-label={saved ? 'Saved. Remove from saved jobs' : 'Save job'}
+      className="group/save inline-flex items-center justify-center w-11 h-11 -m-3.5 disabled:opacity-50">
+      <Bookmark aria-hidden className={clsx('w-4 h-4 transition-colors', saved ? 'text-brand fill-brand' : 'text-gray-300 dark:text-gray-600 group-hover/save:text-gray-500')} />
     </button>
   );
 }
@@ -106,7 +112,7 @@ function SkillChips({ skills }: { skills?: string[] | null }) {
   );
 }
 
-function JobCard({ job, isSaved, onToggleSave }: { job: any; isSaved: boolean; onToggleSave: (slug: string, saved: boolean) => void }) {
+function JobCard({ job, isSaved, onToggleSave, applied }: { job: any; isSaved: boolean; onToggleSave: (slug: string, saved: boolean) => void; applied?: AppliedJob }) {
   const initials = job.companyName
     .split(/\s+/)
     .slice(0, 2)
@@ -117,11 +123,16 @@ function JobCard({ job, isSaved, onToggleSave }: { job: any; isSaved: boolean; o
   const colorIdx = job.companyName.charCodeAt(0) % AVATAR_COLORS.length;
   const bgColor = AVATAR_COLORS[colorIdx];
 
-  const isNew = job.publishedAt && (Date.now() - new Date(job.publishedAt + 'Z').getTime()) < 7 * 24 * 60 * 60 * 1000;
+  // "New" for the first 3 days; after that the posted date says enough.
+  const isNew = job.publishedAt && (Date.now() - new Date(job.publishedAt + 'Z').getTime()) < 3 * 24 * 60 * 60 * 1000;
 
+  // Same bands as the Experience filter (by the minimum years asked).
   const expLabel = job.experienceMin != null
-    ? job.experienceMin <= 2 ? 'Entry' : job.experienceMin <= 5 ? 'Mid level' : 'Senior'
+    ? job.experienceMin < 2 ? 'Entry level' : job.experienceMin < 5 ? 'Mid level' : job.experienceMin < 8 ? 'Senior' : 'Lead'
     : null;
+
+  // Apply starts on the job page: people read the role before applying (both Easy apply and company-site jobs).
+  const external = job.applicationType === 'EXTERNAL';
 
   const formatEmploymentType = (type: string | null) => {
     if (!type) return 'Full-time';
@@ -129,7 +140,8 @@ function JobCard({ job, isSaved, onToggleSave }: { job: any; isSaved: boolean; o
   };
 
   return (
-    <Link href={`/jobs/${job.slug}`} className="block card p-4 sm:p-5 hover:border-gray-300 dark:hover:border-gray-600 transition-colors group cursor-pointer">
+    // The title is the link and stretches over the card (whole card clickable); Save and Apply sit above it as their own controls.
+    <article className="relative card p-4 sm:p-5 hover:border-gray-300 dark:hover:border-gray-600 transition-colors group">
       <div className="flex gap-3 sm:gap-4">
         {/* Company avatar */}
         <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center shrink-0 overflow-hidden ${!job.logoUrl ? bgColor : 'bg-gray-100 dark:bg-gray-800'}`}>
@@ -145,15 +157,24 @@ function JobCard({ job, isSaved, onToggleSave }: { job: any; isSaved: boolean; o
           {/* Title row */}
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <span className="font-sora font-bold text-sm sm:text-base text-navy dark:text-white group-hover:text-brand transition-colors">
-                {job.title}
-              </span>
-              <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta mt-0.5">
+              <h2 className="font-sora font-bold text-sm sm:text-base text-navy dark:text-white group-hover:text-brand transition-colors">
+                <Link href={`/jobs/${job.slug}`} className="after:absolute after:inset-0 after:rounded-[inherit] focus:outline-none focus-visible:after:ring-2 focus-visible:after:ring-brand">
+                  {job.title}
+                </Link>
+              </h2>
+              <p className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 font-jakarta mt-0.5">
                 {job.companyName}
+                {job.companyVerified
+                  ? <CheckCircle2 className="w-3.5 h-3.5 text-blue-500 shrink-0" aria-label="Verified company" />
+                  : job.companyChecked && <span className="text-[10px] font-medium text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-px rounded">Email verified</span>}
               </p>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {isNew && (
+            <div className="relative z-10 flex items-center gap-2 shrink-0">
+              {applied ? (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold font-jakarta bg-gray-900 dark:bg-white text-white dark:text-gray-900 px-2 py-0.5 rounded">
+                  <CheckCircle2 className="w-3 h-3" aria-hidden /> {applied.withdrawn ? 'Withdrawn' : 'Applied'}
+                </span>
+              ) : isNew && (
                 <span className="text-[10px] font-bold font-jakarta bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-0.5 rounded">
                   New
                 </span>
@@ -186,10 +207,8 @@ function JobCard({ job, isSaved, onToggleSave }: { job: any; isSaved: boolean; o
                 {Number(job.positions)} openings
               </span>
             )}
-            {job.showSalary && job.salaryMin && (
-              <span className="inline-flex items-center gap-1">
-                ₹ {(job.salaryMin / 100000).toFixed(0)}L–{(job.salaryMax / 100000).toFixed(0)}L
-              </span>
+            {job.showSalary && salaryText(job) && (
+              <span className="inline-flex items-center gap-1">{salaryText(job)}</span>
             )}
           </div>
 
@@ -218,34 +237,33 @@ function JobCard({ job, isSaved, onToggleSave }: { job: any; isSaved: boolean; o
           {/* Bottom row - mobile */}
           <div className="flex sm:hidden items-center justify-between mt-2.5">
             <span className="text-[11px] text-gray-400 dark:text-gray-500 font-jakarta">
-              {job.showSalary && job.salaryMin ? `₹ ${(job.salaryMin / 100000).toFixed(0)}L–${(job.salaryMax / 100000).toFixed(0)}L` : ''}
+              {(job.showSalary && salaryText(job)) || ''}
             </span>
-            <span className="text-[11px] font-semibold font-jakarta text-green-600 dark:text-green-400">
-              {isNew ? 'New' : ''} · {job.publishedAt ? getShortDate(job.publishedAt) : 'Today'}
+            <span className="text-[11px] font-semibold font-jakarta text-gray-500 dark:text-gray-400">
+              {job.publishedAt ? getShortDate(job.publishedAt) : 'Today'}
             </span>
           </div>
 
           {/* Bottom row - desktop */}
           <div className="hidden sm:flex items-center justify-between mt-3">
             <span className="text-[11px] text-gray-400 dark:text-gray-500 font-jakarta">
-              {job.publishedAt ? `Posted ${getTimeAgo(job.publishedAt)}` : 'Recently'} · Easy apply
+              {job.publishedAt ? `Posted ${getTimeAgo(job.publishedAt)}` : 'Recently'} · {external ? 'Applies on company site' : 'Easy apply'}
             </span>
-            <div className="flex items-center gap-2">
-              <span
-                className="px-5 py-2 rounded-md border border-gray-200 dark:border-gray-700 text-sm font-semibold font-jakarta text-gray-700 dark:text-gray-300 group-hover:bg-gray-50 dark:group-hover:bg-gray-800 transition-colors"
-              >
-                View details
-              </span>
-              <span
-                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-md bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-semibold font-jakarta group-hover:bg-gray-800 dark:group-hover:bg-gray-100 transition-colors"
-              >
-                Apply <ExternalLink className="w-3.5 h-3.5" />
-              </span>
-            </div>
+            {applied ? (
+              <Link href={`/my-applications/${applied.id}`}
+                className="relative z-10 inline-flex items-center gap-1.5 min-h-[40px] px-5 rounded-[10px] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-semibold font-jakarta hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                View application<span className="sr-only">: {job.title}</span>
+              </Link>
+            ) : (
+            <Link href={`/jobs/${job.slug}`} tabIndex={-1} aria-hidden
+              className="relative z-10 inline-flex items-center gap-1.5 min-h-[40px] px-5 rounded-[10px] bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-semibold font-jakarta hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors">
+              View &amp; apply
+            </Link>
+            )}
           </div>
         </div>
       </div>
-    </Link>
+    </article>
   );
 }
 
@@ -260,6 +278,7 @@ interface JobListClientProps {
 export default function JobListClient({ jobs, total, onLoadMore, loadingMore }: JobListClientProps) {
   const { user } = useUser();
   const [savedSlugs, setSavedSlugs] = useState<Set<string>>(new Set());
+  const applied = useAppliedJobs();
 
   useEffect(() => {
     if (!user || jobs.length === 0) return;
@@ -295,7 +314,7 @@ export default function JobListClient({ jobs, total, onLoadMore, loadingMore }: 
     <>
       <div className="space-y-3">
         {jobs.map((job: any) => (
-          <JobCard key={job.id} job={job} isSaved={savedSlugs.has(job.slug)} onToggleSave={handleToggleSave} />
+          <JobCard key={job.id} job={job} isSaved={savedSlugs.has(job.slug)} onToggleSave={handleToggleSave} applied={applied.get(job.slug)} />
         ))}
       </div>
 

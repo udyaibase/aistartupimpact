@@ -7,6 +7,7 @@ import { sql } from '@/lib/db';
 import { SignJWT } from 'jose';
 import { randomBytes } from 'crypto';
 import { safeReturnPath } from '@/lib/safe-return';
+import { isJobSeekerPath, claimApplications } from '@/lib/jobs/candidate-account';
 
 export const dynamic = 'force-dynamic';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -119,6 +120,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/?error=account_deactivated', request.url));
     }
 
+    // Google only signs in verified addresses (checked above), so the account now provably owns this email.
+    await sql`UPDATE "WebUser" SET "emailVerifiedAt" = COALESCE("emailVerifiedAt", NOW()) WHERE id = ${user.id}`;
+
+    // Signed in from a job page: they're here for jobs, so don't send them through onboarding mid-application.
+    if (!user.onboardingCompleted && isJobSeekerPath(safeReturnPath(state))) {
+      await sql`UPDATE "WebUser" SET "onboardingCompleted" = true, "primaryIntent" = COALESCE("primaryIntent", 'looking_for_jobs') WHERE id = ${user.id}`;
+      user.onboardingCompleted = true;
+    }
+
     // Google proves the first step only: anyone with 2FA on still enters their code. The token goes in the URL
     // fragment, so it never reaches server logs or another site's Referer.
     const challenge = await secondFactorChallenge(user.email);
@@ -126,6 +136,9 @@ export async function GET(request: NextRequest) {
       const back = safeReturnPath(state);
       return NextResponse.redirect(new URL(`/auth/login?returnTo=${encodeURIComponent(back)}#twofa=${challenge.challengeToken}&type=${challenge.userType}`, request.url));
     }
+
+    // Applications sent with this address before they had an account are theirs from this moment (Google proved it).
+    await claimApplications({ id: user.id, email: String(user.email).toLowerCase(), name: user.name, emailVerified: true }).catch(() => 0);
 
     const sessionId = generateId();
     const token = await new SignJWT({

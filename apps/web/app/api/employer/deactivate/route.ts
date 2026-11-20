@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { requireEmployerAuth, clearEmployerSession, sessionCutoff } from '@/lib/employer-auth';
+import { clearEmployerSession, sessionCutoff } from '@/lib/employer-auth';
 import { writeLimited } from '@/lib/employer/write-limit';
-import { can, forbidden } from '@/lib/employer/permissions';
 import { refreshSections } from '@/lib/revalidate';
 import { checkActionCode } from '@/lib/employer/account-action';
 import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,8 +15,9 @@ export async function POST(request: NextRequest) {
     const limited = await writeLimited(request, 'deactivate', 'sensitive');
     if (limited) return limited;
 
-    const session = await requireEmployerAuth();
-    if (!can(session.role, 'account.manage')) return forbidden();
+    const guard = await employerApi('account.manage');
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     const employer = await prisma.jobBoardEmployer.findUnique({
       where: { id: session.id },

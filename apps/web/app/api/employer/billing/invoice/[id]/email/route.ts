@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getEmployerSession } from '@/lib/employer-auth';
-import { can, forbidden } from '@/lib/employer/permissions';
 import { invoiceEmailResponse } from '@/lib/billing/invoice-routes';
 import { writeLimited } from '@/lib/employer/write-limit';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,8 +10,8 @@ export async function POST(_request: NextRequest, props: { params: Promise<{ id:
   const limited = await writeLimited(_request, 'billing/invoice/[id]/email');
   if (limited) return limited;
   const { id } = await props.params;
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
-  if (!can(session.role, 'account.manage')) return forbidden();
+  const guard = await employerApi('account.manage');
+  if (guard.error) return guard.error;
+  const session = guard.session;
   return invoiceEmailResponse('employer', id, session.id);
 }

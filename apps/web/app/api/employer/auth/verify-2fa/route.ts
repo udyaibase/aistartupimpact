@@ -1,4 +1,3 @@
-import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 import { sql } from '@/lib/db';
@@ -7,10 +6,10 @@ import { verifyTOTPToken, decryptSecret, verifyBackupCode } from '@/lib/two-fact
 import { TWO_FACTOR_LOCKED_MESSAGE, clearTwoFactorFailures, isTwoFactorLocked, recordTwoFactorFailure } from '@/lib/auth/two-factor-attempts';
 import { twoFactorRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 import { logEmployerActivity } from '@/lib/workspace-activity';
+import { CHALLENGE_SECRET } from '@/lib/employer/sign-in';
 
 export const dynamic = 'force-dynamic';
 
-const CHALLENGE_SECRET = jwtSecret(process.env.EMPLOYER_JWT_SECRET || process.env.USER_JWT_SECRET, 'EMPLOYER_JWT_SECRET');
 
 export async function POST(request: NextRequest) {
   try {
@@ -82,6 +81,13 @@ export async function POST(request: NextRequest) {
     }
 
     await clearTwoFactorFailures('employer', userId);
+    // Finishing two-step sign-in is what brings a deactivated workspace back (the email code alone does not).
+    const reactivated = await sql`
+      UPDATE "JobBoardEmployer" SET "deactivatedAt" = NULL WHERE id = ${userId} AND "deactivatedAt" IS NOT NULL RETURNING id
+    `;
+    if (reactivated.length) {
+      await logEmployerActivity(employer.id, 'account_reactivated', { actor: { name: employer.companyName, email: employer.email }, request });
+    }
     await sql`UPDATE "JobBoardEmployer" SET "lastLoginAt" = NOW() WHERE id = ${userId}`;
     await logEmployerActivity(employer.id, 'signed_in', { actor: { name: employer.companyName, email: employer.email }, request, metadata: { method: 'password_2fa' } });
 

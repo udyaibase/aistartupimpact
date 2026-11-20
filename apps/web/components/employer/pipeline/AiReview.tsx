@@ -26,6 +26,10 @@ const MUST: Record<string, { label: string; icon: React.ReactNode; cls: string }
   not_found: { label: 'Not found', icon: <X className="w-3 h-3" aria-hidden />, cls: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' },
 };
 
+/** With no readable resume the evidence can only be the candidate's own answers, so the labels say that. */
+const mustLabel = (status: string, resumeRead: boolean) =>
+  resumeRead ? MUST[status].label : status === 'evidenced' ? 'Shown in their answers' : status === 'claimed' ? 'Ticked only' : MUST[status].label;
+
 const EXP: Record<string, string> = { strong: 'Closely matches this role', some: 'Related work', none: 'Not shown in the resume' };
 
 export default function AiReview({ id, ai, access, onChanged }: {
@@ -92,7 +96,7 @@ export default function AiReview({ id, ai, access, onChanged }: {
         <p className="text-[13px] text-gray-600 dark:text-gray-400 mb-2">
           {ai?.status === 'FAILED' ? 'The last AI review didn’t finish. It wasn’t counted.' : 'Not reviewed yet.'}
         </p>
-        {runButton(busy ? 'Reviewing…' : 'Review with AI', false)}
+        {runButton(busy ? 'Screening…' : 'Screen with AI', false)}
         {error && <p role="alert" className="mt-2 text-sm text-red-700 dark:text-red-400">{error}</p>}
       </section>
     );
@@ -117,30 +121,30 @@ export default function AiReview({ id, ai, access, onChanged }: {
       <div className="flex items-start justify-between gap-2">
         {heading}
         <span className="flex items-center gap-1.5 shrink-0">
-          <span className={`text-[12px] font-semibold px-2 py-0.5 rounded ${rec.cls}`}>{rec.label}</span>
-          <span className="text-[12px] font-bold tabular-nums text-gray-900 dark:text-white" title="Fit out of 100, worked out from the quoted evidence">{ai.fitScore}</span>
+          <span className={`text-xs font-semibold px-2 py-0.5 rounded ${rec.cls}`}>{rec.label}</span>
+          <span className="text-xs font-bold tabular-nums text-gray-900 dark:text-white" title="Fit out of 100, worked out from the quoted evidence">{ai.fitScore}</span>
         </span>
       </div>
 
       {ai.stale && (
-        <p className="mb-2 text-[12.5px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 rounded-[8px] px-2.5 py-1.5">
+        <p className="mb-2 text-[13px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 rounded-[8px] px-2.5 py-1.5">
           The job’s requirements changed after this review. Re-run it to compare against the new ones.
         </p>
       )}
-      {!r.resumeRead && <p className="mb-2 text-[12.5px] text-gray-600 dark:text-gray-400">No readable resume, so this is based on the form answers only.</p>}
+      {!r.resumeRead && <p className="mb-2 text-[13px] text-gray-600 dark:text-gray-400">No readable resume, so this is based on the form answers only.</p>}
 
-      {r.summary && <p className="text-[13.5px] text-gray-800 dark:text-gray-200">{r.summary}</p>}
+      {r.summary && <p className="text-sm text-gray-800 dark:text-gray-200">{r.summary}</p>}
 
       {r.mustHaves.length > 0 && (
         <div className="mt-3">
-          <p className="text-[12px] font-semibold uppercase tracking-wide text-gray-500 mb-1.5">Must-haves</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5">Must-haves</p>
           <ul className="space-y-1.5">
             {r.mustHaves.map((m) => (
               <li key={m.skill} className="flex items-start gap-2 text-[13px]">
                 <span className={`mt-0.5 w-5 h-5 rounded-full grid place-items-center shrink-0 ${MUST[m.status].cls}`}>{MUST[m.status].icon}</span>
                 <span className="min-w-0">
                   <span className="font-medium text-gray-900 dark:text-white">{m.skill}</span>
-                  <span className="text-gray-500"> · {MUST[m.status].label}</span>
+                  <span className="text-gray-500"> · {mustLabel(m.status, r.resumeRead)}</span>
                   {m.evidence && <q className="block text-gray-600 dark:text-gray-400 italic">{m.evidence}</q>}
                 </span>
               </li>
@@ -151,11 +155,11 @@ export default function AiReview({ id, ai, access, onChanged }: {
 
       {r.otherSkills?.length > 0 && (
         <div className="mt-3">
-          <p className="text-[12px] font-semibold uppercase tracking-wide text-gray-500 mb-1.5">Other skills</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5">Other skills</p>
           <ul className="flex flex-wrap gap-1.5">
             {r.otherSkills.map((m) => (
-              <li key={m.skill} title={MUST[m.status].label} className={`inline-flex items-center gap-1 h-7 px-2 rounded-[8px] text-[12.5px] ${MUST[m.status].cls}`}>
-                {MUST[m.status].icon} {m.skill}<span className="sr-only"> ({MUST[m.status].label})</span>
+              <li key={m.skill} title={mustLabel(m.status, r.resumeRead)} className={`inline-flex items-center gap-1 h-7 px-2 rounded-[8px] text-[13px] ${MUST[m.status].cls}`}>
+                {MUST[m.status].icon} {m.skill}<span className="sr-only"> ({mustLabel(m.status, r.resumeRead)})</span>
               </li>
             ))}
           </ul>
@@ -164,15 +168,15 @@ export default function AiReview({ id, ai, access, onChanged }: {
 
       {r.experience && (
         <div className="mt-3 text-[13px]">
-          <p className="text-[12px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Relevant experience</p>
-          <span className="text-gray-900 dark:text-white">{EXP[r.experience.level]}</span>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Relevant experience</p>
+          <span className="text-gray-900 dark:text-white">{r.experience.level === 'none' && !r.resumeRead ? 'Not shown in their answers' : EXP[r.experience.level]}</span>
           {r.experience.evidence && <q className="block text-gray-600 dark:text-gray-400 italic">{r.experience.evidence}</q>}
         </div>
       )}
 
       {r.strengths.length > 0 && (
         <div className="mt-3">
-          <p className="text-[12px] font-semibold uppercase tracking-wide text-gray-500 mb-1.5">Strengths</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5">Strengths</p>
           <ul className="space-y-1.5">
             {r.strengths.map((s, i) => (
               <li key={i} className="text-[13px]">
@@ -186,14 +190,14 @@ export default function AiReview({ id, ai, access, onChanged }: {
 
       {r.gaps.length > 0 && (
         <div className="mt-3">
-          <p className="text-[12px] font-semibold uppercase tracking-wide text-gray-500 mb-1.5">Not shown</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5">Not shown</p>
           <ul className="list-disc pl-5 space-y-0.5 text-[13px] text-gray-700 dark:text-gray-300">{r.gaps.map((g, i) => <li key={i}>{g}</li>)}</ul>
         </div>
       )}
 
       {r.questions.length > 0 && (
         <div className="mt-3">
-          <p className="text-[12px] font-semibold uppercase tracking-wide text-gray-500 mb-1.5">Ask in the interview</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5">Ask in the interview</p>
           <ol className="list-decimal pl-5 space-y-0.5 text-[13px] text-gray-700 dark:text-gray-300">{r.questions.map((q, i) => <li key={i}>{q}</li>)}</ol>
         </div>
       )}

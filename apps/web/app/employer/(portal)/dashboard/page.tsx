@@ -1,3 +1,4 @@
+import { placeLine } from '@/lib/jobs/format';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ArrowRight, Check, Plus, Users, Clock, CalendarCheck, MessageSquareReply, Briefcase, FileText } from 'lucide-react';
@@ -5,7 +6,10 @@ import { getEmployerSession } from '@/lib/employer-auth';
 import { can } from '@/lib/employer/roles';
 import { getEmployerHome, getEmployerShell, type OpenRole } from '@/lib/employer/portal';
 import RenewJobButton from '@/components/employer/RenewJobButton';
+import Dismissible, { DismissButton } from '@/components/ui/Dismissible';
 import { daysUntil } from '@/lib/jobs/composer';
+
+export const metadata = { title: 'Home' };
 
 export const dynamic = 'force-dynamic';
 
@@ -49,10 +53,13 @@ function StatusChip({ status }: { status: OpenRole['status'] }) {
 function Pipeline({ p, jobId }: { p: OpenRole['pipeline']; jobId: string }) {
   const stages = [
     { key: 'new', label: 'New', n: p.new },
-    { key: 'shortlisted', label: 'Shortlisted', n: p.shortlisted },
+    { key: 'shortlisted', label: 'Screening', n: p.shortlisted },
+    { key: 'assessment', label: 'Assessment', n: p.assessment },
     { key: 'interview', label: 'Interview', n: p.interview },
+    { key: 'decision', label: 'Final decision', n: p.decision },
     { key: 'offer', label: 'Offer', n: p.offer },
-  ];
+  // Same names as the board. Assessment and Final decision only show when someone is in them, to keep the row short.
+  ].filter((s) => s.n > 0 || (s.key !== 'assessment' && s.key !== 'decision'));
   return (
     <Link href={`/employer/applications?job=${jobId}`} className="flex flex-wrap gap-1.5 group" aria-label="Open candidates for this job">
       {stages.map((s) => (
@@ -89,9 +96,9 @@ export default async function EmployerHomePage() {
   const statCards = [
     { label: 'Applications', sub: 'Last 30 days', value: stats.applications30d.toLocaleString('en-IN'), icon: Users },
     {
-      label: 'Waiting for review', value: stats.waiting.toLocaleString('en-IN'), icon: Clock,
-      sub: stats.waitingOver5d > 0 ? `${stats.waitingOver5d} older than 5 days` : 'All caught up within 5 days',
-      warn: stats.waitingOver5d > 0,
+      label: 'To review', value: stats.toReview.toLocaleString('en-IN'), icon: Clock,
+      sub: stats.overdue > 0 ? `${stats.overdue} waiting more than 5 days` : stats.unseen > 0 ? `${stats.unseen} unseen` : 'No one waiting more than 5 days',
+      warn: stats.overdue > 0,
     },
     { label: 'In interviews', sub: 'Across all jobs', value: stats.inInterview.toLocaleString('en-IN'), icon: CalendarCheck },
     { label: 'Median first reply', sub: 'Last 90 days', value: formatHours(stats.medianFirstReplyHours), icon: MessageSquareReply },
@@ -104,16 +111,16 @@ export default async function EmployerHomePage() {
         <div>
           <h1 className="portal-title">{greeting()}, {hello}</h1>
           <p className="portal-subtitle">
-            {stats.waiting > 0
-              ? `${stats.waiting} candidate${stats.waiting === 1 ? ' is' : 's are'} waiting for a reply.`
+            {stats.toReview > 0
+              ? `${stats.toReview} candidate${stats.toReview === 1 ? '' : 's'} to review${stats.unseen > 0 ? `, ${stats.unseen} unseen` : ''}.`
               : openRoles.length > 0
                 ? `You have ${openRoles.length} active job${openRoles.length === 1 ? '' : 's'}. No one is waiting on you.`
                 : 'Post a job to start receiving candidates.'}
           </p>
         </div>
-        {stats.waiting > 0 ? (
+        {stats.toReview > 0 ? (
           <Link href="/employer/applications?stage=new" className="btn-brand gap-2 shrink-0">
-            Review {stats.waiting} new candidate{stats.waiting === 1 ? '' : 's'} <ArrowRight className="w-4 h-4" aria-hidden />
+            Review {stats.toReview} candidate{stats.toReview === 1 ? '' : 's'} <ArrowRight className="w-4 h-4" aria-hidden />
           </Link>
         ) : canPost ? (
           <Link href="/employer/jobs/new" className="btn-brand gap-2 shrink-0">
@@ -123,39 +130,47 @@ export default async function EmployerHomePage() {
       </div>
 
       {/* Setup checklist */}
-      {isOwner && doneCount < setup.length && (
+      {isOwner && doneCount < setup.length && (() => {
+        // Once only optional steps are left, the checklist can be put away.
+        const onlyOptionalLeft = setup.every((st) => st.done || st.key === 'careers');
+        const card = (
         <section aria-labelledby="setup-title" className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4 sm:p-5 mb-6">
           <div className="flex items-center justify-between gap-4 mb-3">
             <h2 id="setup-title" className="portal-section-title">Finish setting up</h2>
-            <span className="text-sm text-gray-600 dark:text-gray-400 tabular-nums">{doneCount} of {setup.length} done</span>
+            <span className="flex items-center gap-2">
+              <span className="text-sm text-gray-600 dark:text-gray-400 tabular-nums">{doneCount} of {setup.length} done</span>
+              {onlyOptionalLeft && <DismissButton label="Hide the setup checklist" />}
+            </span>
           </div>
           <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden mb-4" role="progressbar" aria-valuemin={0} aria-valuemax={setup.length} aria-valuenow={doneCount} aria-label="Setup progress">
             <div className="h-full bg-brand rounded-full" style={{ width: `${(doneCount / setup.length) * 100}%` }} />
           </div>
+          {/* What's left leads; finished steps collapse into one quiet line. */}
           <ol className="grid gap-1">
-            {setup.map((step) => (
+            {setup.filter((step) => !step.done).map((step) => (
               <li key={step.key}>
-                {step.done ? (
-                  <div className="flex items-center gap-3 px-2 py-2.5 rounded-[10px]">
-                    <span className="w-6 h-6 rounded-full bg-green-600 text-white flex items-center justify-center shrink-0" aria-hidden><Check className="w-3.5 h-3.5" /></span>
-                    <span className="text-sm text-gray-500 dark:text-gray-400 line-through decoration-gray-300">{step.label}</span>
-                    <span className="sr-only">Done</span>
-                  </div>
-                ) : (
-                  <Link href={step.href} className="flex items-center gap-3 px-2 py-2.5 rounded-[10px] hover:bg-gray-50 dark:hover:bg-gray-800/60 group">
-                    <span className="w-6 h-6 rounded-full border-2 border-gray-300 dark:border-gray-600 shrink-0" aria-hidden />
-                    <span className="flex-1 min-w-0">
-                      <span className="block text-sm font-semibold text-gray-900 dark:text-white">{step.label}</span>
-                      <span className="block text-[13px] text-gray-600 dark:text-gray-400">{step.hint}</span>
-                    </span>
-                    <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-brand shrink-0" aria-hidden />
-                  </Link>
-                )}
+                <Link href={step.href} className="flex items-center gap-3 px-2 py-2.5 rounded-[10px] hover:bg-gray-50 dark:hover:bg-gray-800/60 group">
+                  <span className="w-6 h-6 rounded-full border-2 border-gray-300 dark:border-gray-600 shrink-0" aria-hidden />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-semibold text-gray-900 dark:text-white">{step.label}</span>
+                    <span className="block text-[13px] text-gray-600 dark:text-gray-400">{step.hint}</span>
+                  </span>
+                  <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-brand shrink-0" aria-hidden />
+                </Link>
               </li>
             ))}
           </ol>
+          {doneCount > 0 && (
+            <p className="mt-2 px-2 flex items-start gap-2 text-[13px] text-gray-600 dark:text-gray-400">
+              <span className="mt-0.5 w-4 h-4 rounded-full bg-green-600 text-white flex items-center justify-center shrink-0" aria-hidden><Check className="w-3 h-3" /></span>
+              <span><span className="font-semibold text-gray-800 dark:text-gray-200">Done:</span> {setup.filter((step) => step.done).map((step) => step.label).join(' · ')}</span>
+            </p>
+          )}
+          {onlyOptionalLeft && <p className="mt-2 px-2 text-xs text-gray-500">The last step is optional. You can hide this checklist.</p>}
         </section>
-      )}
+        );
+        return onlyOptionalLeft ? <Dismissible storageKey={`employer-setup-hidden:${session.id}`}>{card}</Dismissible> : card;
+      })()}
 
       {/* Stats */}
       <section aria-label="Hiring at a glance" className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
@@ -165,7 +180,7 @@ export default async function EmployerHomePage() {
               <s.icon className="w-4 h-4 shrink-0" aria-hidden />
               <span className="text-[13px] font-medium">{s.label}</span>
             </div>
-            <p className="font-sora font-bold text-2xl text-gray-900 dark:text-white tabular-nums">{s.value}</p>
+            <p className="portal-stat">{s.value}</p>
             <p className={`text-xs mt-0.5 ${s.warn ? 'text-amber-700 dark:text-amber-400 font-semibold' : 'text-gray-500 dark:text-gray-400'}`}>{s.sub}</p>
           </div>
         ))}
@@ -185,7 +200,7 @@ export default async function EmployerHomePage() {
             <span className="w-12 h-12 rounded-[12px] bg-gray-100 dark:bg-gray-800 text-gray-500 flex items-center justify-center mx-auto mb-3" aria-hidden>
               {home.hasAnyJob ? <Briefcase className="w-6 h-6" /> : <FileText className="w-6 h-6" />}
             </span>
-            <p className="text-[15px] font-semibold text-gray-900 dark:text-white">
+            <p className="portal-item-title">
               {home.hasAnyJob ? 'No open roles right now' : 'Post your first job in about 2 minutes'}
             </p>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-sm mx-auto">
@@ -220,7 +235,7 @@ export default async function EmployerHomePage() {
                       <tr key={r.id} className="align-middle">
                         <td className="px-5 py-3">
                           <Link href={`/employer/jobs/${r.id}/edit`} className="font-semibold text-gray-900 dark:text-white hover:text-brand">{r.title}</Link>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{[r.location, WORK_TYPE[r.workType] ?? r.workType].filter(Boolean).join(' · ')}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{placeLine(r.location, WORK_TYPE[r.workType] ?? r.workType)}</p>
                         </td>
                         <td className="px-3 py-3"><StatusChip status={r.status} /></td>
                         <td className="px-3 py-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{r.views.toLocaleString('en-IN')}</td>
@@ -244,8 +259,8 @@ export default async function EmployerHomePage() {
                   <li key={r.id} className="px-4 py-3.5 space-y-2.5">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <Link href={`/employer/jobs/${r.id}/edit`} className="block text-[15px] font-semibold text-gray-900 dark:text-white truncate">{r.title}</Link>
-                        <p className="text-[13px] text-gray-500 dark:text-gray-400">{[r.location, WORK_TYPE[r.workType] ?? r.workType, `${r.views.toLocaleString('en-IN')} views`].filter(Boolean).join(' · ')}</p>
+                        <Link href={`/employer/jobs/${r.id}/edit`} className="block portal-item-title truncate">{r.title}</Link>
+                        <p className="text-[13px] text-gray-500 dark:text-gray-400">{[placeLine(r.location, WORK_TYPE[r.workType] ?? r.workType), `${r.views.toLocaleString('en-IN')} views`].filter(Boolean).join(' · ')}</p>
                       </div>
                       <StatusChip status={r.status} />
                     </div>

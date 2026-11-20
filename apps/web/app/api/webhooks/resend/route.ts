@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { candidateEmailUpdate, resendSignatureValid, suppressionReason } from '@/lib/email/resend-webhook';
+import { handleInboundEmail, type InboundEvent } from '@/lib/support/inbound';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,6 +9,7 @@ export const dynamic = 'force-dynamic';
  * Resend delivery webhook (replaces the retired apps/api /v1/webhooks/resend).
  * Hard bounces and spam complaints unsubscribe the address from newsletters and event campaigns,
  * which protects the sending domain's reputation. Account logins are never touched.
+ * Inbound mail (`email.received`) to the support address becomes a support ticket or a reply (lib/support/inbound.ts).
  */
 export async function POST(request: NextRequest) {
   const raw = await request.text();
@@ -20,6 +22,17 @@ export async function POST(request: NextRequest) {
 
   let event: { type?: string; data?: { email_id?: string; to?: string[]; bounce?: { type?: string } } };
   try { event = JSON.parse(raw); } catch { return NextResponse.json({ error: 'Bad payload' }, { status: 400 }); }
+
+  if (event.type === 'email.received') {
+    try {
+      const result = await handleInboundEmail(event.data as unknown as InboundEvent);
+      return NextResponse.json({ status: result });
+    } catch (err) {
+      // Resend retries on an error, and the email id stops a retry from adding it twice.
+      console.error('[webhooks/resend] inbound email', err instanceof Error ? err.message : err);
+      return NextResponse.json({ error: 'Inbound email failed' }, { status: 500 });
+    }
+  }
 
   // Candidate emails: the hiring team sees whether an interview or rejection email really arrived.
   const candidateStatus = candidateEmailUpdate(event);

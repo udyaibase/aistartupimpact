@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { IN_PIPELINE } from '@/lib/employer/stages';
 import { prisma } from '@udyaibase/database';
 import { requireFounderAuth } from '@/lib/founder-auth';
 import FounderHiringClient from '@/components/founder/FounderHiringClient';
@@ -40,7 +41,7 @@ export default async function FounderHiringPage() {
       WHERE l."employerId" = ANY(${ids}) AND l."deletedAt" IS NULL AND a."withdrawnAt" IS NULL AND a.email NOT LIKE '%@deleted.invalid'
         AND a.status IN ('APPLIED', 'INTERVIEW')
       GROUP BY l."employerId", a.status`,
-    prisma.jobBoardApplication.groupBy({ by: ['listingId'], where: { ...live, status: 'APPLIED', appliedAt: { lt: older5 }, Listing: { employerId: { in: ids }, deletedAt: null } }, _count: { _all: true } }),
+    prisma.jobBoardApplication.groupBy({ by: ['listingId'], where: { ...live, status: 'APPLIED', appliedAt: { lt: older5 }, ...IN_PIPELINE, Listing: { employerId: { in: ids }, deletedAt: null } }, _count: { _all: true } }),
     prisma.jobBoardApplication.groupBy({ by: ['listingId'], where: { ...live, appliedAt: { gte: since30 }, Listing: { employerId: { in: ids }, deletedAt: null } }, _count: { _all: true } }),
   ]) : [[], [], []];
   const listingOwner = ids.length && (waitingLong.length || recent.length)

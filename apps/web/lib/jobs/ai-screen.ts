@@ -187,6 +187,10 @@ export async function screenApplication(applicationId: string, employerId: strin
       app.confirmedSkills.length && `Skills they ticked: ${app.confirmedSkills.join(', ')}`,
     ].filter(Boolean).join('\n');
 
+    // A resume with almost no text (a scan, an image, a near-empty file) isn't read at all: it is neither sent nor
+    // quoted. It used to be sent and quoted while the review said "no readable resume".
+    const readable = resume.length > MIN_RESUME_CHARS ? resume : '';
+
     const user = `<job>
 Title: ${l.title}
 Experience: ${band}
@@ -203,7 +207,7 @@ ${coverNote ? `\nNote from candidate:\n${coverNote}` : ''}
 </candidate_form>
 
 <resume>
-${resume || '(No resume text available. Review the form only and say so in the summary.)'}
+${readable || '(No resume text available. Review the form only and say so in the summary.)'}
 </resume>`;
 
     const data = await openaiChat('ai_screening', {
@@ -215,8 +219,8 @@ ${resume || '(No resume text available. Review the form only and say so in the s
     const raw = JSON.parse(data.choices?.[0]?.message?.content ?? '{}');
 
     const result = validate(raw, {
-      source: norm(`${resume}\n${qa}\n${coverNote}\n${candidateFacts}`), mustList,
-      otherList: l.skills.filter((sk) => !mustList.includes(sk)), confirmed: app.confirmedSkills, resumeRead: resume.length > 50,
+      source: norm(`${readable}\n${qa}\n${coverNote}\n${candidateFacts}`), mustList,
+      otherList: l.skills.filter((sk) => !mustList.includes(sk)), confirmed: app.confirmedSkills, resumeRead: !!readable,
     });
     const { fitScore, recommendation } = scoreOf(result);
 
@@ -237,11 +241,37 @@ ${resume || '(No resume text available. Review the form only and say so in the s
 
 const clip = (v: unknown, n: number) => (typeof v === 'string' ? v.trim().replace(/\s+/g, ' ').slice(0, n) : '');
 
+/** A text as plain words, without the full stops and commas around them ("Face." and "Face" are the same word). */
+const quoteWords = (s: string) => norm(s).split(' ').map((w) => w.replace(/^\.+|\.+$/g, '')).filter(Boolean);
+
+/**
+ * Whether a quote is really from the text when it isn't word-for-word. The model shortens what it quotes: it drops a
+ * few words from the middle ("Built a chatbot for Marathi using Python and PyTorch" becomes "Built a chatbot using
+ * Python.") or ends the sentence early. Demanding an exact match threw that real evidence away, and candidates were
+ * told they had "no evidence of Python" in a resume that names it.
+ * So: every word of the quote must be in the text, in the same order, close together (the quote's length twice over,
+ * plus a little). Nothing may be added, so an invented quote still fails; and very short quotes must match exactly.
+ */
+export function wordsAppearInOrder(quote: string[], text: string[]): boolean {
+  if (quote.length < 3) return false;
+  const reach = quote.length * 2 + 4;
+  for (let start = 0; start < text.length; start++) {
+    if (text[start] !== quote[0]) continue;
+    let q = 1;
+    for (let t = start + 1; t < Math.min(text.length, start + reach) && q < quote.length; t++) if (text[t] === quote[q]) q++;
+    if (q === quote.length) return true;
+  }
+  return false;
+}
+
 /** Keep only well-formed output, and only quotes that really appear in what the candidate wrote. */
 export function validate(raw: any, ctx: { source: string; mustList: string[]; otherList: string[]; confirmed: string[]; resumeRead: boolean }): AiScreenResult {
+  const sourceWords = quoteWords(ctx.source);
   const quoted = (q: string) => {
     const n = norm(q);
-    return n.length >= 3 && ctx.source.includes(n);
+    if (n.length < 3) return false;
+    if (ctx.source.includes(n)) return true;
+    return wordsAppearInOrder(quoteWords(q), sourceWords);
   };
   const strengths = (Array.isArray(raw?.strengths) ? raw.strengths : [])
     .map((s: any) => ({ point: clip(s?.point, 160), evidence: clip(s?.evidence, 200) }))
@@ -279,6 +309,9 @@ export function validate(raw: any, ctx: { source: string; mustList: string[]; ot
  * Fit score from verified judgments only: must-have skills 55, other skills 15, relevant experience 30.
  * A skill the candidate ticked but the resume doesn't show earns a little credit.
  */
+/** Below this much extracted text a resume counts as unreadable. */
+export const MIN_RESUME_CHARS = 50;
+
 export function scoreOf(r: AiScreenResult): { fitScore: number; recommendation: AiRecommendation } {
   const credit = (st: string) => (st === 'evidenced' ? 1 : st === 'claimed' ? 0.3 : 0);
   const avg = (xs: { status: string }[]) => (xs.length ? xs.reduce((n, x) => n + credit(x.status), 0) / xs.length : null);
@@ -288,6 +321,9 @@ export function scoreOf(r: AiScreenResult): { fitScore: number; recommendation: 
   const parts: [number | null, number][] = [[must, 55], [other, 15], [exp, 30]];
   const total = parts.reduce((n, [v, w]) => n + (v == null ? 0 : w), 0);
   const fitScore = Math.round((parts.reduce((n, [v, w]) => n + (v == null ? 0 : v * w), 0) / total) * 100);
-  const recommendation: AiRecommendation = fitScore >= 75 && (must == null || must >= 0.99) ? 'shortlist' : fitScore >= 50 ? 'consider' : 'weak';
+  // Without a readable resume there is only what the candidate typed about themselves: worth a look at most,
+  // never a suggestion to shortlist.
+  const strong = fitScore >= 75 && (must == null || must >= 0.99) && r.resumeRead !== false;
+  const recommendation: AiRecommendation = strong ? 'shortlist' : fitScore >= 50 ? 'consider' : 'weak';
   return { fitScore, recommendation };
 }

@@ -196,3 +196,18 @@ export const careersConfirmPerEmailRateLimit = redis
       prefix: "ratelimit:jobs:notify-to",
     })
   : null;
+
+/** Public job search per IP. Generous: the list page calls it on every filter change, and offices share one IP. */
+export const jobSearchRateLimit = redis
+  ? new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(120, "1 m"), analytics: false, prefix: "ratelimit:jobs:search" })
+  : null;
+
+/** Saving and unsaving jobs, per signed-in person. */
+export const jobSaveRateLimit = redis
+  ? new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(30, "1 m"), analytics: false, prefix: "ratelimit:jobs:save" })
+  : null;
+
+/** Candidate CSV exports per hiring workspace (each one reads up to 5,000 applications). */
+export const candidateExportRateLimit = redis
+  ? new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(20, "1 h"), analytics: false, prefix: "ratelimit:jobs:export" })
+  : null;

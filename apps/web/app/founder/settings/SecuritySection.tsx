@@ -396,7 +396,7 @@ export default function SecuritySection() {
             <form onSubmit={handleDeactivate} className="space-y-4">
               {hasPassword && (<div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Enter your password to confirm</label>
-                <input type="password" autoComplete="current-password" value={deactivatePassword} onChange={(e) => setDeactivatePassword(e.target.value)} required placeholder="Your account password" className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-navy dark:text-white focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 font-jakarta text-sm transition-all" />
+                <input type="password" autoComplete="current-password" value={deactivatePassword} onChange={(e) => setDeactivatePassword(e.target.value)} required placeholder="Enter your password" className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-navy dark:text-white focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 font-jakarta text-sm transition-all" />
               </div>)}
               <button type="submit" disabled={deactivateLoading || (hasPassword && !deactivatePassword)} className="w-full px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                 {deactivateLoading ? 'Deactivating...' : 'Deactivate My Account'}
@@ -457,8 +457,8 @@ export default function SecuritySection() {
                   value={deletePassword}
                   onChange={(e) => setDeletePassword(e.target.value)}
                   required
+                  placeholder="Enter your password"
                   className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-navy dark:text-white focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/20 font-jakarta text-sm transition-all"
-                  placeholder="Your account password"
                 />
               </div>)}
 

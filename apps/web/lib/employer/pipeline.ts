@@ -1,20 +1,17 @@
 import { prisma } from '@udyaibase/database';
-import { newlyFilledJobs, type FilledJob } from '@/lib/employer/job-stages';
+import { closeFilledJobs, type FilledJob } from '@/lib/employer/job-stages';
 import type { JobBoardAppStatus } from '@prisma/client';
 import { sendEmailBatch } from '@/lib/email/send';
+import { roundsOf } from '@/lib/employer/rounds';
+import { ENDED_STAGE, ON_HOLD_STAGE, STAGE_RANK, STAGES, type Outcome } from '@/lib/employer/stages';
 
-/** Board columns. "New" holds both unseen (APPLIED) and seen (REVIEWED) candidates. */
-export const PIPELINE = [
-  { key: 'new', label: 'New', statuses: ['APPLIED', 'REVIEWED'], target: 'REVIEWED' },
-  { key: 'shortlisted', label: 'Shortlisted', statuses: ['SHORTLISTED'], target: 'SHORTLISTED' },
-  { key: 'interview', label: 'Interview', statuses: ['INTERVIEW'], target: 'INTERVIEW' },
-  { key: 'offer', label: 'Offer', statuses: ['OFFER'], target: 'OFFER' },
-  { key: 'hired', label: 'Hired', statuses: ['HIRED'], target: 'HIRED' },
-  { key: 'rejected', label: 'Rejected', statuses: ['REJECTED'], target: 'REJECTED' },
-] as const satisfies readonly { key: string; label: string; statuses: readonly JobBoardAppStatus[]; target: JobBoardAppStatus }[];
+/** Board columns (see lib/employer/stages.ts). "New" holds both unseen (APPLIED) and seen (REVIEWED) candidates. */
+export const PIPELINE = [...STAGES, ENDED_STAGE, ON_HOLD_STAGE] as const satisfies readonly { key: string; label: string; statuses: readonly JobBoardAppStatus[]; target: JobBoardAppStatus }[];
 
 export type StageKey = (typeof PIPELINE)[number]['key'];
-export const MOVABLE: JobBoardAppStatus[] = ['REVIEWED', 'SHORTLISTED', 'INTERVIEW', 'OFFER', 'HIRED', 'REJECTED'];
+export const MOVABLE: JobBoardAppStatus[] = ['REVIEWED', 'SHORTLISTED', 'ASSESSMENT', 'INTERVIEW', 'DECISION', 'OFFER', 'HIRED', 'REJECTED', 'ON_HOLD'];
+
+export { UNDECIDED, ACTIVE_WAITING, WAIT_AMBER_DAYS, WAIT_RED_DAYS, waitLevel } from '@/lib/employer/stages';
 
 export function stageOf(status: string): StageKey {
   return (PIPELINE.find((s) => (s.statuses as readonly string[]).includes(status))?.key ?? 'new') as StageKey;
@@ -45,6 +42,11 @@ export const STAGE_TEMPLATES: Partial<Record<JobBoardAppStatus, EmailTemplate>> 
     sendByDefault: false,
     subject: 'Welcome to {{company}}!',
     body: 'Hi {{firstName}},\n\nWelcome aboard! We’re excited to have you join {{company}} as {{jobTitle}}. We’ll be in touch about your first day.\n\nThe {{company}} team',
+  },
+  ON_HOLD: {
+    sendByDefault: false,
+    subject: 'Your application for {{jobTitle}} at {{company}}',
+    body: 'Hi {{firstName}},\n\nThanks for your patience. We liked your profile for the {{jobTitle}} role and we’d like to keep your application open while we finish our first round of conversations. We’ll get back to you within a few weeks.\n\nBest,\nThe {{company}} team',
   },
   REJECTED: {
     sendByDefault: true,
@@ -88,7 +90,7 @@ export interface MoveEmail {
 
 export interface MoveResult {
   moved: number; skipped: number; emailed: number; scheduled: number; failed: number;
-  /** After a move to Hired: jobs that are still open but now have every position filled (the UI offers to close them). */
+  /** After someone joined: jobs whose every opening is now joined (closed as filled; the UI offers the closing emails). */
   filledJobs?: FilledJob[];
 }
 
@@ -105,11 +107,24 @@ export async function moveApplications(opts: {
   toStatus: JobBoardAppStatus;
   email?: MoveEmail | null;
   batchKey: string;
+  /** Exit reason (Rejected, optional for On hold) and note; internal only. */
+  reason?: string | null;
+  note?: string | null;
+  /** On hold: when to come back to them. */
+  holdUntil?: Date | null;
+  /** Interview: which round (defaults to the job's first). */
+  round?: string | null;
+  /** Ending an application (status REJECTED): how it ended, and who gave the reason. Defaults to the team rejecting. */
+  outcome?: Outcome | null;
+  reasonBy?: 'TEAM' | 'CANDIDATE' | null;
+  /** Hired: the agreed joining date, and whether they've already joined. */
+  joiningDate?: Date | null;
+  joined?: boolean;
 }): Promise<MoveResult> {
   const { employerId, toStatus, batchKey } = opts;
   const apps = await prisma.jobBoardApplication.findMany({
     where: { id: { in: opts.ids.slice(0, 1000) }, Listing: { employerId } },
-    select: { id: true, status: true, fullName: true, email: true, withdrawnAt: true, firstResponseAt: true, reviewedAt: true, listingId: true, Listing: { select: { title: true } } },
+    select: { id: true, status: true, fullName: true, email: true, withdrawnAt: true, firstResponseAt: true, reviewedAt: true, listingId: true, interviewRound: true, sourcedState: true, holdFromStatus: true, Listing: { select: { title: true, interviewRounds: true, assessment: true } } },
   });
 
   const result: MoveResult = { moved: 0, skipped: opts.ids.length - apps.length, emailed: 0, scheduled: 0, failed: 0 };
@@ -118,12 +133,14 @@ export async function moveApplications(opts: {
   const hiredInto: string[] = [];
 
   for (const a of apps) {
-    if (a.withdrawnAt || (a.status === toStatus && toStatus !== 'REVIEWED')) { result.skipped++; continue; }
+    // Sourced people join the pipeline only once they say they're interested.
+    if (a.withdrawnAt || (a.status === toStatus && toStatus !== 'REVIEWED') || a.sourcedState === 'ADDED' || a.sourcedState === 'CONTACTED') { result.skipped++; continue; }
+    const ending = toStatus === 'REJECTED';
     const idempotencyKey = `${a.id}:${toStatus}:${batchKey}`;
     try {
       const eventId = await prisma.$transaction(async (tx) => {
         const ev = await tx.jobBoardApplicationEvent.create({
-          data: { applicationId: a.id, fromStatus: a.status, toStatus, actorEmail: opts.actorEmail, idempotencyKey },
+          data: { applicationId: a.id, fromStatus: a.status, toStatus, actorEmail: opts.actorEmail, idempotencyKey, reasonCode: opts.reason ?? (skippedStep(a.status, toStatus, !!a.Listing.assessment) ? 'SKIPPED_STEP' : null) },
           select: { id: true },
         });
         await tx.jobBoardApplication.update({
@@ -132,14 +149,32 @@ export async function moveApplications(opts: {
             status: toStatus,
             statusChangedAt: now,
             reviewedAt: a.reviewedAt ?? now,
+            // Reason and come-back date describe the current stage only; moving back into the pipeline clears them.
+            exitReason: ending || toStatus === 'ON_HOLD' ? opts.reason ?? null : null,
+            exitNote: toStatus === 'REJECTED' || toStatus === 'ON_HOLD' ? opts.note ?? null : null,
+            onHoldUntil: toStatus === 'ON_HOLD' ? opts.holdUntil ?? null : null,
+            // Entering Interview starts at the job's first round (or keeps the round they were in); Final decision keeps
+            // the last round they reached; anything else clears it.
+            interviewRound: toStatus === 'INTERVIEW' ? (opts.round ?? a.interviewRound ?? roundsOf(a.Listing.interviewRounds)[0]) : toStatus === 'DECISION' ? a.interviewRound : null,
+            // On hold remembers the stage it came from, so the owner can resume there.
+            holdFromStatus: toStatus === 'ON_HOLD' ? (a.status === 'ON_HOLD' ? a.holdFromStatus : a.status) : null,
+            outcome: ending ? opts.outcome ?? 'REJECTED' : null,
+            outcomeReasonBy: ending ? (opts.reason ? opts.reasonBy ?? 'TEAM' : null) : null,
+            joiningDate: toStatus === 'HIRED' ? opts.joiningDate ?? null : null,
+            joinedAt: toStatus === 'HIRED' && opts.joined ? now : null,
             // "Reviewed" alone isn't a reply; any other move is the candidate's first response.
             ...(!a.firstResponseAt && toStatus !== 'REVIEWED' ? { firstResponseAt: now } : {}),
           },
         });
+        // Leaving the process (turned down, withdrawn or hired) closes an assessment they haven't handed in, so the
+        // link stops working. No email: the stage email, if any, says what happened.
+        if (ending || toStatus === 'HIRED') {
+          await tx.jobBoardAssessment.updateMany({ where: { applicationId: a.id, status: 'SENT' }, data: { status: 'CANCELLED' } });
+        }
         return ev.id;
       });
       result.moved++;
-      if (toStatus === 'HIRED') hiredInto.push(a.listingId);
+      if (toStatus === 'HIRED' && opts.joined) hiredInto.push(a.listingId);
       const deleted = a.email.endsWith('@deleted.invalid');
       if (opts.email && !deleted) {
         const vars = {
@@ -176,8 +211,21 @@ export async function moveApplications(opts: {
       });
     }));
   }
-  if (hiredInto.length) result.filledJobs = await newlyFilledJobs(hiredInto);
+  if (hiredInto.length) result.filledJobs = await closeFilledJobs(hiredInto, opts.actorEmail);
   return result;
+}
+
+/**
+ * A forward move that jumps over a stage the job uses (e.g. Screening straight to Interview) is allowed and recorded,
+ * so reports can tell a skipped step from one that was done.
+ */
+export function skippedStep(from: string, to: string, hasAssessment: boolean): boolean {
+  const a = STAGE_RANK[from];
+  const b = STAGE_RANK[to];
+  if (a == null || b == null || b <= a + 1) return false;
+  // Without an assessment, Screening → Interview is the normal next step.
+  const gap = b - a - (!hasAssessment && a < STAGE_RANK.ASSESSMENT && b > STAGE_RANK.ASSESSMENT ? 1 : 0);
+  return gap > 1;
 }
 
 /** Next 10:00 IST after now, for "send tomorrow morning". */

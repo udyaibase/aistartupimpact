@@ -1,14 +1,13 @@
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
-import { getEmployerSession } from '@/lib/employer-auth';
-import { can, forbidden } from '@/lib/employer/permissions';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 export async function GET() {
   try {
-    const session = await getEmployerSession();
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (!can(session.role, 'insights.view')) return forbidden();
+    const guard = await employerApi('insights.view');
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     // Overall stats
     const stats = await sql`

@@ -6,6 +6,8 @@ import { ensureOwnerMember, internalAccountEmail } from '@/lib/employer/owners';
 import { ownerInboxes } from '@/lib/employer/team';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 import { button, esc, shell } from '@/lib/jobs/apply-emails';
+import { publishWaiting } from '@/lib/employer/publish';
+import { markStep } from '@/lib/employer/onboarding';
 
 /** passwordHash marker for workspaces that sign in through the founder portal (never a valid bcrypt hash). */
 export const FOUNDER_SSO_MARKER = '!founder-sso';
@@ -116,6 +118,7 @@ export async function openFounderWorkspace(founderUserId: string, startupId: str
           });
         })();
     employerId = employer.id;
+    if (!byEmail) await markStep(employerId, 'WORKSPACE_CREATED', { path: 'founder' });
   }
 
   // Jobs posted for this startup belong to its workspace.
@@ -123,7 +126,11 @@ export async function openFounderWorkspace(founderUserId: string, startupId: str
 
   const e = await prisma.jobBoardEmployer.findUniqueOrThrow({ where: { id: employerId } });
   const member = await ensureOwnerMember(e.id, { email: founder.email, name: founder.name });
-  for (const to of adoptedFrom.filter((o) => o !== founder.email.toLowerCase())) sendWorkspaceVerifiedEmail(to, founder.name ?? founder.email, startup.name);
+  // Jobs the team already pressed Publish on go live now (whoever pressed Publish is emailed).
+  const released = await publishWaiting(e.id);
+  if (!released.published.length) {
+    for (const to of adoptedFrom.filter((o) => o !== founder.email.toLowerCase())) sendWorkspaceVerifiedEmail(to, founder.name ?? founder.email, startup.name);
+  }
   await setEmployerSession(
     { id: e.id, email: e.email, companyName: e.companyName, slug: e.slug, plan: e.plan, onboardingCompleted: true },
     member ? { id: member.id, email: member.email } : undefined,

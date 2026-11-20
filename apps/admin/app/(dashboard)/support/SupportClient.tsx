@@ -18,7 +18,19 @@ interface Ticket {
   assignedTo: string | null;
   createdAt: string;
   updatedAt: string;
+  replyDueAt: string | null;
+  firstReplyAt: string | null;
+  planAtOpen: string | null;
   _count: { messages: number };
+}
+
+/** The first-reply promise: replied, or due / overdue (wall-clock hours; the promise itself counts working hours). */
+function replyDue(t: Ticket): { text: string; cls: string } {
+  if (t.firstReplyAt) return { text: 'Replied', cls: 'text-gray-400' };
+  if (!t.replyDueAt || ['RESOLVED', 'CLOSED'].includes(t.status)) return { text: '—', cls: 'text-gray-400' };
+  const h = (new Date(t.replyDueAt).getTime() - Date.now()) / 36e5;
+  const span = Math.abs(h) < 1 ? `${Math.max(1, Math.round(Math.abs(h) * 60))} min` : Math.abs(h) < 48 ? `${Math.round(Math.abs(h))} h` : `${Math.round(Math.abs(h) / 24)} days`;
+  return h < 0 ? { text: `Overdue ${span}`, cls: 'text-red-600 font-semibold' } : { text: `In ${span}`, cls: h < 2 ? 'text-amber-600 font-semibold' : 'text-gray-600' };
 }
 
 interface Stats {
@@ -159,6 +171,7 @@ export default function SupportClient() {
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Portal</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Priority</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Reply due</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Created</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Msgs</th>
                   <th className="px-4 py-3"></th>
@@ -176,6 +189,7 @@ export default function SupportClient() {
                     <td className="px-4 py-3"><span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${PORTAL_COLORS[t.portal]}`}>{PORTAL_LABELS[t.portal]}</span></td>
                     <td className={`px-4 py-3 text-xs font-medium ${PRIORITY_COLORS[t.priority]}`}>{t.priority}</td>
                     <td className="px-4 py-3"><span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${STATUS_COLORS[t.status]}`}>{STATUS_LABELS[t.status]}</span></td>
+                    <td className={`px-4 py-3 text-xs whitespace-nowrap ${replyDue(t).cls}`}>{replyDue(t).text}{t.planAtOpen ? <span className="block text-[10px] text-gray-400 font-normal">{t.planAtOpen}</span> : null}</td>
                     <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">{timeAgo(t.createdAt)}</td>
                     <td className="px-4 py-3 text-xs text-gray-400">{t._count.messages}</td>
                     <td className="px-4 py-3">

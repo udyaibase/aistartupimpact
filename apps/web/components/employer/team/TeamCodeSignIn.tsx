@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Loader2, Mail } from 'lucide-react';
+import CodeInput from '@/components/ui/CodeInput';
+import { CONTROL_FIELD, CONTROL_LABEL, CONTROL_PRIMARY_BRAND } from '@/lib/ui/form-controls';
+import TurnstileWidget from '@/components/shared/TurnstileWidget';
 
 type Choice = { employerId: string; companyName: string; logoUrl: string | null; role: string; invited: boolean };
 
@@ -18,9 +21,17 @@ export default function TeamCodeSignIn({ onRequires2FA }: { onRequires2FA?: (cha
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
-  const codeRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => { if (step === 'code') codeRef.current?.focus(); }, [step]);
+  // The human check runs once, before a code is emailed. A token works once, so it is cleared after use and the
+  // check shows again if they come back to this step.
+  const turnstileToken = useRef('');
+  const [checkKey, setCheckKey] = useState(0);
+  // A new code can be asked for once the server's 60-second gap has passed.
+  const [resendIn, setResendIn] = useState(0);
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
 
   async function post(body: Record<string, string>) {
     setBusy(true);
@@ -46,35 +57,44 @@ export default function TeamCodeSignIn({ onRequires2FA }: { onRequires2FA?: (cha
     if (d.redirect) window.location.href = d.redirect;
   }
 
-  const input = 'w-full min-h-[44px] px-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-base sm:text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30';
-  const primary = 'w-full min-h-[44px] rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold inline-flex items-center justify-center gap-2 disabled:opacity-50';
+  // The sixth digit signs in by itself; the ref always points at the latest verify (it reads the current code).
+  const verifyRef = useRef(() => {});
+  verifyRef.current = () => { if (!busy) verify(); };
+
+  const input = CONTROL_FIELD;
+  const primary = CONTROL_PRIMARY_BRAND;
 
   return (
     <div className="font-jakarta space-y-3">
       {step === 'email' && (
-        <form onSubmit={async (e) => { e.preventDefault(); const d = await post({ step: 'send', email }); if (d) { setInfo(d.message); setStep('code'); } }} className="space-y-3" noValidate>
+        <form onSubmit={async (e) => { e.preventDefault(); const d = await post({ step: 'send', email, turnstileToken: turnstileToken.current }); turnstileToken.current = ''; if (d) { setInfo(d.message); setCode(''); setResendIn(60); setStep('code'); } else setCheckKey((k) => k + 1); }} className="space-y-3" noValidate>
           <div>
-            <label htmlFor="tm-email" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Work email</label>
+            <label htmlFor="tm-email" className={CONTROL_LABEL}>Work email</label>
             <div className="relative">
               <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" aria-hidden />
               <input id="tm-email" type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" className={`${input} pl-10`} />
             </div>
           </div>
+          <TurnstileWidget key={checkKey} onSuccess={(token) => { turnstileToken.current = token; }} onExpire={() => { turnstileToken.current = ''; }} />
           <button type="submit" disabled={busy || !email.trim()} className={primary}>
             {busy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} Email me a sign-in code
           </button>
         </form>
       )}
       {step === 'code' && (
-        <form onSubmit={(e) => { e.preventDefault(); verify(); }} className="space-y-3" noValidate>
+        <form onSubmit={(e) => { e.preventDefault(); verify(); }} className="space-y-3 text-center" noValidate>
           <p className="text-[13px] text-gray-600 dark:text-gray-400">{info}</p>
-          <label htmlFor="tm-code" className="block text-xs font-semibold text-gray-700 dark:text-gray-300">6-digit code sent to {email}</label>
-          <input id="tm-code" ref={codeRef} inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} className={`${input} text-center tracking-[0.3em] font-semibold`} />
+          <label htmlFor="tm-code" className="block text-sm font-medium text-gray-800 dark:text-gray-200">Enter the 6-digit code sent to <span className="block font-normal truncate">{email}</span></label>
+          <CodeInput id="tm-code" autoFocus value={code} onChange={setCode} disabled={busy} onComplete={() => verifyRef.current()} />
           <button type="submit" disabled={busy || code.length !== 6} className={primary}>
             {busy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} Sign in
           </button>
-          <button type="button" onClick={() => { setStep('email'); setCode(''); setError(''); }} className="w-full min-h-[40px] text-sm text-gray-600 dark:text-gray-400 hover:underline">Use a different email</button>
+          {/* Asking again goes back one step with the email kept, because each code request needs the human check. */}
+          <button type="button" disabled={resendIn > 0} onClick={() => { setStep('email'); setCode(''); setError(''); setCheckKey((k) => k + 1); }}
+            className="w-full min-h-[40px] text-sm font-semibold text-gray-800 dark:text-gray-200 hover:underline disabled:font-normal disabled:text-gray-500 disabled:no-underline">
+            {resendIn > 0 ? `Didn’t get it? You can ask for a new code in ${resendIn}s` : 'Didn’t get it? Send a new code'}
+          </button>
+          <button type="button" onClick={() => { setStep('email'); setEmail(''); setCode(''); setError(''); setCheckKey((k) => k + 1); }} className="w-full min-h-[40px] text-sm text-gray-600 dark:text-gray-400 hover:underline">Use a different email</button>
         </form>
       )}
       {step === 'choose' && (
@@ -82,7 +102,7 @@ export default function TeamCodeSignIn({ onRequires2FA }: { onRequires2FA?: (cha
           <p className="text-[13px] text-gray-600 dark:text-gray-400">You&apos;re on more than one hiring team. Which one?</p>
           {choices.map((c) => (
             <button key={c.employerId} type="button" onClick={() => verify(c.employerId)} disabled={busy}
-              className="w-full min-h-[52px] px-3 flex items-center gap-3 rounded-xl border border-gray-300 dark:border-gray-700 text-left hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
+              className="w-full min-h-[52px] px-3 flex items-center gap-3 rounded-md border border-gray-300 dark:border-gray-700 text-left hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
               {c.logoUrl
                 // eslint-disable-next-line @next/next/no-img-element
                 ? <img src={c.logoUrl} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0" />

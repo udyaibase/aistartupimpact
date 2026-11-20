@@ -1,3 +1,4 @@
+import { salaryText } from '@/lib/jobs/format';
 import { articlePath } from '@/lib/seo';
 import Link from 'next/link';
 import BackToListLink from '@/components/shared/BackToListLink';
@@ -165,8 +166,8 @@ const getStartup = cache(async (slug: string) => {
         : Promise.resolve([]),
       sql`
         SELECT jl.id, jl.title, jl.slug, jl.city AS location, jl."workType" AS type,
-               jl."salaryMin" AS "salaryRangeMin", jl."salaryMax" AS "salaryRangeMax",
-               jl."publishedAt"::text AS "createdAt", 'board' AS source
+               jl."salaryMin" AS "salaryRangeMin", jl."salaryMax" AS "salaryRangeMax", jl."salaryCurrency", jl."showSalary",
+               jl."publishedAt"::text AS "createdAt", 'board' AS source, e.slug AS "companySlug"
         FROM "JobBoardListing" jl
         LEFT JOIN "JobBoardEmployer" e ON e.id = jl."employerId"
         WHERE e."startupId" = ${s.id}
@@ -174,7 +175,7 @@ const getStartup = cache(async (slug: string) => {
           AND jl.status = 'OPEN' AND jl."moderationHold" = false AND jl."deletedAt" IS NULL
           AND (jl."expiresAt" IS NULL OR jl."expiresAt" > NOW()) AND jl."showOnProfile" = true
         ORDER BY jl."publishedAt" DESC
-        LIMIT 10
+        LIMIT 50
       `,
       sql`
         SELECT id, title, slug, excerpt, "publishedAt"::text AS "publishedAt", "contentText"
@@ -947,8 +948,8 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
               <h2 className="section-title flex items-center gap-2">
                 <Briefcase className="w-4 h-4 text-brand" /> Jobs at {startup.name}
               </h2>
-              <Link href="/jobs" className="text-brand font-semibold text-xs sm:text-sm hover:underline flex items-center gap-1 font-jakarta">
-                View all jobs &rsaquo;
+              <Link href={startup.jobs?.[0]?.companySlug ? `/jobs/company/${startup.jobs[0].companySlug}` : '/jobs'} className="text-brand font-semibold text-xs sm:text-sm hover:underline flex items-center gap-1 font-jakarta">
+                {startup.jobs?.length ? `${startup.jobs.length} open role${startup.jobs.length === 1 ? '' : 's'}` : 'View all jobs'} &rsaquo;
               </Link>
             </div>
             
@@ -967,12 +968,10 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
                         <span>{job.location || 'Remote'}</span>
                         <span>·</span>
                         <span>{job.type?.replace(/_/g, ' ') || 'Full Time'}</span>
-                        {job.salaryRangeMin && (
+                        {job.showSalary !== false && salaryText({ salaryMin: job.salaryRangeMin, salaryMax: job.salaryRangeMax, salaryCurrency: job.salaryCurrency ?? 'INR' }) && (
                           <>
                             <span>·</span>
-                            <span>
-                              ${(job.salaryRangeMin / 1000).toFixed(0)}k - ${(job.salaryRangeMax / 1000).toFixed(0)}k
-                            </span>
+                            <span>{salaryText({ salaryMin: job.salaryRangeMin, salaryMax: job.salaryRangeMax, salaryCurrency: job.salaryCurrency ?? 'INR' })}</span>
                           </>
                         )}
                       </div>

@@ -14,6 +14,8 @@ import { logEmployerActivity } from '@/lib/workspace-activity';
 
 
 export const dynamic = 'force-dynamic';
+/** A real bcrypt hash of nothing anyone uses: compared against when there is no password to check. */
+const DUMMY_HASH = bcrypt.hashSync('no-such-account', 12);
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 15;
 
@@ -52,36 +54,29 @@ export async function POST(request: NextRequest) {
       LIMIT 1
     `;
 
-    if (employers.length === 0) {
-      return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
-    }
+    // Every failed sign-in gets this one answer. Different answers for "no such account", "wrong password",
+    // "locked" or "this account has no password" would let anyone check which emails have a hiring account.
+    const denied = () => NextResponse.json(
+      { error: 'That email and password don’t match. You can also sign in with a code sent to your email.', useCode: true },
+      { status: 401 },
+    );
 
     const employer = employers[0] as any;
-
-    // Workspaces opened from the founder portal have no password of their own.
-    if (employer.passwordHash === FOUNDER_SSO_MARKER) {
-      return NextResponse.json({ error: 'This account signs in with your founder account. Use “Continue with your founder account” below.', code: 'founder_sso' }, { status: 401 });
-    }
-    if (employer.passwordHash === CODE_ONLY_MARKER) {
-      return NextResponse.json({ error: 'This account has no password. Sign in with a code sent to your email above.', code: 'code_only', useCode: true }, { status: 401 });
+    // No account, or one that never had a password (founder sign-in, code-only): still spend the time a real
+    // password check takes, so the response time doesn't give the answer away either.
+    if (!employer || employer.passwordHash === FOUNDER_SSO_MARKER || employer.passwordHash === CODE_ONLY_MARKER || !employer.passwordHash) {
+      await bcrypt.compare(String(password), DUMMY_HASH);
+      return denied();
     }
 
-    // Check if account is active
-    if (!employer.isActive) {
-      return NextResponse.json({ error: 'Account is suspended. Contact support.' }, { status: 403 });
-    }
-
-    // Check if account is locked
+    // Locked after too many wrong passwords: no password is tried until the lock ends. The security alert email
+    // (sent when the lock started) tells the real owner what happened.
     if (employer.lockedUntil) {
       const lockExpiry = new Date(employer.lockedUntil + 'Z');
-      if (lockExpiry > new Date()) {
-        const minutesLeft = Math.ceil((lockExpiry.getTime() - Date.now()) / 60000);
-        return NextResponse.json({
-          error: `Account locked due to too many failed attempts. Try again in ${minutesLeft} minute${minutesLeft !== 1 ? 's' : ''}.`
-        }, { status: 429 });
-      }
+      if (lockExpiry > new Date()) return denied();
       // Lock expired — reset
       await sql`UPDATE "JobBoardEmployer" SET "lockedUntil" = NULL, "failedLoginAttempts" = 0 WHERE id = ${employer.id}`;
+      employer.failedLoginAttempts = 0;
     }
 
     // Verify password
@@ -107,19 +102,20 @@ export async function POST(request: NextRequest) {
           html: securityAlertHtml(employer.companyName, newAttempts, LOCKOUT_MINUTES, resetUrl),
           type: 'security_alert',
         });
-
-        return NextResponse.json({
-          error: `Account locked for ${LOCKOUT_MINUTES} minutes due to too many failed attempts. A security alert has been sent to your email.`
-        }, { status: 429 });
+      } else {
+        await sql`UPDATE "JobBoardEmployer" SET "failedLoginAttempts" = ${newAttempts} WHERE id = ${employer.id}`;
       }
+      return denied();
+    }
 
-      // Increment failed attempts
-      await sql`UPDATE "JobBoardEmployer" SET "failedLoginAttempts" = ${newAttempts} WHERE id = ${employer.id}`;
-
-      const remaining = MAX_FAILED_ATTEMPTS - newAttempts;
-      return NextResponse.json({
-        error: `Invalid email or password. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining before account lockout.`
-      }, { status: 401 });
+    // From here the password was right, so saying more about the account tells a stranger nothing.
+    if (!employer.isActive) {
+      return NextResponse.json({ error: 'Account is suspended. Contact support.' }, { status: 403 });
+    }
+    // An address nobody has confirmed must not become a session: other checks (switching teams) trust the
+    // signed-in email. The email code confirms it and signs in.
+    if (!employer.emailVerified) {
+      return NextResponse.json({ error: 'Confirm your email first: sign in with a code sent to your email.', useCode: true }, { status: 403 });
     }
 
     // ✅ Password correct — reset failed attempts + update last login
@@ -133,13 +129,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (employer.deactivatedAt) {
+      // A password alone never brings a workspace back: the email code sign-in does, and it keeps two-step sign-in.
       return NextResponse.json({
         deactivated: true,
-        deactivatedAt: employer.deactivatedAt,
-        message: 'Your account has been deactivated. Would you like to reactivate it?',
+        useCode: true,
         error: 'This workspace is deactivated. Sign in with an email code to reactivate it.',
-        reactivateUrl: '/api/employer/reactivate',
-      });
+      }, { status: 403 });
     }
 
     if (employer.twoFactorEnabled) {

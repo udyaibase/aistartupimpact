@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { randomUUID } from 'crypto';
 import { cookies } from 'next/headers';
 import { SignJWT, jwtVerify } from 'jose';
+import { markStep } from '@/lib/employer/onboarding';
 import { prisma } from '@udyaibase/database';
 import { sql } from '@/lib/db';
 import { sendEmail, sendEmailFireAndForget } from '@/lib/email/send';
@@ -66,7 +67,7 @@ export async function sendSignupCode(email: string): Promise<{ ok: true } | { ok
     VALUES (gen_random_uuid()::text, ${email}, ${hashOtp(code)}, ${SIGNUP_PURPOSE}, ${new Date(Date.now() + 600_000).toISOString()}::timestamp, NOW())`;
   const sent = await sendEmail({
     to: email,
-    subject: `${code} is your Udyaibase code`,
+    subject: 'Your Udyaibase code',
     type: 'employer_signup_code',
     html: shell(`
 <h1 style="font-size:20px;margin:0 0 8px">Your code</h1>
@@ -186,6 +187,7 @@ export async function createWorkspace(email: string, startup: StartupRow | null,
     if (startup && isUniqueClash(err)) return { taken: true };
     throw err;
   }
+  await markStep(made.employerId, 'WORKSPACE_CREATED', { path: 'signup' });
   await enter(made.employerId, made.memberId, email);
   return { employerId: made.employerId };
 }
@@ -214,6 +216,7 @@ export async function addCompany(email: string, name: string, website: string) {
     await tx.startup.update({ where: { id: startup.id }, data: { submittedBy: employerSubmitter(w.employerId) } });
     return w;
   });
+  await markStep(made.employerId, 'WORKSPACE_CREATED', { path: 'signup' });
   await enter(made.employerId, made.memberId, email);
   return { created: { employerId: made.employerId } };
 }

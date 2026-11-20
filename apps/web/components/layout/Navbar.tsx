@@ -4,11 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
-import {
-  Search, X, Menu, Moon, Sun, Monitor,
-  Home, Newspaper, BookOpen, Wrench, Flag, Building2, TrendingUp, Users, Star,
-  Briefcase, CalendarDays, Globe, Mail, Info, ChevronRight, Rocket, LogOut, User, Bookmark, LayoutDashboard,
-} from 'lucide-react';
+import { Search, X, Menu, Moon, Sun, Monitor, Home, Newspaper, BookOpen, Wrench, Flag, Building2, TrendingUp, Users, Star, Briefcase, CalendarDays, Globe, Mail, Info, ChevronRight, Rocket, LogOut, User, Bookmark, LayoutDashboard } from 'lucide-react';
 import { useTheme } from '@/components/ThemeProvider';
 import { useUser } from '@/components/UserProvider';
 import SearchOverlay from './SearchOverlay';
@@ -318,6 +314,49 @@ export default function Navbar() {
 
           {/* Scrollable content */}
           <nav className="flex-1 overflow-y-auto overscroll-contain py-2">
+            {/* Signed in: their own things first (applications, saved, events), then the site. */}
+            {showProfile && user && (
+              <>
+                <div className="px-2">
+                  <p className="px-3 py-1.5 text-[10px] font-jakarta font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Account</p>
+                  <Link href="/profile" onClick={() => setMobileOpen(false)}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-jakarta font-medium text-gray-600 dark:text-gray-400 active:bg-gray-100 dark:active:bg-gray-800 transition-colors">
+                    <User className="w-[18px] h-[18px] shrink-0 text-gray-400 dark:text-gray-500" />
+                    Profile
+                  </Link>
+                  <Link href="/profile#saved" onClick={() => setMobileOpen(false)}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-jakarta font-medium text-gray-600 dark:text-gray-400 active:bg-gray-100 dark:active:bg-gray-800 transition-colors">
+                    <Bookmark className="w-[18px] h-[18px] shrink-0 text-gray-400 dark:text-gray-500" />
+                    Saved
+                  </Link>
+                  <Link href="/my-applications" onClick={() => setMobileOpen(false)}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-jakarta font-medium text-gray-600 dark:text-gray-400 active:bg-gray-100 dark:active:bg-gray-800 transition-colors">
+                    <Briefcase className="w-[18px] h-[18px] shrink-0 text-gray-400 dark:text-gray-500" />
+                    My Applications
+                  </Link>
+                  <Link href="/events/my-events" onClick={() => setMobileOpen(false)}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-jakarta font-medium text-gray-600 dark:text-gray-400 active:bg-gray-100 dark:active:bg-gray-800 transition-colors">
+                    <CalendarDays className="w-[18px] h-[18px] shrink-0 text-gray-400 dark:text-gray-500" />
+                    My Events
+                  </Link>
+                  {user.founderId && (
+                    <Link href="/founder/dashboard" onClick={() => setMobileOpen(false)}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-jakarta font-medium text-gray-600 dark:text-gray-400 active:bg-gray-100 dark:active:bg-gray-800 transition-colors">
+                      <LayoutDashboard className="w-[18px] h-[18px] shrink-0 text-gray-400 dark:text-gray-500" />
+                      Founder Dashboard
+                    </Link>
+                  )}
+                  {user.organizerId && (
+                    <Link href="/organizer" onClick={() => setMobileOpen(false)}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-jakarta font-medium text-gray-600 dark:text-gray-400 active:bg-gray-100 dark:active:bg-gray-800 transition-colors">
+                      <LayoutDashboard className="w-[18px] h-[18px] shrink-0 text-gray-400 dark:text-gray-500" />
+                      Organizer Dashboard
+                    </Link>
+                  )}
+                </div>
+                <div className="my-2 mx-4 border-t border-gray-100 dark:border-gray-800" />
+              </>
+            )}
             {/* Main Navigation */}
             <div className="px-2">
               {mobileMenuNav.map((item) => {
@@ -358,44 +397,6 @@ export default function Navbar() {
               ))}
             </div>
 
-            {/* User account links when signed in */}
-            {showProfile && user && (
-              <>
-                <div className="my-2 mx-4 border-t border-gray-100 dark:border-gray-800" />
-                <div className="px-2">
-                  <p className="px-3 py-1.5 text-[10px] font-jakarta font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Account</p>
-                  <Link href="/profile" onClick={() => setMobileOpen(false)}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-jakarta font-medium text-gray-600 dark:text-gray-400 active:bg-gray-100 dark:active:bg-gray-800 transition-colors">
-                    <User className="w-[18px] h-[18px] shrink-0 text-gray-400 dark:text-gray-500" />
-                    Profile
-                  </Link>
-                  <Link href="/profile#saved" onClick={() => setMobileOpen(false)}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-jakarta font-medium text-gray-600 dark:text-gray-400 active:bg-gray-100 dark:active:bg-gray-800 transition-colors">
-                    <Bookmark className="w-[18px] h-[18px] shrink-0 text-gray-400 dark:text-gray-500" />
-                    Saved
-                  </Link>
-                  <Link href="/events/my-events" onClick={() => setMobileOpen(false)}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-jakarta font-medium text-gray-600 dark:text-gray-400 active:bg-gray-100 dark:active:bg-gray-800 transition-colors">
-                    <CalendarDays className="w-[18px] h-[18px] shrink-0 text-gray-400 dark:text-gray-500" />
-                    My Events
-                  </Link>
-                  {user.founderId && (
-                    <Link href="/founder/dashboard" onClick={() => setMobileOpen(false)}
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-jakarta font-medium text-gray-600 dark:text-gray-400 active:bg-gray-100 dark:active:bg-gray-800 transition-colors">
-                      <LayoutDashboard className="w-[18px] h-[18px] shrink-0 text-gray-400 dark:text-gray-500" />
-                      Founder Dashboard
-                    </Link>
-                  )}
-                  {user.organizerId && (
-                    <Link href="/organizer" onClick={() => setMobileOpen(false)}
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-jakarta font-medium text-gray-600 dark:text-gray-400 active:bg-gray-100 dark:active:bg-gray-800 transition-colors">
-                      <LayoutDashboard className="w-[18px] h-[18px] shrink-0 text-gray-400 dark:text-gray-500" />
-                      Organizer Dashboard
-                    </Link>
-                  )}
-                </div>
-              </>
-            )}
           </nav>
 
           {/* Footer actions — pinned at bottom */}

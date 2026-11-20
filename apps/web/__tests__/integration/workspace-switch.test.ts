@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const db = vi.hoisted(() => ({ jobBoardTeamMember: { findFirst: vi.fn(), update: vi.fn() } }));
-const session = vi.hoisted(() => ({ current: null as null | { email: string; id: string } }));
+const db = vi.hoisted(() => ({ jobBoardTeamMember: { findFirst: vi.fn(), update: vi.fn() }, jobBoardEmployer: { findUnique: vi.fn() } }));
+const session = vi.hoisted(() => ({ current: null as null | { email: string; id: string; memberId?: string | null } }));
 const setEmployerSession = vi.hoisted(() => vi.fn());
 vi.mock('@udyaibase/database', () => ({ prisma: db }));
 vi.mock('@/lib/employer-auth', () => ({ getEmployerSession: async () => session.current, setEmployerSession }));
@@ -13,7 +13,7 @@ const call = async (employerId: string) => {
 };
 
 describe('POST /api/employer/workspaces/switch', () => {
-  beforeEach(() => { vi.clearAllMocks(); session.current = { email: 'priya@acme.ai', id: 'e1' }; });
+  beforeEach(() => { vi.clearAllMocks(); session.current = { email: 'priya@acme.ai', id: 'e1', memberId: 'm1' }; });
 
   it('needs a session', async () => {
     session.current = null;
@@ -24,6 +24,14 @@ describe('POST /api/employer/workspaces/switch', () => {
     db.jobBoardTeamMember.findFirst.mockResolvedValue(null);
     expect((await call('e2')).status).toBe(403);
     expect(db.jobBoardTeamMember.findFirst.mock.calls[0][0].where).toMatchObject({ employerId: 'e2', email: 'priya@acme.ai', status: 'ACTIVE' });
+    expect(setEmployerSession).not.toHaveBeenCalled();
+  });
+
+  it('a password sign-in whose email was never confirmed cannot switch teams on the strength of that email', async () => {
+    session.current = { email: 'priya@acme.ai', id: 'e1', memberId: null };
+    db.jobBoardEmployer.findUnique.mockResolvedValue({ emailVerified: false });
+    expect((await call('e2')).status).toBe(403);
+    expect(db.jobBoardTeamMember.findFirst).not.toHaveBeenCalled();
     expect(setEmployerSession).not.toHaveBeenCalled();
   });
 

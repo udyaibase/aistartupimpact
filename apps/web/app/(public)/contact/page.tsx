@@ -246,7 +246,7 @@ export default function ContactPage() {
                 For startup or tool listing issues, try re-submitting from your{' '}
                 <a href="/founder/login" className="text-brand hover:underline">founder dashboard</a>.
                 For job board questions, visit{' '}
-                <a href="/employer/login" className="text-brand hover:underline">employer settings</a>.
+                <Link href="/employer/login" className="text-brand hover:underline">employer settings</Link>.
               </p>
             </div>
 

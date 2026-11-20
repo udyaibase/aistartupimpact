@@ -1,3 +1,4 @@
+import { salaryText } from '@/lib/jobs/format';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
@@ -709,7 +710,7 @@ export default async function HomePage() {
                   </span>
                   {job.showSalary && job.salaryMax && (
                     <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 font-jakarta">
-                      {job.salaryCurrency === 'INR' ? '₹' : '$'}{(job.salaryMax / 100000).toFixed(0)}L+
+                      {salaryText(job)}
                     </span>
                   )}
                 </div>

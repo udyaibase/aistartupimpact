@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { Building2, Save, Link2, Unlink, ExternalLink, CheckCircle2 } from 'lucide-react';
 import ClaimStartup, { AskFounder } from '@/components/employer/ClaimStartup';
+import { FounderAskForm } from '@/components/employer/jobs/WaitingScreen';
 import Link from 'next/link';
 import { CityPicker, CountryPicker } from '@udyaibase/utils/src/LocationPickers';
 import { useExtraCities } from '@/components/shared/useExtraCities';
@@ -86,9 +87,9 @@ export default function EmployerCompanyPage() {
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-6">
-        <Building2 className="w-5 h-5 text-brand" />
-        <h1 className="font-sora font-extrabold text-xl text-navy dark:text-white">Company Profile</h1>
+      <div className="mb-6">
+        <h1 className="portal-title">Company profile</h1>
+        <p className="portal-subtitle">What candidates see about you on every job: logo, description, website and location.</p>
       </div>
 
       {message && (
@@ -116,7 +117,21 @@ export default function EmployerCompanyPage() {
                 </div>
               </div>
             ) : (
-              <div className="mb-3">
+              <div className="mb-3 space-y-3">
+                {company.companyReview === 'APPROVED' && (
+                  <p className="text-sm font-jakarta p-3 rounded-xl border border-blue-200 bg-blue-50 text-blue-900 dark:bg-blue-950/30 dark:border-blue-900/50 dark:text-blue-200">
+                    <span className="font-semibold">Email verified.</span> Our team checked your company, so you can have 2 live jobs. Once your founder verifies {company.startupName}, the limit goes and your jobs get the verified tick.
+                  </p>
+                )}
+                {company.companyReview === 'PENDING' && (
+                  <p className="text-sm font-jakarta p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:border-amber-800/50 dark:text-amber-200">
+                    <span className="font-semibold">We’re checking your company</span> (same working day, Mon–Sat). Your waiting job goes live by itself once it passes.
+                  </p>
+                )}
+                <FounderAskForm clearance={{
+                  state: 'founder', note: null, startupName: company.startupName, startupSlug: company.startupSlug, startupVerified: !!company.startupIsVerified,
+                  founderAskEmail: company.founderAskEmail ?? null, founderAskedAt: company.founderAskedAt ?? null, linkedinUrl: null, cin: null,
+                }} />
                 <AskFounder startupName={company.startupName} slug={company.startupSlug} startupVerified={!!company.startupIsVerified} />
               </div>
             )}

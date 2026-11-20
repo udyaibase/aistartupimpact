@@ -1,5 +1,9 @@
 'use client';
 
+
+import JobAlertSignup from '@/components/jobs/JobAlertSignup';
+import Link from 'next/link';
+import WhatsAppChannelCard from '@/components/jobs/WhatsAppChannelCard';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Briefcase, Loader2 } from 'lucide-react';
@@ -31,11 +35,14 @@ interface Props {
   initialJobs: any[];
   initialTotal: number;
   workTypeCounts: { workType: string; count: number }[];
+  categoryCounts?: { category: string; count: number }[];
+  /** The WhatsApp jobs channel is set: offer it beside the email alert. */
+  whatsappChannel?: boolean;
   children?: React.ReactNode;
 }
 
 /** The /jobs list. The page is cached without filters; filtered pages come from /api/jobs/search. */
-export default function JobsBrowser({ initialJobs, initialTotal, workTypeCounts, children }: Props) {
+export default function JobsBrowser({ initialJobs, initialTotal, workTypeCounts, categoryCounts = [], whatsappChannel = false, children }: Props) {
   const [filters, setFilters] = useState('');
   const [jobs, setJobs] = useState(initialJobs);
   const [total, setTotal] = useState(initialTotal);
@@ -100,6 +107,7 @@ export default function JobsBrowser({ initialJobs, initialTotal, workTypeCounts,
     currentDatePosted: get('datePosted'),
     total,
     workTypeCounts,
+    categoryCounts,
   };
 
   return (
@@ -124,10 +132,16 @@ export default function JobsBrowser({ initialJobs, initialTotal, workTypeCounts,
           {/* Count + sort — desktop */}
           <div className="hidden lg:flex items-center justify-between mb-4">
             <p className="font-sora font-bold text-sm text-navy dark:text-white flex items-center gap-2">
-              {total > 0 ? `${total}+` : '0'} <span className="font-normal text-gray-500 dark:text-gray-400 font-jakarta">{total === 1 ? 'job' : 'jobs'}</span>
+              {total} <span className="font-normal text-gray-500 dark:text-gray-400 font-jakarta">{total === 1 ? 'job' : 'jobs'}</span>
               {loading && <Loader2 className="w-4 h-4 animate-spin text-gray-400" aria-label="Loading jobs" />}
             </p>
             <SortDropdown currentSort={get('sort')} />
+          </div>
+
+          {/* The one job-alert sign-up on this page (it follows the current filters). */}
+          <div id="job-alert" className="scroll-mt-40">
+          <JobAlertSignup key={`${get('category')}|${get('city')}|${get('workType')}`} category={get('category') ?? null} city={get('city') ?? null} remote={get('workType') === 'REMOTE'} />
+          {whatsappChannel && <div className="-mt-2 mb-4 px-1"><WhatsAppChannelCard from="jobs" variant="inline" /></div>}
           </div>
 
           <div className={loading ? 'opacity-50 pointer-events-none transition-opacity' : 'transition-opacity'} aria-busy={loading}>
@@ -136,8 +150,9 @@ export default function JobsBrowser({ initialJobs, initialTotal, workTypeCounts,
                 <Briefcase className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
                 <h2 className="font-sora font-bold text-lg text-navy dark:text-white mb-2">No jobs found</h2>
                 <p className="text-sm text-gray-500 font-jakarta mb-4">
-                  Try adjusting your filters or search query.
+                  Try fewer filters or a different search.
                 </p>
+                <Link href="/jobs" scroll={false} className="inline-flex items-center min-h-[44px] px-4 rounded-lg border border-gray-300 dark:border-gray-700 text-sm font-semibold font-jakarta text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800">Clear all filters</Link>
               </div>
             ) : (
               <JobListClient jobs={jobs} total={total} onLoadMore={loadMore} loadingMore={loadingMore} />

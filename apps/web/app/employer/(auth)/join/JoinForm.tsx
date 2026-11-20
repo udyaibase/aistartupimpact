@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { InviteEmail } from '@/components/invite/InviteFrame';
+import { CONTROL_FIELD, CONTROL_LABEL, CONTROL_PRIMARY } from '@/lib/ui/form-controls';
 
-export default function JoinForm({ token }: { token: string }) {
+export default function JoinForm({ token, email }: { token: string; email: string }) {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -29,18 +31,20 @@ export default function JoinForm({ token }: { token: string }) {
   }
 
   return (
-    <form onSubmit={submit} className="mt-6 space-y-3" noValidate>
+    <form onSubmit={submit} className="mt-7 space-y-4" noValidate>
+      <InviteEmail email={email} />
       <div>
-        <label htmlFor="join-name" className="block text-sm font-semibold text-gray-900 dark:text-white mb-1.5">Your name</label>
-        <input id="join-name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" maxLength={80} placeholder="e.g. Priya Sharma"
-          className="w-full min-h-[44px] px-3 rounded-[10px] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-base sm:text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#A50F15]/25 focus:border-[#A50F15]"
-          aria-invalid={!!error || undefined} aria-describedby={error ? 'join-error' : undefined} />
-        <p className="mt-1 text-xs text-gray-500">Teammates see this on notes and mentions.</p>
+        <label htmlFor="join-name" className={CONTROL_LABEL}>Full name</label>
+        <input id="join-name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" maxLength={80} placeholder="Your name"
+          className={CONTROL_FIELD} aria-invalid={!!error || undefined} aria-describedby={error ? 'join-error' : 'join-name-hint'} />
+        <p id="join-name-hint" className="mt-1 text-xs text-gray-500 dark:text-gray-400">Teammates see this on notes and mentions. No password needed: you’ll sign in with an email code.</p>
       </div>
-      {error && <p id="join-error" role="alert" className="text-sm text-red-700 dark:text-red-400">{error}</p>}
-      <button type="submit" disabled={busy || name.trim().length < 2} className="btn-brand w-full gap-2 disabled:opacity-50">
-        {busy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} Join team
-      </button>
+      {error && <p id="join-error" role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      <div className="pt-2">
+        <button type="submit" disabled={busy || name.trim().length < 2} className={CONTROL_PRIMARY}>
+          {busy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} {busy ? 'Joining…' : 'Join team'}
+        </button>
+      </div>
     </form>
   );
 }

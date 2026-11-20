@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { searchJobs, JOB_SEARCH_KEYS, type JobSearchFilters } from '@/lib/jobs/search';
+import { getClientIdentifier } from '@/lib/rate-limit';
+import { jobSearchRateLimit } from '@/lib/event-rate-limit';
 
 export const dynamic = 'force-dynamic';
 
 /** Filtered pages for the /jobs list (the page itself is cached without filters). ?limit is capped at 100. */
 export async function GET(req: NextRequest) {
+  // Stops one address hammering the search. If the limiter itself is unreachable the search still works:
+  // reading public jobs should never go down with it.
+  if (jobSearchRateLimit) {
+    const limited = await jobSearchRateLimit.limit(getClientIdentifier(req)).then((r) => !r.success).catch(() => false);
+    if (limited) return NextResponse.json({ error: 'Too many searches. Try again in a minute.' }, { status: 429 });
+  }
   const sp = req.nextUrl.searchParams;
   const filters: JobSearchFilters = {};
   for (const key of JOB_SEARCH_KEYS) filters[key] = sp.get(key);

@@ -43,7 +43,7 @@ export default function EmployerSignupPage() {
       <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-0 lg:gap-0 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 shadow-xl shadow-gray-200/50 dark:shadow-black/30">
 
         {/* Left — Benefits panel */}
-        <div className="relative bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 p-5 sm:p-6 lg:p-12 flex flex-col justify-between overflow-hidden">
+        <div className="relative bg-gradient-to-br from-[#A50F15] via-[#8E0D12] to-[#5C070B] p-5 sm:p-6 lg:p-12 flex flex-col justify-between overflow-hidden">
           <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'40\' height=\'40\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M0 0h40v40H0z\' fill=\'none\'/%3E%3Cpath d=\'M20 0v40M0 20h40\' stroke=\'%23fff\' stroke-width=\'.5\'/%3E%3C/svg%3E")', backgroundSize: '40px 40px' }} />
 
           <div className="relative z-10">
@@ -52,7 +52,7 @@ export default function EmployerSignupPage() {
               <div className="w-9 h-9 lg:w-10 lg:h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
                 <Briefcase className="w-4 h-4 lg:w-5 lg:h-5 text-white" />
               </div>
-              <span className="font-sora font-bold text-white text-xs lg:text-sm tracking-wide uppercase">Employer Portal</span>
+              <span className="font-sora font-bold text-white text-xs lg:text-sm tracking-wide uppercase">Employer portal</span>
             </div>
 
             <h2 className="font-sora font-extrabold text-xl lg:text-3xl text-white leading-tight mb-2 lg:mb-3">
@@ -109,7 +109,7 @@ export default function EmployerSignupPage() {
         <div className="p-5 sm:p-8 lg:p-12 flex flex-col justify-center">
           <div className="w-full max-w-sm mx-auto">
             <div className="mb-5 lg:mb-6">
-              <h1 className="font-sora font-extrabold text-lg sm:text-xl lg:text-2xl text-gray-900 dark:text-white">Start hiring on Udyaibase</h1>
+              <h1 className="font-sora font-extrabold text-xl sm:text-2xl leading-tight text-gray-900 dark:text-white">Start hiring on Udyaibase</h1>
               <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-jakarta mt-1">Free to start. No password, no card.</p>
             </div>
             <SignupFlow />

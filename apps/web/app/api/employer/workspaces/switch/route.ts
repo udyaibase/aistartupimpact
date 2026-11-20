@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { getEmployerSession, setEmployerSession } from '@/lib/employer-auth';
+import { setEmployerSession } from '@/lib/employer-auth';
 import { needsTwoFactor } from '@/lib/employer/sign-in';
 import { writeLimited } from '@/lib/employer/write-limit';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,10 +14,18 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   const limited = await writeLimited(request, 'workspaces/switch');
   if (limited) return limited;
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ error: 'Please sign in again.' }, { status: 401 });
+  const guard = await employerApi();
+  if (guard.error) return guard.error;
+  const session = guard.session;
   const { employerId } = await request.json().catch(() => ({}));
   if (typeof employerId !== 'string' || !employerId) return NextResponse.json({ error: 'Choose a team.' }, { status: 400 });
+
+  // Switching trusts the signed-in email. A teammate proved theirs with an email code; a password sign-in to the
+  // workspace account only counts once that account's email has been confirmed.
+  if (!session.memberId) {
+    const account = await prisma.jobBoardEmployer.findUnique({ where: { id: session.id }, select: { emailVerified: true } });
+    if (!account?.emailVerified) return NextResponse.json({ error: 'Sign in with an email code to switch teams.' }, { status: 403 });
+  }
 
   const m = await prisma.jobBoardTeamMember.findFirst({
     where: { employerId, email: session.email.toLowerCase(), status: 'ACTIVE', Employer: { isActive: true, deactivatedAt: null, deletedAt: null } },

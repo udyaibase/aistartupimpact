@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getEmployerSession } from '@/lib/employer-auth';
 import { can } from '@/lib/employer/roles';
-import { listTeam } from '@/lib/employer/team';
+import { listTeam, teamForViewer } from '@/lib/employer/team';
 import { prisma } from '@udyaibase/database';
 import TeamManager from '@/components/employer/team/TeamManager';
 
@@ -18,7 +18,7 @@ export default async function TeamPage() {
   ]);
   return (
     <TeamManager
-      initialTeam={team}
+      initialTeam={teamForViewer(team, session)}
       jobs={jobs}
       initialRequireApproval={employer?.requireJobApproval ?? false}
       canManage={can(session.role, 'team.manage')}

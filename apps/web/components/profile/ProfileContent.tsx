@@ -255,8 +255,8 @@ function SecurityTab() {
           </div>
         ) : (
           <div className="space-y-3">
-            <PasswordField label="Current password" hideLabel placeholder="Current password" autoComplete="current-password" value={passwords.current} onChange={(v) => setPasswords({ ...passwords, current: v })} />
-            <PasswordField label="New password" hideLabel placeholder="New password" autoComplete="new-password" value={passwords.newPass} onChange={(v) => setPasswords({ ...passwords, newPass: v })} showRules={passwords.newPass.length > 0} />
+            <PasswordField label="Current password" autoComplete="current-password" value={passwords.current} onChange={(v) => setPasswords({ ...passwords, current: v })} />
+            <PasswordField label="New password" autoComplete="new-password" value={passwords.newPass} onChange={(v) => setPasswords({ ...passwords, newPass: v })} showRules={passwords.newPass.length > 0} />
             <div className="flex gap-2">
               <button onClick={handleChangePassword} disabled={saving} className="px-4 py-2 text-xs font-semibold bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg disabled:opacity-50">{saving ? 'Updating...' : 'Update'}</button>
               <button onClick={() => { setChangingPassword(false); setPasswords({ current: '', newPass: '', confirm: '' }); setError(''); }} className="px-4 py-2 text-xs font-medium text-gray-500 hover:text-gray-700">Cancel</button>
@@ -405,7 +405,7 @@ function SecurityTab() {
             }} className="space-y-3">
               {hasPassword && (<div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Enter your password</label>
-                <input type="password" autoComplete="current-password" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} required placeholder="Your account password" className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500" />
+                <input type="password" autoComplete="current-password" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} required placeholder="Enter your password" className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500" />
               </div>)}
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Type <span className="font-bold text-red-600">DELETE</span> to confirm</label>

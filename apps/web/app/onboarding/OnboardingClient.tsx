@@ -22,10 +22,13 @@ type CityResult = { id: string; name: string; state: string | null; country: str
 
 export default function OnboardingClient({
   categories,
+  jobRoles = [],
   returnTo,
   userName,
 }: {
   categories: Category[];
+  /** Roles with open jobs (for "Find Jobs"), most jobs first. */
+  jobRoles?: { value: string; label: string; count: number }[];
   returnTo: string;
   userName: string;
 }) {
@@ -35,6 +38,8 @@ export default function OnboardingClient({
 
   const [primaryIntent, setPrimaryIntent] = useState<string | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
+  const [jobRole, setJobRole] = useState<string | null>(null);
+  const forJobs = primaryIntent === 'looking_for_jobs' && jobRoles.length > 0;
   const [cityId, setCityId] = useState<string | null>(null);
   const [cityQuery, setCityQuery] = useState('');
   const [cityResults, setCityResults] = useState<CityResult[]>([]);
@@ -105,7 +110,9 @@ export default function OnboardingClient({
         cityId: cityId || undefined,
       });
       if ('success' in result) {
-        router.push(returnTo);
+        // Nowhere particular to go back to: open the part of the site they said they came for.
+        const START: Record<string, string> = { looking_for_jobs: jobRole ? `/jobs?category=${encodeURIComponent(jobRole)}` : '/jobs', exploring_tools: '/tools', following_startups: '/startups' };
+        router.push(returnTo === '/' && primaryIntent && START[primaryIntent] ? START[primaryIntent] : returnTo);
         router.refresh();
         return;
       }
@@ -195,8 +202,47 @@ export default function OnboardingClient({
         </div>
       )}
 
+      {/* Step 2 for job seekers: the role they want (AI-tool topics don't help them). */}
+      {step === 2 && forJobs && (
+        <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+          <h1 className="text-2xl font-bold text-center text-slate-900 dark:text-white mb-2">
+            What role are you looking for?
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 text-center mb-8 text-sm">
+            We&apos;ll show you those jobs first. You can change the filter anytime.
+          </p>
+          <div role="radiogroup" aria-label="Role" className="flex flex-wrap gap-2 justify-center">
+            {jobRoles.map((r) => (
+              <button
+                key={r.value}
+                type="button"
+                role="radio"
+                aria-checked={jobRole === r.value}
+                onClick={() => setJobRole(jobRole === r.value ? null : r.value)}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                  jobRole === r.value
+                    ? 'bg-brand text-white shadow-md'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-brand/60'
+                }`}
+              >
+                {r.label} <span className={jobRole === r.value ? 'text-white/80' : 'text-slate-400'}>· {r.count}</span>
+              </button>
+            ))}
+          </div>
+          <div className="mt-8 flex gap-3">
+            <button onClick={() => { setJobRole(null); handleSkipStep(); }} className="flex-1 py-3 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
+              Any role
+            </button>
+            <button onClick={() => setStep(3)} disabled={!jobRole}
+              className="flex-1 py-3 bg-brand text-white rounded-xl font-medium text-sm hover:bg-brand/90 transition-colors flex items-center justify-center gap-1 disabled:opacity-50">
+              Continue <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Step 2: Interests */}
-      {step === 2 && (
+      {step === 2 && !forJobs && (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
           <h1 className="text-2xl font-bold text-center text-slate-900 dark:text-white mb-2">
             Pick your interests

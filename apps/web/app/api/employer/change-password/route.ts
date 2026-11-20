@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { passwordProblem } from "@/lib/password-rules";
 import { prisma } from '@udyaibase/database';
 import bcrypt from 'bcryptjs';
-import { requireEmployerAuth, sessionCutoff, setEmployerSession } from '@/lib/employer-auth';
+import { sessionCutoff, setEmployerSession } from '@/lib/employer-auth';
 import { changePasswordSchema, validateInput } from '@/lib/validation';
-import { can, forbidden } from '@/lib/employer/permissions';
 import { passwordSignInOpen } from '@/lib/employer/sign-in-policy';
 import { writeLimited } from '@/lib/employer/write-limit';
 import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,8 +16,9 @@ export async function POST(request: NextRequest) {
     const limited = await writeLimited(request, 'change-password', 'sensitive');
     if (limited) return limited;
 
-    const session = await requireEmployerAuth();
-    if (!can(session.role, 'account.manage')) return forbidden();
+    const guard = await employerApi('account.manage');
+    if (guard.error) return guard.error;
+    const session = guard.session;
     if (!passwordSignInOpen()) {
       return NextResponse.json({ success: false, error: 'Password sign-in has ended. You sign in with an email code now.' }, { status: 400 });
     }

@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { getEmployerSession, type EmployerRole } from '@/lib/employer-auth';
-import { can, forbidden } from '@/lib/employer/permissions';
+import { type EmployerRole } from '@/lib/employer-auth';
+import { can } from '@/lib/employer/permissions';
 import { INVITE_TTL_DAYS, cleanJobIds, hashToken, listTeam, newInviteToken, sendInviteEmail, sendJoinApprovedEmail } from '@/lib/employer/team';
 import { effectivePlan } from '@/lib/employer/plans';
 import { ownerChangeProblem } from '@/lib/employer/owners';
 import { writeLimited } from '@/lib/employer/write-limit';
 import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
 import { maskEmail } from '@/lib/mask';
+import { seatsUsed } from '@/lib/employer/counts';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,9 +24,9 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ mem
   const limited = await writeLimited(request, 'team/[memberId]');
   if (limited) return limited;
   const { memberId } = await props.params;
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
-  if (!can(session.role, 'team.manage')) return forbidden();
+  const guard = await employerApi('team.manage');
+  if (guard.error) return guard.error;
+  const session = guard.session;
   const member = await own(memberId, session.id);
   if (!member) return NextResponse.json({ error: 'Teammate not found.' }, { status: 404 });
   const b = await request.json().catch(() => ({}));
@@ -38,7 +40,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ mem
     }
     const e = await prisma.jobBoardEmployer.findUnique({ where: { id: session.id }, select: { plan: true, planExpiresAt: true, planIsTrial: true, companyName: true } });
     const plan = e ? effectivePlan(e) : null;
-    const seats = 1 + await prisma.jobBoardTeamMember.count({ where: { employerId: session.id, status: { in: ['PENDING', 'ACTIVE'] } } });
+    const seats = await seatsUsed(session.id);
     if (plan?.maxSeats != null && seats >= plan.maxSeats) {
       return NextResponse.json({ error: `The ${plan.name} plan includes ${plan.maxSeats} seats, including you. Remove someone or upgrade to approve this request.`, code: 'seat_limit' }, { status: 403 });
     }
@@ -82,9 +84,9 @@ export async function DELETE(_request: NextRequest, props: { params: Promise<{ m
   const limited = await writeLimited(_request, 'team/[memberId]');
   if (limited) return limited;
   const { memberId } = await props.params;
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
-  if (!can(session.role, 'team.manage')) return forbidden();
+  const guard = await employerApi('team.manage');
+  if (guard.error) return guard.error;
+  const session = guard.session;
   const member = await own(memberId, session.id);
   if (!member) return NextResponse.json({ error: 'Teammate not found.' }, { status: 404 });
   if (member.id === session.memberId) return NextResponse.json({ error: 'You can’t remove yourself. Ask another owner.' }, { status: 400 });

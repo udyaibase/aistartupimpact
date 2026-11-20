@@ -5,6 +5,7 @@ import { foundingEligible, FOUNDING_LIMIT, planPrice, planSoldName, PLANS, type 
 import BillingClient from '@/components/employer/billing/BillingClient';
 import { invoicesEnabled } from '@/lib/billing/invoice';
 import { BILLING_SELECT, profileFromRow } from '@/lib/billing/details';
+import { seatsUsed } from '@/lib/employer/counts';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Plans & billing' };
@@ -21,7 +22,7 @@ export default async function BillingPage() {
     }),
     prisma.jobBoardListing.count({ where: { employerId: session.id, status: 'OPEN', deletedAt: null } }),
     prisma.jobBoardEmployer.findUnique({ where: { id: session.id }, select: { ...BILLING_SELECT, email: true, companyName: true, foundingMemberAt: true, foundingLostAt: true } }),
-    prisma.jobBoardTeamMember.count({ where: { employerId: session.id, status: { in: ['PENDING', 'ACTIVE'] } } }),
+    seatsUsed(session.id),
     prisma.jobBoardEmployer.count({ where: { foundingMemberAt: { not: null } } }),
   ]);
   const founding = billing ? foundingEligible(billing, billing.foundingMemberAt ? 0 : foundingMembers) : false;
@@ -34,7 +35,7 @@ export default async function BillingPage() {
       ai={status!.ai}
       aiAutoScreen={status!.aiAutoScreen}
       openJobs={openJobs}
-      seatsUsed={1 + teammates}
+      seatsUsed={teammates}
       cycle={status!.cycle}
       founding={{ eligible: founding, member: !!billing?.foundingMemberAt && founding, placesLeft: Math.max(0, FOUNDING_LIMIT - foundingMembers) }}
       plans={keys.map((k) => ({

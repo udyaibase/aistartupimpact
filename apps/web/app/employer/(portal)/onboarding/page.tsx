@@ -3,6 +3,8 @@ import { getEmployerSession } from '@/lib/employer-auth';
 import { prisma } from '@udyaibase/database';
 import OnboardingClient from './OnboardingClient';
 
+export const metadata = { title: 'Get started' };
+
 export default async function EmployerOnboardingPage() {
   const session = await getEmployerSession();
 

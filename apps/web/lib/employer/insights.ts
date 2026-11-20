@@ -1,12 +1,15 @@
 import { prisma } from '@udyaibase/database';
+import { overdueWhere, toReviewByJob } from '@/lib/employer/counts';
+import { CHANNEL_LABEL, IN_PIPELINE, channelOf } from '@/lib/employer/stages';
 
 /** Pipeline order for the funnel; REJECTED is not a stage reached. */
-const RANK: Record<string, number> = { APPLIED: 0, REVIEWED: 0, SHORTLISTED: 1, INTERVIEW: 2, OFFER: 3, HIRED: 4 };
-export const FUNNEL = ['Applied', 'Shortlisted', 'Interview', 'Offer', 'Hired'] as const;
+/** Furthest stage reached: Assessment and Final decision count with Screening and Interview so jobs without them compare. */
+const RANK: Record<string, number> = { APPLIED: 0, REVIEWED: 0, SHORTLISTED: 1, ASSESSMENT: 1, INTERVIEW: 2, DECISION: 2, OFFER: 3, HIRED: 4 };
+export const FUNNEL = ['Applied', 'Screening', 'Interview', 'Offer', 'Hired'] as const;
 
 export const SOURCE_LABEL: Record<string, string> = {
   JOBS_PAGE: 'Udyaibase AI Jobs', STARTUP_PROFILE: 'Startup profile', GOOGLE: 'Google', WIDGET: 'Your website',
-  CAREERS_PAGE: 'Careers page', REFERRAL: 'Referral', DIRECT: 'Direct link', OTHER: 'Other',
+  CAREERS_PAGE: 'Careers page', REFERRAL: 'Referral', DIRECT: 'Direct link', OTHER: 'Other', IMPORTED: 'Imported', SOURCED: 'Sourced',
 };
 
 const median = (xs: number[]) => {
@@ -23,13 +26,14 @@ export async function loadInsights(employerId: string, days: number) {
   const now = Date.now();
   const since = new Date(now - days * 864e5);
   const prevSince = new Date(now - 2 * days * 864e5);
-  const notErased = { NOT: { email: { endsWith: '@deleted.invalid' } } };
+  // Sourced people who haven't said they're interested aren't applications (they're counted separately below).
+  const notErased = { NOT: { email: { endsWith: '@deleted.invalid' } }, ...IN_PIPELINE };
 
-  const [apps, prevCount, jobs, waiting] = await Promise.all([
+  const [apps, prevCount, jobs, waiting, sourcedAdded, sourcedInterested, inNew] = await Promise.all([
     prisma.jobBoardApplication.findMany({
       where: { Listing: { employerId }, appliedAt: { gte: since }, ...notErased },
       select: {
-        id: true, listingId: true, status: true, source: true, appliedAt: true, firstResponseAt: true, withdrawnAt: true,
+        id: true, listingId: true, status: true, source: true, utmSource: true, appliedAt: true, firstResponseAt: true, withdrawnAt: true,
         Events: { select: { toStatus: true } },
       },
     }),
@@ -40,9 +44,11 @@ export async function loadInsights(employerId: string, days: number) {
       orderBy: { publishedAt: 'desc' },
       take: 50,
     }),
-    prisma.jobBoardApplication.count({
-      where: { Listing: { employerId, status: 'OPEN' }, status: { in: ['APPLIED', 'REVIEWED'] }, withdrawnAt: null, appliedAt: { lt: new Date(now - 5 * 864e5) }, ...notErased },
-    }),
+    prisma.jobBoardApplication.count({ where: overdueWhere(employerId, null, now) }),
+    // Sourcing is counted on its own: people the team found and added, and how many said they're interested.
+    prisma.jobBoardApplication.count({ where: { Listing: { employerId }, source: 'SOURCED', appliedAt: { gte: since } } }),
+    prisma.jobBoardApplication.count({ where: { Listing: { employerId }, source: 'SOURCED', interestedAt: { gte: since } } }),
+    toReviewByJob(employerId),
   ]);
 
   // Responsiveness: hours from applying to the first stage change or email.
@@ -54,8 +60,8 @@ export async function loadInsights(employerId: string, days: number) {
   const reached = apps.map((a) => Math.max(RANK[a.status] ?? 0, ...a.Events.map((e) => RANK[e.toStatus] ?? 0)));
   const funnel = FUNNEL.map((label, i) => ({ label, count: reached.filter((r) => r >= i).length }));
 
-  const bySource = Object.entries(apps.reduce<Record<string, number>>((m, a) => ({ ...m, [a.source]: (m[a.source] ?? 0) + 1 }), {}))
-    .map(([key, count]) => ({ key, label: SOURCE_LABEL[key] ?? key, count }))
+  const bySource = Object.entries(apps.reduce<Record<string, number>>((m, a) => { const k = channelOf(a.source, a.utmSource); return { ...m, [k]: (m[k] ?? 0) + 1 }; }, {}))
+    .map(([key, count]) => ({ key, label: CHANNEL_LABEL[key] ?? SOURCE_LABEL[key] ?? key, count }))
     .sort((a, b) => b.count - a.count);
 
   const daily: { day: string; count: number }[] = [];
@@ -72,7 +78,8 @@ export async function loadInsights(employerId: string, days: number) {
       id: j.id, title: j.title, status: j.moderationHold ? 'REVIEW' : j.status, views: j.viewsCount,
       total: j._count.Applications, inRange: mine.length,
       applyRate: j.viewsCount > 0 ? j._count.Applications / j.viewsCount : null,
-      waiting: mine.filter((a) => (a.status === 'APPLIED' || a.status === 'REVIEWED') && !a.withdrawnAt).length,
+      // Everyone still in the New stage for this job, whenever they applied (the same number the Jobs page shows).
+      waiting: inNew[j.id] ?? 0,
       medianResponseHours: median(resp),
     };
   });
@@ -85,6 +92,14 @@ export async function loadInsights(employerId: string, days: number) {
     medianResponseHours: median(responseHours),
     repliedWithin2Days: answerable.length ? within2d / answerable.length : null,
     waitingOver5Days: waiting,
+    /** Applied (came in themselves) vs found by the team, and how many of each reached Screening. */
+    intake: {
+      applied: apps.filter((a) => a.source !== 'SOURCED').length,
+      sourced: sourcedAdded,
+      sourcedInterested,
+      appliedToScreening: apps.filter((a, i) => a.source !== 'SOURCED' && reached[i] >= 1).length,
+      sourcedToScreening: apps.filter((a, i) => a.source === 'SOURCED' && reached[i] >= 1).length,
+    },
     funnel,
     bySource,
     daily,

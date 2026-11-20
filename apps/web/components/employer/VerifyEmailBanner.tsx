@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShieldAlert, Loader2, CheckCircle2, ArrowRight } from 'lucide-react';
+import CodeInput from '@/components/ui/CodeInput';
 
 /** Lets an unverified employer finish email verification from anywhere in the portal. */
 export default function VerifyEmailBanner({ email }: { email: string }) {
@@ -12,7 +13,6 @@ export default function VerifyEmailBanner({ email }: { email: string }) {
   const [busy, setBusy] = useState<'send' | 'verify' | null>(null);
   const [message, setMessage] = useState<{ tone: 'error' | 'info' | 'success'; text: string } | null>(null);
   const [cooldown, setCooldown] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -20,9 +20,6 @@ export default function VerifyEmailBanner({ email }: { email: string }) {
     return () => clearTimeout(t);
   }, [cooldown]);
 
-  useEffect(() => {
-    if (open) inputRef.current?.focus();
-  }, [open]);
 
   async function sendCode() {
     setBusy('send');
@@ -101,22 +98,11 @@ export default function VerifyEmailBanner({ email }: { email: string }) {
       </div>
 
       {open && (
-        <form onSubmit={verify} className="mt-3 sm:pl-8 flex flex-col sm:flex-row gap-2" noValidate>
+        <form onSubmit={verify} className="mt-3 sm:ml-8 max-w-sm space-y-2 text-center" noValidate>
           <label htmlFor="verify-code" className="sr-only">Verification code</label>
-          <input
-            ref={inputRef}
-            id="verify-code"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9]*"
-            maxLength={6}
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-            placeholder="6-digit code"
-            className="w-full sm:w-40 min-h-[44px] px-3 rounded-md border border-amber-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-base tracking-[0.3em] font-semibold text-center text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/30"
-          />
+          <CodeInput id="verify-code" autoFocus value={code} onChange={setCode} />
           <button type="submit" disabled={busy !== null || code.length !== 6}
-            className="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold disabled:opacity-50">
+            className="w-full inline-flex items-center justify-center gap-2 h-11 px-5 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold disabled:opacity-50">
             {busy === 'verify' && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />}
             Verify
           </button>

@@ -1,11 +1,14 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { X, Loader2 } from 'lucide-react';
+import { X, Loader2, Mail } from 'lucide-react';
+import CodeInput from '@/components/ui/CodeInput';
+import { CONTROL_FIELD, CONTROL_LABEL, CONTROL_LINK, CONTROL_OUTLINE, CONTROL_PRIMARY } from '@/lib/ui/form-controls';
 import PasswordField from '@/components/ui/PasswordField';
 import { passwordProblem } from '@/lib/password-rules';
 import { useRouter } from 'next/navigation';
 import TurnstileWidget from '@/components/shared/TurnstileWidget';
+import CandidateSignIn from '@/components/jobs/CandidateSignIn';
 
 interface SignInModalProps {
   isOpen: boolean;
@@ -23,6 +26,7 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
   const router = useRouter();
   const effectiveReturnTo = returnTo || (typeof window !== 'undefined' ? window.location.pathname + window.location.search : null);
   const [mode, setMode] = useState<ModeType>(defaultMode);
+  const [codeSignIn, setCodeSignIn] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -63,12 +67,21 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
   // OTP verification state (for signup)
   const [otpStep, setOtpStep] = useState(false);
   const [otpCode, setOtpCode] = useState('');
+  const [otpWrong, setOtpWrong] = useState(false);
+  const [termsError, setTermsError] = useState(false);
+  const submitRef = useRef<HTMLButtonElement>(null);
+  // When the code step opens, bring its button into view too (on short screens it sat below the visible area).
+  useEffect(() => {
+    if (otpStep) requestAnimationFrame(() => submitRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+  }, [otpStep]);
   const [otpSending, setOtpSending] = useState(false);
   const [otpCountdown, setOtpCountdown] = useState(0);
 
   if (!isOpen) return null;
 
   const resetForm = () => {
+    setCodeSignIn(false);
+    setTermsError(false);
     setFormData({
       name: '',
       email: '',
@@ -106,7 +119,8 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
         return;
       }
       if (!formData.agreeToTerms) {
-        setError('Please agree to the terms and conditions');
+        setTermsError(true); // shown next to the checkbox, where the fix is
+        document.getElementById('modal-terms')?.focus();
         return;
       }
 
@@ -144,29 +158,22 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
           body: JSON.stringify({ email: formData.email, code: otpCode, purpose: 'signup' }),
         });
         const verifyData = await verifyRes.json();
-        if (!verifyRes.ok) throw new Error(verifyData.error || 'Verification failed');
+        if (!verifyRes.ok) { setOtpWrong(true); setOtpCode(''); throw new Error(verifyData.error || 'Verification failed'); }
 
         // OTP verified — now create the account
         const signupRes = await fetch('/api/user/auth/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: formData.name, email: formData.email, password: formData.password, agreeToTerms: formData.agreeToTerms, subscribeNewsletter: formData.subscribeNewsletter, turnstileToken: turnstileToken.current }),
+          body: JSON.stringify({ name: formData.name, email: formData.email, password: formData.password, agreeToTerms: formData.agreeToTerms, subscribeNewsletter: formData.subscribeNewsletter, turnstileToken: turnstileToken.current, returnTo: effectiveReturnTo }),
         });
         const signupData = await signupRes.json();
         if (!signupRes.ok) throw new Error(signupData.error || 'Signup failed');
 
-        // Auto-login after signup
-        const loginRes = await fetch('/api/user/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: formData.email, password: formData.password }),
-        });
-        if (!loginRes.ok) throw new Error('Account created! Please sign in.');
-
+        // Sign-up signs them in (session cookie set by the server). New accounts go through onboarding unless they
+        // signed up from a job page; full reload so the header and every component see the new session.
         onClose();
         resetForm();
-        router.push(effectiveReturnTo || '/onboarding');
-        router.refresh();
+        window.location.href = signupData.onboardingCompleted ? (effectiveReturnTo || '/') : `/onboarding?returnTo=${encodeURIComponent(effectiveReturnTo || '/')}`;
       } catch (err: any) {
         setError(err.message);
       } finally {
@@ -316,28 +323,36 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
 
   const cardClass = embedded
     ? "w-full"
-    : "bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-gray-800";
+    : "bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-gray-800";
+
+  // One look for every control: 44px high, 8px corners, 1px borders, 16px text on phones (no zoom on focus).
+  const field = CONTROL_FIELD;
+  const fieldLabel = CONTROL_LABEL;
+  const outlineBtn = `${CONTROL_OUTLINE} gap-2.5`;
+  const primaryBtn = CONTROL_PRIMARY;
+  const textLink = CONTROL_LINK;
+  const signupCodeStep = mode === 'signup' && otpStep;
 
   const cardContent = (
       <div className={cardClass} onClick={(e) => e.stopPropagation()}>
         {/* Header */}
-        <div className={`flex items-center justify-between ${embedded ? 'pb-4' : 'p-6 border-b border-gray-200 dark:border-gray-800'}`}>
+        <div className={`flex items-start justify-between ${embedded ? 'pb-4' : 'px-6 pt-6 pb-1'}`}>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-              {requires2FA ? 'Verify Identity' : mode === 'signin' ? 'Sign In' : 'Create Account'}
+            <h2 className="font-sora text-xl font-bold text-gray-900 dark:text-white">
+              {requires2FA ? 'Two-step verification' : mode === 'signin' ? 'Sign in' : signupCodeStep ? 'Check your email' : 'Create your account'}
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               {requires2FA
-                ? 'Enter your verification code'
+                ? 'One more step to keep your account safe.'
                 : mode === 'signin'
-                  ? 'Welcome back! Sign in to continue'
-                  : 'Join us and start your journey'}
+                  ? 'Welcome back to Udyaibase.'
+                  : signupCodeStep ? 'It can take a minute to arrive.' : 'Free, and takes under a minute.'}
             </p>
           </div>
           {!fullPage && !embedded && (
             <button
               onClick={() => { onClose(); resetForm(); }}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              className="-mr-2 -mt-1 w-11 h-11 inline-flex items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               aria-label="Close"
             >
               <X className="w-5 h-5 text-gray-500" />
@@ -347,61 +362,47 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
 
         {/* 2FA Verification */}
         {requires2FA ? (
-          <div className="p-6 space-y-5">
+          <div className="px-6 pt-4 pb-6 space-y-4">
             {error && (
-              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-3">
                 <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
               </div>
             )}
 
             <p className="text-sm text-gray-600 dark:text-gray-400 text-center">
-              {useBackupCode
-                ? 'Enter one of your backup codes'
-                : 'Enter the 6-digit code from your authenticator app'}
+              {useBackupCode ? 'Enter one of your backup codes' : 'Enter the 6-digit code from your authenticator app'}
             </p>
 
-            <input
-              type="text"
-              value={twoFACode}
-              onChange={(e) => setTwoFACode(useBackupCode ? e.target.value.toUpperCase() : e.target.value.replace(/\D/g, '').slice(0, 6))}
-              placeholder={useBackupCode ? 'XXXXXXXX' : '000000'}
-              maxLength={useBackupCode ? 8 : 6}
-              className="w-full px-4 py-3 text-center text-2xl font-mono tracking-widest border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-              autoFocus
-            />
+            {useBackupCode ? (
+              <input type="text" value={twoFACode} autoFocus maxLength={8} placeholder="XXXXXXXX" aria-label="Backup code"
+                onChange={(e) => setTwoFACode(e.target.value.toUpperCase())}
+                className={`${field} text-center font-mono tracking-widest`} />
+            ) : (
+              <CodeInput autoFocus value={twoFACode} onChange={setTwoFACode} label="Authenticator code" />
+            )}
 
-            <button
-              type="button"
-              onClick={() => { setUseBackupCode(!useBackupCode); setTwoFACode(''); setError(''); }}
-              className="text-sm text-brand hover:underline w-full text-center"
-            >
-              {useBackupCode ? 'Use authenticator code' : 'Use backup code'}
+            <button onClick={handleVerify2FA} disabled={loading || (useBackupCode ? twoFACode.length !== 8 : twoFACode.length !== 6)} className={primaryBtn}>
+              {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Verifying…</> : 'Verify'}
             </button>
 
-            <button
-              onClick={handleVerify2FA}
-              disabled={loading || (useBackupCode ? twoFACode.length !== 8 : twoFACode.length !== 6)}
-              className="w-full bg-brand hover:bg-brand/90 text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {loading ? <><Loader2 className="w-5 h-5 animate-spin" /> Verifying...</> : 'Verify'}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => { setRequires2FA(false); setTwoFACode(''); setChallengeToken(''); setTwoFAUserType('founder'); setError(''); }}
-              className="w-full text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-            >
-              Back to login
-            </button>
+            <div className="flex justify-center gap-2">
+              <button type="button" onClick={() => { setUseBackupCode(!useBackupCode); setTwoFACode(''); setError(''); }} className={textLink}>
+                {useBackupCode ? 'Use authenticator code' : 'Use a backup code'}
+              </button>
+              <button type="button" onClick={() => { setRequires2FA(false); setTwoFACode(''); setChallengeToken(''); setTwoFAUserType('founder'); setError(''); }} className={textLink}>
+                Back
+              </button>
+            </div>
           </div>
         ) : (
           <>
             {/* Content */}
-            <div className="p-6">
+            <div className="px-6 pt-5 pb-6">
+              {!signupCodeStep && (<>
               {/* Google OAuth */}
               <button
                 onClick={handleGoogleSignIn}
-                className="w-full flex items-center justify-center gap-3 px-4 py-3 border-2 border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors mb-2"
+                className={outlineBtn}
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -409,35 +410,46 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
                   <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                 </svg>
-                <span className="font-semibold text-gray-700 dark:text-gray-300">Continue with Google</span>
+                Continue with Google
               </button>
-              {mode === 'signup' && (
-                <p className="text-xs text-gray-400 dark:text-gray-500 text-center mb-4">
-                  By signing up with Google, you agree to our Terms and Privacy Policy.
-                </p>
+              {/* The two quick ways in sit together; the password form follows for people who use one. */}
+              {mode === 'signin' && !codeSignIn && (
+                <button
+                  type="button"
+                  onClick={() => { setError(''); setCodeSignIn(true); }}
+                  className={`${outlineBtn} mt-2.5`}
+                >
+                  <Mail className="w-5 h-5" aria-hidden />
+                  Email me a sign-in code
+                </button>
               )}
-              {mode === 'signin' && <div className="mb-4" />}
 
-              <div className="relative mb-5">
+              <div className="relative my-5">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
                 </div>
                 <div className="relative flex justify-center text-xs">
                   <span className="px-3 bg-white dark:bg-gray-900 text-gray-400">
-                    Or {mode === 'signin' ? 'sign in' : 'sign up'} with email
+                    {mode === 'signin' ? (codeSignIn ? 'or with a code' : 'or with your password') : 'or with your email'}
                   </span>
                 </div>
               </div>
+              </>)}
 
+              {mode === 'signin' && codeSignIn ? (
+                // No password needed: accounts made with an emailed code (e.g. from a job page) sign in the same way.
+                <CandidateSignIn compact startWithEmail returnTo={effectiveReturnTo || '/'} initialEmail={formData.email} onBack={() => setCodeSignIn(false)} />
+              ) : (
+              <>
               <form onSubmit={handleSubmit} className="space-y-4">
                 {resendSuccess && (
-                  <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 text-sm text-green-600 dark:text-green-400">
+                  <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md p-3 text-sm text-green-600 dark:text-green-400">
                     Verification email sent! Please check your inbox.
                   </div>
                 )}
 
                 {error && (
-                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-3">
                     <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
                     {showResendVerification && (
                       <button
@@ -452,42 +464,29 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
                   </div>
                 )}
 
+                {!signupCodeStep && (<>
                 {/* Name - signup only */}
                 {mode === 'signup' && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Full Name</label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
-                      placeholder="John Doe"
-                    />
+                    <label htmlFor="modal-name" className={fieldLabel}>Full name</label>
+                    <input id="modal-name" type="text" required autoComplete="name" value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })} className={field} placeholder="Your name" />
                   </div>
                 )}
 
                 {/* Email */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
-                    placeholder="your@email.com"
-                  />
+                  <label htmlFor="modal-email" className={fieldLabel}>Email</label>
+                  <input id="modal-email" type="email" required autoComplete="email" value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })} className={field} placeholder="you@example.com" />
                 </div>
 
                 {/* Password */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label htmlFor="modal-password" className="text-sm font-medium text-gray-700 dark:text-gray-300">Password</label>
+                    <label htmlFor="modal-password" className="text-sm font-medium text-gray-800 dark:text-gray-200">Password</label>
                     {mode === 'signin' && (
-                      <button type="button" onClick={handleForgotPassword} className="text-xs text-brand hover:underline">
+                      <button type="button" onClick={handleForgotPassword} className="-my-2 py-2 text-[13px] font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:underline">
                         Forgot password?
                       </button>
                     )}
@@ -502,8 +501,9 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
                     onChange={(v) => setFormData({ ...formData, password: v })}
                     email={formData.email}
                     personName={formData.name}
-                    showRules={mode === 'signup' && formData.password.length > 0}
-                    placeholder={mode === 'signup' ? 'At least 8 characters' : undefined}
+                    // Guidance shows only while the password still misses a rule; once it passes, the field goes quiet.
+                    showRules={mode === 'signup' && formData.password.length > 0 && !!passwordProblem(formData.password, formData.email, 'mixed', formData.name)}
+                    
                   />
                 </div>
 
@@ -517,11 +517,15 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
                       onChange={(e) => {
                         e.stopPropagation();
                         setFormData(prev => ({ ...prev, agreeToTerms: e.target.checked }));
+                        if (e.target.checked) setTermsError(false);
                       }}
-                      className="mt-0.5 w-3.5 h-3.5 text-brand border-gray-300 rounded focus:ring-brand shrink-0 cursor-pointer"
+                      aria-invalid={termsError || undefined}
+                      aria-describedby={termsError ? 'modal-terms-error' : undefined}
+                      className={`mt-0.5 w-4 h-4 rounded border-gray-300 accent-gray-900 dark:accent-white shrink-0 cursor-pointer ${termsError ? 'outline outline-2 outline-offset-2 outline-red-500' : ''}`}
                     />
-                    <label htmlFor="modal-terms" className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed cursor-pointer select-none">
-                      I agree to the <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline" onClick={(e) => e.stopPropagation()}>Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-brand hover:underline" onClick={(e) => e.stopPropagation()}>Privacy Policy</a>
+                    <label htmlFor="modal-terms" className="text-[13px] text-gray-600 dark:text-gray-400 leading-snug cursor-pointer select-none">
+                      {termsError && <span id="modal-terms-error" role="alert" className="block font-medium text-red-700 dark:text-red-400">Tick this to create your account.</span>}
+                      I agree to the <a href="/terms" target="_blank" rel="noopener noreferrer" className="font-medium text-gray-900 dark:text-white underline" onClick={(e) => e.stopPropagation()}>Terms</a> and <a href="/privacy" target="_blank" rel="noopener noreferrer" className="font-medium text-gray-900 dark:text-white underline" onClick={(e) => e.stopPropagation()}>Privacy Policy</a>
                     </label>
                   </div>
                 )}
@@ -537,49 +541,24 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
                         e.stopPropagation();
                         setFormData(prev => ({ ...prev, subscribeNewsletter: e.target.checked }));
                       }}
-                      className="mt-0.5 w-3.5 h-3.5 text-brand border-gray-300 rounded focus:ring-brand shrink-0 cursor-pointer"
+                      className="mt-0.5 w-4 h-4 rounded border-gray-300 accent-gray-900 dark:accent-white shrink-0 cursor-pointer"
                     />
-                    <label htmlFor="modal-newsletter" className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed cursor-pointer select-none">
-                      Optional: send me the weekly AI newsletter (funding rounds, tool launches, founder stories). Unsubscribe anytime.
+                    <label htmlFor="modal-newsletter" className="text-[13px] text-gray-600 dark:text-gray-400 leading-snug cursor-pointer select-none">
+                      Send me the weekly AI newsletter <span className="text-gray-400">(optional)</span>
                     </label>
                   </div>
                 )}
+                </>)}
 
-                {/* OTP Input (signup only, after form validation) */}
-                {mode === 'signup' && otpStep && (
-                  <div className="space-y-3 border-t border-gray-200 dark:border-gray-700 pt-4 mt-2">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                        Enter the 6-digit code sent to {formData.email}
-                      </label>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        autoComplete="one-time-code"
-                        value={otpCode}
-                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                        placeholder="000000"
-                        maxLength={6}
-                        className="w-full px-4 py-3 text-center text-xl font-mono tracking-[0.3em] border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                        autoFocus
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <button
-                        type="button"
-                        onClick={handleResendOtp}
-                        disabled={otpCountdown > 0 || otpSending}
-                        className="text-xs text-brand hover:underline disabled:text-gray-400 disabled:no-underline"
-                      >
-                        {otpSending ? 'Sending...' : otpCountdown > 0 ? `Resend in ${otpCountdown}s` : 'Resend code'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setOtpStep(false); setOtpCode(''); setError(''); }}
-                        className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-                      >
-                        Change email
-                      </button>
+                {/* Sign-up step 2: the code, centered, on its own screen. */}
+                {signupCodeStep && (
+                  <div className="text-center">
+                    <label htmlFor="modal-signup-code" className="block text-sm text-gray-600 dark:text-gray-400">
+                      Enter the code we sent to <span className="block font-medium text-gray-900 dark:text-white truncate">{formData.email}</span>
+                    </label>
+                    <div className="mt-4">
+                      <CodeInput id="modal-signup-code" autoFocus value={otpCode} invalid={otpWrong}
+                        onChange={(v) => { setOtpCode(v); if (otpWrong) setOtpWrong(false); }} />
                     </div>
                   </div>
                 )}
@@ -593,36 +572,50 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
 
                 {/* Submit */}
                 <button
+                  ref={submitRef}
                   type="submit"
-                  disabled={loading || (mode === 'signup' && !formData.agreeToTerms) || (mode === 'signup' && otpStep && otpCode.length !== 6)}
-                  className="w-full bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900 font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
+                  disabled={loading || (signupCodeStep && otpCode.length !== 6)}
+                  className={primaryBtn}
                 >
                   {loading ? (
-                    <><Loader2 className="w-4 h-4 animate-spin" /> {mode === 'signin' ? 'Signing in...' : otpStep ? 'Verifying...' : 'Sending code...'}</>
+                    <><Loader2 className="w-4 h-4 animate-spin" /> {mode === 'signin' ? 'Signing in…' : otpStep ? 'Creating your account…' : 'Sending code…'}</>
                   ) : (
-                    mode === 'signin' ? 'Sign In' : otpStep ? 'Verify & Create Account' : 'Continue'
+                    mode === 'signin' ? 'Sign in' : otpStep ? 'Create account' : 'Continue'
                   )}
                 </button>
+
+                {signupCodeStep && (
+                  <div className="flex justify-center gap-2 -mt-1">
+                    <button type="button" onClick={handleResendOtp} disabled={otpCountdown > 0 || otpSending} className={textLink}>
+                      {otpSending ? 'Sending…' : otpCountdown > 0 ? `Resend in ${otpCountdown}s` : 'Resend code'}
+                    </button>
+                    <button type="button" onClick={() => { setOtpStep(false); setOtpCode(''); setError(''); }} className={textLink}>
+                      Change email
+                    </button>
+                  </div>
+                )}
               </form>
+              </>
+              )}
 
               {/* Toggle mode */}
-              <div className="mt-5 text-center text-sm text-gray-600 dark:text-gray-400">
+              {!signupCodeStep && <div className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
                 {mode === 'signin' ? (
                   <>
                     Don&apos;t have an account?{' '}
-                    <button onClick={() => { setMode('signup'); resetForm(); }} className="text-brand hover:underline font-semibold">
+                    <button onClick={() => { setMode('signup'); resetForm(); }} className="inline-flex items-center min-h-[44px] px-1 font-semibold text-gray-900 dark:text-white hover:underline">
                       Sign up
                     </button>
                   </>
                 ) : (
                   <>
                     Already have an account?{' '}
-                    <button onClick={() => { setMode('signin'); resetForm(); }} className="text-brand hover:underline font-semibold">
+                    <button onClick={() => { setMode('signin'); resetForm(); }} className="inline-flex items-center min-h-[44px] px-1 font-semibold text-gray-900 dark:text-white hover:underline">
                       Sign in
                     </button>
                   </>
                 )}
-              </div>
+              </div>}
             </div>
           </>
         )}

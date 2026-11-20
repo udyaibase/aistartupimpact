@@ -10,7 +10,12 @@ import { prisma } from '@udyaibase/database';
 
 export { PASSWORD_SIGNIN_UNTIL, passwordSignInOpen } from '@/lib/employer/sign-in-policy';
 
-const CHALLENGE_SECRET = jwtSecret(process.env.EMPLOYER_JWT_SECRET || process.env.USER_JWT_SECRET, 'EMPLOYER_JWT_SECRET');
+/**
+ * Key for the two-step challenge token. Derived from the session secret but never equal to it (or to the session
+ * key), so a challenge can't pass as a session and a session can't pass as a challenge.
+ */
+const challengeBase = process.env.EMPLOYER_JWT_SECRET || process.env.USER_JWT_SECRET;
+export const CHALLENGE_SECRET = jwtSecret(challengeBase ? `employer-2fa-challenge:${challengeBase}` : undefined, 'EMPLOYER_JWT_SECRET');
 
 /** Short-lived token for the two-step step after a correct password or email code (checked by verify-2fa). */
 export function twoFactorChallenge(employerId: string) {

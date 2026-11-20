@@ -6,6 +6,8 @@ import Link from "next/link";
 import { AlertTriangle, ArrowRight, CheckCircle2, Clock, Loader2 } from "lucide-react";
 import PasswordField from "@/components/ui/PasswordField";
 import { passwordProblem } from "@/lib/password-rules";
+import { CONTROL_FIELD, CONTROL_PRIMARY } from "@/lib/ui/form-controls";
+import { InviteCard, InviteEmail, InviteFooter, InviteHeading, InviteShell } from "@/components/invite/InviteFrame";
 
 type Invite =
   | { state: "loading" }
@@ -16,15 +18,10 @@ type Invite =
   | { state: "error" }
   | { state: "limited"; message: string };
 
-const inputCls = "w-full h-11 px-3.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-[15px] text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-white/20 focus:border-gray-900 dark:focus:border-gray-400";
+const inputCls = CONTROL_FIELD;
 
-function Shell({ children }: { children: React.ReactNode }) {
-  return <div className="w-full max-w-[400px]">{children}</div>;
-}
-
-function Card({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-6 py-8 sm:px-8">{children}</div>;
-}
+const Shell = InviteShell;
+const Card = InviteCard;
 
 function StateCard({ icon, tone, title, body, action }: { icon: React.ReactNode; tone: "red" | "amber" | "green"; title: string; body: React.ReactNode; action?: React.ReactNode }) {
   const ring = { red: "bg-red-50 text-red-600 dark:bg-red-900/20", amber: "bg-amber-50 text-amber-600 dark:bg-amber-900/20", green: "bg-green-50 text-green-600 dark:bg-green-900/20" }[tone];
@@ -42,7 +39,7 @@ function StateCard({ icon, tone, title, body, action }: { icon: React.ReactNode;
   );
 }
 
-const primaryBtn = "w-full h-11 inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900 font-medium text-[15px] transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
+const primaryBtn = CONTROL_PRIMARY;
 
 function AcceptContent() {
   const token = useSearchParams().get("token");
@@ -76,9 +73,9 @@ function AcceptContent() {
           <div className="animate-pulse space-y-4" aria-label="Loading invitation">
             <div className="h-6 w-2/3 rounded bg-gray-200 dark:bg-gray-800" />
             <div className="h-4 w-full rounded bg-gray-200 dark:bg-gray-800" />
-            <div className="h-11 rounded-lg bg-gray-200 dark:bg-gray-800 mt-8" />
-            <div className="h-11 rounded-lg bg-gray-200 dark:bg-gray-800" />
-            <div className="h-11 rounded-lg bg-gray-200 dark:bg-gray-800" />
+            <div className="h-11 rounded-md bg-gray-200 dark:bg-gray-800 mt-8" />
+            <div className="h-11 rounded-md bg-gray-200 dark:bg-gray-800" />
+            <div className="h-11 rounded-md bg-gray-200 dark:bg-gray-800" />
           </div>
         </Card>
       </Shell>
@@ -116,7 +113,6 @@ function AcceptContent() {
   }
 
   const inv = invite;
-  const expires = new Date(inv.expiresAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,19 +144,10 @@ function AcceptContent() {
   return (
     <Shell>
       <Card>
-        <h1 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-white">Join {inv.team}</h1>
-        <p className="mt-1.5 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-          {inv.inviter ? `${inv.inviter} invited you` : "You’ve been invited"} to join as <span className="font-medium text-gray-900 dark:text-white">{inv.role}</span> on Udyaibase Events.
-          {inv.roleCan ? ` ${inv.roleCan}` : ""}
-        </p>
+        <InviteHeading team={inv.team} inviter={inv.inviter} role={inv.role} detail={inv.roleCan} />
 
         <form onSubmit={submit} noValidate className="mt-7 space-y-4">
-          {/* The invited email: fixed, and given to password managers as the username */}
-          <div>
-            <label htmlFor="invite-email" className="block text-sm font-medium text-gray-800 dark:text-gray-200 mb-1.5">Email</label>
-            <input id="invite-email" type="email" name="username" autoComplete="username" value={inv.email} readOnly
-              className={`${inputCls} bg-gray-50 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 cursor-default focus:ring-0 focus:border-gray-300 dark:focus:border-gray-700`} />
-          </div>
+          <InviteEmail email={inv.email} />
 
           {inv.hasAccount ? (
             <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -171,7 +158,7 @@ function AcceptContent() {
               <div>
                 <label htmlFor="invite-name" className="block text-sm font-medium text-gray-800 dark:text-gray-200 mb-1.5">Full name</label>
                 <input id="invite-name" type="text" name="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)}
-                  maxLength={100} className={inputCls} />
+                  maxLength={100} placeholder="Your name" className={inputCls} />
               </div>
               <PasswordField
                 ref={pwRef}
@@ -200,11 +187,7 @@ function AcceptContent() {
         </form>
       </Card>
 
-      <p className="mt-5 px-2 text-center text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-        By continuing, you agree to the <Link href="/terms" className="underline underline-offset-2 hover:text-gray-700 dark:hover:text-gray-200">Terms</Link> and{" "}
-        <Link href="/privacy" className="underline underline-offset-2 hover:text-gray-700 dark:hover:text-gray-200">Privacy Policy</Link>.
-        {" "}This invitation expires on {expires}. Not expecting it? You can ignore it.
-      </p>
+      <InviteFooter expiresAt={inv.expiresAt} />
     </Shell>
   );
 }

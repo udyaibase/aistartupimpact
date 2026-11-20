@@ -46,6 +46,9 @@ export default function PublishedScreen({ title, slug, companyName, jobId }: { t
           <a className={btn} href={`/jobs/${slug}`} target="_blank" rel="noopener noreferrer"><ExternalLink className="w-4 h-4" aria-hidden /> View job</a>
         </div>
 
+        <p className="mt-5 text-sm text-gray-700 dark:text-gray-300">
+          Next: <Link href={`/employer/applications?job=${jobId}&setup=pipeline`} className="font-semibold underline">choose the hiring steps</Link> (founder-led, with an assessment, or your own template). You can change them any time.
+        </p>
         <div className="flex flex-col sm:flex-row justify-center gap-2 mt-6 pt-5 border-t border-gray-100 dark:border-gray-800">
           <Link href={`/employer/applications?job=${jobId}`} className="btn-brand gap-2"><Users className="w-4 h-4" aria-hidden /> Go to candidates</Link>
           <Link href="/employer/jobs/new" className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:underline">

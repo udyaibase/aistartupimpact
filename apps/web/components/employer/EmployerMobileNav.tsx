@@ -25,7 +25,7 @@ const ALL_MORE: { href: string; icon: typeof Home; label: string; desc: string; 
   { href: '/employer/billing', icon: CreditCard, label: 'Plans & billing', desc: 'Plan, AI reviews and payments', perm: 'account.manage' },
   { href: '/employer/settings', icon: Settings, label: 'Settings', desc: 'Account, notifications, security', perm: 'account.manage' },
   { href: '/employer/activity', icon: History, label: 'Activity log', desc: 'Sign-ins and changes, with who made them', perm: 'account.manage' },
-  { href: '/employer/support', icon: HelpCircle, label: 'Help', desc: 'Guides and contact' },
+  { href: '/employer/help', icon: HelpCircle, label: 'Help', desc: 'Guides and contact' },
 ];
 
 export default function EmployerMobileNav({ shell }: { shell: EmployerShell }) {
@@ -70,7 +70,7 @@ export default function EmployerMobileNav({ shell }: { shell: EmployerShell }) {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
-                aria-label={showBadge ? `${item.label}, ${shell.newCandidates} new` : undefined}
+                aria-label={showBadge ? `${item.label}, ${shell.newCandidates} unseen` : undefined}
                 className={`relative flex flex-col items-center justify-center gap-1 transition-colors active:bg-gray-100 dark:active:bg-gray-900 ${
                   item.highlight || active ? 'text-brand' : 'text-gray-500 dark:text-gray-400'
                 }`}
@@ -84,7 +84,7 @@ export default function EmployerMobileNav({ shell }: { shell: EmployerShell }) {
                   <span className="relative">
                     <item.icon className={`w-[22px] h-[22px] ${active ? 'stroke-[2.2]' : ''}`} />
                     {showBadge && (
-                      <span aria-hidden className="absolute -top-1.5 -right-2.5 min-w-[18px] h-[18px] px-1 rounded-full bg-brand text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-gray-950">
+                      <span aria-hidden className="absolute -top-1.5 -right-2.5 min-w-[18px] h-[18px] px-1 rounded-full bg-brand text-white text-[11px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-gray-950">
                         {shell.newCandidates > 99 ? '99+' : shell.newCandidates}
                       </span>
                     )}
@@ -127,7 +127,7 @@ export default function EmployerMobileNav({ shell }: { shell: EmployerShell }) {
             <div className="mx-4 mt-1 mb-3 flex items-center gap-3 p-3 rounded-[14px] border border-gray-200 dark:border-gray-800">
               <CompanyAvatar shell={shell} size={40} />
               <div className="min-w-0">
-                <p className="text-[15px] font-semibold font-jakarta text-gray-900 dark:text-white truncate">{shell.companyName}</p>
+                <p className="portal-item-title truncate">{shell.companyName}</p>
                 <VerificationLine shell={shell} />
               </div>
             </div>

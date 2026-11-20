@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { getEmployerSession } from '@/lib/employer-auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { embedVerifyRateLimit } from '@/lib/event-rate-limit';
 import { fetchPublicHtml } from '@/lib/embed/safe-fetch';
 import { isLocalHost } from '@/lib/embed/widgets';
 import { ensureCareersWidget, toJobsPortalWidget } from '@/lib/jobs/careers';
-import { can, forbidden } from '@/lib/employer/permissions';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,9 +13,9 @@ type VerifyResult = 'installed' | 'script_missing' | 'container_missing' | 'not_
 
 /** Checks a public page's HTML for the careers widget snippet and records the install when found. */
 export async function POST(request: NextRequest) {
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ success: false, error: 'Please log in again.' }, { status: 401 });
-  if (!can(session.role, 'widget.manage')) return forbidden();
+  const guard = await employerApi('widget.manage');
+  if (guard.error) return guard.error;
+  const session = guard.session;
   const widget = await ensureCareersWidget(session.id);
   const widgetId = widget.id;
 

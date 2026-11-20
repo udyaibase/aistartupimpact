@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { BadgeCheck, Loader2, Mail, ShieldCheck, ArrowRight } from 'lucide-react';
+import CodeInput from '@/components/ui/CodeInput';
 
 interface CompanyEmailSectionProps {
   apiBasePath: '/api/founder' | '/api/organizer';
@@ -123,7 +124,7 @@ export default function CompanyEmailSection({ apiBasePath }: CompanyEmailSection
       ) : (
         <div className="space-y-4">
           {error && (
-            <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+            <div className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
               <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
             </div>
           )}
@@ -142,13 +143,13 @@ export default function CompanyEmailSection({ apiBasePath }: CompanyEmailSection
                       value={companyEmail}
                       onChange={(e) => setCompanyEmail(e.target.value)}
                       placeholder="you@yourcompany.com"
-                      className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+                      className="w-full h-11 pl-10 pr-4 border border-gray-300 dark:border-gray-700 rounded-md focus:ring-2 focus:ring-brand focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
                     />
                   </div>
                   <button
                     onClick={handleSendOtp}
                     disabled={!companyEmail || step === 'sending'}
-                    className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-brand hover:bg-brand/90 text-white text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                    className="inline-flex items-center gap-1.5 h-11 px-4 rounded-md bg-brand hover:bg-brand/90 text-white text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                   >
                     {step === 'sending' ? (
                       <><Loader2 className="w-4 h-4 animate-spin" /> Sending...</>
@@ -164,21 +165,22 @@ export default function CompanyEmailSection({ apiBasePath }: CompanyEmailSection
             </>
           ) : (
             <>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Enter the 6-digit code sent to <span className="font-semibold text-gray-900 dark:text-white">{savedEmail}</span>
+              <p className="text-sm text-gray-600 dark:text-gray-400 text-center">
+                Enter the 6-digit code sent to <span className="block font-semibold text-gray-900 dark:text-white truncate">{savedEmail}</span>
               </p>
-              <input
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                value={otpCode}
-                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="000000"
-                maxLength={6}
-                className="w-full px-4 py-3 text-center text-xl font-mono tracking-[0.3em] border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                autoFocus
-              />
-              <div className="flex items-center justify-between">
+              <CodeInput autoFocus value={otpCode} onChange={setOtpCode} label="Verification code" />
+              <button
+                onClick={handleVerify}
+                disabled={otpCode.length !== 6 || step === 'verifying'}
+                className="w-full h-11 bg-brand hover:bg-brand/90 text-white font-semibold rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
+              >
+                {step === 'verifying' ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Verifying...</>
+                ) : (
+                  <>Verify & Get Badge <BadgeCheck className="w-4 h-4" /></>
+                )}
+              </button>
+              <div className="flex items-center justify-center gap-4">
                 <button
                   onClick={handleSendOtp}
                   disabled={countdown > 0}
@@ -193,17 +195,6 @@ export default function CompanyEmailSection({ apiBasePath }: CompanyEmailSection
                   Change email
                 </button>
               </div>
-              <button
-                onClick={handleVerify}
-                disabled={otpCode.length !== 6 || step === 'verifying'}
-                className="w-full bg-brand hover:bg-brand/90 text-white font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
-              >
-                {step === 'verifying' ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Verifying...</>
-                ) : (
-                  <>Verify & Get Badge <BadgeCheck className="w-4 h-4" /></>
-                )}
-              </button>
             </>
           )}
         </div>

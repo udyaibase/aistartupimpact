@@ -22,12 +22,15 @@ const WORK_TYPES = [
   { value: 'ONSITE', label: 'On-site' },
 ];
 
+// Levels by the minimum years a job asks for (same bands as the search and the job cards).
 const EXPERIENCE_LEVELS = [
-  { value: '2', label: 'Entry (0–2 yrs)' },
-  { value: '5', label: 'Mid (2–5 yrs)' },
-  { value: '10', label: 'Senior (5+ yrs)' },
-  { value: '15', label: 'Lead / Principal' },
+  { value: 'entry', label: 'Entry (0–2 yrs)' },
+  { value: 'mid', label: 'Mid (2–5 yrs)' },
+  { value: 'senior', label: 'Senior (5–8 yrs)' },
+  { value: 'lead', label: 'Lead (8+ yrs)' },
 ];
+const LEGACY_LEVEL: Record<string, string> = { '2': 'entry', '5': 'mid', '10': 'senior', '15': 'lead' };
+const levelsOf = (v?: string) => (v ?? '').split(',').map((x) => LEGACY_LEVEL[x.trim()] ?? x.trim()).filter((x) => EXPERIENCE_LEVELS.some((l) => l.value === x));
 
 const DATE_POSTED = [
   { value: 'all', label: 'Any time' },
@@ -62,13 +65,15 @@ interface JobFiltersProps {
   currentDatePosted?: string;
   total: number;
   workTypeCounts?: WorkTypeCount[];
+  /** Open jobs per role (all filters aside), for counts beside each role. */
+  categoryCounts?: { category: string; count: number }[];
   /** Render only the desktop sidebar or only the mobile filter row (the page puts the row in its sticky search bar). */
   part?: 'desktop' | 'mobile';
 }
 
 export default function JobFilters({
   currentCategory, currentWorkType, currentExperience,
-  currentVisa, currentSort, total, workTypeCounts = [],
+  currentVisa, currentSort, total, workTypeCounts = [], categoryCounts = [],
   currentSalaryDisclosed, currentDatePosted, part,
 }: JobFiltersProps) {
   const router = useRouter();
@@ -116,25 +121,44 @@ export default function JobFilters({
   if (currentCategory && currentCategory !== 'all') {
     activeFilters.push({ key: 'category', label: CATEGORIES.find(c => c.value === currentCategory)?.label || currentCategory });
   }
-  if (currentExperience) {
-    activeFilters.push({ key: 'experience', label: EXPERIENCE_LEVELS.find(e => e.value === currentExperience)?.label || currentExperience });
+  const levels = levelsOf(currentExperience);
+  if (levels.length) {
+    activeFilters.push({ key: 'experience', label: levels.map((l) => EXPERIENCE_LEVELS.find((e) => e.value === l)!.label.split(' (')[0]).join(', ') });
   }
-
-  const getWorkTypeCount = (value: string) => {
-    if (value === 'all') return total;
-    return workTypeCounts.find(w => w.workType === value)?.count || 0;
+  const toggleLevel = (value: string) => {
+    const next = levels.includes(value) ? levels.filter((l) => l !== value) : [...levels, value];
+    // Keep the URL in the list's order so the same choice always reads the same.
+    setFilter('experience', EXPERIENCE_LEVELS.map((l) => l.value).filter((v) => next.includes(v)).join(','));
   };
 
-  const desktopCategories = showAllRoles ? CATEGORIES : CATEGORIES.slice(0, DESKTOP_ROLES_SHOWN);
-  const desktopHiddenCount = CATEGORIES.length - DESKTOP_ROLES_SHOWN;
+  // Counts are for all open jobs (the other filters aside), so "Any" is everything, not the current result.
+  const allOpen = workTypeCounts.reduce((n, w) => n + w.count, 0);
+  const getWorkTypeCount = (value: string) => {
+    if (value === 'all') return allOpen;
+    return workTypeCounts.find(w => w.workType === value)?.count || 0;
+  };
+  const roleCount = (value: string) => (value === 'all' ? allOpen : categoryCounts.find((c) => c.category === value)?.count || 0);
+  // Roles with jobs first (most first), then the rest in their usual order; the selected role always shows.
+  const rankedRoles = [
+    CATEGORIES[0],
+    // "Other roles" is a catch-all: it goes last among the roles with jobs.
+    ...CATEGORIES.slice(1).filter((c) => roleCount(c.value) > 0).sort((a, b) => Number(a.value === 'OTHER') - Number(b.value === 'OTHER') || roleCount(b.value) - roleCount(a.value)),
+    // Roles nobody is hiring for are left out (they were 33 dead ends behind "Show more"), except the one in use.
+    // Without counts (they failed to load) every role stays, so the filter still works.
+    ...CATEGORIES.slice(1).filter((c) => roleCount(c.value) === 0 && (!categoryCounts.length || c.value === currentCategory)),
+  ];
+  const withJobs = rankedRoles.filter((c, i) => i === 0 || roleCount(c.value) > 0).length;
+  const shown = categoryCounts.length ? withJobs : DESKTOP_ROLES_SHOWN;
+  const desktopCategories = showAllRoles ? rankedRoles : rankedRoles.filter((c, i) => i < shown || c.value === currentCategory);
+  const desktopHiddenCount = rankedRoles.length - desktopCategories.length;
 
   // The phone sheet: 'all' in the lists means no filter, which the shared list writes as ''.
   const noAll = (list: { value: string; label: string }[]) => list.map(o => (o.value === 'all' ? { ...o, value: '' } : o));
   const sheetRows: FilterRow[] = [
     { key: 'sort', label: 'Sort by', options: SORT_LABELS, value: currentSort && currentSort !== 'recent' ? currentSort : '', onChange: v => setFilter('sort', v), emptyLabel: 'Most recent' },
     { key: 'workType', label: 'Work mode', options: noAll(WORK_TYPES.map(w => (w.value === 'all' ? w : { ...w, label: `${w.label} (${getWorkTypeCount(w.value)})` }))), value: currentWorkType && currentWorkType !== 'all' ? currentWorkType : '', onChange: v => setFilter('workType', v) },
-    { key: 'category', label: 'Role', options: noAll(CATEGORIES), value: currentCategory && currentCategory !== 'all' ? currentCategory : '', onChange: v => setFilter('category', v) },
-    { key: 'experience', label: 'Experience', options: [{ value: '', label: 'Any' }, ...EXPERIENCE_LEVELS], value: currentExperience ?? '', onChange: v => setFilter('experience', v) },
+    { key: 'category', label: 'Role', options: noAll(rankedRoles.map((c) => (c.value === 'all' ? c : { ...c, label: `${c.label} (${roleCount(c.value)})` }))), value: currentCategory && currentCategory !== 'all' ? currentCategory : '', onChange: v => setFilter('category', v) },
+    { key: 'experience', label: 'Experience', options: [{ value: '', label: 'Any' }, ...EXPERIENCE_LEVELS], value: levels.length === 1 ? levels[0] : '', onChange: v => setFilter('experience', v) },
     { key: 'datePosted', label: 'Date posted', options: noAll(DATE_POSTED), value: currentDatePosted && currentDatePosted !== 'all' ? currentDatePosted : '', onChange: v => setFilter('datePosted', v) },
     { kind: 'toggle', key: 'visa', label: 'Visa sponsorship', checked: currentVisa === 'true', onChange: v => setFilter('visa', v ? 'true' : '') },
     { kind: 'toggle', key: 'salaryDisclosed', label: 'Salary disclosed', checked: currentSalaryDisclosed === 'true', onChange: v => setFilter('salaryDisclosed', v ? 'true' : '') },
@@ -180,12 +204,13 @@ export default function JobFilters({
               {desktopCategories.map(cat => (
                 <label key={cat.value} className="flex items-center gap-2.5 cursor-pointer group">
                   <input type="radio" name="category" checked={(currentCategory || 'all') === cat.value} onChange={() => setFilter('category', cat.value)} className={RADIO} />
-                  <span className="text-sm font-jakarta text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white">{cat.label}</span>
+                  <span className="flex-1 text-sm font-jakarta text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white">{cat.label}</span>
+                  <span className="text-xs font-jakarta text-gray-400 dark:text-gray-500 tabular-nums">{roleCount(cat.value)}</span>
                 </label>
               ))}
               {!showAllRoles && desktopHiddenCount > 0 && (
                 <button onClick={() => setShowAllRoles(true)} className="text-sm font-jakarta font-semibold text-navy dark:text-white hover:underline underline-offset-2">
-                  Show {desktopHiddenCount} more roles
+                  Show {desktopHiddenCount} more {desktopHiddenCount === 1 ? 'role' : 'roles'}
                 </button>
               )}
             </div>
@@ -197,7 +222,7 @@ export default function JobFilters({
             <div className="space-y-2">
               {EXPERIENCE_LEVELS.map(exp => (
                 <label key={exp.value} className="flex items-center gap-2.5 cursor-pointer group">
-                  <input type="checkbox" checked={currentExperience === exp.value} onChange={() => setFilter('experience', currentExperience === exp.value ? '' : exp.value)} className={CHECK} />
+                  <input type="checkbox" checked={levels.includes(exp.value)} onChange={() => toggleLevel(exp.value)} className={CHECK} />
                   <span className="text-sm font-jakarta text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white">{exp.label}</span>
                 </label>
               ))}
@@ -258,7 +283,7 @@ export default function JobFilters({
             ))}
           </div>
           <p className="text-[13px] text-gray-500 dark:text-gray-400 font-jakarta shrink-0">
-            <span className="font-semibold text-navy dark:text-white">{total > 0 ? `${total}+` : '0'}</span> jobs
+            <span className="font-semibold text-navy dark:text-white">{total}</span> {total === 1 ? 'job' : 'jobs'}
           </p>
         </div>
 
@@ -272,10 +297,28 @@ export default function JobFilters({
           ) : null}
           footer={(
             <button type="button" onClick={() => setMobileOpen(false)} className="w-full min-h-[48px] rounded-xl bg-brand text-white font-jakarta font-bold text-[15px] inline-flex items-center justify-center gap-2 active:scale-[0.98] transition-transform duration-150 motion-reduce:transition-none">
-              {updating ? <><Loader2 className="w-4 h-4 animate-spin" aria-hidden /> Finding jobs</> : `Show ${total > 0 ? `${total}+` : 0} ${total === 1 ? 'job' : 'jobs'}`}
+              {updating ? <><Loader2 className="w-4 h-4 animate-spin" aria-hidden /> Finding jobs</> : `Show ${total} ${total === 1 ? 'job' : 'jobs'}`}
             </button>
           )}
         >
+          {/* Phones have no room for the location box beside the search, so it lives here. */}
+          <form
+            onSubmit={(e) => { e.preventDefault(); setFilter('location', String(new FormData(e.currentTarget).get('location') ?? '').trim()); }}
+            className="px-4 pt-4 pb-1 font-jakarta"
+          >
+            <label htmlFor="jobs-sheet-location" className="block text-sm font-semibold text-gray-900 dark:text-white mb-1.5">City or Remote</label>
+            <div className="flex gap-2">
+              <input
+                id="jobs-sheet-location" name="location" type="text" enterKeyHint="search" autoComplete="address-level2"
+                // Read when the sheet opens (not during render, like the other filters), so it shows the current choice.
+                key={mobileOpen ? 'open' : 'closed'}
+                defaultValue={mobileOpen && typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('location') ?? '' : ''}
+                placeholder="e.g. Bengaluru"
+                className="flex-1 min-w-0 h-11 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-base text-gray-900 dark:text-white placeholder-gray-400"
+              />
+              <button type="submit" className="shrink-0 h-11 px-4 rounded-lg border border-gray-300 dark:border-gray-600 text-sm font-semibold text-gray-900 dark:text-white">Apply</button>
+            </div>
+          </form>
           <FilterList sheetOpen={mobileOpen} rows={sheetRows} />
         </BottomSheet>
       </div>

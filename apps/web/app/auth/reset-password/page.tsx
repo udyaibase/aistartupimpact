@@ -8,6 +8,7 @@ import { Loader2, CheckCircle2, ArrowLeft, XCircle } from 'lucide-react';
 import PasswordField from '@/components/ui/PasswordField';
 import { passwordProblem } from '@/lib/password-rules';
 import TurnstileWidget from '@/components/shared/TurnstileWidget';
+import { CONTROL_PRIMARY } from '@/lib/ui/form-controls';
 
 function ResetPasswordContent() {
   const searchParams = useSearchParams();
@@ -81,7 +82,7 @@ function ResetPasswordContent() {
             <p className="text-gray-600 dark:text-gray-400 mb-6">
               Your password has been updated. You can now sign in with your new password.
             </p>
-            <Link href="/auth/login" className="inline-block bg-brand hover:bg-brand/90 text-white font-semibold px-6 py-3 rounded-lg transition-colors">
+            <Link href="/auth/login" className={`${CONTROL_PRIMARY} !w-auto px-6`}>
               Sign In
             </Link>
           </div>
@@ -104,7 +105,7 @@ function ResetPasswordContent() {
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4">
                 <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
               </div>
             )}
@@ -128,7 +129,7 @@ function ResetPasswordContent() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-brand hover:bg-brand/90 text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className={CONTROL_PRIMARY}
             >
               {loading ? <><Loader2 className="w-5 h-5 animate-spin" /> Resetting...</> : 'Reset Password'}
             </button>

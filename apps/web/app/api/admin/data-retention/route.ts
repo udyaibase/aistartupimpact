@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { setListingStatus } from '@/lib/jobs/listing-status';
+import { notifyClosedJob } from '@/lib/employer/closing';
 import { deleteResume } from '@/lib/jobs/resume-storage';
 import { runPlanMaintenance } from '@/lib/employer/billing';
 import { runHiringMaintenance } from '@/lib/employer/lifecycle';
@@ -139,6 +140,12 @@ async function runCleanup(request: NextRequest) {
       select: { id: true },
     });
     results.expiredListingsClosed = await setListingStatus(expired.map(l => l.id), 'CLOSED', 'EXPIRED');
+    // No-ghosting: candidates still waiting on an expired job hear back once.
+    let closingEmails = 0;
+    for (const l of expired.slice(0, 50)) {
+      try { closingEmails += (await notifyClosedJob(l.id)).emailed; } catch (e) { console.error('[retention] closing emails', l.id, e instanceof Error ? e.message : e); }
+    }
+    results.closedJobEmails = closingEmails;
 
     // Resumes uploaded but never submitted: deleted within 24 hours (promised in the apply consent text).
     const orphanCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);

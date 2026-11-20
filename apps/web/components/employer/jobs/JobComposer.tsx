@@ -18,6 +18,8 @@ import { CITY_REQUEST } from '@/lib/city-request';
 import { JobPreview, ListingStrength, type ComposerCompany } from './JobPreview';
 import StartFaster from './StartFaster';
 import PublishedScreen from './PublishedScreen';
+import WaitingScreen from './WaitingScreen';
+import type { Clearance } from '@/lib/employer/portal';
 
 type Status = 'NEW' | 'DRAFT' | 'OPEN' | 'PAUSED' | 'CLOSED';
 type Errors = Partial<Record<keyof JobDraft, string>>;
@@ -40,10 +42,16 @@ function ago(ts: number) {
 
 const STATUS_LABEL: Record<Status, string> = { NEW: 'New job', DRAFT: 'Draft', OPEN: 'Open', PAUSED: 'Paused', CLOSED: 'Closed' };
 
+/** The form's sections, in order, for the jump links. The ids are the cards' ids. */
+const COMPOSER_SECTIONS = [
+  { id: 'basics', label: 'Role' }, { id: 'location', label: 'Location' }, { id: 'pay', label: 'Pay' }, { id: 'perks', label: 'Perks' },
+  { id: 'about', label: 'About the role' }, { id: 'screening', label: 'Questions' }, { id: 'apply', label: 'Applications' }, { id: 'where', label: 'Where it appears' },
+] as const;
+
 export default function JobComposer({
   jobId: initialId, initialDraft, initialStatus, initialSlug, initialSavedAt, company, previousJobs, emailVerified,
   approval = { required: false, canDecide: false }, everPublished = false, approvalRequest = null,
-  savedTeams = [], savedCategories = [],
+  savedTeams = [], savedCategories = [], clearance = null, waitingSince = null,
 }: {
   jobId?: string;
   initialDraft: JobDraft;
@@ -60,6 +68,10 @@ export default function JobComposer({
   /** Teams and custom categories this workspace used on earlier jobs (offered in the dropdowns). */
   savedTeams?: string[];
   savedCategories?: string[];
+  /** Whether this workspace can put jobs live yet (founder verification or our company check). */
+  clearance?: Clearance | null;
+  /** Publish was pressed and the job waits for the company to be cleared. */
+  waitingSince?: string | null;
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState<JobDraft>(initialDraft);
@@ -75,6 +87,7 @@ export default function JobComposer({
   const [publishing, setPublishing] = useState(false);
   const [actionError, setActionError] = useState<React.ReactNode>('');
   const [published, setPublished] = useState(false);
+  const [waiting, setWaiting] = useState<'founder' | 'review' | null>(null);
   const [request, setRequest] = useState(approvalRequest);
   const [declineNote, setDeclineNote] = useState<string | null>(null);
   const needsApproval = approval.required && !everPublished;
@@ -199,12 +212,17 @@ export default function JobComposer({
       if (!res.ok) {
         if (data.code === 'email_unverified') {
           setActionError(<>Verify your email before publishing. Your job is saved as a draft. <a href="#verify-email" className="font-semibold underline">Verify now</a></>);
-        } else if (data.code === 'startup_unverified') {
-          setActionError(<>Only a verified startup can publish jobs, and only its founder can verify it. Your job is saved as a draft. <Link href="/employer/company" className="font-semibold underline">Ask your founder</Link></>);
+        } else if (data.code === 'startup_unverified' || data.code === 'review_rejected') {
+          setActionError(<>{data.error} <Link href="/employer/company" className="font-semibold underline">Ask your founder</Link></>);
         } else {
           setActionError(data.error || 'Couldn’t publish. Try again.');
           if (data.field) { setErrors((e) => ({ ...e, [data.field]: data.error })); focusField(data.field); }
         }
+        return;
+      }
+      if (data.waiting === 'founder' || data.waiting === 'review') {
+        setWaiting(data.waiting);
+        document.querySelector('main')?.scrollTo({ top: 0 });
         return;
       }
       if (data.approval === 'requested') {
@@ -277,6 +295,7 @@ export default function JobComposer({
   if (published && id) {
     return <PublishedScreen title={draft.title} slug={slug} companyName={company.name} jobId={id} />;
   }
+  if (waiting) return <WaitingScreen title={draft.title} waiting={waiting} clearance={clearance} />;
 
   const unit = salaryUnit(draft.salaryCurrency);
   const today = new Date().toISOString().slice(0, 10);
@@ -307,21 +326,13 @@ export default function JobComposer({
             <h1 className="portal-title">{status === 'NEW' ? 'Post a job' : 'Edit job'}</h1>
             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">{STATUS_LABEL[status]}</span>
           </div>
-          <p className="portal-subtitle">Candidates see the preview on the right. You can edit the job after it’s live.</p>
+          <p className="portal-subtitle">Candidates see the job as in the preview <span className="hidden lg:inline">on the right</span><span className="lg:hidden">(the eye button below)</span>. You can edit it after it’s live.</p>
         </div>
       </div>
 
       <div className="grid lg:grid-cols-[minmax(0,1fr)_340px] gap-5 lg:gap-6 items-start">
         <div className="space-y-4 min-w-0">
-          {!company.verified && (
-            <div role="status" className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-[14px] border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800/50">
-              <AlertTriangle className="hidden sm:block w-5 h-5 text-amber-600 shrink-0" aria-hidden />
-              <p className="flex-1 text-sm text-amber-900 dark:text-amber-200">
-                <span className="font-semibold">Verify your startup to publish.</span> Jobs on Udyaibase always belong to a verified startup. You can write and save this job now.
-              </p>
-              <Link href="/employer/company" className="inline-flex items-center justify-center min-h-[40px] px-4 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold shrink-0">Verify startup</Link>
-            </div>
-          )}
+          {clearance && clearance.state !== 'verified' && <ClearanceBanner clearance={clearance} waitingSince={isDraft ? waitingSince : null} />}
 
           {status === 'NEW' && <StartFaster previousJobs={previousJobs} onFill={fill} onDuplicate={duplicate} />}
 
@@ -357,6 +368,19 @@ export default function JobComposer({
               <button type="button" onClick={() => setNotice('')} className="text-[13px] font-semibold hover:underline">Dismiss</button>
             </div>
           )}
+
+          {/* The form is long (about seven screens on a phone): jump straight to a section. Stays in view while scrolling. */}
+          <nav aria-label="Sections of this job" className="sticky top-0 z-dropdown -mx-4 px-4 md:mx-0 md:px-0 py-2 bg-page dark:bg-page-dark">
+            <ul className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {COMPOSER_SECTIONS.map((sec) => (
+                <li key={sec.id} className="shrink-0">
+                  <a href={`#${sec.id}`} className="inline-flex items-center min-h-[36px] px-3 rounded-full border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-[13px] font-semibold text-gray-700 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-600">
+                    {sec.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
 
           <Card id="basics" title="Role">
             <Field label="Job title" htmlFor="job-title" error={err('title')} hint="Use the title people search for, like “Backend Engineer”.">
@@ -614,7 +638,7 @@ export default function JobComposer({
                 label={<span className="inline-flex items-center gap-1.5">Google for Jobs {company.verified && <BadgeCheck className="w-4 h-4 text-green-700" aria-hidden />}</span>}
                 hint={company.verified
                   ? 'Included automatically for verified companies.'
-                  : <>Available after you <Link href="/employer/company" className="text-brand hover:underline">claim your startup</Link>, so Google only shows jobs from verified companies.</>}
+                  : <>Available once <Link href="/employer/company" className="text-brand hover:underline">your company is verified</Link>, so Google only shows jobs from verified companies.</>}
                 onChange={() => {}} />
             </div>
             {err('showOnJobsPage') && <p className="text-[13px] text-red-700 dark:text-red-400">{err('showOnJobsPage')}</p>}
@@ -628,7 +652,10 @@ export default function JobComposer({
       </div>
 
       {/* Action bar: sits above the mobile tab bar, at the bottom of the scroll area on desktop. */}
-      <div className="sticky z-10 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-0 mt-5 -mx-4 md:-mx-8 lg:-mx-10 px-4 md:px-8 lg:px-10 py-3 bg-white/95 dark:bg-gray-950/95 backdrop-blur border-t border-gray-200 dark:border-gray-800">
+      {/* Flush to the bottom edge: the page has bottom padding (6rem phones, 1rem desktop), so offset by it.
+          On phones that lands the bar right on top of the 4rem tab bar; on desktop, on the window edge. The matching
+          negative margin keeps it flush at the very end of the page too. */}
+      <div className="sticky z-10 -bottom-8 md:-bottom-4 -mb-8 md:-mb-4 mt-5 -mx-4 md:-mx-8 lg:-mx-10 px-4 md:px-8 lg:px-10 py-3 bg-white/95 dark:bg-gray-950/95 backdrop-blur border-t border-gray-200 dark:border-gray-800">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
           <div className="flex-1 min-w-0" aria-live="polite">
             {actionError ? (
@@ -641,13 +668,13 @@ export default function JobComposer({
             )}
           </div>
           <div className="flex items-center gap-2">
-            <a href="#job-preview" aria-label="Preview" className="lg:hidden inline-flex items-center justify-center gap-1.5 min-h-[44px] px-3 rounded-[10px] text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800">
+            <a href="#job-preview" aria-label="Preview" className="lg:hidden inline-flex items-center justify-center gap-1.5 min-h-[44px] sm:min-h-[40px] px-3 rounded-[10px] text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800">
               <Eye className="w-4 h-4" aria-hidden /><span className="hidden sm:inline">Preview</span>
             </a>
             {isDraft ? (
               <>
                 <button type="button" onClick={() => save()} disabled={!draft.title.trim() || saveState === 'saving'}
-                  className="flex-1 sm:flex-none whitespace-nowrap min-h-[44px] px-4 rounded-[10px] border border-gray-300 dark:border-gray-700 text-sm font-semibold text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
+                  className="flex-1 sm:flex-none whitespace-nowrap min-h-[44px] sm:min-h-[40px] px-4 rounded-[10px] border border-gray-300 dark:border-gray-700 text-sm font-semibold text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
                   Save draft
                 </button>
                 <button type="button" onClick={publish} disabled={publishing} className="btn-brand flex-1 sm:flex-none gap-2 whitespace-nowrap px-4 disabled:opacity-60">
@@ -670,6 +697,31 @@ export default function JobComposer({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Where the company stands on putting jobs live, above the form. */
+function ClearanceBanner({ clearance: c, waitingSince }: { clearance: Clearance; waitingSince: string | null }) {
+  const startup = c.startupName ?? 'your startup';
+  const text: Record<Exclude<Clearance['state'], 'verified'>, React.ReactNode> = {
+    founder: <><span className="font-semibold">Your jobs go live once {startup}’s founder verifies it.</span> Write the job and press Publish: it waits and goes live by itself when they do.</>,
+    review_needed: <><span className="font-semibold">Your first job is checked by our team.</span> Press Publish when it’s ready; we check your company the same working day (Mon–Sat) and it goes live by itself.</>,
+    review_pending: <><span className="font-semibold">We’re checking your company.</span> Jobs you publish now wait and go live by themselves once the check passes.</>,
+    review_rejected: <><span className="font-semibold">We couldn’t confirm your company{c.note ? `: ${c.note}` : '.'}</span> Ask {startup}’s founder to verify it so your jobs can go live.</>,
+    reviewed: <><span className="font-semibold">Email verified.</span> You can have 2 live jobs until {startup}’s founder verifies it, which also adds the verified tick.</>,
+  };
+  const tone = c.state === 'reviewed' ? 'border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-900/50 text-blue-900 dark:text-blue-200' : 'border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800/50 text-amber-900 dark:text-amber-200';
+  const askFounder = c.state === 'founder' || c.state === 'review_rejected' || c.state === 'reviewed';
+  return (
+    <div role="status" className={`flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-[14px] border ${tone}`}>
+      <AlertTriangle className="hidden sm:block w-5 h-5 shrink-0 opacity-70" aria-hidden />
+      <p className="flex-1 text-sm">
+        {waitingSince && c.state !== 'reviewed'
+          ? <><span className="font-semibold">This job is waiting to go live</span> (since {new Date(waitingSince).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}). {c.state === 'founder' ? `It goes live once ${startup}’s founder verifies it.` : 'It goes live once our company check passes.'}</>
+          : text[c.state as Exclude<Clearance['state'], 'verified'>]}
+      </p>
+      {askFounder && <Link href="/employer/company" className="inline-flex items-center justify-center min-h-[40px] px-4 rounded-md bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-semibold shrink-0">Ask your founder</Link>}
     </div>
   );
 }

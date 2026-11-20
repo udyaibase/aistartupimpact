@@ -24,7 +24,8 @@ export default function TermsAcceptanceModal({ userName }: TermsAcceptanceModalP
       });
 
       if (res.ok) {
-        window.location.href = '/';
+        // Stay where they were (an application, a saved list); sending them home lost their place.
+        window.location.reload();
       } else {
         const data = await res.json();
         setError(data.error || 'Failed to accept terms');

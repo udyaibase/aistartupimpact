@@ -1,12 +1,16 @@
+import { placeLine } from '@/lib/jobs/format';
 import { listingScope } from '@/lib/employer/permissions';
 import Link from 'next/link';
 import { Plus, Briefcase, Inbox, ChevronRight } from 'lucide-react';
-import { hiresByJob, stageCountsByJob, type StageCounts } from '@/lib/employer/job-stages';
+import { hiresByJob, openingsOf, stageCountsByJob, type StageCounts } from '@/lib/employer/job-stages';
 import { prisma } from '@udyaibase/database';
 import { requirePagePermission } from '@/lib/employer/page-guard';
 import JobRowActions from '@/components/employer/jobs/JobRowActions';
+import ReferralLinks from '@/components/employer/jobs/ReferralLinks';
 import { daysUntil } from '@/lib/jobs/composer';
 import { can } from '@/lib/employer/roles';
+
+export const metadata = { title: 'Jobs' };
 
 export const dynamic = 'force-dynamic';
 
@@ -79,14 +83,16 @@ export default async function EmployerJobsPage(props: { searchParams: Promise<{ 
         })}
       </nav>
 
+      {tab === 'OPEN' && rows.some((r) => effective(r) === 'OPEN') && <ReferralLinks />}
+
       {generalCounts && generalCounts.total > 0 && tab !== 'DRAFT' && (
         <Link href={`/employer/applications?job=${general!.id}`}
           className="mb-3 flex items-center gap-3 px-4 sm:px-5 py-3.5 rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-gray-400 dark:hover:border-gray-600">
           <span className="w-9 h-9 rounded-[10px] bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0"><Inbox className="w-4 h-4 text-gray-700 dark:text-gray-300" aria-hidden /></span>
           <span className="flex-1 min-w-0">
-            <span className="block text-[15px] font-semibold text-gray-900 dark:text-white">General applications</span>
+            <span className="block portal-item-title">General applications</span>
             <span className="block text-[13px] text-gray-500 dark:text-gray-400 truncate">
-              {generalCounts.total.toLocaleString('en-IN')} applied without a specific role{generalCounts.unseen ? ` · ${generalCounts.unseen} new` : ''}
+              {generalCounts.total.toLocaleString('en-IN')} applied without a specific role{generalCounts.unseen ? ` · ${generalCounts.unseen} unseen` : ''}
             </span>
           </span>
           <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" aria-hidden />
@@ -96,7 +102,7 @@ export default async function EmployerJobsPage(props: { searchParams: Promise<{ 
       {jobs.length === 0 ? (
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] px-4 py-10 text-center">
           <Briefcase className="w-8 h-8 text-gray-400 mx-auto mb-2" aria-hidden />
-          <p className="text-[15px] font-semibold text-gray-900 dark:text-white">
+          <p className="portal-item-title">
             {{ OPEN: 'No open jobs', DRAFT: 'No drafts', PAUSED: 'No paused jobs', CLOSED: 'No closed jobs' }[tab]}
           </p>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
@@ -116,27 +122,34 @@ export default async function EmployerJobsPage(props: { searchParams: Promise<{ 
             return (
               <li key={j.id} className="flex items-center gap-3 px-4 sm:px-5 py-3.5">
                 <div className="flex-1 min-w-0">
-                  <Link href={canManage ? `/employer/jobs/${j.id}/edit` : `/employer/applications?job=${j.id}`} className="block text-[15px] font-semibold text-gray-900 dark:text-white hover:text-brand truncate">{j.title}</Link>
+                  <Link href={canManage ? `/employer/jobs/${j.id}/edit` : `/employer/applications?job=${j.id}`} className="block portal-item-title hover:text-brand truncate">{j.title}</Link>
                   {(j.promotedNewsletterAt || j.promotedSocialAt) && (
-                    <p className="mt-0.5 text-[12.5px] text-gray-600 dark:text-gray-400">
+                    <p className="mt-0.5 text-[13px] text-gray-600 dark:text-gray-400">
                       Promoted by Udyaibase: {[j.promotedNewsletterAt && `newsletter ${fmt(j.promotedNewsletterAt)}`, j.promotedSocialAt && `social ${fmt(j.promotedSocialAt)}`].filter(Boolean).join(' · ')}
                       {j.promotedSocialUrl && <> · <a href={j.promotedSocialUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-gray-900 dark:text-white hover:underline">see post</a></>}
                     </p>
                   )}
                   {status === 'DRAFT' && j.approvalRequestedAt && (
-                    <p className="mt-0.5 text-[12.5px] font-semibold text-blue-800 dark:text-blue-300">
+                    <p className="mt-0.5 text-[13px] font-semibold text-blue-800 dark:text-blue-300">
                       Waiting for owner approval{j.approvalRequestedBy && j.approvalRequestedBy.toLowerCase() !== session.email.toLowerCase() ? ` · asked by ${j.approvalRequestedBy}` : ''}
                     </p>
                   )}
                   {j.moderationHold && status !== 'CLOSED' && (
-                    <p className="mt-0.5 text-[12.5px] font-semibold text-amber-800 dark:text-amber-300">Hidden while we review reports about this job. We’ll email you if we need anything.</p>
+                    <p className="mt-0.5 text-[13px] font-semibold text-amber-800 dark:text-amber-300">Hidden while we review reports about this job. We’ll email you if we need anything.</p>
                   )}
                   <p className="text-[13px] text-gray-500 dark:text-gray-400 truncate">
-                    {[j.location, WORK_TYPE[j.workType]].filter(Boolean).join(' · ')}
+                    {placeLine(j.location, WORK_TYPE[j.workType])}
                     {status !== 'DRAFT' && j.publishedByEmail && j.publishedByEmail.toLowerCase() !== session.email.toLowerCase() && <span> · by {j.publishedByName || j.publishedByEmail}</span>}
                     <span className={status !== 'DRAFT' && status !== 'CLOSED' && daysLeft != null && daysLeft <= 7 ? ' text-amber-700 dark:text-amber-400 font-semibold' : ''}> · {line}</span>
                   </p>
-                  {status !== 'DRAFT' && stages[j.id] && <StageLine jobId={j.id} c={stages[j.id]} positions={j.positions} hired={hires[j.id] ?? 0} />}
+                  {status !== 'DRAFT' && stages[j.id] && <StageLine jobId={j.id} c={stages[j.id]} positions={j.positions} hires={hires[j.id] ?? { joined: 0, awaiting: 0 }} />}
+                  {status === 'OPEN' && (() => {
+                    // Every opening is taken but the job still takes applications: say so, so nobody applies for nothing.
+                    const h = hires[j.id] ?? { joined: 0, awaiting: 0 };
+                    return h.joined + h.awaiting > 0 && openingsOf(j.positions ?? 1, h.joined, h.awaiting).available === 0
+                      ? <p className="mt-1 text-[13px] text-amber-800 dark:text-amber-300">All openings are filled but the job is still taking applications. Pause or close it from the ⋯ menu.</p>
+                      : null;
+                  })()}
                 </div>
                 {status !== 'DRAFT' && (
                   <div className="flex items-center gap-4 sm:gap-5 shrink-0">
@@ -163,32 +176,38 @@ export default async function EmployerJobsPage(props: { searchParams: Promise<{ 
 
 const STAGE_LABELS: { key: keyof StageCounts; label: string }[] = [
   { key: 'new', label: 'New' },
-  { key: 'shortlisted', label: 'Shortlisted' },
+  { key: 'shortlisted', label: 'Screening' },
+  { key: 'assessment', label: 'Assessment' },
   { key: 'interview', label: 'Interview' },
+  { key: 'decision', label: 'Final decision' },
   { key: 'offer', label: 'Offer' },
   { key: 'hired', label: 'Hired' },
+  { key: 'onhold', label: 'On hold' },
 ];
 
-/** "New 40 (12 unseen) · Shortlisted 15 · Interview 6 · Offer 1": only the stages that have someone in them. */
-function StageLine({ jobId, c, positions = 1, hired = 0 }: { jobId: string; c: StageCounts; positions?: number; hired?: number }) {
-  // Hired always shows against the openings once there's more than one ("Hired 3/5"), even at 0.
-  const parts = STAGE_LABELS.filter((s) => c[s.key] > 0 || (s.key === 'hired' && positions > 1));
-  if (!parts.length) return <p className="mt-1 text-[12.5px] text-gray-500 dark:text-gray-400">No candidates yet</p>;
-  const filled = hired >= positions;
+/**
+ * "New 40 (12 unseen) · Screening 15 · Interview 6 · Offer 1": only the stages that have someone in them.
+ * With more than one opening, hires read against them: "3 openings · 1 joined · 1 awaiting joining · 1 available".
+ */
+function StageLine({ jobId, c, positions = 1, hires }: { jobId: string; c: StageCounts; positions?: number; hires: { joined: number; awaiting: number } }) {
+  const parts = STAGE_LABELS.filter((s) => c[s.key] > 0 && !(s.key === 'hired' && positions > 1));
+  const o = openingsOf(positions, hires.joined, hires.awaiting);
+  if (!parts.length && positions <= 1) return <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-400">No candidates yet</p>;
   return (
-    <p className="mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5 text-[12.5px] text-gray-600 dark:text-gray-400">
+    <p className="mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5 text-[13px] text-gray-600 dark:text-gray-400">
       {parts.map((s) => (
         <Link key={s.key} href={`/employer/applications?job=${jobId}`} className="hover:text-gray-900 dark:hover:text-white whitespace-nowrap">
           {s.label}{' '}
-          {s.key === 'hired' && positions > 1 ? (
-            <span className={`font-semibold tabular-nums ${filled ? 'text-emerald-700 dark:text-emerald-400' : 'text-gray-900 dark:text-white'}`}
-              aria-label={`${hired} of ${positions} positions filled`}>{hired}/{positions}</span>
-          ) : (
-            <span className="font-semibold tabular-nums text-gray-900 dark:text-white">{c[s.key].toLocaleString('en-IN')}</span>
-          )}
+          <span className="font-semibold tabular-nums text-gray-900 dark:text-white">{c[s.key].toLocaleString('en-IN')}</span>
           {s.key === 'new' && c.unseen > 0 && <span className="ml-1 font-semibold text-[#A50F15]">({c.unseen} unseen)</span>}
+          {s.key === 'hired' && hires.awaiting > 0 && <span className="ml-1">({hires.awaiting} awaiting joining)</span>}
         </Link>
       ))}
+      {positions > 1 && (
+        <span className={`whitespace-nowrap ${o.available === 0 ? 'text-emerald-700 dark:text-emerald-400 font-semibold' : ''}`}>
+          {positions} openings · {o.joined} joined{o.awaiting ? ` · ${o.awaiting} awaiting joining` : ''} · {o.available} available
+        </span>
+      )}
     </p>
   );
 }

@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { effectivePlan, PLANS } from '@/lib/employer/plans';
-import { featuredFor } from '@/lib/employer/billing';
-import { ownerInboxes, sendApprovalDeclinedEmail, sendApprovalRequestEmail, sendTeammatePublishedEmail } from '@/lib/employer/team';
-import { getEmployerSession } from '@/lib/employer-auth';
+import { ownerInboxes, sendApprovalDeclinedEmail, sendApprovalRequestEmail } from '@/lib/employer/team';
 import { setListingStatus } from '@/lib/jobs/listing-status';
 import { canPublish } from '@/lib/jobs/trust';
 import { draftFromRow, publishProblems } from '@/lib/jobs/composer';
-import { standardJobLocation } from '@/lib/jobs/location';
 import { can, forbidden } from '@/lib/employer/permissions';
-import { refreshPaths, refreshSections } from '@/lib/revalidate';
-import { maybeStartTrial } from '@/lib/employer/trial';
 import { writeLimited } from '@/lib/employer/write-limit';
 import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
-import { notifyCareersSubscribers } from '@/lib/jobs/careers-subscribers';
+import { markWaiting, publishNow, PUBLISH_EMPLOYER_SELECT, readyToPublish, refreshPublished } from '@/lib/employer/publish';
+import { requestCompanyReview } from '@/lib/employer/company-check';
+import { markStep } from '@/lib/employer/onboarding';
+import { closingPreview, notifyClosedJob } from '@/lib/employer/closing';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +20,17 @@ const RENEW_DAYS = 30;
 const MAX_OPEN_DAYS = 90;
 const ACTIONS = ['publish', 'resume', 'pause', 'close', 'renew', 'decline'] as const;
 type Action = (typeof ACTIONS)[number];
+
+/** Before closing: how many waiting candidates would get the "role closed" email, and how many are mid-process. */
+export async function GET(_request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const { id } = await props.params;
+  const guard = await employerApi('jobs.manage');
+  if (guard.error) return guard.error;
+  const session = guard.session;
+  const listing = await prisma.jobBoardListing.findFirst({ where: { id, employerId: session.id, deletedAt: null }, select: { id: true } });
+  if (!listing) return NextResponse.json({ error: 'Job not found.' }, { status: 404 });
+  return NextResponse.json(await closingPreview(id));
+}
 
 /**
  * Publish, pause, resume, close (filled or not) or renew (+30 days) one of the employer's jobs.
@@ -32,9 +41,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   const limited = await writeLimited(request, 'jobs/[id]/status');
   if (limited) return limited;
   const { id } = await props.params;
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
-  if (!can(session.role, 'jobs.manage')) return forbidden();
+  const guard = await employerApi('jobs.manage');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const body = await request.json().catch(() => ({}));
   const action = body.action as Action;
@@ -46,7 +55,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     }),
     prisma.jobBoardEmployer.findUnique({
       where: { id: session.id },
-      select: { email: true, passwordHash: true, requireJobApproval: true, emailVerified: true, maxActiveJobs: true, plan: true, planExpiresAt: true, firstJobPublishedAt: true, startupId: true, startupClaimMethod: true, Startup: { select: { isVerified: true } } },
+      select: PUBLISH_EMPLOYER_SELECT,
     }),
   ]);
   if (!listing || !employer) return NextResponse.json({ error: 'Job not found.' }, { status: 404 });
@@ -66,34 +75,38 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
 
   const willOpen = action === 'publish' || action === 'resume' || (action === 'renew' && listing.status === 'CLOSED');
 
+  // Approval mode: a recruiter's first publish of a job goes to the owners instead (checked again below).
+  const needsOwner = action === 'publish' && !listing.publishedAt && employer.requireJobApproval && session.role === 'RECRUITER';
+
   if (willOpen && listing.status !== 'OPEN') {
-    const gate = canPublish(employer);
-    if (!gate.ok) return NextResponse.json({ error: gate.reason, code: gate.code }, { status: 403 });
-    const problems = publishProblems(draftFromRow(listing));
-    if (problems.length) {
-      return NextResponse.json({ error: problems[0].message, field: problems[0].field, problems }, { status: 400 });
-    }
-    // Only listed places go live (older jobs may still hold a free-text city).
-    const loc = await standardJobLocation({ workType: listing.workType, city: listing.city, country: listing.country });
-    if (!loc.ok) return NextResponse.json({ error: `${loc.error} Open the job to fix it.`, field: loc.field }, { status: 400 });
-    if (loc.data.city !== listing.city || loc.data.country !== listing.country) {
-      await prisma.jobBoardListing.update({ where: { id }, data: { city: loc.data.city, country: loc.data.country, location: loc.data.location } });
-    }
-    const open = await prisma.jobBoardListing.count({ where: { employerId: session.id, status: 'OPEN', deletedAt: null } });
-    const plan = effectivePlan(employer);
-    // A lapsed paid plan falls back to Free; otherwise keep any higher limit an admin granted.
-    const limit = plan.key === 'FREE' && employer.plan !== 'FREE' ? PLANS.FREE.maxActiveJobs : Math.max(plan.maxActiveJobs, employer.maxActiveJobs);
-    if (open >= limit) {
-      return NextResponse.json(
-        { error: `You can have ${limit} open job${limit === 1 ? '' : 's'} on the ${plan.name} plan. Close or pause one first, or upgrade for more.`, code: 'limit' },
-        { status: 403 },
-      );
+    const gate = canPublish(employer, session.email);
+    if (!gate.ok) {
+      const waits = gate.code === 'review_needed' || gate.code === 'review_pending' || gate.code === 'startup_unverified';
+      if (needsOwner) {
+        // Owners decide; when they press Publish the job waits for the company in the usual way.
+      } else if (waits && action === 'publish') {
+        // The job must be complete before it waits, so it can go live the moment the company is cleared.
+        const problems = publishProblems(draftFromRow(listing));
+        if (problems.length) return NextResponse.json({ error: problems[0].message, field: problems[0].field, problems }, { status: 400 });
+        await markWaiting(id, session.email, now);
+        await markStep(session.id, 'PUBLISH_BLOCKED', { code: gate.code });
+        if (gate.code === 'review_needed') await requestCompanyReview(session.id, session.email, now);
+        return NextResponse.json({ success: true, status: listing.status, waiting: gate.code === 'startup_unverified' ? 'founder' : 'review', message: gate.reason }, { status: 202 });
+      } else {
+        return NextResponse.json({ error: gate.reason, code: gate.code }, { status: 403 });
+      }
+    } else {
+      const ready = await readyToPublish(session.id, listing, employer, gate);
+      if (!ready.ok) {
+        const { ok: _ok, status, ...body } = ready;
+        return NextResponse.json(body, { status });
+      }
     }
   }
 
   // Approval mode: a recruiter can't put a new job live; owners are asked instead. Jobs that were
   // already published (approved) can still be paused, resumed and renewed.
-  if (action === 'publish' && !listing.publishedAt && employer.requireJobApproval && session.role === 'RECRUITER') {
+  if (needsOwner) {
     const already = !!listing.approvalRequestedAt;
     await prisma.jobBoardListing.update({ where: { id }, data: { approvalRequestedAt: now, approvalRequestedBy: session.email } });
     if (!already) {
@@ -105,36 +118,17 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
 
   switch (action) {
     case 'publish':
-    case 'resume': {
-      // A job whose closing date has passed gets a fresh window rather than reopening already expired.
-      if (!listing.expiresAt || listing.expiresAt <= now) {
-        await prisma.jobBoardListing.update({ where: { id }, data: { expiresAt: new Date(now.getTime() + RENEW_DAYS * 86_400_000), expiryNudgeAt: null } });
-      }
-      await setListingStatus(id, 'OPEN');
-      // A workspace's first published job starts its free Pro trial (before featuredFor, so it's featured too).
-      if (!employer.firstJobPublishedAt) await maybeStartTrial(session.id);
-      const firstPublish = !listing.publishedAt;
-      await prisma.jobBoardListing.update({
-        where: { id },
-        data: { ...(await featuredFor(session.id)), approvalRequestedAt: null, approvalRequestedBy: null, ...(firstPublish ? { publishedByEmail: session.email, publishedByName: session.memberName } : {}) },
-      });
-      // A teammate published under the startup's name: tell the owner straight away (placeholder workspaces have no inbox).
-      if (firstPublish && session.memberId && employer.passwordHash !== '') {
-        sendTeammatePublishedEmail({ to: employer.email, who: session.memberName || session.email, jobTitle: listing.title, slug: listing.slug, jobId: id });
-      }
-      if (!employer.firstJobPublishedAt) {
-        await prisma.jobBoardEmployer.update({ where: { id: session.id }, data: { firstJobPublishedAt: now } });
-      }
-      // People who asked to hear when this company is hiring (only for a role's first publish, not a reopen).
-      if (firstPublish && (listing.showOnCareers || listing.showOnProfile)) after(() => notifyCareersSubscribers(session.id, { title: listing.title, slug: listing.slug }).then(() => undefined));
+    case 'resume':
+      await publishNow({ employerId: session.id, listing, employer, actor: { email: session.email, name: session.memberName ?? null, memberId: session.memberId ?? null }, now });
       break;
-    }
     case 'pause':
       if (listing.status !== 'OPEN') return NextResponse.json({ error: 'Only open jobs can be paused.' }, { status: 400 });
       await setListingStatus(id, 'PAUSED');
       break;
     case 'close':
       await setListingStatus(id, 'CLOSED', body.reason === 'FILLED' ? 'FILLED' : 'MANUAL');
+      // Everyone still waiting hears back (default on; the confirm step shows how many).
+      if (body.notifyCandidates !== false) after(() => notifyClosedJob(id, session.email).then(() => undefined).catch((e) => console.error('[jobs] closing emails', id, e instanceof Error ? e.message : e)));
       break;
     case 'renew': {
       const from = listing.expiresAt && listing.expiresAt > now ? listing.expiresAt : now;
@@ -148,13 +142,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     }
   }
 
-  // Job lists, the homepage's latest jobs, this job, and the startup profile that lists it.
-  refreshSections(['jobs', 'home']);
-  refreshPaths([`/jobs/${listing.slug}`]);
-  if (employer.startupId) {
-    const s = await prisma.startup.findUnique({ where: { id: employer.startupId }, select: { slug: true } });
-    if (s) refreshPaths([`/startups/${s.slug}`]);
-  }
+  refreshPublished(listing.slug, employer.Startup?.slug ?? null);
 
   const updated = await prisma.jobBoardListing.findUnique({ where: { id }, select: { status: true, expiresAt: true } });
   if (action !== 'renew') {

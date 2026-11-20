@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { JobBoardAppStatus } from '@prisma/client';
-import { getEmployerSession } from '@/lib/employer-auth';
 import { employerContext, saveBookingUrl } from '@/lib/employer/applications';
 import { MOVABLE, moveApplications } from '@/lib/employer/pipeline';
-import { can, forbidden } from '@/lib/employer/permissions';
+import { parseExitInput } from '@/lib/employer/exit-reasons';
 import { writeLimited } from '@/lib/employer/write-limit';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -16,9 +16,9 @@ export const maxDuration = 60;
 export async function POST(request: NextRequest) {
   const limited = await writeLimited(request, 'applications/bulk');
   if (limited) return limited;
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
-  if (!can(session.role, 'candidates.move')) return forbidden();
+  const guard = await employerApi('candidates.move');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const b = await request.json().catch(() => ({}));
   const toStatus = b.toStatus as JobBoardAppStatus;
@@ -27,6 +27,8 @@ export async function POST(request: NextRequest) {
   if (!MOVABLE.includes(toStatus)) return NextResponse.json({ error: 'Choose a stage.' }, { status: 400 });
   if (!ids.length) return NextResponse.json({ error: 'Select at least one candidate.' }, { status: 400 });
   if (!batchKey) return NextResponse.json({ error: 'Missing batch key.' }, { status: 400 });
+  const exit = parseExitInput(toStatus, b);
+  if (!exit.ok) return NextResponse.json({ error: exit.error, field: exit.field }, { status: 400 });
 
   const ctx = await employerContext(session.id);
   const bookingUrl = await saveBookingUrl(session.id, b.bookingUrl, ctx.bookingUrl);
@@ -37,6 +39,7 @@ export async function POST(request: NextRequest) {
     : null;
   const result = await moveApplications({
     employerId: session.id, actorEmail: session.email, company: ctx.company, bookingUrl, ids, toStatus, email, batchKey,
+    reason: exit.reason, note: exit.note, holdUntil: exit.holdUntil,
   });
   return NextResponse.json({ success: true, result });
 }

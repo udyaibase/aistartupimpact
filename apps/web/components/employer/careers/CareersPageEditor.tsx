@@ -181,10 +181,13 @@ export default function CareersPageEditor({ initial, page, pageUrl, isNew, canHi
             const isCurrent = !fresh && t === current;
             return (
               <li key={t} className={`${card} p-3 flex flex-col ${isCurrent ? "ring-2 ring-[#A50F15]" : ""}`}>
-                <button type="button" onClick={() => setPreviewing(t)} className="block text-left rounded-[10px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#A50F15]"
-                  aria-label={`Preview the ${TEMPLATE_INFO[t].label} template`}>
-                  <TemplateThumb data={dataFor(withTemplate(t))} />
-                </button>
+                {/* The thumbnail is a live render with its own buttons, so it can't sit inside a <button> (invalid HTML,
+                    hydration error). It's inert; a sibling button laid over it opens the preview. */}
+                <div className="relative rounded-[10px]">
+                  <div inert aria-hidden="true"><TemplateThumb data={dataFor(withTemplate(t))} /></div>
+                  <button type="button" onClick={() => setPreviewing(t)} className="absolute inset-0 rounded-[10px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#A50F15]"
+                    aria-label={`Preview the ${TEMPLATE_INFO[t].label} template`} />
+                </div>
                 <div className="px-1 pt-3 flex-1">
                   <p className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                     {TEMPLATE_INFO[t].label}
@@ -206,7 +209,7 @@ export default function CareersPageEditor({ initial, page, pageUrl, isNew, canHi
             onKeyDown={(e) => e.key === "Escape" && setPreviewing(null)}>
             <div className="bg-white dark:bg-gray-950 w-full max-w-6xl sm:rounded-[16px] flex flex-col max-h-full">
               <div className="flex items-center gap-3 px-4 sm:px-5 py-3 border-b border-gray-100 dark:border-gray-800">
-                <h2 id="tpl-preview-h" className="flex-1 font-semibold text-gray-900 dark:text-white">{TEMPLATE_INFO[previewing].label} template</h2>
+                <h2 id="tpl-preview-h" className="flex-1 portal-dialog-title">{TEMPLATE_INFO[previewing].label} template</h2>
                 <button type="button" onClick={() => choose(previewing)} className={btnPrimary}>Use this template</button>
                 <button type="button" onClick={() => setPreviewing(null)} aria-label="Close preview" autoFocus className="inline-flex items-center justify-center w-9 h-9 rounded-[10px] text-gray-500 hover:text-gray-900 dark:hover:text-white">
                   <X className="w-5 h-5" />

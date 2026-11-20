@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { getEmployerSession } from '@/lib/employer-auth';
-import { can, forbidden, listingScope } from '@/lib/employer/permissions';
+import { listingScope } from '@/lib/employer/permissions';
 import { listTeam, sendMentionEmails } from '@/lib/employer/team';
 import { writeLimited } from '@/lib/employer/write-limit';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,9 +12,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   const limited = await writeLimited(request, 'applications/[id]/notes');
   if (limited) return limited;
   const { id } = await props.params;
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
-  if (!can(session.role, 'candidates.note')) return forbidden();
+  const guard = await employerApi('candidates.note');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const { body, mentions: picked } = await request.json().catch(() => ({}));
   const text = typeof body === 'string' ? body.trim().slice(0, 4000) : '';

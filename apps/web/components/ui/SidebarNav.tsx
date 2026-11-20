@@ -16,6 +16,8 @@ export interface NavItem {
   badge?: string;
   count?: number;
   type?: 'divider';
+  /** Other sections that belong to this item, so it stays highlighted there too (e.g. Help covers Support). */
+  alsoActive?: string[];
 }
 
 interface SidebarNavProps {
@@ -77,7 +79,7 @@ export default function SidebarNav({ items, topSlot }: SidebarNavProps) {
         }
 
         const Icon = item.icon!;
-        const active = isActive(item.href!, item.exact);
+        const active = isActive(item.href!, item.exact) || !!item.alsoActive?.some((h) => isActive(h));
 
         if (item.locked) {
           const lockedContent = (
@@ -107,6 +109,7 @@ export default function SidebarNav({ items, topSlot }: SidebarNavProps) {
         const linkContent = (
           <Link
             href={item.href!}
+            aria-current={active ? 'page' : undefined}
             data-tour={`nav:${item.href}`}
             className={`flex items-center ${collapsed ? 'justify-center' : 'gap-2.5'} px-3 py-2 rounded-lg text-[13px] font-jakarta font-medium transition-all duration-150 ${
               active

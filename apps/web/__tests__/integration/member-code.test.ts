@@ -16,6 +16,8 @@ vi.mock('@/lib/employer/team', () => ({
   resendPendingInvites: (...a: unknown[]) => resendPendingInvites(...a),
   sendMemberLoginCode: (...a: unknown[]) => sendMemberLoginCode(...a),
 }));
+const human = vi.fn();
+vi.mock('@/lib/turnstile', () => ({ verifyTurnstileToken: (...a: unknown[]) => human(...a) }));
 vi.mock('@/lib/rate-limit', () => ({
   authRateLimit: null,
   checkRateLimit: async () => ({ success: true }),
@@ -35,6 +37,16 @@ describe('POST /api/employer/auth/member-code (send)', () => {
     vi.clearAllMocks();
     emailCodeAllowed.mockResolvedValue(true);
     sql.mockResolvedValue([]);
+    human.mockResolvedValue(true);
+  });
+
+  it('asks for the human check before any code is sent or counted', async () => {
+    human.mockResolvedValue(false);
+    findMany.mockResolvedValue([{ id: 'm1' }]);
+    const res = await send('priya@acme.ai');
+    expect(res.status).toBe(403);
+    expect(emailCodeAllowed).not.toHaveBeenCalled();
+    expect(sendMemberLoginCode).not.toHaveBeenCalled();
   });
 
   it('limits codes per email, before revealing anything about the address', async () => {

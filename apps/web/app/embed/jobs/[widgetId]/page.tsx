@@ -67,7 +67,7 @@ export default async function JobsEmbedPage({ params }: { params: Promise<{ widg
     showPoweredBy: widget.showPoweredBy || !canHideBranding,
     design,
     applyForm: company.applyForm,
-    company: { name: company.name, logoUrl: company.logoUrl, slug: company.slug, perks: company.perks },
+    company: { name: company.name, logoUrl: company.logoUrl, slug: company.slug, perks: company.perks, verified: company.verified },
     careers: careersSettingsOf(company),
   };
 

@@ -23,10 +23,10 @@ function JobAccessDialog({ jobs, initial, onSave, onClose, saving }: {
   const toggle = (id: string) => setPicked((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const invalid = mode === 'some' && picked.size === 0;
   return (
-    <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="ja-title">
+    <div className="fixed inset-0 z-dialog flex items-end sm:items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="ja-title">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden />
       <div className="relative w-full max-w-md bg-white dark:bg-gray-900 rounded-[14px] p-5 shadow-xl">
-        <p id="ja-title" className="text-[15px] font-semibold text-gray-900 dark:text-white">Which jobs can they see?</p>
+        <p id="ja-title" className="portal-dialog-title">Which jobs can they see?</p>
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Interviewers only see candidates, resumes and notes for these jobs.</p>
         <fieldset className="mt-4 space-y-2">
           <legend className="sr-only">Job access</legend>
@@ -329,10 +329,10 @@ export default function TeamManager({ initialTeam, jobs, initialRequireApproval,
       )}
 
       {confirmRemove && (
-        <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-4" role="alertdialog" aria-modal="true" aria-labelledby="rm-title">
+        <div className="fixed inset-0 z-dialog flex items-end sm:items-center justify-center p-4" role="alertdialog" aria-modal="true" aria-labelledby="rm-title">
           <div className="absolute inset-0 bg-black/40" onClick={() => setConfirmRemove(null)} aria-hidden />
           <div className="relative w-full max-w-sm bg-white dark:bg-gray-900 rounded-[14px] p-5 shadow-xl">
-            <p id="rm-title" className="text-[15px] font-semibold text-gray-900 dark:text-white">
+            <p id="rm-title" className="portal-dialog-title">
               {confirmRemove.status === 'PENDING' ? `Cancel the invite to ${confirmRemove.email}?` : `Remove ${confirmRemove.name || confirmRemove.email}?`}
             </p>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">

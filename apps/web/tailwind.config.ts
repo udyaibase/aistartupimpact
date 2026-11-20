@@ -85,6 +85,8 @@ const config: Config = {
         sticky: '200',
         overlay: '300',
         modal: '400',
+        // Dialogs opened from a side panel (which sits at modal) must cover it.
+        dialog: '450',
         toast: '500',
         critical: '600',
       },

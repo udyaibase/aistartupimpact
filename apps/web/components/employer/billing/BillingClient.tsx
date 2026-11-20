@@ -100,7 +100,7 @@ export default function BillingClient({ current, expiresAt, ai, aiAutoScreen, op
       <section aria-labelledby="cur" className={`${card} p-4 sm:p-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4`}>
         <div>
           <h2 id="cur" className="text-xs font-semibold uppercase tracking-wide text-gray-500">Current plan</h2>
-          <p className="mt-1 text-lg font-bold text-gray-900 dark:text-white">{plan.name}</p>
+          <p className="mt-1 portal-stat-sm">{plan.name}</p>
           <p className="text-sm text-gray-600 dark:text-gray-400">
             {expiresAt ? `${currentCycle === 'ANNUAL' ? 'Yearly · ' : ''}Active until ${fmt(expiresAt)} · ${daysLeft} day${daysLeft === 1 ? '' : 's'} left` : 'Free forever'}
           </p>
@@ -108,17 +108,17 @@ export default function BillingClient({ current, expiresAt, ai, aiAutoScreen, op
         </div>
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Open jobs</p>
-          <p className="mt-1 text-lg font-bold text-gray-900 dark:text-white tabular-nums">{openJobs} <span className="text-sm font-normal text-gray-500">of {plan.maxActiveJobs}</span></p>
+          <p className="mt-1 portal-stat-sm">{openJobs} <span className="text-sm font-normal text-gray-500">of {plan.maxActiveJobs}</span></p>
         </div>
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Team seats</p>
-          <p className="mt-1 text-lg font-bold text-gray-900 dark:text-white tabular-nums">{seatsUsed} <span className="text-sm font-normal text-gray-500">{plan.maxSeats === null ? 'unlimited' : `of ${plan.maxSeats}`}</span></p>
+          <p className="mt-1 portal-stat-sm">{seatsUsed} <span className="text-sm font-normal text-gray-500">{plan.maxSeats === null ? 'unlimited' : `of ${plan.maxSeats}`}</span></p>
         </div>
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">AI reviews this month</p>
           {ai.limit ? (
             <>
-              <p className="mt-1 text-lg font-bold text-gray-900 dark:text-white tabular-nums">{ai.used} <span className="text-sm font-normal text-gray-500">of {ai.limit}</span></p>
+              <p className="mt-1 portal-stat-sm">{ai.used} <span className="text-sm font-normal text-gray-500">of {ai.limit}</span></p>
               <div className="mt-1.5 h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={ai.limit} aria-valuenow={ai.used} aria-label="AI reviews used">
                 <div className="h-full bg-violet-600" style={{ width: `${Math.min(100, (ai.used / ai.limit) * 100)}%` }} />
               </div>
@@ -179,7 +179,7 @@ export default function BillingClient({ current, expiresAt, ai, aiAutoScreen, op
                 : <p className="text-xs text-gray-500">Free forever</p>}
               <ul className="mt-4 space-y-2 flex-1">
                 {p.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2 text-[13.5px] text-gray-700 dark:text-gray-300">
+                  <li key={f} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
                     {f.startsWith('AI') ? <Sparkles className="w-4 h-4 mt-0.5 text-violet-600 shrink-0" aria-hidden /> : <Check className="w-4 h-4 mt-0.5 text-green-600 shrink-0" aria-hidden />} {f}
                   </li>
                 ))}

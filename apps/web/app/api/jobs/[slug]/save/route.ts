@@ -2,6 +2,8 @@ import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { jwtVerify } from 'jose';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { jobSaveRateLimit } from '@/lib/event-rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +26,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
   try {
     const userId = await getUserId(request);
     if (!userId) return NextResponse.json({ error: 'Login required' }, { status: 401 });
+    const { success } = await checkRateLimit(jobSaveRateLimit, `save:${userId}`);
+    if (!success) return NextResponse.json({ error: 'Too many requests. Try again in a minute.' }, { status: 429 });
 
     const { slug } = params;
 
@@ -37,22 +41,24 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
     if (jobs.length === 0) return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     const listingId = (jobs[0] as any).id;
 
-    // Toggle
-    const existing = await sql`
-      SELECT id FROM "JobBoardSaved"
-      WHERE "listingId" = ${listingId} AND "userId" = ${userId}
-      LIMIT 1
+    // Toggle. Each step is safe to run twice or at the same moment as another click: removing returns what it
+    // removed, adding ignores a row that already exists, and the count is recounted from the rows instead of
+    // being nudged up or down (two quick clicks used to leave it one out).
+    const removed = await sql`
+      DELETE FROM "JobBoardSaved" WHERE "listingId" = ${listingId} AND "userId" = ${userId} RETURNING id
     `;
-
-    if (existing.length > 0) {
-      await sql`DELETE FROM "JobBoardSaved" WHERE "listingId" = ${listingId} AND "userId" = ${userId}`;
-      await sql`UPDATE "JobBoardListing" SET "savedCount" = GREATEST("savedCount" - 1, 0) WHERE id = ${listingId}`;
-      return NextResponse.json({ saved: false });
-    } else {
-      await sql`INSERT INTO "JobBoardSaved" ("id", "listingId", "userId") VALUES (gen_random_uuid()::text, ${listingId}, ${userId})`;
-      await sql`UPDATE "JobBoardListing" SET "savedCount" = "savedCount" + 1 WHERE id = ${listingId}`;
-      return NextResponse.json({ saved: true });
+    const saved = removed.length === 0;
+    if (saved) {
+      await sql`
+        INSERT INTO "JobBoardSaved" ("id", "listingId", "userId") VALUES (gen_random_uuid()::text, ${listingId}, ${userId})
+        ON CONFLICT ("listingId", "userId") DO NOTHING
+      `;
     }
+    await sql`
+      UPDATE "JobBoardListing" SET "savedCount" = (SELECT COUNT(*)::int FROM "JobBoardSaved" WHERE "listingId" = ${listingId})
+      WHERE id = ${listingId}
+    `;
+    return NextResponse.json({ saved });
   } catch (error: any) {
     console.error('[POST /api/jobs/save]', error);
     return NextResponse.json({ error: 'Failed' }, { status: 500 });

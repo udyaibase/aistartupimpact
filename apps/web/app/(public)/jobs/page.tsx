@@ -1,10 +1,10 @@
 import { jsonLd } from "@/lib/json-ld";
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ChevronRight, Bell } from 'lucide-react';
-import SubscribeForm from '@/components/SubscribeForm';
+import { ChevronRight } from 'lucide-react';
 import JobsBrowser from './JobsBrowser';
-import { searchJobs, getJobWorkTypeCounts, JOBS_PAGE_SIZE } from '@/lib/jobs/search';
+import { searchJobs, getJobWorkTypeCounts, getJobCategoryCounts, JOBS_PAGE_SIZE } from '@/lib/jobs/search';
+import { getSeoConfig } from '@/lib/seo-config';
 
 export const metadata: Metadata = {
   title: 'AI Jobs in India — Find Your Next Role in Artificial Intelligence',
@@ -20,20 +20,24 @@ export default async function JobsPage() {
   let jobs: any[] = [];
   let total = 0;
   let workTypeCounts: { workType: string; count: number }[] = [];
+  let categoryCounts: { category: string; count: number }[] = [];
 
   try {
-    const [page, counts] = await Promise.all([
+    const [page, counts, roles] = await Promise.all([
       searchJobs({}, { limit: JOBS_PAGE_SIZE }),
       getJobWorkTypeCounts(),
+      getJobCategoryCounts(),
     ]);
     jobs = page.jobs;
     total = page.total;
     workTypeCounts = counts;
+    categoryCounts = roles;
   } catch (err) {
     console.error('[Jobs Page] Error:', err);
   }
 
   const totalAll = workTypeCounts.reduce((s, w) => s + w.count, 0);
+  const { socialWhatsappChannel } = await getSeoConfig();
 
   const breadcrumbJsonLd = {
     '@context': 'https://schema.org',
@@ -68,50 +72,23 @@ export default async function JobsPage() {
       </nav>
 
       {/* Hero */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
         <div>
           <h1 className="font-sora font-extrabold text-2xl sm:text-3xl text-navy dark:text-white">
             AI Jobs in India
           </h1>
           <p className="text-gray-500 dark:text-gray-400 font-jakarta text-sm mt-1">
-            {totalAll > 0 ? `${totalAll}+` : ''} open roles at AI startups, scale-ups and global AI companies. Updated daily.
+            {totalAll > 0 ? `${totalAll} open ${totalAll === 1 ? 'role' : 'roles'}` : 'Open roles'} at AI startups, scale-ups and global AI companies. Updated daily.
           </p>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <a
-            href="#job-alert"
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm font-semibold font-jakarta text-gray-700 dark:text-gray-300 hover:border-gray-400 transition-colors"
-          >
-            <Bell className="w-4 h-4" />
-            Create job alert
-          </a>
-          <Link href="/employer/signup" className="text-sm font-semibold font-jakarta text-gray-600 dark:text-gray-400 hover:text-brand transition-colors underline underline-offset-2">
-            Hiring? Post a job
-          </Link>
-          <Link href="/hire/pricing" className="text-sm font-semibold font-jakarta text-gray-600 dark:text-gray-400 hover:text-brand transition-colors underline underline-offset-2">
-            Pricing
-          </Link>
-        </div>
+        {/* For job seekers: the job-alert sign-up sits once, above the results (it follows the filters). Employers get
+            one link; pricing is on the employer pages. */}
+        <Link href="/employer/signup" className="shrink-0 text-sm font-semibold font-jakarta text-gray-600 dark:text-gray-400 hover:text-brand transition-colors underline underline-offset-2">
+          Hiring? Post a job
+        </Link>
       </div>
 
-      <JobsBrowser initialJobs={jobs} initialTotal={total} workTypeCounts={workTypeCounts}>
-        {/* Job Alert CTA */}
-        <div id="job-alert" className="mt-10 rounded-xl bg-gray-900 dark:bg-gray-800 px-6 py-4 sm:px-8 sm:py-5 scroll-mt-24">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="shrink-0">
-              <h2 className="font-sora font-bold text-base text-white">
-                Never miss an AI role
-              </h2>
-              <p className="text-sm text-gray-400 font-jakarta mt-0.5">
-                Get new AI jobs matching your search in your inbox, once a day.
-              </p>
-            </div>
-            <div className="sm:flex-1 sm:max-w-md">
-              <SubscribeForm source="jobs-alert" buttonText="Subscribe" />
-            </div>
-          </div>
-        </div>
-      </JobsBrowser>
+      <JobsBrowser initialJobs={jobs} initialTotal={total} workTypeCounts={workTypeCounts} categoryCounts={categoryCounts} whatsappChannel={!!socialWhatsappChannel} />
     </div>
   );
 }

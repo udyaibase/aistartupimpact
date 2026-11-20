@@ -2,12 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@udyaibase/database';
-import { getEmployerSession } from '@/lib/employer-auth';
-import { can, forbidden } from '@/lib/employer/permissions';
 import { writeLimited } from '@/lib/employer/write-limit';
 import { careersSettingsOf, ensureGeneralListing, getCareersCompany, JobsWidgetInputError, parseCareersSettingsInput } from '@/lib/jobs/careers';
 import { refreshPaths } from '@/lib/revalidate';
 import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,9 +14,9 @@ export const dynamic = 'force-dynamic';
 export async function PUT(request: NextRequest) {
   const limited = await writeLimited(request, 'careers/page');
   if (limited) return limited;
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ success: false, error: 'Please log in again.' }, { status: 401 });
-  if (!can(session.role, 'company.manage')) return forbidden();
+  const guard = await employerApi('company.manage');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const body = await request.json().catch(() => ({}));
   let data: Record<string, unknown>;

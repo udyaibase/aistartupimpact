@@ -4,9 +4,11 @@ import { useState, useEffect } from 'react';
 import PasswordField from '@/components/ui/PasswordField';
 import { passwordProblem } from '@/lib/password-rules';
 import { useRouter } from 'next/navigation';
-import { Settings, Download, Loader2, Shield } from 'lucide-react';
+import { Download, Loader2, Shield } from 'lucide-react';
 import TwoFactorSetup from '@/components/TwoFactorSetup';
 import EmailChangeModal from '@/components/EmailChangeModal';
+import WeeklyReportToggle from '@/components/employer/WeeklyReportToggle';
+import CodeInput from '@/components/ui/CodeInput';
 
 export default function EmployerSettingsPage() {
   const router = useRouter();
@@ -122,9 +124,9 @@ export default function EmployerSettingsPage() {
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-6">
-        <Settings className="w-5 h-5 text-brand" />
-        <h1 className="font-sora font-extrabold text-xl text-navy dark:text-white">Settings</h1>
+      <div className="mb-6">
+        <h1 className="portal-title">Settings</h1>
+        <p className="portal-subtitle">Your sign-in, security, weekly report and account data.</p>
       </div>
 
       {error && (
@@ -138,6 +140,8 @@ export default function EmployerSettingsPage() {
         </div>
       )}
 
+      <WeeklyReportToggle />
+
       <div className="card p-5 sm:p-6 space-y-4">
         <div className="flex items-center justify-between">
           <div>
@@ -146,7 +150,7 @@ export default function EmployerSettingsPage() {
           </div>
           <button
             onClick={() => setShowEmailChange(true)}
-            className="px-3 py-1.5 text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            className="inline-flex items-center min-h-[36px] px-3 text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
           >
             Change
           </button>
@@ -154,7 +158,7 @@ export default function EmployerSettingsPage() {
 
         {/* Security */}
         <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
-          <h3 className="font-sora font-bold text-sm text-navy dark:text-white mb-3">Security</h3>
+          <h2 className="portal-section-title mb-3">Security</h2>
           {hasPassword ? (
           <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800">
             <div>
@@ -163,7 +167,7 @@ export default function EmployerSettingsPage() {
             </div>
             <button
               onClick={() => setShowPasswordModal(true)}
-              className="px-3 py-1.5 text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              className="inline-flex items-center min-h-[36px] px-3 text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
             >
               Change
             </button>
@@ -178,7 +182,7 @@ export default function EmployerSettingsPage() {
             </div>
             <button
               onClick={() => setShow2FA(true)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${twoFAEnabled ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+              className={`inline-flex items-center min-h-[36px] px-3 text-xs font-semibold rounded-lg transition-colors ${twoFAEnabled ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
             >
               {twoFAEnabled ? 'Enabled' : 'Set up'}
             </button>
@@ -187,7 +191,7 @@ export default function EmployerSettingsPage() {
 
         {/* Data & Privacy */}
         <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
-          <h3 className="font-sora font-bold text-sm text-navy dark:text-white mb-3">Data & Privacy</h3>
+          <h2 className="portal-section-title mb-3">Data and privacy</h2>
           <p className="text-xs text-gray-500 font-jakarta mb-3">
             Under the DPDP Act, you have the right to access and export your personal data, or delete your account entirely.
           </p>
@@ -200,7 +204,7 @@ export default function EmployerSettingsPage() {
             <button
               onClick={handleExport}
               disabled={exporting}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 min-h-[36px] px-3 text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
             >
               {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
               {exporting ? 'Exporting...' : 'Download'}
@@ -210,29 +214,29 @@ export default function EmployerSettingsPage() {
 
         {/* Deactivate Account */}
         <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
-          <h3 className="font-sora font-bold text-sm text-amber-600 dark:text-amber-400 mb-3">Deactivate Account</h3>
+          <h2 className="portal-section-title !text-amber-700 dark:!text-amber-400 mb-3">Deactivate account</h2>
           <p className="text-xs text-gray-500 font-jakarta mb-3">
-            Temporarily hide your profile and close all active job listings. You can reactivate anytime by logging in again.
+            Temporarily hide your profile and close all active job listings. You can reactivate anytime by signing in with an email code.
           </p>
           <button
             onClick={() => setShowDeactivateModal(true)}
-            className="text-sm font-semibold text-amber-600 hover:text-amber-700 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-2 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
+            className="text-sm font-semibold text-amber-800 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-300 border border-amber-200 dark:border-amber-800 rounded-lg px-4 min-h-[40px] hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
           >
-            Deactivate Account
+            Deactivate account
           </button>
         </div>
 
         {/* Danger Zone */}
         <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
-          <h3 className="font-sora font-bold text-sm text-red-600 dark:text-red-400 mb-3">Danger Zone</h3>
+          <h2 className="portal-section-title !text-red-700 dark:!text-red-400 mb-3">Delete account</h2>
           <p className="text-xs text-gray-500 font-jakarta mb-3">
             Deleting your account will remove all your job listings and application data permanently.
           </p>
           <button
             onClick={() => setShowDeleteModal(true)}
-            className="text-sm font-semibold text-red-600 hover:text-red-700 border border-red-200 dark:border-red-800 rounded-lg px-4 py-2 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+            className="text-sm font-semibold text-red-700 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 border border-red-200 dark:border-red-800 rounded-lg px-4 min-h-[40px] hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
           >
-            Delete Account
+            Delete account
           </button>
         </div>
       </div>
@@ -249,7 +253,7 @@ export default function EmployerSettingsPage() {
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
             </button>
             <div className="text-center mb-5">
-              <h3 className="font-semibold text-lg text-navy dark:text-white mb-1">Change Password</h3>
+              <h3 className="portal-dialog-title mb-1">Change password</h3>
               <p className="text-gray-600 dark:text-gray-400 text-sm">Enter your current password and choose a new one</p>
             </div>
             <form onSubmit={handleChangePassword} className="space-y-3">
@@ -292,7 +296,7 @@ export default function EmployerSettingsPage() {
               <div className="w-11 h-11 bg-amber-50 dark:bg-amber-900/20 rounded-full flex items-center justify-center mx-auto mb-3">
                 <svg className="w-5 h-5 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" /></svg>
               </div>
-              <h3 className="font-semibold text-lg text-amber-600 dark:text-amber-400 mb-1">Deactivate Account</h3>
+              <h3 className="portal-dialog-title !text-amber-700 dark:!text-amber-400 mb-1">Deactivate account</h3>
               <p className="text-gray-600 dark:text-gray-400 text-sm">You can reactivate anytime by signing in with an email code.</p>
             </div>
             <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4">
@@ -330,7 +334,7 @@ export default function EmployerSettingsPage() {
               <div className="w-11 h-11 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-3">
                 <svg className="w-5 h-5 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
               </div>
-              <h3 className="font-semibold text-lg text-red-600 dark:text-red-400 mb-1">Delete Employer Account</h3>
+              <h3 className="portal-dialog-title !text-red-700 dark:!text-red-400 mb-1">Delete employer account</h3>
               <p className="text-gray-600 dark:text-gray-400 text-sm">This action cannot be undone.</p>
             </div>
 
@@ -388,17 +392,16 @@ function ActionCodeField({ id, value, onChange, sentTo, sending, onSend }: {
 }) {
   return (
     <div>
-      <label htmlFor={id} className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Confirm with an email code</label>
-      <div className="flex gap-2">
-        <input id={id} inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={value} placeholder="6-digit code"
-          onChange={(e) => onChange(e.target.value.replace(/\D/g, ''))}
-          className="flex-1 min-w-0 min-h-[44px] px-3 py-2 text-base sm:text-sm tracking-widest border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-500/20 focus:border-gray-500 font-jakarta" />
+      <label htmlFor={id} className="block text-center text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Confirm with an email code</label>
+      {/* Send first, then type the code. */}
+      <div className="space-y-2 text-center">
         <button type="button" onClick={onSend} disabled={sending}
-          className="shrink-0 min-h-[44px] px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 rounded-lg text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
-          {sending ? <Loader2 className="w-4 h-4 animate-spin" aria-label="Sending" /> : sentTo ? 'Send again' : 'Send code'}
+          className="inline-flex items-center gap-2 min-h-[40px] px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 rounded-lg text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
+          {sending && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />}{sentTo ? 'Send a new code' : 'Send code'}
         </button>
+        <CodeInput id={id} value={value} onChange={onChange} />
       </div>
-      <p aria-live="polite" className="mt-1 text-xs text-gray-500">{sentTo ? `We sent a code to ${sentTo}. It expires in 10 minutes.` : 'We’ll email a code to your sign-in address.'}</p>
+      <p aria-live="polite" className="mt-1.5 text-center text-xs text-gray-500">{sentTo ? `We sent a code to ${sentTo}. It expires in 10 minutes.` : 'We’ll email a code to your sign-in address.'}</p>
     </div>
   );
 }

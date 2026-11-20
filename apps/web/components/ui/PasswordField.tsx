@@ -65,10 +65,11 @@ const PasswordField = forwardRef<HTMLInputElement, Props>(function PasswordField
           spellCheck={false}
           aria-invalid={!!error || undefined}
           aria-describedby={describedBy}
-          className={`w-full h-11 pl-3.5 pr-11 rounded-lg border bg-white dark:bg-gray-900 text-[15px] text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 transition-shadow ${
+          className={`w-full h-11 pl-3.5 pr-11 rounded-md border bg-white dark:bg-gray-900 text-base sm:text-[15px] text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 transition-shadow ${
             error ? 'border-red-400 focus:ring-red-500/20' : 'border-gray-300 dark:border-gray-700 focus:border-gray-900 dark:focus:border-gray-400 focus:ring-gray-900/10 dark:focus:ring-white/20'
           }`}
           {...rest}
+          placeholder={rest.placeholder ?? (rest.autoComplete === 'new-password' ? 'At least 8 characters' : 'Enter your password')}
         />
         <button
           type="button"
@@ -77,7 +78,7 @@ const PasswordField = forwardRef<HTMLInputElement, Props>(function PasswordField
           aria-label={visible ? 'Hide password' : 'Show password'}
           aria-pressed={visible}
           aria-controls={inputId}
-          className="absolute inset-y-0 right-0 w-11 inline-flex items-center justify-center rounded-r-lg text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900/20"
+          className="absolute inset-y-0 right-0 w-11 inline-flex items-center justify-center rounded-r-md text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900/20"
         >
           {visible ? <EyeOff className="w-[18px] h-[18px]" aria-hidden /> : <Eye className="w-[18px] h-[18px]" aria-hidden />}
         </button>

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { getEmployerSession, type EmployerRole } from '@/lib/employer-auth';
-import { can, forbidden } from '@/lib/employer/permissions';
+import { type EmployerRole } from '@/lib/employer-auth';
+import { can } from '@/lib/employer/permissions';
 import { apiRateLimit, checkRateLimit } from '@/lib/rate-limit';
-import { cleanJobIds, inviteTeammate, listTeam } from '@/lib/employer/team';
+import { cleanJobIds, inviteTeammate, listTeam, teamForViewer } from '@/lib/employer/team';
 import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
 import { maskEmail } from '@/lib/mask';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,16 +14,17 @@ const ROLES: EmployerRole[] = ['OWNER', 'RECRUITER', 'INTERVIEWER'];
 
 /** Team list (any teammate can see it, e.g. for @mentions). */
 export async function GET() {
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
-  return NextResponse.json({ team: await listTeam(session.id), me: { memberId: session.memberId, email: session.email, role: session.role } });
+  const guard = await employerApi();
+  if (guard.error) return guard.error;
+  const session = guard.session;
+  return NextResponse.json({ team: teamForViewer(await listTeam(session.id), session), me: { memberId: session.memberId, email: session.email, role: session.role } });
 }
 
 /** Workspace team settings (owners only): { requireJobApproval } makes recruiters' new jobs wait for an owner. */
 export async function PATCH(request: NextRequest) {
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
-  if (!can(session.role, 'team.manage')) return forbidden();
+  const guard = await employerApi('team.manage');
+  if (guard.error) return guard.error;
+  const session = guard.session;
   const b = await request.json().catch(() => ({}));
   if (typeof b.requireJobApproval !== 'boolean') return NextResponse.json({ error: 'Nothing to change.' }, { status: 400 });
   await prisma.jobBoardEmployer.update({ where: { id: session.id }, data: { requireJobApproval: b.requireJobApproval } });
@@ -31,9 +33,9 @@ export async function PATCH(request: NextRequest) {
 
 /** Invite a teammate by email (owners only). Re-inviting refreshes the link. */
 export async function POST(request: NextRequest) {
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
-  if (!can(session.role, 'team.manage')) return forbidden();
+  const guard = await employerApi('team.manage');
+  if (guard.error) return guard.error;
+  const session = guard.session;
   const { success } = await checkRateLimit(apiRateLimit, `team-invite:${session.id}`);
   if (!success) return NextResponse.json({ error: 'Too many invites. Try again shortly.' }, { status: 429 });
 

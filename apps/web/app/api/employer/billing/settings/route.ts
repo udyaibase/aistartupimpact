@@ -1,19 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { getEmployerSession } from '@/lib/employer-auth';
-import { can, forbidden } from '@/lib/employer/permissions';
 import { parseBillingProfile } from '@/lib/billing/details';
 import { writeLimited } from '@/lib/employer/write-limit';
 import { employerActor, logEmployerActivity } from '@/lib/workspace-activity';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
 export async function PATCH(request: NextRequest) {
   const limited = await writeLimited(request, 'billing/settings');
   if (limited) return limited;
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
-  if (!can(session.role, 'account.manage')) return forbidden();
+  const guard = await employerApi('account.manage');
+  if (guard.error) return guard.error;
+  const session = guard.session;
   const body = await request.json().catch(() => ({}));
   if (typeof body.aiAutoScreen === 'boolean') {
     await prisma.jobBoardEmployer.update({ where: { id: session.id }, data: { aiAutoScreen: body.aiAutoScreen } });

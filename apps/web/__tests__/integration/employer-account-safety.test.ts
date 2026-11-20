@@ -29,11 +29,8 @@ const db = vi.hoisted(() => {
 
 vi.mock('@udyaibase/database', () => ({ prisma: db.prisma }));
 vi.mock('@/lib/employer-auth', () => ({
-  requireEmployerAuth: async () => {
-    const s = db.session();
-    if (!s) throw new Error('EMPLOYER_AUTH_REQUIRED');
-    return s;
-  },
+  // Routes reach the session through the one guard (employerApi), which reads it here.
+  getEmployerSession: async () => db.session() ?? null,
   clearEmployerSession: db.clear,
   sessionCutoff: () => new Date(0),
 }));

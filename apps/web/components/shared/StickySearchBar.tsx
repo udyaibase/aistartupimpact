@@ -35,7 +35,7 @@ export default function StickySearchBar({ children, topVar }: { children: ReactN
           transform: bar.hidden ? `translate3d(0, calc(-100% - ${bar.headerOffset}px), 0)` : 'translate3d(0, 0, 0)',
           transition: 'transform 360ms cubic-bezier(0.32, 0.72, 0, 1)',
         }}
-        className="sticky z-30 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 py-2 sm:py-3 space-y-2 sm:space-y-3 will-change-transform motion-reduce:!transition-none"
+        className="sticky z-30 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 py-2 sm:py-3 will-change-transform motion-reduce:!transition-none"
       >
         {/* Full-bleed backdrop so the bar reads as one strip edge to edge */}
         <div
@@ -44,7 +44,9 @@ export default function StickySearchBar({ children, topVar }: { children: ReactN
             bar.stuck ? 'shadow-[0_8px_16px_-12px_rgba(0,0,0,0.25)] border-b border-gray-200/70 dark:border-gray-800' : ''
           }`}
         />
-        {children}
+        {/* Spacing between the bar's own rows only: the backdrop above is a child too, and spacing it pushed the
+            search box 12px down. */}
+        <div className="space-y-2 sm:space-y-3">{children}</div>
       </div>
     </>
   );

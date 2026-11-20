@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
-import { getEmployerSession } from '@/lib/employer-auth';
 import { checkRateLimit, jdParseRateLimit } from '@/lib/rate-limit';
 import { fetchPublicHtml } from '@/lib/embed/safe-fetch';
-import { can, forbidden } from '@/lib/employer/permissions';
+import { can } from '@/lib/employer/permissions';
 import { openaiChat } from '@/lib/ops/ai';
 import { checkLocation } from '@/lib/locations';
 import { normalizeCountry } from '@udyaibase/utils/src/locations';
+import { employerApi } from '@/lib/employer/api-session';
 import {
   CURRENCIES, EMPLOYMENT_TYPES, EXPERIENCE_BANDS, JOB_CATEGORIES, MAX_SKILLS, WORK_TYPES, salaryUnit, type JobDraft,
 } from '@/lib/jobs/composer';
@@ -63,10 +63,11 @@ const SCHEMA = {
       salaryMaxYearly: { type: ['number', 'null'] },
       hasEsops: { type: 'boolean', description: 'True only if ESOPs, equity or stock options are mentioned.' },
       skills: { type: 'array', items: { type: 'string' }, description: `Up to ${MAX_SKILLS} concrete skills or tools, short names.` },
+      mustHaveSkills: { type: 'array', items: { type: 'string' }, description: 'The skills from the list above that the text states as required ("must have", "what we look for", "requirements"). Leave out anything described as good to have, a plus or preferred. Empty if the text does not make the difference clear.' },
       shortDescription: { type: 'string', description: 'One sentence summary, max 160 characters.' },
       description: { type: 'string', description: 'The original description reorganised as Markdown with "## " section headings and "- " bullets. Keep the original wording; do not add claims.' },
     },
-    required: ['title', 'category', 'department', 'employmentType', 'experienceBand', 'workType', 'city', 'country', 'salaryCurrency', 'salaryMinYearly', 'salaryMaxYearly', 'hasEsops', 'skills', 'shortDescription', 'description'],
+    required: ['title', 'category', 'department', 'employmentType', 'experienceBand', 'workType', 'city', 'country', 'salaryCurrency', 'salaryMinYearly', 'salaryMaxYearly', 'hasEsops', 'skills', 'mustHaveSkills', 'shortDescription', 'description'],
   },
 };
 
@@ -76,9 +77,9 @@ Only use information present in the text. Leave a field empty (or null) when the
 
 /** Fills composer fields from a pasted job description or a public job-page link. The employer reviews everything before publishing. */
 export async function POST(request: NextRequest) {
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
-  if (!can(session.role, 'jobs.manage')) return forbidden();
+  const guard = await employerApi('jobs.manage');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const { success } = await checkRateLimit(jdParseRateLimit, `employer:${session.id}`);
   if (!success) return NextResponse.json({ error: 'You’ve used autofill a lot this hour. Fill the form manually or try again later.' }, { status: 429 });
@@ -159,6 +160,11 @@ export async function POST(request: NextRequest) {
   }
   if (fields.hasEsops === true) draft.hasEsops = true;
   set('skills', (Array.isArray(fields.skills) ? fields.skills : []).map((s: unknown) => String(s).trim().slice(0, 40)).filter(Boolean).slice(0, MAX_SKILLS));
+  // Must-haves drive the "Meets requirements" filter and the match score. Without any, that filter passed everyone,
+  // so the ones the description calls required are ticked for the employer to confirm. At most 5: more than that
+  // and almost nobody "meets requirements".
+  const wanted = new Set((Array.isArray(fields.mustHaveSkills) ? fields.mustHaveSkills : []).map((s: unknown) => String(s).trim().toLowerCase()));
+  set('mustHaveSkills', (draft.skills ?? []).filter((s) => wanted.has(s.toLowerCase())).slice(0, 5));
   set('shortDescription', String(fields.shortDescription ?? '').slice(0, 200));
   set('description', String(fields.description ?? '').slice(0, 20_000) || text);
 

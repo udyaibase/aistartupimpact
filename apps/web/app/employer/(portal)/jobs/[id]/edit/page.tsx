@@ -5,6 +5,8 @@ import { getComposerContext } from '@/lib/employer/portal';
 import { draftFromRow } from '@/lib/jobs/composer';
 import JobComposer from '@/components/employer/jobs/JobComposer';
 
+export const metadata = { title: 'Edit job' };
+
 export const dynamic = 'force-dynamic';
 
 export default async function EditJobPage(props: { params: Promise<{ id: string }> }) {
@@ -14,7 +16,7 @@ export default async function EditJobPage(props: { params: Promise<{ id: string 
   const job = await prisma.jobBoardListing.findFirst({ where: { id, employerId: session.id, deletedAt: null } });
   if (!job) notFound();
 
-  const ctx = await getComposerContext(session.id, session.role);
+  const ctx = await getComposerContext(session.id, session.role, session.email);
   return (
     <JobComposer
       key={job.id}
@@ -26,6 +28,7 @@ export default async function EditJobPage(props: { params: Promise<{ id: string 
       {...ctx}
       previousJobs={ctx.previousJobs.filter((p) => p.id !== job.id)}
       everPublished={!!job.publishedAt}
+      waitingSince={job.status === 'DRAFT' && job.publishWaitingAt ? job.publishWaitingAt.toISOString() : null}
       approvalRequest={job.approvalRequestedAt ? { at: job.approvalRequestedAt.toISOString(), by: job.approvalRequestedBy } : null}
     />
   );

@@ -82,7 +82,7 @@ export default function ResumeViewer({ applicationId, name, type, onClose }: {
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="max-w-sm text-center">
             <FileText className="w-10 h-10 text-gray-400 mx-auto mb-3" aria-hidden />
-            <p className="text-[15px] font-semibold text-gray-900 dark:text-white">
+            <p className="portal-item-title">
               {type === 'docx' ? 'Word files can’t be shown in the browser' : type === 'link' ? 'This resume is a link from an older application' : 'This browser can’t show PDFs inside the page'}
             </p>
             <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">

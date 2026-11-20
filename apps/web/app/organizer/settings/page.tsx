@@ -435,7 +435,7 @@ export default function OrganizerSettingsPage() {
             }} className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Enter your password to confirm (Google sign-in only? Submit, then enter the code we email you)</label>
-                <input type="password" autoComplete="current-password" value={deactivatePassword} onChange={(e) => setDeactivatePassword(e.target.value)} placeholder={confirmCodeToken ? '6-digit code from your email' : 'Your account password'} className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 font-jakarta" />
+                <input type="password" autoComplete="current-password" value={deactivatePassword} onChange={(e) => setDeactivatePassword(e.target.value)} placeholder={confirmCodeToken ? '6-digit code from your email' : 'Enter your password'} className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 font-jakarta" />
               </div>
               <button type="submit" disabled={deactivating || (!!confirmCodeToken && !deactivatePassword)} className="w-full min-h-[48px] px-4 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                 {deactivating ? 'Deactivating...' : 'Deactivate My Account'}
@@ -493,7 +493,7 @@ export default function OrganizerSettingsPage() {
             }} className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{confirmCodeToken ? 'Enter the code we emailed you' : 'Enter your password (Google sign-in only? Leave empty and submit for an emailed code)'}</label>
-                <input type="password" autoComplete="current-password" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} placeholder={confirmCodeToken ? '6-digit code from your email' : 'Your account password'} className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500" />
+                <input type="password" autoComplete="current-password" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} placeholder={confirmCodeToken ? '6-digit code from your email' : 'Enter your password'} className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Type <span className="font-bold text-red-600">DELETE</span> to confirm</label>

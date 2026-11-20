@@ -51,7 +51,7 @@ export default function JobsCustomizePanel({ widget, departments, canHideBrandin
       <aside role="dialog" aria-modal="true" aria-labelledby="customize-title"
         className="fixed inset-y-0 right-0 z-modal w-full sm:w-[440px] bg-white dark:bg-gray-950 border-l border-gray-200 dark:border-gray-800 flex flex-col font-jakarta shadow-xl">
         <header className="flex items-center gap-3 px-4 sm:px-5 min-h-[4rem] shrink-0 border-b border-gray-100 dark:border-gray-800" style={{ paddingTop: "env(safe-area-inset-top)" }}>
-          <h2 id="customize-title" className="portal-section-title flex-1">Customize</h2>
+          <h2 id="customize-title" className="portal-dialog-title flex-1">Customize</h2>
           <SaveIndicator state={saveState} error={saveError} onRetry={onRetry} />
           <button ref={closeRef} onClick={onClose} className={btnGhost} aria-label="Close customize panel">
             <X className="w-5 h-5" />
@@ -152,7 +152,7 @@ export default function JobsCustomizePanel({ widget, departments, canHideBrandin
               <div className="flex items-center justify-between gap-3 rounded-[10px] border border-gray-200 dark:border-gray-800 pl-3 pr-2">
                 <span className="py-2">
                   <span className="block text-sm text-gray-800 dark:text-gray-200">Show “Powered by Udyaibase”</span>
-                  {!canHideBranding && <span className="block text-xs text-gray-500"><a href="/employer/billing" className="underline">Upgrade</a> to remove it</span>}
+                  {!canHideBranding && <span className="block text-xs text-gray-500"><Link href="/employer/billing" className="underline">Upgrade</Link> to remove it</span>}
                 </span>
                 {canHideBranding
                   ? <Switch checked={widget.showPoweredBy} label="Show Powered by Udyaibase" onChange={(v) => onChange({ showPoweredBy: v })} />

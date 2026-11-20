@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { getEmployerSession } from '@/lib/employer-auth';
-import { can, forbidden } from '@/lib/employer/permissions';
+import { can } from '@/lib/employer/permissions';
+import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,9 +10,9 @@ const cell = (v: string) => `"${(/^[=+\-@]/.test(v) ? `'${v}` : v).replace(/"/g,
 
 /** CSV of confirmed "get notified" subscribers. */
 export async function GET() {
-  const session = await getEmployerSession();
-  if (!session) return NextResponse.json({ error: 'Please log in again.' }, { status: 401 });
-  if (!can(session.role, 'widget.manage')) return forbidden();
+  const guard = await employerApi('widget.manage');
+  if (guard.error) return guard.error;
+  const session = guard.session;
   const rows = await prisma.jobBoardCareersSubscriber.findMany({
     where: { employerId: session.id, confirmedAt: { not: null }, unsubscribedAt: null },
     orderBy: { confirmedAt: 'desc' },

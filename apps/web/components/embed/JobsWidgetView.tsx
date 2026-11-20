@@ -40,7 +40,7 @@ export interface JobsWidgetConfig {
   design: WidgetDesign;
   applyForm: ApplyFormConfig;
   /** perks: company-wide, set by the employer; shown on every job like on the Udyaibase job page. */
-  company: { name: string; logoUrl: string | null; slug: string; perks?: string[] };
+  company: { name: string; logoUrl: string | null; slug: string; perks?: string[]; /** Verified on Udyaibase (same rule as the job page). */ verified?: boolean };
   /** "Life at {company}" content, Notify me and general applications (same shape the employer portal edits). */
   careers: CareersSettings;
 }
@@ -469,6 +469,11 @@ function Logo({ config, size }: { config: JobsWidgetConfig; size: "sm" | "md" })
   );
 }
 
+/** Blue tick: the company is verified on Udyaibase. */
+const VerifiedTick = () => (
+  <svg role="img" aria-label="Verified company" className="shrink-0" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><title>Verified on Udyaibase</title><circle cx="12" cy="12" r="10" /><path d="m9 12 2 2 4-4" /></svg>
+);
+
 const PinIcon = () => (
   <svg aria-hidden className="shrink-0" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" /><circle cx="12" cy="10" r="3" /></svg>
 );
@@ -587,7 +592,10 @@ function JobDetail({ job, config, pageHref, onApply }: {
           {config.showLogo && <Logo config={config} size="md" />}
           <div className="min-w-0">
             <h2 className="text-xl font-bold leading-tight">{job.title}</h2>
-            <p className="text-sm font-semibold mt-1" style={{ color: "var(--embed-accent-text)" }}>{config.company.name}</p>
+            <p className="flex items-center gap-1 text-sm font-semibold mt-1" style={{ color: "var(--embed-accent-text)" }}>
+              {config.company.name}
+              {config.company.verified && <VerifiedTick />}
+            </p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 pt-4 border-t" style={{ borderColor: "var(--w-border)" }}>
