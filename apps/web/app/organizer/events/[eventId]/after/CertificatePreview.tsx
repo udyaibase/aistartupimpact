@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CERTIFICATE_PAGE, CERTIFICATE_THEMES, TECH_BAND_HOST, type Triple } from '@/lib/events/certificate-themes';
 import type { CertificateTemplate } from '@/lib/events/after-event';
 import { fillMarkers, qrBox, sampleMarkerValues, viewBoxOf } from '@/lib/events/certificate-custom';
@@ -37,23 +37,64 @@ export interface CertificatePreviewProps {
   logoPosition?: 'center' | 'left' | 'right';
   logoSize?: 'small' | 'medium' | 'large';
   showHostName?: boolean;
+  /** Logo height in points; overrides logoSize. */
+  logoHeight?: number | null;
+  /** Points to move the logo right and down. */
+  logoOffsetX?: number;
+  logoOffsetY?: number;
+  /** White plate behind the logo on dark areas. Default on. */
+  logoPlate?: boolean;
   /** The host's own design (SVG code), shown when template is "custom". */
   customSvg?: string;
   duration?: string;
 }
 
 const LOGO_HEIGHT = { small: 38, medium: 56, large: 74 } as const;
-const LOGO_BOX = 120; // each logo is fitted into a box this wide
+const LOGO_GAP = 22;
+type LogoPlace = { position: 'center' | 'left' | 'right'; maxHeight: number; maxWidth: number; dx: number; dy: number; plate: boolean };
+const logoHeightOf = (p: CertificatePreviewProps) => Math.min(74, Math.max(24, p.logoHeight ?? LOGO_HEIGHT[p.logoSize ?? 'medium']));
+
+/** Each picture's width divided by its height, once it has loaded (a typical logo shape until then). */
+function useAspects(urls: string[]): number[] {
+  const [known, setKnown] = useState<Record<string, number>>({});
+  const key = urls.join('|');
+  useEffect(() => {
+    let live = true;
+    for (const url of urls) {
+      if (known[url]) continue;
+      const img = new Image();
+      img.onload = () => { if (live && img.naturalHeight) setKnown((k) => ({ ...k, [url]: img.naturalWidth / img.naturalHeight })); };
+      img.src = url;
+    }
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return urls.map((u) => known[u] ?? 2.4);
+}
+
+/** The size each logo takes inside its limits, as the PDF works it out. */
+function fitLogos(aspects: number[], place: Pick<LogoPlace, 'maxHeight' | 'maxWidth'>) {
+  const sized = aspects.map((a) => { const k = Math.min(place.maxWidth / a, place.maxHeight); return { width: a * k, height: k }; });
+  return { sized, total: sized.reduce((w, x) => w + x.width, 0) + LOGO_GAP * Math.max(0, sized.length - 1), height: sized.length ? Math.max(...sized.map((x) => x.height)) : 0 };
+}
 
 /** The logo and partner logo in a row, as the PDF places them. `top` is the row's top edge in PDF points. */
-function Logos({ urls, position, height, top, box = LOGO_BOX }: { urls: string[]; position: 'center' | 'left' | 'right'; height: number; top: number; box?: number }) {
+function Logos({ urls, aspects, top, place }: { urls: string[]; aspects: number[]; top: number; place: LogoPlace }) {
   if (!urls.length) return null;
-  const gap = 22;
-  const LOGO_BOX = box;
-  const total = urls.length * LOGO_BOX + gap * (urls.length - 1);
-  const start = position === 'left' ? 72 : position === 'right' ? W - 72 - total : (W - total) / 2;
-  const align = urls.length > 1 ? 'xMidYMid' : position === 'left' ? 'xMinYMid' : position === 'right' ? 'xMaxYMid' : 'xMidYMid';
-  return <>{urls.map((url, i) => <image key={url + i} href={url} x={start + i * (LOGO_BOX + gap)} y={H - top} width={LOGO_BOX} height={height} preserveAspectRatio={`${align} meet`} />)}</>;
+  const { sized, total, height } = fitLogos(aspects, place);
+  const left = (place.position === 'left' ? 72 : place.position === 'right' ? W - 72 - total : (W - total) / 2) + place.dx;
+  const rowTop = H - top + place.dy; // SVG's y runs down
+  let x = left;
+  return (
+    <>
+      {place.plate && <rect x={left - 7} y={rowTop - 7} width={total + 14} height={height + 14} rx={6} fill="#fff" />}
+      {urls.map((url, i) => {
+        const node = <image key={url + i} href={url} x={x} y={rowTop + (height - sized[i].height) / 2} width={sized[i].width} height={sized[i].height} preserveAspectRatio="xMidYMid meet" />;
+        x += sized[i].width + LOGO_GAP;
+        return node;
+      })}
+    </>
+  );
 }
 
 /**
@@ -63,6 +104,8 @@ function Logos({ urls, position, height, top, box = LOGO_BOX }: { urls: string[]
  */
 function CustomPreview(p: CertificatePreviewProps) {
   const svg = (p.customSvg ?? '').trim();
+  const logoUrls = [p.logoUrl, p.partnerLogoUrl].filter((u): u is string => !!u);
+  const aspects = useAspects(logoUrls);
   const src = useMemo(() => {
     if (!/<svg[\s>]/i.test(svg)) return '';
     const filled = fillMarkers(svg, sampleMarkerValues({
@@ -85,13 +128,13 @@ function CustomPreview(p: CertificatePreviewProps) {
   const size = box ? Math.min(120, Math.max(54, (box.size / vb.width) * W)) : 74;
   const x = box ? ((box.x - vb.x) / vb.width) * W : W - 90 - size;
   const yTop = box ? ((box.y - vb.y) / vb.height) * H : H - 86 - size;
-  const logos = [p.logoUrl, p.partnerLogoUrl].filter((u): u is string => !!u);
+  const logos = logoUrls;
   return (
     <div className="relative aspect-[842/595] bg-white">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt="Preview of your own certificate design" className="absolute inset-0 w-full h-full" />
+      <img src={src} alt="Preview of your custom certificate design" className="absolute inset-0 w-full h-full" />
       <svg viewBox={`0 0 ${W} ${H}`} className="absolute inset-0 w-full h-full" aria-hidden>
-        <Logos urls={logos} position={p.logoPosition ?? 'center'} height={LOGO_HEIGHT[p.logoSize ?? 'medium']} top={H - 34} />
+        <Logos urls={logos} aspects={aspects} top={H - 34} place={{ position: p.logoPosition ?? 'center', maxHeight: logoHeightOf(p), maxWidth: 170, dx: p.logoOffsetX ?? 0, dy: p.logoOffsetY ?? 0, plate: false }} />
         <rect x={x - 12} y={yTop - 5} width={size + 24} height={size + 29} fill="#fff" />
         <QrPlaceholder x={x} y={yTop} size={size} dark={false} />
         <text x={x + size / 2} y={yTop + size + 11} textAnchor="middle" fontFamily={SANS} fontSize={6.5} fill="#4d4d54">ID SAMPLE0000000000</text>
@@ -211,7 +254,19 @@ function BuiltInPreview(p: CertificatePreviewProps) {
   const logos = [p.logoUrl, p.partnerLogoUrl].filter((u): u is string => !!u);
   const logoPosition = p.logoPosition ?? 'center';
   const centred = logos.length > 0 && logoPosition === 'center';
-  const logoHeight = centred ? Math.max(30, LOGO_HEIGHT[p.logoSize ?? 'medium'] - (full ? 16 : 0)) : Math.min(LOGO_HEIGHT[p.logoSize ?? 'medium'], 44);
+  const aspects = useAspects(logos);
+  // The same rules as the PDF: centred, the logo heads the page; in a corner it is kept smaller.
+  const place: LogoPlace = {
+    position: centred ? 'center' : logoPosition,
+    maxHeight: centred ? Math.max(24, logoHeightOf(p) - (full ? 16 : 0)) : Math.min(logoHeightOf(p), 56),
+    maxWidth: centred ? 170 : 120,
+    dx: p.logoOffsetX ?? 0, dy: p.logoOffsetY ?? 0,
+    plate: (p.logoPlate ?? true) && (!!t.dark || inBand),
+  };
+  const rowHeight = centred ? fitLogos(aspects, place).height : 0;
+  // The Tech band grows to hold the logo, host name and title.
+  const headerEnd = H - 78 - (centred ? rowHeight + 6 + (p.showHostName ? 10 : 0) : 20) - 34 - 16;
+  const band = Math.max(BAND, H - (headerEnd - 20));
 
   // The same walk down the page as the PDF.
   const { lines, ruleY, logoTop } = useMemo(() => {
@@ -222,10 +277,10 @@ function BuiltInPreview(p: CertificatePreviewProps) {
     const hostLine = (size: number) => out.push({ text: host, y, size: fit(host, sansBold, size, 520), font: sansBold, fill: inBand ? css(TECH_BAND_HOST) : muted });
     if (centred) {
       logoAt = y + 18;
-      y -= logoHeight + 6;
+      y -= rowHeight + 6;
       if (p.showHostName) { y += 4; hostLine(10); y -= 14; }
     } else {
-      if (logos.length) logoAt = H - 48;
+      if (logos.length) logoAt = H - 46;
       if (!logos.length || p.showHostName) hostLine(13);
       y -= 20;
     }
@@ -234,7 +289,7 @@ function BuiltInPreview(p: CertificatePreviewProps) {
     out.push({ text: title, y, size: fit(title, heading, t.serif ? 30 : 26, 680), font: heading, fill: inBand ? '#fff' : ink });
     y -= 16;
     const rule = y;
-    if (inBand) y = Math.min(y, H - BAND - 5);
+    if (inBand) y = H - band - 4;
 
     y -= full ? 32 : 38;
     out.push({ text: 'This is to certify that', y, size: 13, font: body, fill: muted });
@@ -267,7 +322,7 @@ function BuiltInPreview(p: CertificatePreviewProps) {
     return { lines: out, ruleY: rule, logoTop: logoAt };
     // The fonts and colours all follow from the template, so the listed values are everything that can change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [p.template, p.title, p.phrase, p.eventTitle, p.dateLine, p.hostName, logos.join('|'), logoPosition, p.logoSize, p.showHostName, p.sampleName, description, skills.join('|')]);
+  }, [p.template, p.title, p.phrase, p.eventTitle, p.dateLine, p.hostName, logos.join('|'), logoPosition, rowHeight, band, p.showHostName, p.sampleName, description, skills.join('|')]);
 
   const sigX = 90;
   const lineY = 112;
@@ -314,15 +369,18 @@ function BuiltInPreview(p: CertificatePreviewProps) {
       )}
       {p.template === 'tech' && (
         <>
-          <rect x={0} y={0} width={W} height={BAND} fill={ink} />
-          <rect x={0} y={BAND} width={W} height={5} fill={accent} />
-          <path d={`M 0 ${H} L 170 ${H} L 0 ${H - 120} Z`} fill={accent} opacity={0.1} />
-          <path d={`M ${W} ${H} L ${W - 230} ${H} L ${W} ${H - 150} Z`} fill={ink} opacity={0.06} />
+          <rect x={0} y={0} width={W} height={band} fill={ink} />
+          <rect x={0} y={band} width={W} height={4} fill={accent} />
+          {Array.from({ length: 5 }, (_, row) => Array.from({ length: 9 }, (_, col) => (
+            <circle key={`${row}-${col}`} cx={W - 46 - col * 13} cy={26 + row * 13} r={1.1} fill={accent} opacity={0.55 - row * 0.09} />
+          )))}
+          <rect x={0} y={H - 9} width={W} height={9} fill={ink} />
+          <rect x={0} y={H - 11.5} width={W} height={2.5} fill={accent} />
         </>
       )}
 
       {/* The host's logo is their own upload, shown as it is. */}
-      {logoTop !== null && <Logos urls={logos} position={logoPosition} height={logoHeight} top={logoTop} box={centred ? undefined : 110} />}
+      {logoTop !== null && <Logos urls={logos} aspects={aspects} top={logoTop} place={place} />}
 
       <line x1={W / 2 - 60} x2={W / 2 + 60} y1={H - ruleY} y2={H - ruleY} stroke={accent} strokeWidth={1.2} />
 

@@ -51,20 +51,43 @@ describe('live certificate preview in the host form', () => {
   it('is shown in the form and fed from the fields as they are typed', () => {
     const form = readFileSync(resolve(__dirname, '../../app/organizer/events/[eventId]/after/AfterEventClient.tsx'), 'utf8');
     expect(form).toContain('<CertificatePreview');
-    expect(form).toContain("skills={(skillsText ?? '').split(',')}");
-    expect(form).toContain('template={cert.template}');
+    expect(form).toContain("skills: (skillsText ?? '').split(','),");
+    expect(form).toContain('<CertificatePreview {...previewProps} template={cert.template} />');
   });
 
   it('a host’s own design is shown as a picture, with example values in its markers', () => {
     const own = '<svg viewBox="0 0 842 595"><text>{{name}}</text><text>{{event}}</text><rect id="qr" x="700" y="440" width="80" height="80"/></svg>';
     const html = draw({ template: 'custom', customSvg: own });
-    expect(html).toContain('alt="Preview of your own certificate design"');
+    expect(html).toContain('alt="Preview of your custom certificate design"');
     expect(html).toContain('src="data:image/svg+xml');
     expect(decodeURIComponent(html)).toContain('<text>Priya Sharma</text>');
     expect(decodeURIComponent(html)).toContain('<text>Bengaluru AI Builders Day</text>');
     expect(html).not.toContain('<script');
     // Nothing pasted yet: a prompt to paste, not a broken picture.
     expect(draw({ template: 'custom', customSvg: '' })).toContain('Paste your design');
+  });
+
+  it('Tech design: the dark band grows to hold a logo, so the title is never left outside it', () => {
+    const bandOf = (html: string) => Number(/<rect x="0" y="0" width="842" height="([\d.]+)" fill="rgb\(15, 23, 42\)"/.exec(html)?.[1]);
+    const titleY = (html: string) => Number(/<text x="421" y="([\d.]+)"[^>]*>CERTIFICATE OF COMPLETION/.exec(html)?.[1]);
+    const plain = draw({ template: 'tech' });
+    const withLogo = draw({ template: 'tech', logoUrl: 'https://media.udyaibase.com/a.png', logoHeight: 74, showHostName: true, description: '', skills: [] });
+    expect(bandOf(withLogo)).toBeGreaterThan(bandOf(plain));
+    for (const html of [plain, withLogo]) expect(titleY(html)).toBeLessThan(bandOf(html));
+    // A white plate sits behind the logo on the band; it can be switched off.
+    expect(withLogo).toContain('rx="6" fill="#fff"');
+    expect(draw({ template: 'tech', logoUrl: 'https://media.udyaibase.com/a.png', logoPlate: false })).not.toContain('rx="6" fill="#fff"');
+    expect(draw({ template: 'classic', logoUrl: 'https://media.udyaibase.com/a.png' })).not.toContain('rx="6" fill="#fff"');
+  });
+
+  it('logo size and fine position move the logo in the preview', () => {
+    const at = (extra: Record<string, unknown>) => { const m = /<image href="[^"]+" x="([\d.-]+)" y="([\d.-]+)" width="([\d.]+)" height="([\d.]+)"/.exec(draw({ template: 'classic', logoUrl: 'https://media.udyaibase.com/a.png', description: '', skills: [], ...extra }))!; return { x: +m[1], y: +m[2], h: +m[4] }; };
+    const base = at({});
+    expect(at({ logoHeight: 30 }).h).toBeLessThan(base.h);
+    expect(at({ logoOffsetX: 40 }).x).toBeCloseTo(base.x + 40, 1);
+    expect(at({ logoOffsetY: 12 }).y).toBeCloseTo(base.y + 12, 1);
+    expect(at({ logoPosition: 'left' }).x).toBeLessThan(base.x);
+    expect(at({ logoPosition: 'right' }).x).toBeGreaterThan(base.x);
   });
 
   it('shows the logo and a partner logo', () => {

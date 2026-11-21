@@ -42,23 +42,52 @@ export interface CertificateData {
   logoSize?: 'small' | 'medium' | 'large';
   /** Print the host's name as well as the logo. */
   showHostName?: boolean;
+  /** Logo height in points; overrides logoSize. */
+  logoHeight?: number | null;
+  /** Points to move the logo right and down from its place. */
+  logoOffsetX?: number;
+  logoOffsetY?: number;
+  /** White plate behind the logo on dark areas. Default on. */
+  logoPlate?: boolean;
   /** The host's own design (SVG). Drawn when template is "custom"; if it can't be, Classic is drawn. */
   customSvg?: string;
 }
 
 const LOGO_HEIGHT = { small: 38, medium: 56, large: 74 } as const;
 
-/** Draws the logo, and a partner logo beside it, in a row. Returns the row's height (0 when there is no logo). */
-function drawLogos(page: PDFPage, images: PDFImage[], position: 'center' | 'left' | 'right', maxHeight: number, top: number, maxWidth = 170): number {
+const LOGO_GAP = 22;
+type LogoPlace = { position: 'center' | 'left' | 'right'; maxHeight: number; maxWidth: number; dx: number; dy: number; plate: boolean };
+
+/** The logo's height in points: the slider's value, else the small / medium / large choice. */
+const logoHeightOf = (d: CertificateData) => Math.min(74, Math.max(24, d.logoHeight ?? LOGO_HEIGHT[d.logoSize ?? 'medium']));
+
+/** Height the logo row will take, without drawing it (0 when there is no logo). */
+function logoRowHeight(images: PDFImage[], place: Pick<LogoPlace, 'maxHeight' | 'maxWidth'>): number {
+  return images.length ? Math.max(...images.map((img) => img.scaleToFit(place.maxWidth, place.maxHeight).height)) : 0;
+}
+
+/**
+ * Draws the logo, and a partner logo beside it, in a row whose top edge is `top`. `dx` and `dy` nudge it right and
+ * down. On a dark area a white plate goes behind it, so a logo made for white paper can still be seen.
+ * Returns the row's height (0 when there is no logo).
+ */
+function drawLogos(page: PDFPage, images: PDFImage[], top: number, place: LogoPlace): number {
   if (!images.length) return 0;
-  const gap = 22;
-  const sized = images.map((img) => ({ img, ...img.scaleToFit(maxWidth, maxHeight) }));
-  const total = sized.reduce((w, s) => w + s.width, 0) + gap * (sized.length - 1);
+  const sized = images.map((img) => ({ img, ...img.scaleToFit(place.maxWidth, place.maxHeight) }));
+  const total = sized.reduce((w, s) => w + s.width, 0) + LOGO_GAP * (sized.length - 1);
   const height = Math.max(...sized.map((s) => s.height));
-  let x = position === 'left' ? 72 : position === 'right' ? W - 72 - total : (W - total) / 2;
+  const left = (place.position === 'left' ? 72 : place.position === 'right' ? W - 72 - total : (W - total) / 2) + place.dx;
+  const rowTop = top - place.dy;
+  if (place.plate) {
+    const pad = 7, r = 6;
+    const px = left - pad, pw = total + pad * 2, ph = height + pad * 2;
+    // A rounded rectangle; SVG paths are drawn with y running down from the given point.
+    page.drawSvgPath(`M ${r} 0 H ${pw - r} Q ${pw} 0 ${pw} ${r} V ${ph - r} Q ${pw} ${ph} ${pw - r} ${ph} H ${r} Q 0 ${ph} 0 ${ph - r} V ${r} Q 0 0 ${r} 0 Z`, { x: px, y: rowTop + pad, color: rgb(1, 1, 1) });
+  }
+  let x = left;
   for (const s of sized) {
-    page.drawImage(s.img, { x, y: top - height + (height - s.height) / 2, width: s.width, height: s.height });
-    x += s.width + gap;
+    page.drawImage(s.img, { x, y: rowTop - height + (height - s.height) / 2, width: s.width, height: s.height });
+    x += s.width + LOGO_GAP;
   }
   return height;
 }
@@ -83,7 +112,7 @@ async function renderCustomPage(doc: PDFDocument, page: PDFPage, d: CertificateD
     page.drawImage(await doc.embedPng(png), { x: 0, y: 0, width: W, height: H });
 
     const [logo, partner] = await Promise.all([loadImage(doc, d.logoUrl), loadImage(doc, d.partnerLogoUrl ?? null)]);
-    drawLogos(page, [logo, partner].filter((i): i is PDFImage => !!i), d.logoPosition ?? 'center', LOGO_HEIGHT[d.logoSize ?? 'medium'], H - 34);
+    drawLogos(page, [logo, partner].filter((i): i is PDFImage => !!i), H - 34, { position: d.logoPosition ?? 'center', maxHeight: logoHeightOf(d), maxWidth: 170, dx: d.logoOffsetX ?? 0, dy: d.logoOffsetY ?? 0, plate: false });
 
     // The QR code, where the design marked it (<rect id="qr">) or bottom right. On a white plate so it always scans,
     // with the ID and verify address on the same plate so they can always be read.
@@ -237,6 +266,32 @@ export async function renderCertificatePdf(d: CertificateData): Promise<Uint8Arr
   const heading = t.serif ? serif : sansBold;
   const nameFont = t.serif ? serifItalic : sansBold;
 
+  const [logo, partner, signature] = await Promise.all([loadImage(doc, d.logoUrl), loadImage(doc, d.partnerLogoUrl ?? null), loadImage(doc, d.signatureUrl)]);
+  const logos = [logo, partner].filter((i): i is PDFImage => !!i);
+  const logoPosition = d.logoPosition ?? 'center';
+
+  const description = drawable(body, d.description ?? '');
+  const skills = (d.skills ?? []).map((k) => drawable(sansBold, k)).filter(Boolean);
+  // With the extra lines the page is fuller, so the logo and the gaps above the name give a little back.
+  const full = !!description || skills.length > 0;
+  // On the tech design the logo, host name and title sit in the dark band, in light colours.
+  const inBand = d.template === 'tech';
+
+  // Where the logo goes. Centred, it heads the page and the text starts below it. In a corner it is kept smaller,
+  // because the title runs across the page beside it.
+  const centred = logos.length > 0 && logoPosition === 'center';
+  const place: LogoPlace = centred
+    ? { position: 'center', maxHeight: Math.max(24, logoHeightOf(d) - (full ? 16 : 0)), maxWidth: 170, dx: d.logoOffsetX ?? 0, dy: d.logoOffsetY ?? 0, plate: false }
+    : { position: logoPosition, maxHeight: Math.min(logoHeightOf(d), 56), maxWidth: 120, dx: d.logoOffsetX ?? 0, dy: d.logoOffsetY ?? 0, plate: false };
+  // A dark logo needs a white plate on the navy page and on the Tech band.
+  place.plate = (d.logoPlate ?? true) && (!!t.dark || inBand);
+  const rowHeight = centred ? logoRowHeight(logos, place) : 0;
+
+  // The Tech band is as tall as what it holds (logo, host name, title), so the title is always inside it. It used
+  // to be a fixed height: with a logo the title fell below the band, white on white.
+  const headerEnd = H - 78 - (centred ? rowHeight + 6 + (d.showHostName ? 10 : 0) : 20) - 34 - 16; // the rule under the title
+  const techBand = Math.max(TECH_BAND, H - (headerEnd - 20));
+
   // Background and frame
   page.drawRectangle({ x: 0, y: 0, width: W, height: H, color: t.bg });
   if (d.template === 'classic') {
@@ -256,40 +311,28 @@ export async function renderCertificatePdf(d: CertificateData): Promise<Uint8Arr
     page.drawRectangle({ x: 32, y: 32, width: W - 64, height: H - 64, borderColor: t.accent, borderWidth: 0.6 });
     for (const [x, y] of [[26, 26], [W - 26, 26], [26, H - 26], [W - 26, H - 26]]) page.drawRectangle({ x: x - 6, y: y - 6, width: 12, height: 12, color: gold });
   } else if (d.template === 'tech') {
-    page.drawRectangle({ x: 0, y: H - TECH_BAND, width: W, height: TECH_BAND, color: t.ink });
-    page.drawRectangle({ x: 0, y: H - TECH_BAND - 5, width: W, height: 5, color: t.accent });
-    // Two soft triangles in the bottom corners.
-    page.drawSvgPath('M 0 0 L 170 0 L 0 -120 Z', { x: 0, y: 0, color: t.accent, opacity: 0.1 });
-    page.drawSvgPath('M 0 0 L -230 0 L 0 -150 Z', { x: W, y: 0, color: t.ink, opacity: 0.06 });
+    // Dark header band with a teal line under it, a matching strip along the foot, and a faint grid of dots in
+    // the band's corner for texture.
+    page.drawRectangle({ x: 0, y: H - techBand, width: W, height: techBand, color: t.ink });
+    page.drawRectangle({ x: 0, y: H - techBand - 4, width: W, height: 4, color: t.accent });
+    for (let row = 0; row < 5; row++) for (let col = 0; col < 9; col++) page.drawCircle({ x: W - 46 - col * 13, y: H - 26 - row * 13, size: 1.1, color: t.accent, opacity: 0.55 - row * 0.09 });
+    page.drawRectangle({ x: 0, y: 0, width: W, height: 9, color: t.ink });
+    page.drawRectangle({ x: 0, y: 9, width: W, height: 2.5, color: t.accent });
   } else {
     page.drawRectangle({ x: 30, y: 30, width: W - 60, height: H - 60, borderColor: t.accent, borderWidth: 0.6 });
   }
-
-  const [logo, partner, signature] = await Promise.all([loadImage(doc, d.logoUrl), loadImage(doc, d.partnerLogoUrl ?? null), loadImage(doc, d.signatureUrl)]);
-  const logos = [logo, partner].filter((i): i is PDFImage => !!i);
-  const logoPosition = d.logoPosition ?? 'center';
-
-  const description = drawable(body, d.description ?? '');
-  const skills = (d.skills ?? []).map((k) => drawable(sansBold, k)).filter(Boolean);
-  // With the extra lines the page is fuller, so the logo and the gaps above the name give a little back.
-  const full = !!description || skills.length > 0;
-  // On the tech design the host name and title sit in the dark band, in light colours.
-  const inBand = d.template === 'tech';
 
   let y = H - 78;
   const hostLine = (size: number) => {
     const host = drawable(sansBold, d.hostName).toUpperCase();
     centered(page, sansBold, host, y, fit(sansBold, host, size, 520), inBand ? paint(TECH_BAND_HOST) : t.muted);
   };
-  if (logos.length && logoPosition === 'center') {
-    // With the extra lines the page is fuller, so the logo gives a little height back.
-    const used = drawLogos(page, logos, 'center', Math.max(30, LOGO_HEIGHT[d.logoSize ?? 'medium'] - (full ? 16 : 0)), y + 18);
-    y -= used + 6;
+  if (centred) {
+    drawLogos(page, logos, y + 18, place);
+    y -= rowHeight + 6;
     if (d.showHostName) { y += 4; hostLine(10); y -= 14; }
   } else {
-    // A corner logo sits clear of the centred text, which starts with the host's name as usual.
-    // Kept small: the title runs across the page just below it.
-    if (logos.length) drawLogos(page, logos, logoPosition, Math.min(LOGO_HEIGHT[d.logoSize ?? 'medium'], 44), H - 48, 110);
+    if (logos.length) drawLogos(page, logos, H - 46, place);
     if (!logos.length || d.showHostName) hostLine(13);
     y -= 20;
   }
@@ -301,7 +344,7 @@ export async function renderCertificatePdf(d: CertificateData): Promise<Uint8Arr
   y -= 16;
   page.drawLine({ start: { x: W / 2 - 60, y }, end: { x: W / 2 + 60, y }, thickness: 1.2, color: t.accent });
   // Whatever the logo's height, the text below starts under the band.
-  if (inBand) y = Math.min(y, H - TECH_BAND - 5);
+  if (inBand) y = H - techBand - 4;
 
   y -= full ? 32 : 38;
   centered(page, body, 'This is to certify that', y, 13, t.muted);

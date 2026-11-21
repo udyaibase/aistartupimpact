@@ -5,11 +5,12 @@ import Link from 'next/link';
 import { ArrowLeft, Award, CheckCircle2, ExternalLink, Eye, ImagePlus, Loader2, Lock, Mail, MessageSquareText, Plus, Send, Star, Trash2, Upload, Users, X } from 'lucide-react';
 import { payWithRazorpay } from '@/lib/billing/checkout-client';
 import CertificatePreview from './CertificatePreview';
+import ImageDropField from '@/components/ui/ImageDropField';
 import { CERTIFICATE_MARKERS, certificatePrompt, checkCustomSvg } from '@/lib/events/certificate-custom';
 
 type Template = 'classic' | 'modern' | 'minimal' | 'executive' | 'heritage' | 'tech' | 'custom';
 type Phrase = 'participated' | 'attended' | 'completed' | 'spoke' | 'volunteered';
-type CertSettings = { template: Template; audience: 'CHECKED_IN' | 'REGISTERED'; title: string; signerName: string; signerTitle: string; signatureUrl: string | null; autoIssue: boolean; phrase: Phrase; description: string; skills: string[]; duration: string; logoUrl: string | null; partnerLogoUrl: string | null; logoPosition: 'center' | 'left' | 'right'; logoSize: 'small' | 'medium' | 'large'; showHostName: boolean; customSvg: string };
+type CertSettings = { template: Template; audience: 'CHECKED_IN' | 'REGISTERED'; title: string; signerName: string; signerTitle: string; signatureUrl: string | null; autoIssue: boolean; phrase: Phrase; description: string; skills: string[]; duration: string; logoUrl: string | null; partnerLogoUrl: string | null; logoPosition: 'center' | 'left' | 'right'; logoSize: 'small' | 'medium' | 'large'; showHostName: boolean; customSvg: string; logoHeight: number | null; logoOffsetX: number; logoOffsetY: number; logoPlate: boolean };
 type FollowSettings = { auto: boolean; includeMissed: boolean; attendedSubject: string; attendedBody: string; missedSubject: string; missedBody: string };
 type FeedbackSettings = { enabled: boolean; questions: string[] };
 type RecapLink = { kind: 'recording' | 'slides' | 'other'; title: string; url: string };
@@ -60,8 +61,12 @@ const TEMPLATES: { id: Template; name: string; swatch: string; dark?: boolean }[
   { id: 'executive', name: 'Executive', swatch: 'bg-[#0D182E] border-[#D4B05C] border-2 [outline:1px_solid_#D4B05C] [outline-offset:-6px]', dark: true },
   { id: 'heritage', name: 'Heritage', swatch: 'bg-[#FCF9F2] border-[#851C26] border-[3px] [outline:1px_solid_#B8943F] [outline-offset:-7px]' },
   { id: 'tech', name: 'Tech', swatch: 'bg-white border-t-[14px] border-t-[#0F172A] border-b-[3px] border-b-[#0D9488]' },
-  { id: 'custom', name: 'Your own', swatch: 'bg-gray-50 border-2 border-dashed border-gray-400' },
+  { id: 'custom', name: 'Custom', swatch: 'bg-gray-50 border-2 border-dashed border-gray-400' },
 ];
+
+const LOGO_HEIGHTS = { small: 38, medium: 56, large: 74 } as const;
+/** "12 pt left", "centred"… for the fine position sliders. */
+const offsetText = (n: number, minus: string, plus: string) => (n === 0 ? 'as placed' : `${Math.abs(n)} pt ${n < 0 ? minus : plus}`);
 
 const PHRASES: { id: Phrase; text: string }[] = [
   { id: 'participated', text: 'participated in' },
@@ -85,9 +90,6 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
   const [note, setNote] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [busy, setBusy] = useState<'' | 'issue' | 'send' | 'buy' | 'upload' | 'photos'>('');
   const [confirmSend, setConfirmSend] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const logoRef = useRef<HTMLInputElement>(null);
-  const partnerRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
@@ -96,7 +98,7 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
       const d = await r.json();
       if (!r.ok || !d.success) { setLoadError(d.error || 'Couldn’t load this event.'); return; }
       setData(d);
-      setCert((c) => c ?? { phrase: 'participated', description: '', skills: [], duration: '', logoUrl: null, partnerLogoUrl: null, logoPosition: 'center', logoSize: 'medium', showHostName: false, customSvg: '', ...d.certificates.settings });
+      setCert((c) => c ?? { phrase: 'participated', description: '', skills: [], duration: '', logoUrl: null, partnerLogoUrl: null, logoPosition: 'center', logoSize: 'medium', showHostName: false, customSvg: '', logoHeight: null, logoOffsetX: 0, logoOffsetY: 0, logoPlate: true, ...d.certificates.settings });
       setSkillsText((t) => t ?? (d.certificates.settings.skills ?? []).join(', '));
       setFollow((f) => f ?? d.followUp.settings);
       setFb((f) => f ?? d.feedback.settings);
@@ -177,7 +179,7 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
       if (!r.ok || !d.url) flash('error', d.error || 'Upload failed.');
       else setCert((c) => (c ? { ...c, [field]: d.url } : c));
     } catch { flash('error', 'You seem to be offline.'); }
-    finally { setBusy(''); for (const r of [fileRef, logoRef, partnerRef]) if (r.current) r.current.value = ''; }
+    finally { setBusy(''); }
   }
 
   async function uploadPhotos(files: FileList) {
@@ -211,6 +213,32 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
   const { counts, certificates, followUp, event, feedback } = data;
   const rate = counts.registered ? Math.round((counts.attended / counts.registered) * 100) : 0;
   const recipients = counts.attended + (follow.includeMissed ? counts.missed : 0) - counts.optedOut;
+  // What every preview on this screen shows: the large live one and the small one on each design choice.
+  const previewProps = cert && data ? {
+    title: cert.title,
+    phrase: PHRASES.find((x) => x.id === (cert.phrase ?? 'participated'))?.text ?? 'participated in',
+    description: cert.description ?? '',
+    skills: (skillsText ?? '').split(','),
+    dateLine: [data.certificates.sample?.dateLine, (cert.duration ?? '').trim()].filter(Boolean).join(' · '),
+    eventTitle: data.event.title,
+    hostName: data.certificates.sample?.hostName ?? '',
+    logoUrl: cert.logoUrl ?? data.certificates.sample?.logoUrl ?? null,
+    partnerLogoUrl: cert.partnerLogoUrl,
+    logoPosition: cert.logoPosition ?? 'center',
+    logoSize: cert.logoSize ?? 'medium',
+    logoHeight: cert.logoHeight ?? null,
+    logoOffsetX: cert.logoOffsetX ?? 0,
+    logoOffsetY: cert.logoOffsetY ?? 0,
+    logoPlate: cert.logoPlate !== false,
+    showHostName: !!cert.showHostName,
+    customSvg: cert.customSvg ?? '',
+    duration: cert.duration ?? '',
+    signerName: cert.signerName,
+    signerTitle: cert.signerTitle,
+    signatureUrl: cert.signatureUrl,
+    sampleName: 'Priya Sharma',
+  } as const : null;
+  const logoHeightNow = cert ? cert.logoHeight ?? LOGO_HEIGHTS[cert.logoSize ?? 'medium'] : 56;
   const previewHref = `/api/organizer/events/${eventId}/certificates/preview?settings=${encodeURIComponent(JSON.stringify({ ...cert, customSvg: undefined, skills: skillsText ?? '' }))}`;
   const eligible = cert.audience === 'CHECKED_IN' ? counts.attended : counts.registered;
 
@@ -352,16 +380,18 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
 
           <fieldset>
             <legend className={label}>Design</legend>
-            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 sm:gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
               {TEMPLATES.map((t) => (
                 <label key={t.id} className={`cursor-pointer rounded-[12px] border p-2 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand/40 ${cert.template === t.id ? 'border-brand bg-brand/5' : 'border-gray-200 dark:border-gray-800 hover:border-gray-300'}`}>
                   <input type="radio" name="cert-template" value={t.id} checked={cert.template === t.id} onChange={() => setCert({ ...cert, template: t.id })} className="sr-only" />
-                  <span className={`block aspect-[842/595] rounded-[6px] ${t.swatch}`} aria-hidden>
-                    <span className="flex h-full flex-col items-center justify-center gap-1">
-                      <span className={`block h-1 w-1/2 rounded ${t.dark ? 'bg-[#D4B05C]/80' : 'bg-gray-800/70'}`} />
-                      <span className={`block h-1.5 w-2/3 rounded ${t.dark ? 'bg-[#F8F3E7]' : 'bg-gray-900'}`} />
-                      <span className={`block h-0.5 w-1/3 rounded ${t.dark ? 'bg-[#D4B05C]/60' : 'bg-gray-400'}`} />
-                    </span>
+                  {/* The design itself, small, with this event's own details: not a stand-in pattern. */}
+                  <span className="block aspect-[842/595] rounded-[6px] overflow-hidden border border-gray-200 dark:border-gray-700 bg-white" aria-hidden>
+                    {t.id === 'custom' && !(cert.customSvg ?? '').trim() ? (
+                      <span className="flex h-full flex-col items-center justify-center gap-0.5 border-2 border-dashed border-gray-300 rounded-[6px] bg-gray-50 text-gray-500">
+                        <span className="text-[15px] leading-none font-mono">&lt;/&gt;</span>
+                        <span className="text-[9px] font-semibold">Paste your code</span>
+                      </span>
+                    ) : previewProps ? <CertificatePreview {...previewProps} template={t.id} /> : null}
                   </span>
                   <span className="mt-1.5 block text-center text-[13px] font-semibold text-gray-800 dark:text-gray-200">{t.name}</span>
                 </label>
@@ -377,27 +407,7 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
                 <p className="text-xs text-gray-500 dark:text-gray-400">Updates as you type. The name is an example.</p>
               </div>
               <div className="rounded-[8px] overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm">
-                <CertificatePreview
-                  template={cert.template}
-                  title={cert.title}
-                  phrase={PHRASES.find((p) => p.id === (cert.phrase ?? 'participated'))?.text ?? 'participated in'}
-                  description={cert.description ?? ''}
-                  skills={(skillsText ?? '').split(',')}
-                  dateLine={[certificates.sample?.dateLine, (cert.duration ?? '').trim()].filter(Boolean).join(' · ')}
-                  eventTitle={event.title}
-                  hostName={certificates.sample?.hostName ?? ''}
-                  logoUrl={cert.logoUrl ?? certificates.sample?.logoUrl ?? null}
-                  partnerLogoUrl={cert.partnerLogoUrl}
-                  logoPosition={cert.logoPosition ?? 'center'}
-                  logoSize={cert.logoSize ?? 'medium'}
-                  showHostName={!!cert.showHostName}
-                  customSvg={cert.customSvg ?? ''}
-                  duration={cert.duration ?? ''}
-                  signerName={cert.signerName}
-                  signerTitle={cert.signerTitle}
-                  signatureUrl={cert.signatureUrl}
-                  sampleName="Priya Sharma"
-                />
+{previewProps && <CertificatePreview {...previewProps} template={cert.template} />}
               </div>
             </div>
           </div>
@@ -407,7 +417,7 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
             return (
               <div className="rounded-[12px] border border-gray-200 dark:border-gray-800 p-4 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <label htmlFor="cert-custom-svg" className="text-sm font-semibold text-gray-900 dark:text-white">Your design (SVG code)</label>
+                  <label htmlFor="cert-custom-svg" className="text-sm font-semibold text-gray-900 dark:text-white">Custom design (SVG code)</label>
                   <button type="button" className={secondary}
                     onClick={async () => { try { await navigator.clipboard.writeText(certificatePrompt(event.title)); setCopied(true); setTimeout(() => setCopied(false), 2500); } catch { flash('error', 'Couldn’t copy. Select the text in “What to ask” below instead.'); } }}>
                     {copied ? 'Copied' : 'Copy prompt for Claude or ChatGPT'}
@@ -448,45 +458,60 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
           <fieldset className="rounded-[12px] border border-gray-200 dark:border-gray-800 p-4">
             <legend className="px-1 text-sm font-semibold text-gray-900 dark:text-white">Logo</legend>
             <div className="grid sm:grid-cols-2 gap-4">
-              {([['logoUrl', 'Your logo', logoRef, 'Upload logo'], ['partnerLogoUrl', 'Partner logo (optional)', partnerRef, 'Add partner logo']] as const).map(([field, name, ref, action]) => (
-                <div key={field}>
-                  <p className={label}>{name}</p>
-                  <div className="flex flex-wrap items-center gap-3">
-                    {cert[field] && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={cert[field]!} alt={name} className="h-12 max-w-[140px] object-contain rounded border border-gray-200 dark:border-gray-700 bg-white p-1" />
-                    )}
-                    <input ref={ref} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" aria-label={name} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadImage(f, field); }} />
-                    <button type="button" onClick={() => ref.current?.click()} disabled={busy === 'upload'} className={secondary}>
-                      {busy === 'upload' ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Upload className="w-4 h-4" aria-hidden />} {cert[field] ? 'Replace' : action}
-                    </button>
-                    {cert[field] && <button type="button" onClick={() => setCert({ ...cert, [field]: null })} className="text-sm font-semibold text-gray-600 hover:underline min-h-[32px]">Remove</button>}
-                  </div>
+              <ImageDropField label="Your logo" value={cert.logoUrl} busy={busy === 'upload'} cropTitle="Crop your logo"
+                onPick={(file) => uploadImage(file, 'logoUrl')} onRemove={() => setCert({ ...cert, logoUrl: null })}
+                hint={cert.logoUrl ? undefined : 'Without one, your profile picture is used if you have it; otherwise your organization’s name is printed.'} />
+              <ImageDropField label="Partner logo (optional)" value={cert.partnerLogoUrl} busy={busy === 'upload'} cropTitle="Crop the partner logo"
+                onPick={(file) => uploadImage(file, 'partnerLogoUrl')} onRemove={() => setCert({ ...cert, partnerLogoUrl: null })}
+                hint="A sponsor, partner or accrediting body, shown beside yours." />
+            </div>
+
+            <div className="mt-4 grid sm:grid-cols-2 gap-x-6 gap-y-4">
+              <fieldset>
+                <legend className={label}>Position</legend>
+                <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Logo position">
+                  {([['left', 'Left'], ['center', 'Centre'], ['right', 'Right']] as const).map(([value, name]) => {
+                    const on = (cert.logoPosition ?? 'center') === value;
+                    return (
+                      <button key={value} type="button" role="radio" aria-checked={on} onClick={() => setCert({ ...cert, logoPosition: value })}
+                        className={`min-h-[44px] rounded-[10px] border px-2 py-1.5 flex flex-col items-center justify-center gap-1 text-xs font-semibold transition-colors ${on ? 'border-brand bg-brand/5 text-brand' : 'border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-gray-400'}`}>
+                        {/* A tiny page with a block where the logo sits. */}
+                        <span aria-hidden className={`flex w-9 h-[18px] rounded-[3px] border border-current p-[2px] ${value === 'left' ? 'justify-start' : value === 'right' ? 'justify-end' : 'justify-center'}`}><span className="block w-2.5 h-1.5 rounded-[1px] bg-current" /></span>
+                        {name}
+                      </button>
+                    );
+                  })}
                 </div>
-              ))}
+              </fieldset>
               <div>
-                <label htmlFor="cert-logo-position" className={label}>Position</label>
-                <select id="cert-logo-position" value={cert.logoPosition ?? 'center'} onChange={(e) => setCert({ ...cert, logoPosition: e.target.value as CertSettings['logoPosition'] })} className={input}>
-                  <option value="center">Top centre</option>
-                  <option value="left">Top left</option>
-                  <option value="right">Top right</option>
-                </select>
+                <div className="flex items-baseline justify-between">
+                  <label htmlFor="cert-logo-height" className={label}>Size</label>
+                  <span className="text-xs text-gray-500 tabular-nums">{logoHeightNow} pt</span>
+                </div>
+                <input id="cert-logo-height" type="range" min={24} max={74} step={1} value={logoHeightNow} onChange={(e) => setCert({ ...cert, logoHeight: Number(e.target.value) })} className="w-full h-11 accent-[#A50F15]" />
               </div>
               <div>
-                <label htmlFor="cert-logo-size" className={label}>Size</label>
-                <select id="cert-logo-size" value={cert.logoSize ?? 'medium'} onChange={(e) => setCert({ ...cert, logoSize: e.target.value as CertSettings['logoSize'] })} className={input}>
-                  <option value="small">Small</option>
-                  <option value="medium">Medium</option>
-                  <option value="large">Large</option>
-                </select>
+                <div className="flex items-baseline justify-between">
+                  <label htmlFor="cert-logo-x" className={label}>Move left or right</label>
+                  <span className="text-xs text-gray-500 tabular-nums">{offsetText(cert.logoOffsetX ?? 0, 'left', 'right')}</span>
+                </div>
+                <input id="cert-logo-x" type="range" min={-140} max={140} step={2} value={cert.logoOffsetX ?? 0} onChange={(e) => setCert({ ...cert, logoOffsetX: Number(e.target.value) })} className="w-full h-11 accent-[#A50F15]" />
+              </div>
+              <div>
+                <div className="flex items-baseline justify-between">
+                  <label htmlFor="cert-logo-y" className={label}>Move up or down</label>
+                  <span className="text-xs text-gray-500 tabular-nums">{offsetText(cert.logoOffsetY ?? 0, 'up', 'down')}</span>
+                </div>
+                <input id="cert-logo-y" type="range" min={-40} max={40} step={1} value={cert.logoOffsetY ?? 0} onChange={(e) => setCert({ ...cert, logoOffsetY: Number(e.target.value) })} className="w-full h-11 accent-[#A50F15]" />
               </div>
             </div>
-            <div className="mt-3">
+            <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-2">
               <Toggle id="cert-show-host" checked={!!cert.showHostName} onChange={(v) => setCert({ ...cert, showHostName: v })}>Also print your organization’s name</Toggle>
+              <Toggle id="cert-logo-plate" checked={cert.logoPlate !== false} onChange={(v) => setCert({ ...cert, logoPlate: v })}>White background behind the logo on dark designs</Toggle>
+              {(cert.logoHeight !== null || (cert.logoOffsetX ?? 0) !== 0 || (cert.logoOffsetY ?? 0) !== 0 || (cert.logoPosition ?? 'center') !== 'center') && (
+                <button type="button" onClick={() => setCert({ ...cert, logoHeight: null, logoOffsetX: 0, logoOffsetY: 0, logoPosition: 'center' })} className="ml-auto text-sm font-semibold text-gray-600 dark:text-gray-300 hover:underline min-h-[32px]">Reset position and size</button>
+              )}
             </div>
-            <p className="mt-2 text-[13px] text-gray-500 dark:text-gray-400">
-              {cert.logoUrl ? 'A PNG with a transparent background looks best.' : 'Without a logo here, your profile picture is used if you have one; otherwise your organization’s name is printed.'}
-            </p>
           </fieldset>
 
           <div className="grid sm:grid-cols-2 gap-4">
@@ -531,20 +556,10 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
             </div>
           </div>
 
-          <div>
-            <p className={label}>Signature <span className="font-normal text-gray-500">(optional)</span></p>
-            <div className="flex flex-wrap items-center gap-3">
-              {cert.signatureUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={cert.signatureUrl} alt="Signature" className="h-12 max-w-[180px] object-contain rounded border border-gray-200 dark:border-gray-700 bg-white p-1" />
-              )}
-              <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadImage(f); }} />
-              <button type="button" onClick={() => fileRef.current?.click()} disabled={busy === 'upload'} className={secondary}>
-                {busy === 'upload' ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Upload className="w-4 h-4" aria-hidden />} {cert.signatureUrl ? 'Replace' : 'Upload signature'}
-              </button>
-              {cert.signatureUrl && <button type="button" onClick={() => setCert({ ...cert, signatureUrl: null })} className="text-sm font-semibold text-gray-600 hover:underline">Remove</button>}
-            </div>
-            <p className="mt-1.5 text-[13px] text-gray-500 dark:text-gray-400">A PNG with a transparent background looks best.</p>
+          <div className="sm:max-w-[50%]">
+            <ImageDropField label="Signature (optional)" value={cert.signatureUrl} busy={busy === 'upload'} cropTitle="Crop the signature" removeWhiteByDefault
+              onPick={(file) => uploadImage(file, 'signatureUrl')} onRemove={() => setCert({ ...cert, signatureUrl: null })}
+              hint="A photo of a signature on white paper works: the white is made see-through when you crop it." />
           </div>
 
           <Toggle id="cert-auto" checked={cert.autoIssue} onChange={(v) => setCert({ ...cert, autoIssue: v })}>
