@@ -84,6 +84,15 @@ const nextConfig = {
         ],
       },
       {
+        // Organizer check-in scans tickets with the phone's camera. Every other page keeps camera=() (blocked); with that
+        // header here too, browsers and the installed app refuse the camera without even asking ("permission denied").
+        // Declared after the site-wide block so this value replaces it on this path only.
+        source: '/organizer/check-in/:path*',
+        headers: [
+          { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=(), payment=(), usb=(), bluetooth=()' },
+        ],
+      },
+      {
         // "Get notified" confirm and unsubscribe links carry a private token in the URL.
         source: '/job-alerts',
         headers: [

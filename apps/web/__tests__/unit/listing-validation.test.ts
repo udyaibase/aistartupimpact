@@ -3,7 +3,7 @@ import { isPublicWebUrl, startupSubmissionSchema, toolSubmissionSchema } from '@
 
 const startup = { name: 'Acme AI', tagline: 'AI for x', description: 'What it does', websiteUrl: 'https://acme.ai', foundedYear: 2024, founders: ['A'] };
 const tool = { name: 'Acme Writer', tagline: 'Writes', description: 'What it does', websiteUrl: 'https://acme.ai', launchYear: 2024, features: [], useCases: [], screenshotUrls: [] };
-const message = (r: { success: boolean; error?: { errors: { message: string }[] } }) => r.error?.errors[0].message;
+const message = (r: { success: boolean; error?: { issues: { message: string }[] } }) => r.error?.issues[0].message;
 
 describe('isPublicWebUrl', () => {
   it('accepts normal addresses', () => {
