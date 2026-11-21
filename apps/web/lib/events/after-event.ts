@@ -20,6 +20,10 @@ export const CERTIFICATE_TEMPLATES = ['classic', 'modern', 'minimal', 'executive
 export const CERTIFICATE_LOGO_POSITIONS = ['center', 'left', 'right'] as const;
 export type CertificateLogoPosition = (typeof CERTIFICATE_LOGO_POSITIONS)[number];
 export const CERTIFICATE_LOGO_SIZES = ['small', 'medium', 'large'] as const;
+/** Limits of the logo size slider (height in points) and of the fine position controls. */
+export const LOGO_HEIGHT_RANGE = { min: 24, max: 74 } as const;
+export const LOGO_OFFSET_MAX = { x: 140, y: 40 } as const;
+const within = (n: number, min: number, max: number) => Math.round(Math.min(max, Math.max(min, n)));
 export type CertificateLogoSize = (typeof CERTIFICATE_LOGO_SIZES)[number];
 export type CertificateTemplate = (typeof CERTIFICATE_TEMPLATES)[number];
 
@@ -62,6 +66,13 @@ export interface CertificateSettings {
   logoSize: CertificateLogoSize;
   /** Print the host's name under the logo (it is always printed when there is no logo). */
   showHostName: boolean;
+  /** Logo height in points, set with the size slider. Null means the small / medium / large choice above. */
+  logoHeight: number | null;
+  /** Fine position: points to move the logo right (negative: left) and down (negative: up) from its place. */
+  logoOffsetX: number;
+  logoOffsetY: number;
+  /** A white plate behind the logo on dark areas (the navy design, the Tech design's band), so a dark logo shows. */
+  logoPlate: boolean;
   /** The host's own design, as cleaned SVG code. Used when template is "custom". */
   customSvg: string;
 }
@@ -111,6 +122,10 @@ export function certificateSettings(raw: unknown): CertificateSettings {
     logoPosition: CERTIFICATE_LOGO_POSITIONS.includes(r.logoPosition as CertificateLogoPosition) ? (r.logoPosition as CertificateLogoPosition) : 'center',
     logoSize: CERTIFICATE_LOGO_SIZES.includes(r.logoSize as CertificateLogoSize) ? (r.logoSize as CertificateLogoSize) : 'medium',
     showHostName: r.showHostName === true,
+    logoHeight: r.logoHeight === null || r.logoHeight === undefined || r.logoHeight === '' || !Number.isFinite(Number(r.logoHeight)) ? null : within(Number(r.logoHeight), LOGO_HEIGHT_RANGE.min, LOGO_HEIGHT_RANGE.max),
+    logoOffsetX: within(Number(r.logoOffsetX) || 0, -LOGO_OFFSET_MAX.x, LOGO_OFFSET_MAX.x),
+    logoOffsetY: within(Number(r.logoOffsetY) || 0, -LOGO_OFFSET_MAX.y, LOGO_OFFSET_MAX.y),
+    logoPlate: r.logoPlate !== false,
     customSvg,
   };
 }

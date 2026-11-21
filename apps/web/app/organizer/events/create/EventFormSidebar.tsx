@@ -1,5 +1,6 @@
 "use client";
 
+import { formatTimeLabel } from "@/components/ui/DateTimeFields";
 import Image from "next/image";
 import { Calendar, MapPin, Video, X, Clock, Users, Globe, Image as ImageIcon, Mail, User, Mic, Check, Ticket, ExternalLink } from "lucide-react";
 import { CATEGORIES, CATEGORY_VALUES, type EventFormView } from "./event-form-data";
@@ -46,7 +47,7 @@ export default function EventFormSidebar({ title, category, topics, coverImageUr
                 {startDate ? (
                   <p className="text-sm text-brand font-semibold font-jakarta">
                     {new Date(startDate + "T00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
-                    {startTime && ` · ${startTime}`}
+                    {startTime && ` · ${formatTimeLabel(startTime)}`}
                   </p>
                 ) : (
                   <p className="text-sm text-brand font-jakarta">Date & time to be set</p>

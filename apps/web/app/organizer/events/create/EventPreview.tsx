@@ -1,5 +1,6 @@
 "use client";
 
+import { formatTimeLabel } from "@/components/ui/DateTimeFields";
 import Image from "next/image";
 import { Calendar, MapPin, Video, X, Clock, Users, Globe, Image as ImageIcon, Mail, User, Mic, Check, Ticket, ExternalLink } from "lucide-react";
 import { CATEGORIES, CATEGORY_VALUES, type EventFormView } from "./event-form-data";
@@ -49,8 +50,8 @@ export default function EventPreview({ title, subtitle, category, topics, coverI
               {startDate ? (
                 <p className="text-sm text-brand font-semibold font-jakarta mb-2">
                   {new Date(startDate + "T00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-                  {startTime && ` · ${startTime}`}
-                  {endTime && ` – ${endTime}`}
+                  {startTime && ` · ${formatTimeLabel(startTime)}`}
+                  {endTime && ` – ${formatTimeLabel(endTime)}`}
                   {multiDay && endDate && (
                     <> to {new Date(endDate + "T00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long" })}</>
                   )}
@@ -77,7 +78,9 @@ export default function EventPreview({ title, subtitle, category, topics, coverI
             {description ? (
               <div>
                 <h2 className="text-sm font-bold text-gray-900 dark:text-white font-jakarta uppercase tracking-wider mb-3">About this event</h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400 font-jakarta whitespace-pre-wrap leading-relaxed">{description}</p>
+                {/* The editor's own output: only the formatting the editor has (headings, lists, bold, links). Shown formatted,
+                    as attendees will see it. It used to be printed as raw text, tags and all. */}
+                <div className="prose prose-sm dark:prose-invert max-w-none font-jakarta text-gray-700 dark:text-gray-300" dangerouslySetInnerHTML={{ __html: description }} />
               </div>
             ) : (
               <div className="py-6 border border-dashed border-gray-200 dark:border-gray-700 rounded-md text-center">

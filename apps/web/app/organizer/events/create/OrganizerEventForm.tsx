@@ -12,6 +12,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import CitySelect from "@/components/events/CitySelect";
+import { DateField, TimeField, addMinutes, durationLabel, formatDateLabel, formatTimeLabel } from "@/components/ui/DateTimeFields";
 
 import ImageCropDialog from "@/components/organizer/ImageCropDialog";
 import MeetingLinkButtons from "@/components/organizer/MeetingLinkButtons";
@@ -23,6 +24,14 @@ import EventPreview from "./EventPreview";
 import { eventPriceLabel } from "@/lib/events/price-label";
 import { CATEGORIES, CATEGORY_VALUES, TIMEZONES, MAX_DESC, STEPS, slugify, TEMPLATES, EventData, type EventFormView } from "./event-form-data";
 const RichTextEditor = dynamic(() => import("@/components/organizer/RichTextEditor"), { ssr: false });
+
+/** Minutes from a start time to an end time on the same day; null when either is missing or the end isn't later. */
+function durationMinutes(start: string, end: string): number | null {
+  const a = /^(\d{2}):(\d{2})$/.exec(start), b = /^(\d{2}):(\d{2})$/.exec(end);
+  if (!a || !b) return null;
+  const minutes = Number(b[1]) * 60 + Number(b[2]) - (Number(a[1]) * 60 + Number(a[2]));
+  return minutes > 0 ? minutes : null;
+}
 
 export default function OrganizerEventForm({ organizerId, template, event }: { organizerId: string; template?: string; event?: EventData }) {
   const tpl = template ? TEMPLATES[template] : undefined;
@@ -322,6 +331,8 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
     }
   };
 
+  const todayIso = useMemo(() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`; }, []);
+  const whenLength = durationLabel(startDate, startTime, multiDay ? endDate : startDate, endTime);
   const ic = "w-full min-h-[44px] px-3.5 py-2.5 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm font-jakarta focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand placeholder-gray-400 transition-colors";
 
   return (
@@ -608,28 +619,60 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
                       <span className="text-sm text-gray-700 dark:text-gray-200 font-jakarta">Runs over multiple days</span>
                     </label>
 
-                    <div className={`grid gap-4 ${multiDay ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-1 sm:grid-cols-3"}`}>
+                    <div className={`grid gap-4 ${multiDay ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-3"}`}>
                       <div>
-                        <label className="text-sm font-semibold text-gray-700 dark:text-gray-200 font-jakarta mb-1.5 block">Start date *</label>
-                        <input type="date" value={startDate} onChange={e => { setStartDate(e.target.value); if (!multiDay) setEndDate(e.target.value); }} className={`${ic} ${fieldErrors.startAt ? "!border-red-400" : ""}`} />
+                        <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 font-jakarta mb-1.5">{multiDay ? "Starts on *" : "Date *"}</p>
+                        <DateField label={multiDay ? "Start date" : "Date"} value={startDate} min={todayIso} invalid={!!fieldErrors.startAt}
+                          onChange={(v) => { setStartDate(v); if (!multiDay || !endDate || endDate < v) setEndDate(v); }} />
                         {fieldErrors.startAt && <p className="text-xs text-red-500 font-jakarta mt-1">{fieldErrors.startAt}</p>}
                       </div>
                       <div>
-                        <label className="text-sm font-semibold text-gray-700 dark:text-gray-200 font-jakarta mb-1.5 block">Start time *</label>
-                        <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className={ic} />
+                        <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 font-jakarta mb-1.5">Start time *</p>
+                        <TimeField label="Start time" value={startTime}
+                          onChange={(v) => {
+                            // Keep the event the same length when the start moves (a new event defaults to two hours).
+                            const length = durationMinutes(startTime, endTime) ?? 120;
+                            setStartTime(v);
+                            if (!multiDay) setEndTime(addMinutes(v, length) ?? addMinutes(v, 60) ?? "23:59");
+                          }} />
                       </div>
                       {multiDay && (
                         <div>
-                          <label className="text-sm font-semibold text-gray-700 dark:text-gray-200 font-jakarta mb-1.5 block">End date *</label>
-                          <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={ic} min={startDate} />
+                          <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 font-jakarta mb-1.5">Ends on *</p>
+                          <DateField label="End date" value={endDate} min={startDate || todayIso} onChange={setEndDate} />
                         </div>
                       )}
                       <div>
-                        <label className="text-sm font-semibold text-gray-700 dark:text-gray-200 font-jakarta mb-1.5 block">End time *</label>
-                        <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className={`${ic} ${fieldErrors.endAt ? "!border-red-400" : ""}`} />
+                        <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 font-jakarta mb-1.5">End time *</p>
+                        <TimeField label="End time" value={endTime} after={multiDay ? undefined : startTime} invalid={!!fieldErrors.endAt} onChange={setEndTime} />
                         {fieldErrors.endAt && <p className="text-xs text-red-500 font-jakarta mt-1">{fieldErrors.endAt}</p>}
                       </div>
                     </div>
+
+                    {/* One tap for the usual lengths, and the whole thing read back in words. */}
+                    {!multiDay && startTime && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-xs text-gray-500 font-jakarta mr-1">Length</span>
+                        {([[60, "1 hour"], [90, "1.5 hours"], [120, "2 hours"], [180, "3 hours"], [240, "4 hours"], [480, "Full day"]] as const).map(([minutes, name]) => {
+                          const end = addMinutes(startTime, minutes);
+                          if (!end) return null;
+                          const on = end === endTime;
+                          return (
+                            <button key={minutes} type="button" aria-pressed={on} onClick={() => setEndTime(end)}
+                              className={`h-8 px-3 rounded-full border text-xs font-medium font-jakarta transition-colors ${on ? "border-brand bg-brand/10 text-brand" : "border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-brand hover:text-brand"}`}>
+                              {name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {startDate && startTime && endTime && (
+                      <p role="status" className={`rounded-md px-3.5 py-2.5 text-sm font-jakarta ${whenLength ? "bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100" : "bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300"}`}>
+                        {whenLength
+                          ? <><span className="font-semibold">{formatDateLabel(startDate)}</span>, {formatTimeLabel(startTime)} to {multiDay && endDate && endDate !== startDate ? `${formatDateLabel(endDate)}, ` : ""}{formatTimeLabel(endTime)} <span className="text-gray-500 dark:text-gray-400">· {whenLength}</span></>
+                          : "The end is before the start. Choose a later end time."}
+                      </p>
+                    )}
 
                     <div>
                       <label className="text-sm font-semibold text-gray-700 dark:text-gray-200 font-jakarta mb-1.5 block">Time zone *</label>
@@ -925,11 +968,11 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
                                     )}
                                     <label className="block">
                                       <span className="sr-only">Starts</span>
-                                      <input type="time" value={a.time} onChange={e => setAgenda(l => l.map((x, j) => j === i ? { ...x, time: e.target.value } : x))} aria-label={`Session ${i + 1} start time`} className={ic} />
+                                      <TimeField label={`Session ${i + 1} start time`} placeholder="Starts" value={a.time} onChange={(v) => setAgenda(l => l.map((x, j) => j === i ? { ...x, time: v } : x))} />
                                     </label>
                                     <label className="block">
                                       <span className="sr-only">Ends</span>
-                                      <input type="time" value={a.endTime} onChange={e => setAgenda(l => l.map((x, j) => j === i ? { ...x, endTime: e.target.value } : x))} aria-label={`Session ${i + 1} end time`} className={ic} />
+                                      <TimeField label={`Session ${i + 1} end time`} placeholder="Ends" after={a.time} value={a.endTime} onChange={(v) => setAgenda(l => l.map((x, j) => j === i ? { ...x, endTime: v } : x))} />
                                     </label>
                                     <select value={a.speaker} onChange={e => setAgenda(l => l.map((x, j) => j === i ? { ...x, speaker: e.target.value } : x))} aria-label={`Session ${i + 1} speaker`} className={`${ic} col-span-2 sm:col-span-1`}>
                                       <option value="">No speaker</option>

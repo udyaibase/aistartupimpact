@@ -132,6 +132,13 @@ describe('brand logo on certificates', () => {
     expect(certificateSettings({ logoPosition: 'left', logoSize: 'large', showHostName: true })).toMatchObject({ logoPosition: 'left', logoSize: 'large', showHostName: true });
   });
 
+  it('settings: the size slider and fine position are kept inside their limits', () => {
+    expect(certificateSettings({})).toMatchObject({ logoHeight: null, logoOffsetX: 0, logoOffsetY: 0, logoPlate: true });
+    expect(certificateSettings({ logoHeight: 500, logoOffsetX: -999, logoOffsetY: 999, logoPlate: false })).toMatchObject({ logoHeight: 74, logoOffsetX: -140, logoOffsetY: 40, logoPlate: false });
+    expect(certificateSettings({ logoHeight: 3, logoOffsetX: 12.6, logoOffsetY: 'abc' })).toMatchObject({ logoHeight: 24, logoOffsetX: 13, logoOffsetY: 0 });
+    expect(certificateSettings({ logoHeight: 'big' }).logoHeight).toBeNull();
+  });
+
   it('a logo from another website is dropped when the host saves', () => {
     const route = readFileSync(resolve(__dirname, '../../app/api/organizer/events/[eventId]/after-event/route.ts'), 'utf8');
     expect(route).toContain("for (const key of ['logoUrl', 'partnerLogoUrl', 'signatureUrl'] as const)");
@@ -154,5 +161,56 @@ describe('brand logo on certificates', () => {
     asked.length = 0;
     await renderCertificatePdf({ ...base, template: 'classic', logoUrl: 'https://evil.example/logo.png', partnerLogoUrl: 'http://media.udyaibase.com/x.png' });
     expect(asked).toEqual([]);
+  });
+});
+
+describe('uploading a logo or signature: the cropper', () => {
+  it('says plainly why a file can’t be used', async () => {
+    const { imageFileProblem } = await import('@/components/ui/ImageDropField');
+    expect(imageFileProblem({ type: 'image/png', size: 1000 })).toBe('');
+    expect(imageFileProblem({ type: 'application/pdf', size: 1000 })).toMatch(/PNG, JPG or WebP/);
+    expect(imageFileProblem({ type: 'image/svg+xml', size: 1000 })).toMatch(/PNG, JPG or WebP/);
+    expect(imageFileProblem({ type: 'image/jpeg', size: 6 * 1024 * 1024 })).toMatch(/5 MB/);
+  });
+
+  it('“make white see-through” clears white paper, softens the edge, and leaves ink alone', async () => {
+    const { whiteToAlpha } = await import('@/components/ui/ImageDropField');
+    expect(whiteToAlpha(255, 255, 255, 255)).toBe(0);
+    expect(whiteToAlpha(250, 248, 246, 255)).toBe(0);
+    expect(whiteToAlpha(20, 20, 60, 255)).toBe(255);           // dark ink
+    expect(whiteToAlpha(255, 255, 40, 255)).toBe(255);         // a bright colour is not white
+    const edge = whiteToAlpha(225, 225, 225, 255);
+    expect(edge).toBeGreaterThan(0);
+    expect(edge).toBeLessThan(255);
+    expect(whiteToAlpha(10, 10, 10, 120)).toBe(120);           // already part see-through stays so
+  });
+
+  it('starts on the picture’s content, not its empty edges', async () => {
+    const { contentBox } = await import('@/components/ui/ImageDropField');
+    const w = 20, h = 10;
+    const px = new Uint8ClampedArray(w * h * 4).fill(255);     // a white page
+    for (let y = 3; y <= 6; y++) for (let x = 5; x <= 14; x++) { const i = (y * w + x) * 4; px[i] = 20; px[i + 1] = 30; px[i + 2] = 200; }
+    expect(contentBox(px, w, h)).toEqual({ x: 5, y: 3, w: 10, h: 4 });
+    expect(contentBox(new Uint8ClampedArray(w * h * 4).fill(255), w, h)).toBeNull();   // nothing but white
+    expect(contentBox(new Uint8ClampedArray(w * h * 4), w, h)).toBeNull();             // nothing but see-through
+  });
+
+  it('the form uses the drop-and-crop field for both logos and the signature, with a red remove icon', () => {
+    const form = readFileSync(resolve(__dirname, '../../app/organizer/events/[eventId]/after/AfterEventClient.tsx'), 'utf8');
+    expect((form.match(/<ImageDropField /g) ?? []).length).toBe(3);
+    expect(form).toContain('removeWhiteByDefault');
+    expect(form).not.toContain('>Remove</button>');
+    const field = readFileSync(resolve(__dirname, '../../components/ui/ImageDropField.tsx'), 'utf8');
+    expect(field).toContain('<Trash2');
+    expect(field).toContain('text-red-600');
+    expect(field).toContain('onDrop=');
+    expect(field).toContain('onPaste=');
+  });
+
+  it('the design choice is called Custom and every choice shows the real design', () => {
+    const form = readFileSync(resolve(__dirname, '../../app/organizer/events/[eventId]/after/AfterEventClient.tsx'), 'utf8');
+    expect(form).toContain("{ id: 'custom', name: 'Custom'");
+    expect(form).not.toContain('Your own');
+    expect(form).toContain('<CertificatePreview {...previewProps} template={t.id} />');
   });
 });

@@ -99,6 +99,7 @@ export async function certificateByCode(code: unknown) {
     hostName,
     logoUrl: s.logoUrl ?? e.organizer.avatar,
     partnerLogoUrl: s.partnerLogoUrl, logoPosition: s.logoPosition, logoSize: s.logoSize, showHostName: s.showHostName,
+    logoHeight: s.logoHeight, logoOffsetX: s.logoOffsetX, logoOffsetY: s.logoOffsetY, logoPlate: s.logoPlate,
     customSvg: s.customSvg, duration: s.duration,
     signerName: s.signerName,
     signerTitle: s.signerTitle,
