@@ -89,7 +89,7 @@ export default function CompanyEmailSection({ apiBasePath }: CompanyEmailSection
 
   if (step === 'loading') {
     return (
-      <div className="rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 p-6">
+      <div className="portal-edge rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 p-4 sm:p-6">
         <div className="flex items-center gap-2 text-gray-400">
           <Loader2 className="w-4 h-4 animate-spin" />
           <span className="text-sm">Loading verification status...</span>
@@ -99,7 +99,7 @@ export default function CompanyEmailSection({ apiBasePath }: CompanyEmailSection
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 p-6">
+    <div className="portal-edge rounded-xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-900 p-4 sm:p-6">
       <div className="flex items-center gap-3 mb-4">
         <div className="w-9 h-9 rounded-lg bg-brand/10 flex items-center justify-center">
           <ShieldCheck className="w-5 h-5 text-brand" />

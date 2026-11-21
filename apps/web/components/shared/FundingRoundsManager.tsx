@@ -146,7 +146,7 @@ export default function FundingRoundsManager({ rounds, onChange, maxRounds = 10 
           <button
             type="button"
             onClick={addRound}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-brand bg-brand/10 hover:bg-brand/20 rounded-lg transition-colors"
+            className="inline-flex items-center gap-1.5 min-h-[40px] px-3.5 text-[13px] font-semibold text-brand bg-brand/10 hover:bg-brand/20 rounded-lg whitespace-nowrap shrink-0 transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
             Add Round
@@ -159,7 +159,7 @@ export default function FundingRoundsManager({ rounds, onChange, maxRounds = 10 
       )}
 
       {rounds.map((round, index) => (
-        <div key={index} className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 relative">
+        <div key={index} className="border border-gray-200 dark:border-gray-700 rounded-xl p-3 sm:p-4 space-y-3 relative">
           <button
             type="button"
             onClick={() => removeRound(index)}
@@ -171,7 +171,7 @@ export default function FundingRoundsManager({ rounds, onChange, maxRounds = 10 
           <div className="grid grid-cols-2 gap-3">
             {/* Round Type */}
             <div>
-              <label htmlFor={`round-type-${index}`} className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Round Type</label>
+              <label htmlFor={`round-type-${index}`} className="block text-[13px] font-semibold text-gray-600 dark:text-gray-300 mb-1">Round Type</label>
               <select id={`round-type-${index}`}
                 value={round.roundType}
                 onChange={(e) => updateRound(index, 'roundType', e.target.value)}
@@ -183,7 +183,7 @@ export default function FundingRoundsManager({ rounds, onChange, maxRounds = 10 
 
             {/* Date */}
             <div>
-              <label htmlFor={`round-date-${index}`} className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Announced Date</label>
+              <label htmlFor={`round-date-${index}`} className="block text-[13px] font-semibold text-gray-600 dark:text-gray-300 mb-1">Announced Date</label>
               <input id={`round-date-${index}`}
                 type="date"
                 value={round.announcedAt}
@@ -195,7 +195,7 @@ export default function FundingRoundsManager({ rounds, onChange, maxRounds = 10 
 
           {/* Amount with unit selector */}
           <div>
-            <label htmlFor={`round-amount-${index}`} className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Amount</label>
+            <label htmlFor={`round-amount-${index}`} className="block text-[13px] font-semibold text-gray-600 dark:text-gray-300 mb-1">Amount</label>
             <div className="flex flex-wrap gap-2">
               <input id={`round-amount-${index}`}
                 type="number"
@@ -223,7 +223,7 @@ export default function FundingRoundsManager({ rounds, onChange, maxRounds = 10 
 
           {/* Investors */}
           <div>
-            <label htmlFor={`round-lead-${index}`} className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Lead Investors <span className="font-normal">(comma-separated)</span></label>
+            <label htmlFor={`round-lead-${index}`} className="block text-[13px] font-semibold text-gray-600 dark:text-gray-300 mb-1">Lead Investors <span className="font-normal">(comma-separated)</span></label>
             <input id={`round-lead-${index}`}
               type="text"
               value={round.leadInvestors}
@@ -234,7 +234,7 @@ export default function FundingRoundsManager({ rounds, onChange, maxRounds = 10 
           </div>
 
           <div>
-            <label htmlFor={`round-all-${index}`} className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">All Investors <span className="font-normal">(optional, comma-separated)</span></label>
+            <label htmlFor={`round-all-${index}`} className="block text-[13px] font-semibold text-gray-600 dark:text-gray-300 mb-1">All Investors <span className="font-normal">(optional, comma-separated)</span></label>
             <input id={`round-all-${index}`}
               type="text"
               value={round.allInvestors}

@@ -130,9 +130,9 @@ export default function SupportTicketList({ apiBasePath, portalPath, newTicketHr
         </div>
       )}
 
-      <div className="flex gap-1 overflow-x-auto border-b border-gray-200 dark:border-gray-800">
+      <div className="flex gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-4 px-4 sm:mx-0 sm:px-0 border-b border-gray-200 dark:border-gray-800">
         {STATUS_TABS.map((s) => (
-          <button key={s} onClick={() => { setStatusFilter(s); setPage(1); }} className={`px-3 py-2 text-xs font-medium whitespace-nowrap transition-colors relative ${statusFilter === s ? 'text-brand' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
+          <button key={s} onClick={() => { setStatusFilter(s); setPage(1); }} className={`min-h-[44px] sm:min-h-0 px-3 py-2 text-[13px] sm:text-xs font-medium whitespace-nowrap transition-colors relative ${statusFilter === s ? 'text-brand' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
             {STATUS_LABELS[s]}
             {statusFilter === s && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand rounded-t" />}
           </button>
@@ -148,7 +148,7 @@ export default function SupportTicketList({ apiBasePath, portalPath, newTicketHr
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Stuck on something? Tell us what’s going on and we’ll get back to you.</p>
           {newTicketHref
             ? <Link href={newTicketHref} className="inline-block text-sm text-brand font-medium mt-2 hover:underline">Ask for help</Link>
-            : <button onClick={() => setShowNew(true)} className="text-sm text-brand font-medium mt-2 hover:underline">Raise a ticket</button>}
+            : <button onClick={() => setShowNew(true)} className="inline-flex items-center min-h-[44px] px-3 text-sm text-brand font-semibold mt-1 hover:underline">Raise a ticket</button>}
         </div>
       ) : (
         <div className="space-y-2">
@@ -189,30 +189,32 @@ export default function SupportTicketList({ apiBasePath, portalPath, newTicketHr
       )}
 
       {showNew && (
-        <div className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="relative bg-white dark:bg-gray-900 rounded-2xl p-6 max-w-lg w-full shadow-2xl border border-gray-200 dark:border-gray-800">
-            <button onClick={() => setShowNew(false)} className="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" aria-label="Close">
+        /* Phones: a sheet from the bottom, like a native form; bigger screens: a centred dialog. */
+        <div className="fixed inset-0 z-modal flex items-end sm:items-center justify-center sm:p-4 bg-black/50 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setShowNew(false); }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="new-ticket-title" className="relative bg-white dark:bg-gray-900 rounded-t-[20px] sm:rounded-2xl px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+16px)] sm:p-6 max-w-lg w-full max-h-[92dvh] overflow-y-auto overscroll-contain shadow-2xl border border-gray-200 dark:border-gray-800 animate-slide-up sm:animate-fade-in">
+            <div className="sm:hidden mx-auto mb-3 h-1 w-10 rounded-full bg-gray-300 dark:bg-gray-700" aria-hidden />
+            <button onClick={() => setShowNew(false)} className="absolute top-2 right-2 sm:top-3 sm:right-3 w-10 h-10 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" aria-label="Close">
               <X className="w-5 h-5" />
             </button>
-            <div className="mb-5">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">New Support Ticket</h2>
+            <div className="mb-4 sm:mb-5 pr-10">
+              <h2 id="new-ticket-title" className="text-lg font-semibold text-gray-900 dark:text-white">New support ticket</h2>
               <p className="text-sm text-gray-500 mt-0.5">Describe your issue and we'll get back to you</p>
             </div>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Subject</label>
-                <input type="text" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder="Brief summary of your issue" className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand/20 focus:border-brand" required />
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Subject</label>
+                <input type="text" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder="Brief summary of your issue" className="w-full h-11 px-3 text-base sm:text-sm border border-gray-200 dark:border-gray-700 rounded-[10px] bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand" required />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Category</label>
-                  <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Category</label>
+                  <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full h-11 px-3 text-base sm:text-sm border border-gray-200 dark:border-gray-700 rounded-[10px] bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand">
                     {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Priority</label>
-                  <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Priority</label>
+                  <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className="w-full h-11 px-3 text-base sm:text-sm border border-gray-200 dark:border-gray-700 rounded-[10px] bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand">
                     <option value="LOW">Low</option>
                     <option value="MEDIUM">Medium</option>
                     <option value="HIGH">High</option>
@@ -221,14 +223,14 @@ export default function SupportTicketList({ apiBasePath, portalPath, newTicketHr
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Description</label>
-                <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Provide details about your issue..." rows={5} className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none focus:ring-2 focus:ring-brand/20 focus:border-brand" required />
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Description</label>
+                <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Provide details about your issue..." rows={5} className="w-full px-3 py-2.5 text-base sm:text-sm border border-gray-200 dark:border-gray-700 rounded-[10px] bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand" required />
               </div>
               <div className="flex gap-3 pt-1">
-                <button type="submit" disabled={creating} className="flex-1 py-2.5 bg-brand text-white text-sm font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity">
+                <button type="submit" disabled={creating} className="flex-1 min-h-[44px] bg-brand text-white text-sm font-semibold rounded-[10px] hover:opacity-90 disabled:opacity-50 transition-opacity">
                   {creating ? 'Submitting...' : 'Submit Ticket'}
                 </button>
-                <button type="button" onClick={() => setShowNew(false)} className="px-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Cancel</button>
+                <button type="button" onClick={() => setShowNew(false)} className="min-h-[44px] px-4 rounded-[10px] border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-300">Cancel</button>
               </div>
             </form>
           </div>

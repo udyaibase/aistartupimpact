@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { MoreVertical, Edit, Trash2, Share2, ExternalLink, Copy, Check, CodeXml, Send, EyeOff, Loader2, Award, Repeat, CalendarRange, Mic, Handshake, IdCard } from "lucide-react";
@@ -21,10 +22,26 @@ const ALL = { edit: true, del: true, promote: true, download: true, embed: true 
 export default function EventActions({ eventId, eventSlug, eventTitle, shortCode, status, registrationCount, allowed = ALL }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  // Phones: the menu is a bottom sheet over everything (portaled, so no card or tab bar can cover it).
+  const [isPhone, setIsPhone] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const update = () => setIsPhone(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
   const [showDelete, setShowDelete] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState("");
   const [showUnpublish, setShowUnpublish] = useState(false);
   const [showRepeat, setShowRepeat] = useState(false);
   const [repeatDate, setRepeatDate] = useState("");
@@ -98,10 +115,38 @@ export default function EventActions({ eventId, eventSlug, eventTitle, shortCode
     setOpen(false);
   };
 
+  // Clipboard access can be refused (some installed apps and in-app browsers): fall back to the older copy command.
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(shortCode ? shortUrl : publicUrl);
+    const text = shortCode ? shortUrl : publicUrl;
+    let ok = false;
+    try {
+      // Some browsers leave the request waiting for a permission that never comes: give it a second.
+      await Promise.race([navigator.clipboard.writeText(text), new Promise((_, no) => setTimeout(() => no(new Error("timeout")), 1000))]);
+      ok = true;
+    }
+    catch {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select(); ok = document.execCommand("copy"); ta.remove();
+      } catch { ok = false; }
+    }
+    if (!ok) {
+      setCopyError("Couldn't copy here. The link is selected: press and hold it to copy.");
+      const field = document.querySelector<HTMLInputElement>("[data-share-link]");
+      field?.focus(); field?.select();
+      return;
+    }
+    setCopyError("");
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  // The phone's own share sheet (WhatsApp, Messages, Mail…) where the browser offers it.
+  const [canShare, setCanShare] = useState(false);
+  useEffect(() => { setCanShare(typeof navigator !== "undefined" && typeof navigator.share === "function"); }, []);
+  const handleNativeShare = async () => {
+    try { await navigator.share({ title: eventTitle, text: eventTitle, url: shortCode ? shortUrl : publicUrl }); } catch { /* cancelled */ }
   };
 
   const handleShareTwitter = () => {
@@ -116,8 +161,11 @@ export default function EventActions({ eventId, eventSlug, eventTitle, shortCode
     window.open(`https://wa.me/?text=${encodeURIComponent(`${eventTitle} ${shortUrl}`)}`, "_blank");
   };
 
+  // Dialogs render at the top of the page: inside the card, a neighbouring card or the tab bar could cover them.
+  const toBody = (node: React.ReactNode) => (typeof document !== "undefined" ? createPortal(node, document.body) : null);
+
   return (
-    <div className="relative flex items-center gap-2">
+    <div className="relative flex items-center gap-2" data-menu-open={open || undefined}>
       {isDraft && (
         <button
  data-tour="event-publish"          onClick={() => changeStatus("PUBLISHED")}
@@ -146,11 +194,10 @@ export default function EventActions({ eventId, eventSlug, eventTitle, shortCode
         <MoreVertical className="w-4 h-4" />
       </button>
 
-      {/* Dropdown */}
-      {open && (
-        <>
-          <div className="fixed inset-0 z-overlay" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-[310] py-1 overflow-hidden">
+      {/* Menu: a dropdown on bigger screens, a bottom sheet on phones */}
+      {open && (() => {
+        const items = (
+          <>
             <a href={`/events/${eventSlug}`} target="_blank" rel="noopener" className="flex items-center gap-2.5 px-4 min-h-[44px] text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 font-jakarta transition-colors">
               <ExternalLink className="w-3.5 h-3.5 text-gray-400" /> View Public Page
             </a>
@@ -223,12 +270,33 @@ export default function EventActions({ eventId, eventSlug, eventTitle, shortCode
               <Trash2 className="w-3.5 h-3.5" /> Delete Event
             </button>
             </>)}
-          </div>
-        </>
-      )}
+          </>
+        );
+        if (isPhone && typeof document !== "undefined") {
+          return createPortal(
+            <div className="fixed inset-0 z-modal flex items-end bg-black/40 animate-fade-in" onClick={() => setOpen(false)}>
+              <div role="menu" aria-label={`Actions for ${eventTitle}`} onClick={(e) => e.stopPropagation()}
+                className="w-full max-h-[82dvh] overflow-y-auto overscroll-contain bg-white dark:bg-gray-900 rounded-t-[20px] pt-2 pb-[calc(env(safe-area-inset-bottom)+8px)] shadow-2xl animate-slide-up">
+                <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-gray-300 dark:bg-gray-700" aria-hidden />
+                <p className="px-4 pb-2 mb-1 border-b border-gray-100 dark:border-gray-800 text-sm font-bold text-gray-900 dark:text-white font-jakarta truncate">{eventTitle}</p>
+                {items}
+              </div>
+            </div>,
+            document.body,
+          );
+        }
+        return (
+          <>
+            <div className="fixed inset-0 z-overlay" onClick={() => setOpen(false)} />
+            <div role="menu" className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-[310] py-1 overflow-hidden">
+              {items}
+            </div>
+          </>
+        );
+      })()}
 
       {/* Share Modal */}
-      {showShare && (
+      {showShare && toBody(
         <div className="fixed inset-0 z-modal flex items-end sm:items-center justify-center sm:p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowShare(false)}>
           <div className="bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:pb-6 max-w-sm w-full space-y-4 animate-slide-up sm:animate-none" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-sora font-bold text-lg text-navy dark:text-white">Share Event</h3>
@@ -240,7 +308,7 @@ export default function EventActions({ eventId, eventSlug, eventTitle, shortCode
                 <div>
                   <p className="text-xs font-bold text-gray-400 uppercase mb-1">Short Link (for sharing)</p>
                   <div className="flex items-center gap-2">
-                    <input type="text" readOnly value={shortUrl} className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-600 dark:text-gray-300 font-jakarta font-mono" />
+                    <input type="text" readOnly data-share-link value={shortUrl} onFocus={(e) => e.currentTarget.select()} className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-600 dark:text-gray-300 font-jakarta font-mono" />
                     <button onClick={handleCopy} className="px-3 py-2 bg-brand text-white rounded-lg text-xs font-bold flex items-center gap-1">
                       {copied ? <><Check className="w-3.5 h-3.5" /> Copied</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
                     </button>
@@ -250,13 +318,19 @@ export default function EventActions({ eventId, eventSlug, eventTitle, shortCode
               <div>
                 <p className="text-xs font-bold text-gray-400 uppercase mb-1">{shortCode ? "Full URL" : "Event Link"}</p>
                 <div className="flex items-center gap-2">
-                  <input type="text" readOnly value={publicUrl} className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-600 dark:text-gray-300 font-jakarta" />
+                  <input type="text" readOnly {...(!shortCode ? { "data-share-link": true } : {})} value={publicUrl} onFocus={(e) => e.currentTarget.select()} className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-600 dark:text-gray-300 font-jakarta" />
                   {!shortCode && <button onClick={handleCopy} className="px-3 py-2 bg-brand text-white rounded-lg text-xs font-bold flex items-center gap-1">{copied ? <><Check className="w-3.5 h-3.5" /> Copied</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}</button>}
                 </div>
               </div>
             </div>
 
+            {copyError && <p role="alert" className="text-sm text-red-700 dark:text-red-300 font-jakarta">{copyError}</p>}
             {/* Social Share */}
+            {canShare && (
+              <button onClick={handleNativeShare} className="w-full min-h-[44px] rounded-[10px] bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-semibold font-jakarta flex items-center justify-center gap-2">
+                <Share2 className="w-4 h-4" aria-hidden /> Share…
+              </button>
+            )}
             <div className="flex gap-2">
               <button onClick={handleShareTwitter} className="flex-1 py-2.5 bg-[#1DA1F2]/10 text-[#1DA1F2] rounded-lg text-xs font-bold font-jakarta hover:bg-[#1DA1F2]/20 transition-colors">Twitter</button>
               <button onClick={handleShareLinkedIn} className="flex-1 py-2.5 bg-[#0077B5]/10 text-[#0077B5] rounded-lg text-xs font-bold font-jakarta hover:bg-[#0077B5]/20 transition-colors">LinkedIn</button>
@@ -277,7 +351,7 @@ export default function EventActions({ eventId, eventSlug, eventTitle, shortCode
       )}
 
       {/* Unpublish Confirmation */}
-      {showUnpublish && (
+      {showUnpublish && toBody(
         <div className="fixed inset-0 z-modal flex items-end sm:items-center justify-center sm:p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowUnpublish(false)}>
           <div role="alertdialog" aria-modal="true" aria-labelledby="unpublish-title" className="bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:pb-6 max-w-sm w-full space-y-4 animate-slide-up sm:animate-none" onClick={(e) => e.stopPropagation()}>
             <h3 id="unpublish-title" className="font-sora font-bold text-lg text-navy dark:text-white">Unpublish event?</h3>
@@ -296,7 +370,7 @@ export default function EventActions({ eventId, eventSlug, eventTitle, shortCode
       )}
 
       {/* Run it again */}
-      {showRepeat && (
+      {showRepeat && toBody(
         <div className="fixed inset-0 z-modal flex items-end sm:items-center justify-center sm:p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowRepeat(false)}>
           <div role="dialog" aria-modal="true" aria-labelledby="repeat-title" className="bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:pb-6 max-w-sm w-full space-y-4 animate-slide-up sm:animate-none" onClick={(e) => e.stopPropagation()}>
             <h3 id="repeat-title" className="font-sora font-bold text-lg text-navy dark:text-white">Run it again</h3>
@@ -321,7 +395,7 @@ export default function EventActions({ eventId, eventSlug, eventTitle, shortCode
       )}
 
       {/* Delete Confirmation */}
-      {showDelete && (
+      {showDelete && toBody(
         <div className="fixed inset-0 z-modal flex items-end sm:items-center justify-center sm:p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowDelete(false)}>
           <div className="bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:pb-6 max-w-sm w-full space-y-4 animate-slide-up sm:animate-none" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-sora font-bold text-lg text-navy dark:text-white">Delete Event</h3>

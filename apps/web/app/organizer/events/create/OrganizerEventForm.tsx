@@ -33,6 +33,18 @@ function durationMinutes(start: string, end: string): number | null {
   return minutes > 0 ? minutes : null;
 }
 
+/** Whether some HTML has any text outside its tags (an empty editor gives "<p></p>"). Only a yes/no, nothing is
+ *  cleaned or shown, so a simple scan is enough. */
+function hasVisibleText(html: string): boolean {
+  let inTag = false;
+  for (const ch of html) {
+    if (ch === "<") inTag = true;
+    else if (ch === ">") inTag = false;
+    else if (!inTag && ch.trim()) return true;
+  }
+  return false;
+}
+
 export default function OrganizerEventForm({ organizerId, template, event }: { organizerId: string; template?: string; event?: EventData }) {
   const tpl = template ? TEMPLATES[template] : undefined;
   const isEdit = !!event;
@@ -266,12 +278,34 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
     : "Publish event";
 
   // publish=true moves a draft live; on a published event every save keeps it published.
-  const handleSubmit = async (publish = !isEdit || !isDraft) => {
+  // An error goes away as soon as its field is filled in (not only on the next save).
+  useEffect(() => {
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      if (next.title && title.trim()) delete next.title;
+      if (next.startAt && startDate && startTime) delete next.startAt;
+      if (next.endAt && endTime && !(startAtISO && endAtISO && new Date(endAtISO) <= new Date(startAtISO))) delete next.endAt;
+      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
+    });
+  }, [title, startDate, startTime, endTime, startAtISO, endAtISO]);
+
+  // A new event with something typed in: warn before the page is closed or reloaded, so work isn't lost by accident.
+  const savedRef = useRef(false);
+  const hasWork = !isEdit && !!(title.trim() || subtitle.trim() || venueName.trim() || startDate || (typeof description === "string" && hasVisibleText(description)));
+  useEffect(() => {
+    if (!hasWork) return;
+    const warn = (e: BeforeUnloadEvent) => { if (savedRef.current) return; e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasWork]);
+
+  // asDraft (new events only): save it privately to finish later; it needs just a name and a date.
+  const handleSubmit = async (publish = !isEdit || !isDraft, asDraft = false) => {
     setError("");
     setFieldErrors({});
     const errs: Record<string, string> = {};
-    if (!title) errs.title = "Title is required";
-    if (!startAtISO) errs.startAt = "Start date/time is required";
+    if (!title) errs.title = asDraft ? "Add a name to save a draft" : "Title is required";
+    if (!startAtISO) errs.startAt = asDraft ? "Add a date to save a draft" : "Start date/time is required";
     if (!endAtISO) errs.endAt = "End time is required";
     if (startAtISO && endAtISO && new Date(endAtISO) <= new Date(startAtISO)) errs.endAt = "End must be after start";
     if (!isEdit) {
@@ -307,6 +341,7 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
       seoDescription: seoDescription || undefined,
       ...(taggable.length || event?.startupId ? { startupId: startupId || null } : {}),
       ...(isEdit && isDraft && publish ? { status: "PUBLISHED" } : {}),
+      ...(!isEdit && asDraft ? { asDraft: true } : {}),
     };
     try {
       const url = isEdit ? `/api/organizer/events/${event!.id}` : "/api/organizer/events";
@@ -322,6 +357,9 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
         return;
       }
       const id = isEdit ? event!.id : d.data.id;
+      savedRef.current = true;
+      // A saved draft (new or existing): back to the list with a "Draft saved" note.
+      if (asDraft || (isEdit && isDraft && !publish)) { router.push(`/organizer/events?saved=${id}`); return; }
       if (d.data?.status === "PENDING_REVIEW") { router.push(`/organizer/events?review=${id}`); return; }
       const justPublished = !isEdit || (isDraft && publish);
       router.push(justPublished ? `/organizer/events?published=${id}` : "/organizer/events");
@@ -369,10 +407,10 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
             <Eye className="w-4 h-4" />
             Preview
           </button>
-          {isDraft && (
+          {(isDraft || !isEdit) && (
             <button
               type="button"
-              onClick={() => handleSubmit(false)}
+              onClick={() => (isEdit ? handleSubmit(false) : handleSubmit(false, true))}
               disabled={loading}
               className="px-5 py-2.5 text-sm font-semibold font-jakarta border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-700 dark:text-gray-200 disabled:opacity-50"
             >
@@ -448,9 +486,9 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
               <div className="space-y-5">
                 {/* Cover image */}
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-semibold text-gray-700 dark:text-gray-200 font-jakarta">Cover image <span className="text-brand">*</span></label>
-                    <span className="text-xs text-gray-400 font-jakarta">16:9 · 1920×1080 recommended · JPG, PNG or WebP · up to 5 MB</span>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 mb-2">
+                    <label className="text-sm font-semibold text-gray-700 dark:text-gray-200 font-jakarta whitespace-nowrap">Cover image <span className="text-brand">*</span></label>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 font-jakarta">16:9 · 1920×1080 · JPG, PNG or WebP · up to 5 MB</span>
                   </div>
                   <div
                     onDragOver={e => { e.preventDefault(); setDragOver(true); }}
@@ -554,11 +592,11 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
                   <label className="text-sm font-semibold text-gray-700 dark:text-gray-200 font-jakarta mb-1.5 block">
                     Topics <span className="font-normal text-gray-400">(optional)</span>
                   </label>
-                  <div className="flex flex-wrap items-center gap-2 p-2 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 min-h-[42px]">
+                  <div className="flex flex-wrap items-center gap-2 p-2 border border-gray-200 dark:border-gray-700 rounded-[10px] bg-white dark:bg-gray-900 min-h-[44px]">
                     {topics.map((t, i) => (
                       <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-100 dark:bg-gray-800 rounded-md text-sm font-jakarta text-gray-700 dark:text-gray-300">
                         {t}
-                        <button type="button" onClick={() => removeTopic(i)} className="text-gray-400 hover:text-red-500 ml-0.5"><X className="w-3 h-3" /></button>
+                        <button type="button" onClick={() => removeTopic(i)} aria-label={`Remove topic ${t}`} className="relative inline-flex items-center justify-center w-5 h-5 -mr-1 rounded-full text-gray-400 hover:text-red-500 before:absolute before:-inset-2 before:content-['']"><X className="w-3.5 h-3.5" /></button>
                       </span>
                     ))}
                     {topics.length < 5 && (
@@ -581,16 +619,16 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
                 {/* Event link */}
                 <div>
                   <label className="text-sm font-semibold text-gray-700 dark:text-gray-200 font-jakarta mb-1.5 block">Event link</label>
-                  <div className="flex items-center border border-gray-200 dark:border-gray-700 rounded-md overflow-hidden bg-white dark:bg-gray-900">
-                    <span className="px-3 py-2.5 text-sm text-gray-400 font-jakarta bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 whitespace-nowrap">udyaibase.com/e/</span>
+                  <div className="flex items-center min-h-[44px] border border-gray-200 dark:border-gray-700 rounded-[10px] overflow-hidden bg-white dark:bg-gray-900">
+                    <span className="shrink-0 px-2.5 sm:px-3 py-2.5 text-sm text-gray-400 font-jakarta bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 whitespace-nowrap"><span className="hidden sm:inline">udyaibase.com</span>/e/</span>
                     <input
                       aria-label="Event link"
                       value={slug || generatedSlug}
                       onChange={e => setSlug(slugify(e.target.value))}
                       placeholder="your-event-name"
-                      className="flex-1 px-3 py-2.5 bg-transparent border-none outline-none text-sm font-jakarta text-gray-700 dark:text-gray-200 font-mono"
+                      className="flex-1 min-w-0 w-0 px-3 py-2.5 bg-transparent border-none outline-none text-sm font-jakarta text-gray-700 dark:text-gray-200 font-mono"
                     />
-                    <button type="button" onClick={copySlug} className="px-3 py-2.5 text-gray-400 hover:text-brand transition-colors border-l border-gray-200 dark:border-gray-700 flex items-center gap-1.5 text-xs font-jakarta">
+                    <button type="button" onClick={copySlug} className="shrink-0 min-h-[44px] px-3 py-2.5 text-gray-400 hover:text-brand transition-colors border-l border-gray-200 dark:border-gray-700 flex items-center gap-1.5 text-xs font-jakarta">
                       {copiedSlug ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
                       Copy
                     </button>
@@ -1041,8 +1079,9 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
 
           {error && <p className="text-sm text-red-500 font-jakarta bg-red-50 dark:bg-red-900/20 p-3 rounded-md">{error}</p>}
 
-          {/* Bottom bar: sits above the mobile tab bar */}
-          <div className="sticky bottom-[calc(4.25rem+env(safe-area-inset-bottom))] md:bottom-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur border border-gray-200 dark:border-gray-700 rounded-md p-3 sm:p-4 flex items-center justify-between gap-2 shadow-lg z-10">
+          {/* Actions: an ordinary row at the end of the form on phones (nothing floating over the fields);
+              a bar that stays in view on bigger screens. */}
+          <div className="pt-1 md:sticky md:bottom-0 md:bg-white/95 md:dark:bg-gray-900/95 md:backdrop-blur md:border md:border-gray-200 md:dark:border-gray-700 md:rounded-md md:p-4 md:shadow-lg md:z-10 flex items-center justify-between gap-2">
             <span className="hidden sm:block text-sm text-gray-400 font-jakarta">
               Step {currentStep} of 5 · {metCount} of 6 publish requirements met
             </span>
@@ -1051,16 +1090,16 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
                 type="button"
                 onClick={() => setShowPreview(true)}
                 aria-label="Preview"
-                className="sm:hidden w-12 h-12 shrink-0 flex items-center justify-center border border-gray-200 dark:border-gray-700 rounded-md text-gray-600 dark:text-gray-300 active:bg-gray-100 dark:active:bg-gray-800"
+                className="sm:hidden w-11 h-11 shrink-0 flex items-center justify-center border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 rounded-[10px] text-gray-600 dark:text-gray-300 active:bg-gray-100 dark:active:bg-gray-800"
               >
                 <Eye className="w-5 h-5" />
               </button>
-              {isDraft && (
+              {(isDraft || !isEdit) && (
                 <button
                   type="button"
-                  onClick={() => handleSubmit(false)}
+                  onClick={() => (isEdit ? handleSubmit(false) : handleSubmit(false, true))}
                   disabled={loading}
-                  className="min-h-[48px] sm:min-h-[40px] px-4 text-sm font-semibold font-jakarta border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition-colors disabled:opacity-50"
+                  className="min-h-[44px] sm:min-h-[40px] px-4 text-sm font-semibold font-jakarta border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 rounded-[10px] hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition-colors disabled:opacity-50"
                 >
                   Save draft
                 </button>
@@ -1069,7 +1108,7 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
                 <button
                   type="button"
                   onClick={nextStep}
-                  className="flex-1 sm:flex-none min-h-[48px] sm:min-h-[40px] px-5 text-sm font-bold font-jakarta bg-brand hover:bg-brand/90 active:bg-brand-700 text-white rounded-md transition-colors flex items-center justify-center gap-1.5"
+                  className="flex-1 sm:flex-none min-h-[44px] sm:min-h-[40px] px-5 text-sm font-bold font-jakarta bg-brand hover:bg-brand/90 active:bg-brand-700 text-white rounded-[10px] transition-colors flex items-center justify-center gap-1.5"
                 >
                   <span className="sm:hidden">Continue</span>
                   <span className="hidden sm:inline">{nextStepLabel}</span>
@@ -1080,7 +1119,7 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
                   type="button"
                   onClick={() => handleSubmit()}
                   disabled={loading}
-                  className="flex-1 sm:flex-none min-h-[48px] sm:min-h-[40px] px-5 text-sm font-bold font-jakarta bg-brand hover:bg-brand/90 active:bg-brand-700 text-white rounded-md disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                  className="flex-1 sm:flex-none min-h-[44px] sm:min-h-[40px] px-5 text-sm font-bold font-jakarta bg-brand hover:bg-brand/90 active:bg-brand-700 text-white rounded-[10px] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
                 >
                   {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   {isEdit && !isDraft ? "Save changes" : "Publish event"} <Send className="w-3.5 h-3.5" />

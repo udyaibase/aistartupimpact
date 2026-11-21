@@ -21,7 +21,7 @@ export default function ActivityList({ rows }: { rows: ActivityRow[] }) {
       {[...days].map(([label, items]) => (
         <section key={label} aria-label={label}>
           <h2 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">{label}</h2>
-          <ul className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] divide-y divide-gray-100 dark:divide-gray-800">
+          <ul className="portal-edge bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] divide-y divide-gray-100 dark:divide-gray-800">
             {items.map((row) => {
               const { title, category } = describeActivity(row.action, row.metadata);
               const Icon = ICONS[category];

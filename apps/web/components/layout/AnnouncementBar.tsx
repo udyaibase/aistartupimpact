@@ -76,8 +76,8 @@ export default function AnnouncementBar() {
 
   return (
     <div className="fixed top-0 left-0 right-0 z-[250] h-[44px] overflow-hidden">
-      {/* Animated gradient background */}
-      <div className="absolute inset-0 bg-gradient-to-r from-[#1a0a0a] via-brand/90 to-[#1a0a0a] animate-[shimmer_6s_ease-in-out_infinite]" />
+      {/* Black in the centre (where the text sits), the brand colour at both edges. */}
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,color-mix(in_srgb,var(--brand-color,#FF3131)_90%,#000)_0%,color-mix(in_srgb,var(--brand-color,#FF3131)_45%,#000)_10%,color-mix(in_srgb,var(--brand-color,#FF3131)_16%,#000)_19%,#000_28%,#000_72%,color-mix(in_srgb,var(--brand-color,#FF3131)_16%,#000)_81%,color-mix(in_srgb,var(--brand-color,#FF3131)_45%,#000)_90%,color-mix(in_srgb,var(--brand-color,#FF3131)_90%,#000)_100%)]" />
       <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent_25%,rgba(255,255,255,0.08)_50%,transparent_75%)] bg-[length:250%_100%] animate-[shine_4s_ease-in-out_infinite]" />
 
       {/* Content */}

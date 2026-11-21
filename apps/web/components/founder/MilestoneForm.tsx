@@ -24,7 +24,7 @@ const MILESTONE_TYPES = [
 const WITH_AMOUNT = ["FUNDING", "REVENUE", "ACQUISITION"];
 const fieldBase = "px-3.5 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-jakarta text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand";
 const field = `${fieldBase} w-full`;
-const label = "block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5 font-jakarta";
+const label = "block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5 font-jakarta";
 
 interface Startup { id: string; name: string; role: string }
 
@@ -121,7 +121,7 @@ export default function MilestoneForm({ milestoneId }: { milestoneId?: string })
       <div className="max-w-2xl mx-auto px-6 py-16 text-center">
         <p className="text-[15px] font-semibold font-jakarta text-gray-900 dark:text-white">We can’t find that milestone</p>
         <p className="text-sm font-jakarta text-gray-600 dark:text-gray-400 mt-1">It may have been deleted.</p>
-        <button onClick={() => router.push("/founder/content")} className="btn-brand mt-4">Back to Content</button>
+        <button type="button" onClick={() => router.push("/founder/content")} className="btn-brand mt-4">Back to Content</button>
       </div>
     );
   }
@@ -138,7 +138,7 @@ export default function MilestoneForm({ milestoneId }: { milestoneId?: string })
 
   return (
     <div>
-      <button onClick={() => router.push("/founder/content")} className="flex items-center gap-1.5 min-h-[40px] text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-jakarta mb-2">
+      <button type="button" onClick={() => router.push("/founder/content")} className="flex items-center gap-1.5 min-h-[40px] text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-jakarta mb-2">
         <ArrowLeft className="w-4 h-4" aria-hidden /> Back to Content
       </button>
 
@@ -147,7 +147,7 @@ export default function MilestoneForm({ milestoneId }: { milestoneId?: string })
         <p className="portal-subtitle">{editing ? "Correct the details. The change shows on your startup’s public profile straight away." : "Record a key moment for your startup. It shows on your startup’s public profile straight away."}</p>
       </div>
 
-      <form onSubmit={(e) => { e.preventDefault(); void save(); }} className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-6 space-y-5">
+      <form onSubmit={(e) => { e.preventDefault(); void save(); }} className="bg-white dark:bg-gray-900 -mx-4 sm:mx-0 border-y sm:border border-gray-100 dark:border-gray-800 rounded-none sm:rounded-xl px-4 py-5 sm:p-6 space-y-5">
         {error && <p id="milestone-error" role="alert" className="text-sm font-jakarta px-3 py-2 rounded-lg bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300">{error}</p>}
 
         {similar && (
@@ -175,11 +175,11 @@ export default function MilestoneForm({ milestoneId }: { milestoneId?: string })
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {MILESTONE_TYPES.map((t) => (
               <button key={t.value} type="button" aria-pressed={type === t.value} onClick={() => setType(t.value)}
-                className={`relative flex flex-col items-center gap-1.5 min-h-[64px] p-3 rounded-lg border transition-colors ${type === t.value ? "border-gray-900 dark:border-white ring-1 ring-gray-900 dark:ring-white bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white" : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500"}`}>
+                className={`relative flex flex-row sm:flex-col items-center justify-start sm:justify-center gap-2 sm:gap-1.5 min-h-[44px] sm:min-h-[64px] px-3 py-2 sm:p-3 rounded-lg border text-left sm:text-center transition-colors ${type === t.value ? "border-gray-900 dark:border-white ring-1 ring-gray-900 dark:ring-white bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white" : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500"}`}>
                 {type === t.value && <Check className="absolute top-1.5 right-1.5 w-3.5 h-3.5" aria-hidden />}
                 {/* The word below names the button; the icon is decoration here. */}
                 <span aria-hidden="true"><MilestoneIcon type={t.value} className="w-5 h-5" plain /></span>
-                <span className="text-xs font-jakarta font-medium">{t.label}</span>
+                <span className="text-sm sm:text-xs font-jakarta font-medium">{t.label}</span>
               </button>
             ))}
           </div>

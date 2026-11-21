@@ -128,7 +128,7 @@ export default async function AnalyticsPage() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {/* Views */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4">
+        <div className="portal-edge bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Views</span>
             <Eye className="w-4 h-4 text-gray-400" />
@@ -146,7 +146,7 @@ export default async function AnalyticsPage() {
         </div>
 
         {/* Clicks */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4">
+        <div className="portal-edge bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Clicks</span>
             <MousePointerClick className="w-4 h-4 text-gray-400" />
@@ -164,7 +164,7 @@ export default async function AnalyticsPage() {
         </div>
 
         {/* CTR */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4">
+        <div className="portal-edge bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">CTR</span>
             <TrendingUp className="w-4 h-4 text-gray-400" />
@@ -182,7 +182,7 @@ export default async function AnalyticsPage() {
         </div>
 
         {/* All Time */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4">
+        <div className="portal-edge bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">All Time</span>
           </div>
@@ -204,7 +204,7 @@ export default async function AnalyticsPage() {
       </div>
 
       {/* Top Performing Items */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] overflow-hidden">
+      <div className="portal-edge bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800">
           <h2 className="portal-section-title">
             Top Performing Listings

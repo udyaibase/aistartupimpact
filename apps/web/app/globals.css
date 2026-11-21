@@ -257,6 +257,23 @@
     .founder-portal .story-editor textarea.story-plain:first-of-type { font-size: 30px; }
     .founder-portal .story-editor textarea.story-plain + textarea.story-plain { font-size: 18px; }
   }
+  /* Pictures inside the story: rounded, full width, outlined when selected (to move or delete them). */
+  .story-editor .ProseMirror img.story-editor-img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 12px;
+    margin: 1.5em 0;
+    cursor: grab;
+  }
+  .story-editor .ProseMirror img.story-editor-img.ProseMirror-selectednode {
+    outline: 3px solid var(--brand-color, #FF3131);
+    outline-offset: 2px;
+  }
+  /* Story text in the editor at the size readers get on a phone. */
+  @media (max-width: 639px) {
+    .story-editor .ProseMirror { font-size: 1.0625rem; line-height: 1.75; }
+  }
 
   /* A field the form's error list points at (see components/ui/FormProblems.tsx). */
   .founder-portal [aria-invalid="true"] {
@@ -292,20 +309,24 @@
   /* ─── Employer and organizer portal controls (audited 2026-11-19; organizer 2026-11-21) ───
      Corners: buttons, inputs and dropdowns 10px; small chips and icon buttons (≤36px) 8px; cards 14px; pills round.
      This project's scale makes rounded-lg 12px and rounded-xl 16px, which had drifted onto controls; bring them to 10px. */
-  :is(.employer-portal, .organizer-portal) :is(button, a, input, select, textarea):is(.rounded-lg, .rounded-xl, .rounded-2xl),
+  :is(.employer-portal, .organizer-portal, .founder-portal) :is(button, a, input, select, textarea):is(.rounded-lg, .rounded-xl, .rounded-2xl),
   .employer-portal .btn-brand,
   .organizer-portal .btn-brand,
+  .founder-portal .btn-brand,
   .employer-portal .btn-brand-outline,
-  .organizer-portal .btn-brand-outline { border-radius: 10px; }
+  .organizer-portal .btn-brand-outline,
+  .founder-portal .btn-brand-outline { border-radius: 10px; }
   @media (min-width: 640px) {
-    :is(.employer-portal, .organizer-portal) :is(.btn-brand, .btn-brand-outline) { min-height: 40px; padding-top: 0; padding-bottom: 0; }
+    :is(.employer-portal, .organizer-portal, .founder-portal) :is(.btn-brand, .btn-brand-outline) { min-height: 40px; padding-top: 0; padding-bottom: 0; }
   }
 
   /* Checkboxes and radios: one portal style instead of the browser default. 18px, brand fill, white mark. */
   .employer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none),
   .organizer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none),
+  .founder-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none),
   .employer-portal input[type="radio"]:not(.sr-only):not(.appearance-none),
-  .organizer-portal input[type="radio"]:not(.sr-only):not(.appearance-none) {
+  .organizer-portal input[type="radio"]:not(.sr-only):not(.appearance-none),
+  .founder-portal input[type="radio"]:not(.sr-only):not(.appearance-none) {
     appearance: none; -webkit-appearance: none; margin: 0; flex-shrink: 0;
     width: 18px; height: 18px; cursor: pointer; vertical-align: middle;
     border: 1.5px solid #9CA3AF; background-color: #fff;
@@ -313,62 +334,118 @@
     transition: background-color .15s, border-color .15s, box-shadow .15s;
   }
   .employer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none),
-  .organizer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none) { border-radius: 5px; }
+  .organizer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none),
+  .founder-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none) { border-radius: 5px; }
   .employer-portal input[type="radio"]:not(.sr-only):not(.appearance-none),
-  .organizer-portal input[type="radio"]:not(.sr-only):not(.appearance-none) { border-radius: 9999px; }
+  .organizer-portal input[type="radio"]:not(.sr-only):not(.appearance-none),
+  .founder-portal input[type="radio"]:not(.sr-only):not(.appearance-none) { border-radius: 9999px; }
   .employer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):hover:not(:disabled),
   .organizer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):hover:not(:disabled),
+  .founder-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):hover:not(:disabled),
   .employer-portal input[type="radio"]:not(.sr-only):not(.appearance-none):hover:not(:disabled),
-  .organizer-portal input[type="radio"]:not(.sr-only):not(.appearance-none):hover:not(:disabled) { border-color: var(--brand-color); }
+  .organizer-portal input[type="radio"]:not(.sr-only):not(.appearance-none):hover:not(:disabled),
+  .founder-portal input[type="radio"]:not(.sr-only):not(.appearance-none):hover:not(:disabled) { border-color: var(--brand-color); }
   .employer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):checked,
-  .organizer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):checked {
+  .organizer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):checked,
+  .founder-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):checked {
     background-color: var(--brand-color); border-color: var(--brand-color);
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
     background-size: 12px;
   }
   .employer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):indeterminate,
-  .organizer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):indeterminate {
+  .organizer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):indeterminate,
+  .founder-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):indeterminate {
     background-color: var(--brand-color); border-color: var(--brand-color);
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' stroke='white' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M4 8h8'/%3E%3C/svg%3E");
     background-size: 12px;
   }
   .employer-portal input[type="radio"]:not(.sr-only):not(.appearance-none):checked,
-  .organizer-portal input[type="radio"]:not(.sr-only):not(.appearance-none):checked {
+  .organizer-portal input[type="radio"]:not(.sr-only):not(.appearance-none):checked,
+  .founder-portal input[type="radio"]:not(.sr-only):not(.appearance-none):checked {
     border-color: var(--brand-color);
     background-image: radial-gradient(circle, var(--brand-color) 0 4.5px, transparent 5px);
   }
   .employer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):focus-visible,
   .organizer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):focus-visible,
+  .founder-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):focus-visible,
   .employer-portal input[type="radio"]:not(.sr-only):focus-visible,
-  .organizer-portal input[type="radio"]:not(.sr-only):focus-visible { outline: 2px solid var(--brand-color); outline-offset: 2px; }
+  .organizer-portal input[type="radio"]:not(.sr-only):focus-visible,
+  .founder-portal input[type="radio"]:not(.sr-only):focus-visible { outline: 2px solid var(--brand-color); outline-offset: 2px; }
   .employer-portal input[type="checkbox"]:disabled,
   .organizer-portal input[type="checkbox"]:disabled,
+  .founder-portal input[type="checkbox"]:disabled,
   .employer-portal input[type="radio"]:disabled,
-  .organizer-portal input[type="radio"]:disabled { opacity: .5; cursor: not-allowed; }
+  .organizer-portal input[type="radio"]:disabled,
+  .founder-portal input[type="radio"]:disabled { opacity: .5; cursor: not-allowed; }
   .dark .employer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):not(:checked):not(:indeterminate),
   .dark .organizer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):not(:checked):not(:indeterminate),
+  .dark .founder-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):not(:checked):not(:indeterminate),
   .dark .employer-portal input[type="radio"]:not(.sr-only):not(.appearance-none),
-  .dark .organizer-portal input[type="radio"]:not(.sr-only):not(.appearance-none) { background-color: #111827; border-color: #4B5563; }
+  .dark .organizer-portal input[type="radio"]:not(.sr-only):not(.appearance-none),
+  .dark .founder-portal input[type="radio"]:not(.sr-only):not(.appearance-none) { background-color: #111827; border-color: #4B5563; }
 
   /* Dropdowns: one chevron, consistent padding, in place of the browser's default arrow. */
   .employer-portal select:not([multiple]):not(.appearance-none),
-  .organizer-portal select:not([multiple]):not(.appearance-none) {
+  .organizer-portal select:not([multiple]):not(.appearance-none),
+  .founder-portal select:not([multiple]):not(.appearance-none) {
     appearance: none; -webkit-appearance: none; cursor: pointer;
     padding-right: 2.25rem;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%236B7280' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
     background-repeat: no-repeat; background-position: right .7rem center; background-size: 16px;
   }
   .dark .employer-portal select:not([multiple]):not(.appearance-none),
-  .dark .organizer-portal select:not([multiple]):not(.appearance-none) {
+  .dark .organizer-portal select:not([multiple]):not(.appearance-none),
+  .dark .founder-portal select:not([multiple]):not(.appearance-none) {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%239CA3AF' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
   }
   .employer-portal select:disabled,
-  .organizer-portal select:disabled { cursor: not-allowed; opacity: .6; }
+  .organizer-portal select:disabled,
+  .founder-portal select:disabled { cursor: not-allowed; opacity: .6; }
   .dark .employer-portal select,
-  .dark .organizer-portal select { color-scheme: dark; }   /* dark option list */
+  .dark .organizer-portal select,
+  .dark .founder-portal select { color-scheme: dark; }   /* dark option list */
 
   /* Organizer cards: rounded-xl/2xl (16/20px) on panels, down to the 14px cards the employer portal uses. */
-  .organizer-portal :is(div, section, article, form, li, aside, header, details):is(.rounded-xl, .rounded-2xl) { border-radius: 14px; }
+  .organizer-portal :is(div, section, article, form, li, aside, header, details):is(.rounded-xl, .rounded-2xl),
+  .founder-portal :is(div, section, article, form, li, aside, header, details):is(.rounded-xl, .rounded-2xl) { border-radius: 14px; }
+
+  /* Chrome's built-in "Use camera" control on the check-in page: styled like the portal's buttons.
+     Chrome requires full opacity and readable contrast here, so it stays solid white on the dark camera panel. */
+  .reallow-camera {
+    display: inline-flex; align-items: center; min-height: 44px; padding: 0 20px;
+    border-radius: 10px; border: 0; background-color: #fff; color: #111827;
+    font-family: var(--font-jakarta, inherit); font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+
+  /* Portal headers on phones: the shared theme and notification buttons match the other 40px round header icons. */
+  @media (max-width: 767px) {
+    :is(.organizer-header-theme, .portal-header-actions) :is(button[aria-label="Toggle theme"], button[aria-label^="Notifications"]) { width: 40px; height: 40px; border-radius: 9999px; color: #374151; }
+    .dark :is(.organizer-header-theme, .portal-header-actions) :is(button[aria-label="Toggle theme"], button[aria-label^="Notifications"]) { color: #E5E7EB; }
+    :is(.organizer-header-theme, .portal-header-actions) :is(button[aria-label="Toggle theme"], button[aria-label^="Notifications"]) svg { width: 20px; height: 20px; }
+  }
+
+  /* Organizer forms: one field size and corner everywhere. Phones get the 44px standard tap height; fields that live
+     inside a bordered wrapper (border-none / border-0, e.g. the event-link field) keep their wrapper's size. */
+  .organizer-portal :is(input, select, textarea).rounded-md:not(.border-none):not(.border-0),
+  .founder-portal :is(input, select, textarea).rounded-md:not(.border-none):not(.border-0) { border-radius: 10px; }
+  .organizer-portal :is(input, select).input-field,
+  .founder-portal :is(input, select).input-field { height: 44px; padding-top: 0; padding-bottom: 0; border-radius: 10px; }
+  @media (max-width: 639px) {
+    .organizer-portal :is(input:not([type]), input[type="text"], input[type="email"], input[type="tel"], input[type="url"], input[type="number"], input[type="search"], input[type="password"], input[type="date"], input[type="time"], input[type="datetime-local"], select:not([multiple])):not(.border-none):not(.border-0):not(.sr-only),
+    .founder-portal :is(input:not([type]), input[type="text"], input[type="email"], input[type="tel"], input[type="url"], input[type="number"], input[type="search"], input[type="password"], input[type="date"], input[type="time"], input[type="datetime-local"], select:not([multiple])):not(.border-none):not(.border-0):not(.sr-only) {
+      min-height: 44px;
+    }
+  }
+
+  /* Phones: a section card inside a portal runs edge to edge (no inset card inside the page margin), like native
+     grouped settings screens, so fields get the full width. Only inside the portals, whose pages have a 16px margin. */
+  @media (max-width: 639px) {
+    :is(.founder-portal, .organizer-portal) .portal-edge {
+      margin-left: -1rem; margin-right: -1rem;
+      border-radius: 0 !important; border-left-width: 0 !important; border-right-width: 0 !important;
+    }
+    :is(.founder-portal, .organizer-portal) .portal-edge > * { border-radius: 0 !important; }
+  }
 
   .portal-eyebrow {
     @apply font-jakarta text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400;
@@ -507,6 +584,18 @@
   }
   .article-content blockquote {
     background-color: color-mix(in srgb, var(--brand-color) 5%, transparent);
+  }
+  /* Stories are read on phones: 17px text with roomy lines (the shared article style is 14px there). Headings,
+     spacing and pictures are sized in em, so they grow with it. Headings clear the fixed site header on jump. */
+  .story-body.article-content {
+    font-size: 1.0625rem;
+    line-height: 1.75;
+  }
+  @media (min-width: 1024px) {
+    .story-body.article-content { font-size: 1.125rem; }
+  }
+  .story-body.article-content :is(h2, h3) {
+    scroll-margin-top: 140px;
   }
   .dark .article-content blockquote {
     background-color: color-mix(in srgb, var(--brand-color) 10%, transparent);

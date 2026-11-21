@@ -76,7 +76,7 @@ function Combo<T>({ id, value, options, label, hint, onPick, placeholder, disabl
       />
       {clearable && value && !disabled ? (
         <button type="button" aria-label="Clear" onClick={() => { onPick(null); setQuery(''); }}
-          className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800">×</button>
+          className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full before:absolute before:-inset-2 before:content-[''] text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800">×</button>
       ) : (
         <span aria-hidden className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">▾</span>
       )}

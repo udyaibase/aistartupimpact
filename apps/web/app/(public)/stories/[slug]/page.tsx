@@ -3,12 +3,16 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { Clock, Calendar, ChevronRight, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, ArrowRight, ArrowUpRight, BadgeCheck } from 'lucide-react';
+import ReadingProgress from '@/components/stories/ReadingProgress';
+import StoryCard, { FounderBadge } from '@/components/stories/StoryCard';
+import { formatStoryDate, initials, isFounderWritten, storyTopic } from '@/components/stories/storyMeta';
 import StorySaveButton from '@/components/StorySaveButton';
 import { sql, getArticleBySlugDirect, getRelatedArticlesDirect } from '@/lib/db';
 import { defaultFounderSpotlights } from '@/lib/fallbacks';
 import { buildArticleMetadata, generateArticleSchema, generateBreadcrumbSchema } from '@/lib/seo';
 import { articleBodyHtml } from '@/lib/article-body';
+import { addHeadingIds, comparableText } from '@/lib/article-headings';
 import { getArticleEntityCards } from '@/lib/article-entities';
 import EntityHoverCards from '@/components/article/EntityHoverCards';
 import ShareButton from '@/components/ShareButton';
@@ -38,9 +42,25 @@ export async function generateStaticParams() {
   }
 }
 
+/** SERIES_A → "Series A", PRE_SEED → "Pre-Seed", IDEA → "Idea stage". */
+const stageLabel = (s?: string | null) => {
+  if (!s) return null;
+  if (s === 'IDEA') return 'Idea stage';
+  return s.split('_').map((w) => (w.length <= 1 ? w : w[0] + w.slice(1).toLowerCase())).join(' ').replace(/^Pre /, 'Pre-');
+};
+
+function Avatar({ src, name, size, square = false }: { src?: string | null; name?: string | null; size: number; square?: boolean }) {
+  return (
+    <span aria-hidden className={`flex shrink-0 items-center justify-center overflow-hidden bg-gray-100 dark:bg-gray-800 font-sora font-bold text-gray-600 dark:text-gray-300 ${square ? 'rounded-[10px]' : 'rounded-full'}`}
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.36) }}>
+      {src ? <Image src={src} alt="" width={size} height={size} sizes={`${size}px`} className="h-full w-full object-cover" /> : initials(name)}
+    </span>
+  );
+}
+
 export default async function StoryDetailPage(props: { params: Promise<{ slug: string }> }) {
   const params = await props.params;
-  let story = await getArticleBySlugDirect(params.slug);
+  let story: any = await getArticleBySlugDirect(params.slug);
 
   if (!story) {
     if (defaultFounderSpotlights.find(s => s.slug === params.slug)) {
@@ -50,17 +70,21 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
 
   if (!story) notFound();
 
-  const formatDate = (d: string) =>
-    d ? new Date(d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '';
+  const founder = isFounderWritten(story);
+  const topic = storyTopic(story);
+  const startup = story.linkedStartup as null | { name: string; slug: string; tagline?: string | null; logoUrl?: string | null; isVerified?: boolean; stage?: string | null; foundedYear?: number | null };
+  const author = story.author || {};
+  // A founder who chose not to be named is shown as their startup; then there's no personal card.
+  const namedFounder = founder && author.name && author.name !== startup?.name;
 
-  // A short update posted by a startup, or a longer founder story reviewed by our editors.
-  const kind = story.type === 'STARTUP_UPDATE' ? 'Startup Update' : 'Founder Story';
+  const { html: bodyHtml, headings } = addHeadingIds(articleBodyHtml(story));
 
-  const bodyHtml = articleBodyHtml(story);
+  // Many stories open with the summary as their first paragraph; don't print it twice.
+  const showLede = !!story.excerpt && !comparableText(bodyHtml).startsWith(comparableText(story.excerpt).slice(0, 120));
 
   const entityCards = await getArticleEntityCards(bodyHtml);
 
-  const relatedStories = await getRelatedArticlesDirect(story.id, ['STORY', 'FOUNDER_STORY'], 3);
+  const relatedStories = await getRelatedArticlesDirect(story.id, ['STORY', 'FOUNDER_STORY'], 4);
 
   const siteUrl = 'https://udyaibase.com';
   const storyUrl = `${siteUrl}/stories/${story.slug}`;
@@ -68,17 +92,17 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
   const articleSchema = generateArticleSchema({
     title: story.title,
     excerpt: story.excerpt || '',
-    author: { name: story.author?.name || 'Udyaibase Editorial', slug: story.author?.slug || 'udyaibase-editorial' },
+    author: { name: author.name || 'Udyaibase Editorial', slug: author.slug || 'udyaibase-editorial' },
     date: story.publishedAt,
     updatedAt: story.updatedAt,
     url: storyUrl,
     imageUrl: story.coverImage || undefined,
-    category: kind,
+    category: founder ? 'Founder Story' : topic,
     isStory: true,
-    founderData: story.linkedStartup && story.linkedStartup.founders?.length > 0 ? {
-      name: story.linkedStartup.founders[0],
-      slug: story.linkedStartup.founders[0].toLowerCase().replace(/\s+/g, '-'),
-      startupSlug: story.linkedStartup.slug
+    founderData: startup && (startup as any).founders?.length > 0 ? {
+      name: (startup as any).founders[0],
+      slug: (startup as any).founders[0].toLowerCase().replace(/\s+/g, '-'),
+      startupSlug: startup.slug
     } : undefined
   });
 
@@ -88,143 +112,196 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
     { name: story.title, url: storyUrl },
   ]);
 
+  const authorLine = founder
+    ? [author.role, startup?.name && namedFounder ? startup.name : null].filter(Boolean).join(' at ') || (namedFounder ? 'Founder' : 'Startup')
+    : 'Udyaibase editorial';
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
+    <div className="px-4 sm:px-6 lg:px-8 pt-4 pb-10 sm:pt-8">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(articleSchema) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbSchema) }} />
+      <ReadingProgress targetId="story-body" />
 
-      <nav className="flex items-center gap-1.5 text-xs sm:text-sm font-jakarta text-gray-400 dark:text-gray-500 mb-6">
-        <Link href="/" className="hover:text-brand">Home</Link>
-        <ChevronRight className="w-3 h-3" />
-        <Link href="/stories" className="hover:text-brand">Stories</Link>
-        <ChevronRight className="w-3 h-3" />
-        <span className="text-gray-600 dark:text-gray-300 truncate max-w-[200px]">{kind}</span>
-      </nav>
+      <article className="mx-auto max-w-[720px]">
+        <nav aria-label="Breadcrumb" className="flex items-center gap-0.5 text-sm font-jakarta text-gray-500 dark:text-gray-400 mb-2 sm:mb-4">
+          <Link href="/stories" className="-ml-1 inline-flex min-h-[40px] items-center gap-1 pl-1 pr-1 hover:text-brand">
+            <ChevronLeft className="w-4 h-4" aria-hidden /> Stories
+          </Link>
+          <span aria-hidden>/</span>
+          <Link href={`/stories?topic=${encodeURIComponent(topic)}`} className="inline-flex min-h-[40px] items-center truncate px-1 hover:text-brand">{topic}</Link>
+        </nav>
 
-      <div className="flex flex-col lg:flex-row gap-10">
-        {/* ── Main Article ── */}
-        <article className="flex-1 min-w-0">
-          <span className="badge-brand text-xs mb-4 inline-block">{kind}</span>
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          {founder
+            ? <FounderBadge />
+            : <span className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-800 px-2.5 py-0.5 text-xs font-semibold text-gray-600 dark:text-gray-300 font-jakarta">Editorial</span>}
+        </div>
 
-          <h1 className="font-sora font-extrabold text-[22px] leading-[1.2] sm:text-3xl md:text-[36px] md:leading-[1.2] text-navy dark:text-white">
-            {story.title}
-          </h1>
+        <h1 className="font-sora font-extrabold text-[26px] leading-[1.2] sm:text-[36px] sm:leading-[1.15] tracking-tight text-navy dark:text-white">
+          {story.title}
+        </h1>
 
-          {story.excerpt && (
-            <p className="article-lede text-gray-500 dark:text-gray-400 font-jakarta text-sm sm:text-base mt-3 sm:mt-4 leading-relaxed">
-              {story.excerpt}
-            </p>
-          )}
+        {showLede && (
+          <p className="mt-3 text-[17px] sm:text-lg leading-relaxed text-gray-600 dark:text-gray-400 font-jakarta">
+            {story.excerpt}
+          </p>
+        )}
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-6 pb-6 border-b border-gray-100 dark:border-gray-800">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-brand/10 dark:bg-brand/20 flex items-center justify-center text-sm text-brand font-bold font-sora">
-                {story.author?.name?.charAt(0) || 'A'}
-              </div>
-              <div>
-                <span className="text-sm font-semibold text-navy dark:text-white font-jakarta">{story.author?.name || 'Author'}</span>
-                <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500 font-jakarta">
-                  <span className="flex items-center gap-1">
-                    <Calendar className="w-3 h-3" />
-                    <time dateTime={story.publishedAt || new Date().toISOString()}>Published on: {formatDate(story.publishedAt)}</time>
-                  </span>
-                  <span>·</span>
-                  <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{story.readTimeMinutes} min read</span>
+        {/* Who wrote it, when, and the actions */}
+        <div className="mt-5 flex items-center justify-between gap-3 border-y border-gray-100 dark:border-gray-800 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <Avatar src={author.avatar} name={author.name} size={44} square={founder && !namedFounder} />
+            <div className="min-w-0">
+              <p className="truncate text-[15px] font-semibold text-gray-900 dark:text-white font-jakarta">
+                {author.slug && !founder
+                  ? <Link href={`/authors/${author.slug}`} className="hover:text-brand">{author.name}</Link>
+                  : (author.name || 'Udyaibase')}
+              </p>
+              <p className="truncate text-[13px] text-gray-500 dark:text-gray-400 font-jakarta">
+                {startup && founder && namedFounder ? (
+                  <>{author.role ? `${author.role} at ` : 'Founder, '}<Link href={`/startups/${startup.slug}`} className="font-medium text-gray-700 dark:text-gray-300 hover:text-brand">{startup.name}</Link></>
+                ) : authorLine}
+              </p>
+              <p className="text-[13px] text-gray-500 dark:text-gray-400 font-jakarta">
+                <time dateTime={story.publishedAt || undefined}>{formatStoryDate(story.publishedAt)}</time>
+                {story.readTimeMinutes ? <> · {story.readTimeMinutes} min read</> : null}
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <StorySaveButton slug={story.slug} />
+            <ShareButton title={story.title} iconOnly size="lg" className="!rounded-full !border-0 !shadow-none !bg-transparent !text-gray-500 hover:!bg-gray-100 dark:hover:!bg-gray-800" />
+          </div>
+        </div>
+
+        {story.coverImage && (
+          <figure className="relative mt-5 aspect-[16/9] overflow-hidden rounded-[14px] bg-gray-100 dark:bg-gray-800 sm:-mx-6">
+            <Image src={story.coverImage} alt={story.title} fill priority sizes="(max-width: 768px) 100vw, 768px" className="object-cover" />
+          </figure>
+        )}
+
+        {headings.length >= 3 && (
+          <details className="group mt-6 rounded-[14px] border border-gray-200 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/60">
+            <summary className="flex min-h-[48px] cursor-pointer list-none items-center justify-between px-4 text-[15px] font-semibold text-gray-900 dark:text-white font-jakarta [&::-webkit-details-marker]:hidden">
+              In this story
+              <ChevronDown className="h-4 w-4 text-gray-400 transition-transform group-open:rotate-180" aria-hidden />
+            </summary>
+            <ol className="space-y-0.5 px-2 pb-3">
+              {headings.map((h, i) => (
+                <li key={h.id}>
+                  <a href={`#${h.id}`} className="flex min-h-[40px] items-center gap-3 rounded-[10px] px-2 text-[15px] text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800 hover:text-brand font-jakarta">
+                    <span className="w-5 shrink-0 text-right text-sm tabular-nums text-gray-400">{i + 1}</span>{h.text}
+                  </a>
+                </li>
+              ))}
+            </ol>
+          </details>
+        )}
+
+        <div id="story-body" className="mt-6">
+          <EntityHoverCards cards={entityCards}>
+            <div className="article-content story-body prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+          </EntityHoverCards>
+        </div>
+
+        <ArticleActions slug={story.slug} initialLikes={story.likeCount || 0} title={story.title} />
+
+        {/* The people and the company behind it */}
+        {(namedFounder || (!founder && author.name) || startup) && (
+          <section aria-label="About" className="mt-8 grid gap-3">
+            {namedFounder && (
+              <div className="rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 sm:p-5">
+                <p className="text-xs font-bold uppercase tracking-wider text-gray-400 font-jakarta">Written by</p>
+                <div className="mt-3 flex items-start gap-3">
+                  <Avatar src={author.avatar} name={author.name} size={52} />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-sora text-base font-bold text-gray-900 dark:text-white">{author.name}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 font-jakarta">{[author.role || 'Founder', startup?.name].filter(Boolean).join(', ')}</p>
+                    {author.bio && <p className="mt-2 text-[15px] leading-relaxed text-gray-600 dark:text-gray-300 font-jakarta line-clamp-4">{author.bio}</p>}
+                    {author.linkedin && /^https?:\/\//i.test(author.linkedin) && (
+                      <a href={author.linkedin} target="_blank" rel="noopener noreferrer nofollow"
+                        className="mt-3 inline-flex min-h-[40px] items-center gap-1.5 rounded-[10px] border border-gray-200 dark:border-gray-700 px-3 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:border-gray-300">
+                        LinkedIn <ArrowUpRight className="h-4 w-4" aria-hidden />
+                      </a>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <ShareButton title={story.title} />
-              <StorySaveButton slug={story.slug} />
-            </div>
-          </div>
+            )}
 
-          {story.coverImage ? (
-            <div className="relative aspect-[16/9] rounded-xl overflow-hidden my-6 sm:my-8">
-              <Image src={story.coverImage} alt={story.title} fill sizes="100vw" className="object-cover" />
-            </div>
-          ) : story.type === 'STARTUP_UPDATE' ? (
-            // A short update with no picture goes straight to the text; the big placeholder pushed it off the screen.
-            <div className="my-4" />
-          ) : (
-            <div className="aspect-[16/9] bg-gradient-to-br from-brand-50 to-gray-50 dark:from-brand-900/20 dark:to-gray-900 rounded-xl my-6 sm:my-8 flex items-center justify-center">
-              <Users className="w-20 h-20 text-brand/20" />
-            </div>
-          )}
-
-          <EntityHoverCards cards={entityCards}><div className="article-content prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: bodyHtml }} /></EntityHoverCards>
-
-          {/* Likes, Comments, Share */}
-          <ArticleActions
-            slug={story.slug}
-            initialLikes={(story as any).likeCount || 0}
-            title={story.title}
-          />
-
-          {relatedStories.length > 0 && (
-            <div className="mt-10">
-              <h2 className="section-title mb-6">More Founder Stories</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {relatedStories.map((s: any) => (
-                  <Link key={s.slug} href={`/stories/${s.slug}`} className="group">
-                    <div className="card p-4 h-full">
-                      <span className="badge-category text-xs mb-2 inline-block">Founder Story</span>
-                      <h3 className="font-sora font-bold text-sm text-navy dark:text-white group-hover:text-brand transition-colors leading-snug line-clamp-3">{s.title}</h3>
-                      <span className="text-xs text-gray-400 font-jakarta mt-2 block">{s.readTimeMinutes} min</span>
-                    </div>
-                  </Link>
-                ))}
+            {!founder && author.name && (
+              <div className="rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 sm:p-5">
+                <p className="text-xs font-bold uppercase tracking-wider text-gray-400 font-jakarta">Written by</p>
+                <div className="mt-3 flex items-start gap-3">
+                  <Avatar src={author.avatar} name={author.name} size={52} />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-sora text-base font-bold text-gray-900 dark:text-white">{author.name}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 font-jakarta">Udyaibase editorial</p>
+                    {author.bio && <p className="mt-2 text-[15px] leading-relaxed text-gray-600 dark:text-gray-300 font-jakarta line-clamp-4">{author.bio}</p>}
+                    {author.slug && (
+                      <Link href={`/authors/${author.slug}`} className="mt-3 inline-flex min-h-[40px] items-center gap-1 text-sm font-semibold text-brand hover:underline">
+                        More from {author.name.split(' ')[0]} <ArrowRight className="h-4 w-4" aria-hidden />
+                      </Link>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
-        </article>
+            )}
 
-        {/* ── Sidebar ── */}
-        <aside className="w-full lg:w-72 xl:w-80 shrink-0 space-y-6">
-
-          {/* Newsletter */}
-          <div className="card p-5 bg-gradient-to-br from-brand-50 to-white dark:from-brand-900/20 dark:to-gray-900">
-            <h4 className="font-sora font-bold text-sm text-navy dark:text-white mb-2">Get weekly insights</h4>
-            <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta mb-4">
-              Join 5,000+ founders reading our India AI ecosystem digest every Friday.
-            </p>
-            <SubscribeForm source="sidebar" buttonText="Subscribe Free" />
-          </div>
-
-          {/* More Stories */}
-          {relatedStories.length > 0 && (
-            <div className="card p-5">
-              <h4 className="font-sora font-bold text-sm text-navy dark:text-white mb-4 flex items-center gap-2">
-                <Users className="w-4 h-4 text-brand" /> More Founder Stories
-              </h4>
-              <div className="space-y-4">
-                {relatedStories.map((s: any) => (
-                  <Link key={s.slug} href={`/stories/${s.slug}`} className="group block">
-                    <h5 className="font-sora font-bold text-sm text-navy dark:text-white group-hover:text-brand transition-colors leading-snug line-clamp-2">
-                      {s.title}
-                    </h5>
-                    <span className="text-xs text-gray-400 font-jakarta mt-1 block">{s.readTimeMinutes} min read</span>
-                  </Link>
-                ))}
-              </div>
-              <Link href="/stories" className="text-brand text-xs font-semibold hover:underline mt-4 block font-jakarta">
-                View all stories →
+            {startup && (
+              <Link href={`/startups/${startup.slug}`}
+                className="group flex items-center gap-3 rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 sm:p-5 hover:border-gray-300 dark:hover:border-gray-700">
+                <Avatar src={startup.logoUrl} name={startup.name} size={52} square />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold uppercase tracking-wider text-gray-400 font-jakarta">{founder ? 'The startup' : 'Startup in this story'}</p>
+                  <p className="mt-0.5 flex items-center gap-1.5 font-sora text-base font-bold text-gray-900 dark:text-white">
+                    <span className="truncate">{startup.name}</span>
+                    {startup.isVerified && <BadgeCheck className="h-4 w-4 shrink-0 text-blue-500" aria-label="Verified" />}
+                  </p>
+                  {startup.tagline && <p className="text-sm text-gray-600 dark:text-gray-400 font-jakarta line-clamp-2">{startup.tagline}</p>}
+                  {(stageLabel(startup.stage) || startup.foundedYear) && (
+                    <p className="mt-1 text-[13px] text-gray-500 font-jakarta">
+                      {[stageLabel(startup.stage), startup.foundedYear ? `Founded ${startup.foundedYear}` : null].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
+                </div>
+                <ChevronRight className="h-5 w-5 shrink-0 text-gray-400 transition-transform group-hover:translate-x-0.5" aria-hidden />
               </Link>
-            </div>
-          )}
+            )}
+          </section>
+        )}
+      </article>
 
-          {/* Advertise */}
-          <div className="card p-5">
-            <h4 className="font-sora font-bold text-sm text-navy dark:text-white mb-2">Reach AI founders</h4>
-            <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta mb-3">
-              Advertise to 50,000+ monthly readers in India's AI ecosystem.
-            </p>
-            <Link href="/advertise" className="btn-outline text-xs w-full text-center block">
-              View Media Kit →
+      {relatedStories.length > 0 && (
+        <section className="mx-auto mt-12 max-w-5xl" aria-labelledby="more-stories">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 id="more-stories" className="font-sora text-lg sm:text-xl font-bold text-gray-900 dark:text-white">More stories</h2>
+            <Link href="/stories" className="inline-flex min-h-[40px] items-center gap-1 text-sm font-semibold text-brand hover:underline">
+              See all <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
           </div>
-        </aside>
-      </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
+            {relatedStories.map((s: any) => <StoryCard key={s.slug} story={s} sizes="(max-width: 640px) 96px, 260px" />)}
+          </div>
+        </section>
+      )}
+
+      <section className="mx-auto mt-10 grid max-w-5xl gap-3 sm:grid-cols-5">
+        <div className="rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 sm:col-span-3">
+          <p className="text-xs font-bold uppercase tracking-wider text-brand mb-1.5 font-jakarta">Free every Friday</p>
+          <h2 className="font-sora font-bold text-base text-navy dark:text-white mb-1">Get the India AI Digest</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 font-jakarta mb-4">The week&apos;s top AI stories for founders and investors.</p>
+          <SubscribeForm source="sidebar" buttonText="Subscribe free" />
+        </div>
+        <div className="rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 sm:col-span-2 flex flex-col">
+          <h2 className="font-sora font-bold text-base text-navy dark:text-white mb-1">Building an AI startup?</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 font-jakarta">Share your story, or reach AI founders with a featured spot.</p>
+          <div className="mt-auto flex flex-wrap gap-2 pt-4">
+            <Link href="/founder/content" className="inline-flex min-h-[44px] items-center rounded-[10px] bg-gray-900 dark:bg-white px-4 text-sm font-semibold text-white dark:text-gray-900">Write a story</Link>
+            <Link href="/advertise" className="inline-flex min-h-[44px] items-center rounded-[10px] border border-gray-200 dark:border-gray-700 px-4 text-sm font-semibold text-gray-700 dark:text-gray-200">Advertise</Link>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

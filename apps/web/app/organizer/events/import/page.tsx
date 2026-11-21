@@ -199,7 +199,7 @@ export default function ImportEventsPage() {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <Link href="/organizer/events" className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-brand font-jakarta mb-2 transition-colors">
+        <Link href="/organizer/events" className="inline-flex items-center gap-1.5 min-h-[40px] -ml-1 px-1 text-sm text-gray-500 dark:text-gray-400 hover:text-brand font-jakarta mb-1 transition-colors">
           <ArrowLeft className="w-4 h-4" />
           Back to events
         </Link>

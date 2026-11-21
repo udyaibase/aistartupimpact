@@ -142,7 +142,7 @@ export default function TeamPage() {
         </div>
         {viewer.canManage && (
           <button data-tour="team-invite" onClick={() => { setShowInvite(true); setInvRole(viewer.assignableRoles.includes("STAFF") ? "STAFF" : viewer.assignableRoles[0]); }}
-            className="inline-flex items-center gap-1.5 min-h-[44px] px-4 bg-brand hover:bg-brand-600 active:bg-brand-700 text-white text-sm font-bold font-jakarta rounded-lg">
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 bg-brand hover:bg-brand-600 active:bg-brand-700 text-white text-sm font-bold font-jakarta rounded-lg">
             <Plus className="w-4 h-4" /> Invite member
           </button>
         )}
@@ -176,14 +176,16 @@ export default function TeamPage() {
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-9 h-9 shrink-0 rounded-full bg-brand/10 flex items-center justify-center"><span className="text-xs font-bold text-brand">{m.email?.charAt(0).toUpperCase()}</span></div>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-700 dark:text-gray-200 font-jakarta truncate">{m.email}</p>
-                        <p className="text-xs text-gray-400 font-jakarta">
-                          {roleLabel(m.role)} · {m.assignments && m.assignments.length > 0 ? `${m.assignments.length} event${m.assignments.length > 1 ? "s" : ""}` : "All events"}
+                        <p className="text-sm font-medium text-gray-700 dark:text-gray-200 font-jakarta break-all sm:break-normal sm:truncate">{m.email}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                          <span>{roleLabel(m.role)} · {m.assignments && m.assignments.length > 0 ? `${m.assignments.length} event${m.assignments.length > 1 ? "s" : ""}` : "All events"}</span>
+                          {/* Phones: the status sits under the name, so the email isn't squeezed. */}
+                          <span className={`sm:hidden text-[10px] font-bold uppercase px-1.5 py-px rounded-full ${m.status === "ACTIVE" ? "bg-green-100 text-green-700" : m.status === "PENDING" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-600"}`}>{m.status}</span>
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <span className={`text-[11px] font-bold uppercase px-2 py-0.5 rounded-full ${m.status === "ACTIVE" ? "bg-green-100 text-green-700" : m.status === "PENDING" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-600"}`}>{m.status}</span>
+                      <span className={`hidden sm:inline-flex text-[11px] font-bold uppercase px-2 py-0.5 rounded-full ${m.status === "ACTIVE" ? "bg-green-100 text-green-700" : m.status === "PENDING" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-600"}`}>{m.status}</span>
                       {editable && !editing && (
                         <button onClick={() => startEdit(m)} aria-label={`Change role for ${m.email}`} className="w-10 h-10 flex items-center justify-center rounded-lg text-gray-400 hover:text-brand hover:bg-brand/5"><Pencil className="w-4 h-4" /></button>
                       )}

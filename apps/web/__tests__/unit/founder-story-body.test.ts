@@ -13,6 +13,16 @@ describe('what a founder writes, made ready to store', () => {
     expect(body.content).toBe('<p>Hi</p><p>there</p>');
   });
 
+  it('keeps pictures uploaded to our own media, with their description, and drops any other picture', () => {
+    const own = '<p>Our team</p><img src="https://media.udyaibase.com/uploads/team.webp" alt="The team in Pune">';
+    expect(prepareBody(own).content).toBe(own.replace('">', '" />').replace('Pune">', 'Pune" />'));
+    expect(prepareBody('<img src="/uploads/1-abc.png" alt="x">').content).toBe('<img src="/uploads/1-abc.png" alt="x" />');
+    const outside = prepareBody('<p>a</p><img src="https://evil.example/x.png"><img src="http://media.udyaibase.com/x.png"><img src="https://media.udyaibase.com.evil.example/x.png"><img src="data:image/png;base64,AAAA">');
+    expect(outside.content).toBe('<p>a</p>');
+    expect(prepareBody('<img src="https://media.udyaibase.com/x.png" onerror="alert(1)" style="width:1px">').content)
+      .toBe('<img src="https://media.udyaibase.com/x.png" />');
+  });
+
   it('keeps web links, makes them open safely, and drops javascript: links', () => {
     const body = prepareBody('<p><a href="https://krishi.example">site</a> <a href="javascript:alert(1)">bad</a></p>');
     expect(body.content).toContain('<a href="https://krishi.example" rel="noopener nofollow ugc" target="_blank">site</a>');

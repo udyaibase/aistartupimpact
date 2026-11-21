@@ -16,6 +16,7 @@ import FundingRoundsManager, { FundingRound, convertToSaveFormat, convertFromDbF
 import FoundersDetailsManager, { FounderDetail } from '@/components/shared/FoundersDetailsManager';
 import SocialLinksManager, { SocialLink } from '@/components/shared/SocialLinksManager';
 import CityCombobox from '@/components/shared/CityCombobox';
+import { STARTUP_CATEGORIES } from '@/lib/categories';
 
 interface Startup {
   id: string;
@@ -118,6 +119,14 @@ const EDIT_SECTIONS = [
   { id: 'startup-team', label: 'Founders' }, { id: 'startup-funding', label: 'Funding' }, { id: 'startup-faqs', label: 'FAQs' },
 ] as const;
 
+/** Used when the admin-managed business model list hasn't been set up. */
+const DEFAULT_BUSINESS_MODELS = ['B2B', 'B2C', 'B2B2C', 'D2C', 'B2G', 'Marketplace'];
+
+/** The options plus the listing's saved value, so a renamed or retired option still shows (and can be kept) instead of a blank. */
+function withCurrent(options: string[], current?: string | null): string[] {
+  return current && !options.includes(current) ? [current, ...options] : options;
+}
+
 export default function StartupForm({ startup: existing, existingFaqs = [], existingFundingRounds = [], initialFounder, founderEmail, created }: StartupFormProps) {
   const isNew = !existing;
   const startup = existing ?? NEW_STARTUP;
@@ -130,13 +139,15 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
   const [startupCategories, setStartupCategories] = useState<string[]>([]);
   const [businessTypesOptions, setBusinessTypesOptions] = useState<string[]>([]);
 
+  // The lists are managed by admins. If one comes back empty (not set up yet, or a database hiccup), fall back to the
+  // site's standard list so the form never shows an empty dropdown that blocks saving.
   useEffect(() => {
     Promise.all([
-      getStartupCategoriesAction(),
-      getStartupTypesAction(),
+      getStartupCategoriesAction().catch(() => []),
+      getStartupTypesAction().catch(() => []),
     ]).then(([cats, types]) => {
-      setStartupCategories(cats as string[]);
-      setBusinessTypesOptions(types as string[]);
+      setStartupCategories((cats as string[]).length ? (cats as string[]) : STARTUP_CATEGORIES.map((c) => c.value));
+      setBusinessTypesOptions((types as string[]).length ? (types as string[]) : DEFAULT_BUSINESS_MODELS);
     });
   }, []);
 
@@ -664,7 +675,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
           className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
         >
           <option value="">Select a category</option>
-          {startupCategories.map(category => (
+          {withCurrent(startupCategories, formData.category).map(category => (
             <option key={category} value={category}>
               {category}
             </option>
@@ -692,7 +703,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
           className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
         >
           <option value="">Select business model</option>
-          {businessTypesOptions.map(type => (
+          {withCurrent(businessTypesOptions, formData.businessType).map(type => (
             <option key={type} value={type}>
               {type}
             </option>
@@ -765,7 +776,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
+      <div className="bg-white dark:bg-gray-900 -mx-4 sm:mx-0 rounded-none sm:rounded-2xl border-y sm:border border-gray-200 dark:border-gray-800 px-4 py-5 sm:p-6">
         <SocialLinksManager links={socialLinks} onChange={setSocialLinks} />
       </div>
     </>
@@ -901,7 +912,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
         const missing = !formData.logoUrl ? 'Upload your logo.' : !formData.stage ? 'Choose a funding stage.' : !foundersDetails.some((f) => f.name.trim()) ? 'Add at least one founder.' : null;
         if (missing) { e.preventDefault(); setError(missing); form.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
         handleSubmit(e);
-      }} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 space-y-6">
+      }} className="bg-white dark:bg-gray-900 -mx-4 sm:mx-0 rounded-none sm:rounded-2xl border-y sm:border border-gray-200 dark:border-gray-800 px-4 py-5 sm:p-6 space-y-6">
         {/* The form is long: jump straight to a part of it. */}
         <SectionLinks label="Parts of this form" sections={EDIT_SECTIONS} />
         {saved && (
@@ -934,11 +945,12 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
         <div id="startup-funding" className="scroll-mt-4">{fundingBlock}</div>
         <div id="startup-faqs" className="scroll-mt-4">{faqsBlock}</div>
       {/* Submit Button */}
-      <div className="flex items-center justify-end gap-4 pt-4 border-t border-gray-200 dark:border-gray-800">
+      {/* Phones: full-width buttons, Save on top; bigger screens: side by side on the right. */}
+      <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 sm:gap-4 pt-4 border-t border-gray-200 dark:border-gray-800">
         <button
           type="button"
           onClick={() => router.back()}
-          className="px-6 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          className="w-full sm:w-auto min-h-[44px] px-6 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
         >
           Cancel
         </button>
@@ -947,7 +959,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
           // Only while saving. It used to stay greyed out, with no reason given, until every required field was filled;
           // now a tap lists what's missing.
           disabled={loading}
-          className="px-6 py-2 bg-brand hover:bg-brand/90 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          className="w-full sm:w-auto min-h-[44px] justify-center px-6 py-2 bg-brand hover:bg-brand/90 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
           {loading && <Loader2 className="w-4 h-4 animate-spin" />}
           {loading ? (isNew ? 'Submitting...' : 'Saving...') : isNew ? 'Submit Startup' : 'Save changes'}
@@ -1091,8 +1103,9 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
         )}
       </div>
 
-      {/* Back / Continue: stays in reach above the phone tab bar */}
-      <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-0 z-10 -mx-4 md:mx-0 mt-4 px-4 md:px-0 py-3 bg-white/95 dark:bg-gray-950/95 backdrop-blur border-t md:border-t-0 border-gray-200 dark:border-gray-800">
+      {/* Back / Continue: an ordinary row at the end of the step on phones (nothing floating over the fields);
+          kept in view on bigger screens. */}
+      <div className="mt-4 py-3 md:sticky md:bottom-0 md:z-10 md:bg-white/95 md:dark:bg-gray-950/95 md:backdrop-blur border-t border-gray-200 dark:border-gray-800">
         <div className="flex items-center gap-2">
           {step > 1 ? (
             <button type="button" onClick={() => goTo(step - 1)} disabled={loading} className="h-11 px-4 inline-flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">

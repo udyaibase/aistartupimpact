@@ -1,4 +1,7 @@
 import sanitizeHtmlLib from 'sanitize-html';
+import { isOwnMediaUrl } from './own-media';
+
+export { isOwnMediaUrl };
 
 /**
  * Sanitizes editorial HTML (articles, stories, opinions) from the database before rendering.
@@ -51,6 +54,20 @@ const USER_HTML_OPTIONS: sanitizeHtmlLib.IOptions = {
 
 export function sanitizeUserHtml(dirty: string): string {
   return sanitizeHtmlLib(dirty, USER_HTML_OPTIONS);
+}
+
+/**
+ * Founder stories: the outside-user profile plus pictures, as long as they're our own uploads (see isOwnMediaUrl).
+ * A picture keeps only its address and its description (alt).
+ */
+export function sanitizeStoryHtml(dirty: string): string {
+  return sanitizeHtmlLib(dirty, {
+    ...USER_HTML_OPTIONS,
+    allowedTags: [...(USER_HTML_OPTIONS.allowedTags as string[]), 'img'],
+    allowedAttributes: { ...(USER_HTML_OPTIONS.allowedAttributes as Record<string, string[]>), img: ['src', 'alt'] },
+    allowedSchemesByTag: { img: ['https'] },
+    exclusiveFilter: (frame) => frame.tag === 'img' && !isOwnMediaUrl(frame.attribs.src),
+  });
 }
 
 export function htmlToPlainText(html: string): string {

@@ -23,7 +23,7 @@ export default function HiringMemberships({ workspaces }: { workspaces: { member
   }
 
   return (
-    <section aria-labelledby="memberships-title" className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4 sm:p-5">
+    <section aria-labelledby="memberships-title" className="portal-edge bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-4 sm:p-5">
       <h2 id="memberships-title" className="portal-section-title">Hiring teams you’re on</h2>
       <p className="text-[13px] text-gray-600 dark:text-gray-400 mt-0.5">You were invited to help with hiring. Open a workspace without signing in again.</p>
       <ul className="mt-3 divide-y divide-gray-100 dark:divide-gray-800">

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Users, Search, Download, Check, X, ArrowUpCircle, Loader2, ChevronDown, RotateCcw } from "lucide-react";
+import { Users, Search, Download, Check, X, ArrowUpCircle, Loader2, ChevronDown, RotateCcw, MoreHorizontal } from "lucide-react";
+import ConfirmSheet from "@/components/ui/ConfirmSheet";
 
 type Registration = {
   id: string;
@@ -32,6 +33,8 @@ export default function AttendeesPage() {
   const [bulkAction, setBulkAction] = useState("");
   const [processing, setProcessing] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  // Cancelling or refunding is asked about first, in the app's own sheet.
+  const [confirmFor, setConfirmFor] = useState<{ id: string; action: "cancel" | "refund" } | null>(null);
   // Search, filter and paging run on the server, so every registration is reachable however many there are.
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -95,21 +98,29 @@ export default function AttendeesPage() {
   };
 
   const handleSingleAction = async (id: string, action: string) => {
-    if (action === "refund") {
-      const reg = regs.find((x) => x.id === id);
-      if (!confirm(`Refund ₹${((reg?.amountPaise ?? 0) / 100).toLocaleString("en-IN")} to ${reg?.guestName || reg?.guestEmail}? Their ticket is cancelled and the money goes back to them.`)) return;
-      setActionLoading(id);
-      const res = await fetch(`/api/organizer/registrations/${id}/refund`, { method: "POST" }).then((r) => r.json()).catch(() => ({ success: false, error: "You seem to be offline." }));
-      if (!res.success) alert(res.error || "Refund failed.");
-      await fetchRegistrations();
-      setActionLoading(null);
-      return;
-    }
+    if (action === "refund" || action === "cancel") { setConfirmFor({ id, action }); return; }
     setActionLoading(id);
     await performAction([id], action);
     await fetchRegistrations();
     setActionLoading(null);
   };
+
+  /** Runs the confirmed cancel or refund; returns an error to show in the sheet. */
+  const runConfirmed = async (): Promise<string | void> => {
+    if (!confirmFor) return;
+    const { id, action } = confirmFor;
+    setActionLoading(id);
+    try {
+      const res = action === "refund"
+        ? await fetch(`/api/organizer/registrations/${id}/refund`, { method: "POST" }).then((r) => r.json())
+        : await performAction([id], "cancel");
+      if (!res?.success) return res?.error || (action === "refund" ? "Refund failed." : "Couldn't cancel. Try again.");
+      await fetchRegistrations();
+    } catch { return "You seem to be offline."; }
+    finally { setActionLoading(null); }
+  };
+  const confirmReg = confirmFor ? regs.find((x) => x.id === confirmFor.id) : undefined;
+  const confirmName = confirmReg?.guestName || confirmReg?.guestEmail || "this attendee";
 
   const handleBulkAction = async () => {
     if (!bulkAction || selected.size === 0) return;
@@ -241,13 +252,18 @@ export default function AttendeesPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <p className="text-[15px] font-semibold text-gray-900 dark:text-white font-jakarta truncate">{r.guestName || "Guest"}</p>
-                        <Badge status={r.status} />
+                        <div className="flex items-center gap-1 shrink-0 -mt-1.5">
+                          <Badge status={r.status} />
+                          {onlyMore(r) && <RowActions reg={r} labeled loading={actionLoading === r.id} onAction={(action) => handleSingleAction(r.id, action)} />}
+                        </div>
                       </div>
                       <p className="text-[13px] text-gray-500 font-jakarta truncate">{r.guestEmail}</p>
                       <p className="text-[13px] text-brand font-medium font-jakarta truncate mt-0.5">{r.eventTitle}</p>
-                      <div className="mt-2.5">
-                        <RowActions reg={r} labeled loading={actionLoading === r.id} onAction={(action) => handleSingleAction(r.id, action)} />
-                      </div>
+                      {!onlyMore(r) && (r.status === "PENDING_APPROVAL" || r.status === "WAITLISTED") && (
+                        <div className="mt-2.5">
+                          <RowActions reg={r} labeled loading={actionLoading === r.id} onAction={(action) => handleSingleAction(r.id, action)} />
+                        </div>
+                      )}
                     </div>
                   </div>
                 </li>
@@ -335,8 +351,23 @@ export default function AttendeesPage() {
           </button>
         </nav>
       )}
+      <ConfirmSheet
+        open={!!confirmFor}
+        title={confirmFor?.action === "refund" ? `Refund ${confirmName}?` : `Cancel ${confirmName}'s registration?`}
+        message={confirmFor?.action === "refund"
+          ? <>₹{((confirmReg?.amountPaise ?? 0) / 100).toLocaleString("en-IN")} goes back to them and their ticket is cancelled. This can&apos;t be undone.</>
+          : <>They lose their place at <strong>{confirmReg?.eventTitle}</strong>. If anyone is on the waitlist, the next person gets the spot.</>}
+        confirmLabel={confirmFor?.action === "refund" ? "Refund and cancel" : "Cancel registration"}
+        onConfirm={runConfirmed}
+        onClose={() => setConfirmFor(null)}
+      />
     </div>
   );
+}
+
+/** On phones these registrations only have cancel/refund, which sits behind a ⋯ button beside the status. */
+function onlyMore(r: Registration) {
+  return (r.paymentStatus === "PAID" && r.status !== "CHECKED_IN") || r.status === "CONFIRMED";
 }
 
 function RowActions({ reg, loading, onAction, labeled }: { reg: Registration; loading: boolean; onAction: (action: string) => void; labeled?: boolean }) {
@@ -350,6 +381,15 @@ function RowActions({ reg, loading, onAction, labeled }: { reg: Registration; lo
     bad: labeled ? "border-red-200 text-red-600 active:bg-red-50 dark:border-red-900/50 dark:text-red-400" : "text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20",
     muted: labeled ? "border-gray-200 text-gray-600 active:bg-gray-50 dark:border-gray-700 dark:text-gray-300" : "text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20",
   };
+
+  // Phones: cancelling or refunding isn't a big button on every card (too easy to tap while scrolling); it's behind ⋯.
+  const more = (
+    <button onClick={() => onAction(reg.paymentStatus === "PAID" ? "refund" : "cancel")} aria-label={`More actions for ${reg.guestName || reg.guestEmail}`}
+      className="w-10 h-10 -mr-2 inline-flex items-center justify-center rounded-full text-gray-500 active:bg-gray-100 dark:active:bg-gray-800">
+      <MoreHorizontal className="w-5 h-5" aria-hidden />
+    </button>
+  );
+  if (labeled && ((reg.paymentStatus === "PAID" && reg.status !== "CHECKED_IN") || reg.status === "CONFIRMED")) return more;
 
   if (reg.paymentStatus === "PAID" && reg.status !== "CHECKED_IN") {
     return (

@@ -61,7 +61,7 @@ export default function InfoTip({ label, children }: { label: string; children: 
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); const next = !pinned; setPinned(next); setOpen(next); }}
         onFocus={() => setOpen(true)}
         onBlur={() => !pinned && setOpen(false)}
-        className="inline-flex items-center justify-center w-6 h-6 -my-1 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#A50F15]"
+        className="relative inline-flex items-center justify-center w-6 h-6 -my-1 rounded-full text-gray-400 before:absolute before:-inset-2.5 before:content-[''] hover:text-gray-700 dark:hover:text-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#A50F15]"
       >
         <Info className="w-3.5 h-3.5" aria-hidden />
       </button>

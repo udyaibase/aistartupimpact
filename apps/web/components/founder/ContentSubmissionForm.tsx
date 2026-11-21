@@ -181,7 +181,7 @@ export default function ContentSubmissionForm({
 
       {startups.length > 1 && (
         <div>
-          <label htmlFor="content-startup" className="block text-xs font-bold text-gray-400 uppercase mb-1.5 font-jakarta">Startup</label>
+          <label htmlFor="content-startup" className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5 font-jakarta">Startup</label>
           <select id="content-startup" value={startupId} onChange={e => setStartupId(e.target.value)} className="w-full px-3.5 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-jakarta text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/20">
             {startups.filter(s => s.role !== "VIEWER").map(s => (
               <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
@@ -191,21 +191,21 @@ export default function ContentSubmissionForm({
       )}
 
       <div>
-        <label htmlFor="content-title" className="block text-xs font-bold text-gray-400 uppercase mb-1.5 font-jakarta">Title *</label>
+        <label htmlFor="content-title" className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5 font-jakarta">Title *</label>
         <input id="content-title" type="text" value={title} onChange={e => setTitle(e.target.value)} maxLength={200} placeholder={isStory ? "Your story title..." : "What's new with your startup?"} className="w-full px-3.5 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-jakarta text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/20" />
         <p className="text-xs text-gray-400 mt-1 font-jakarta text-right">{title.length}/200</p>
       </div>
 
       {isStory && (
         <div>
-          <label htmlFor="content-excerpt" className="block text-xs font-bold text-gray-400 uppercase mb-1.5 font-jakarta">Excerpt</label>
+          <label htmlFor="content-excerpt" className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5 font-jakarta">Excerpt</label>
           <textarea id="content-excerpt" value={excerpt} onChange={e => setExcerpt(e.target.value)} maxLength={500} rows={2} placeholder="A short summary for previews..." className="w-full px-3.5 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-jakarta text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/20 resize-y" />
           <p className="text-xs text-gray-400 mt-1 font-jakarta text-right">{excerpt.length}/500</p>
         </div>
       )}
 
       <div>
-        <label htmlFor="content-field" className="block text-xs font-bold text-gray-400 uppercase mb-1.5 font-jakarta">
+        <label htmlFor="content-field" className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5 font-jakarta">
           {isStory ? "Story" : "Update"} *
         </label>
         <textarea id="content-field" value={body} onChange={e => setBody(e.target.value)} maxLength={isStory ? 50000 : 5000} rows={isStory ? 16 : 6} placeholder={isStory ? "Tell your story..." : "Share your update..."} className="w-full px-3.5 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-jakarta text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/20 resize-y leading-relaxed" />
@@ -216,14 +216,14 @@ export default function ContentSubmissionForm({
       </div>
 
       <div>
-        <label htmlFor="content-cover-image-url" className="block text-xs font-bold text-gray-400 uppercase mb-1.5 font-jakarta">Cover Image URL</label>
+        <label htmlFor="content-cover-image-url" className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5 font-jakarta">Cover Image URL</label>
         <div className="flex gap-2">
           <input id="content-cover-image-url" type="url" value={coverImage} onChange={e => setCoverImage(e.target.value)} placeholder="https://..." className="flex-1 px-3.5 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-jakarta text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/20" />
           {coverImage && <button onClick={() => setCoverImage("")} className="p-2.5 text-gray-400 hover:text-red-500"><X className="w-4 h-4" /></button>}
         </div>
       </div>
 
-      <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-800">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">
         <div className="flex items-center gap-3">
           {(lastSaved || accountCopy) && (
             <span className="text-xs text-gray-500 dark:text-gray-400 font-jakarta flex items-center gap-1">
@@ -234,14 +234,14 @@ export default function ContentSubmissionForm({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-2">
           {onCancel && (
-            <button onClick={onCancel} className="px-4 py-2.5 text-sm font-jakarta font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Cancel</button>
+            <button onClick={onCancel} className="min-h-[44px] px-4 py-2.5 text-sm font-jakarta font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Cancel</button>
           )}
-          {!liveStory && <button onClick={() => saveDraft(false)} disabled={saving || !title.trim()} className="px-4 py-2.5 border border-gray-200 dark:border-gray-700 text-sm font-jakarta font-bold text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 flex items-center gap-2">
+          {!liveStory && <button onClick={() => saveDraft(false)} disabled={saving || !title.trim()} className="w-full sm:w-auto min-h-[44px] justify-center px-4 py-2.5 border border-gray-200 dark:border-gray-700 text-sm font-jakarta font-bold text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40 flex items-center gap-2 whitespace-nowrap">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Draft
           </button>}
-          <button onClick={handleSubmit} disabled={submitting || !title.trim()} className="px-4 py-2.5 bg-brand hover:bg-brand-600 text-white text-sm font-jakarta font-bold rounded-lg disabled:opacity-40 flex items-center gap-2">
+          <button onClick={handleSubmit} disabled={submitting || !title.trim()} className="w-full sm:w-auto min-h-[44px] justify-center px-4 py-2.5 bg-brand hover:bg-brand-600 text-white text-sm font-jakarta font-bold rounded-lg disabled:opacity-40 flex items-center gap-2 whitespace-nowrap">
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             {liveStory ? "Submit changes for review" : isStory ? "Submit for Review" : "Publish Update"}
           </button>

@@ -106,7 +106,7 @@ export function SectionLinks({ label, sections }: { label: string; sections: rea
       <ul className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {sections.map((sec) => (
           <li key={sec.id} className="shrink-0">
-            <a href={`#${sec.id}`} className="inline-flex items-center min-h-[36px] px-3 rounded-full border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-[13px] font-semibold text-gray-700 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-600">
+            <a href={`#${sec.id}`} className="inline-flex items-center min-h-[40px] sm:min-h-[36px] px-4 sm:px-3 rounded-full border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-sm sm:text-[13px] font-semibold text-gray-700 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-600">
               {sec.label}
             </a>
           </li>

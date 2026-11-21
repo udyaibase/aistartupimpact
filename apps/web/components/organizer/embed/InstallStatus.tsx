@@ -82,7 +82,7 @@ function StatusPanel({
           {[
             { label: c.statLabels[0], value: views.toLocaleString("en-IN") },
             { label: c.statLabels[1], value: regs.toLocaleString("en-IN") },
-            { label: "Conversion", value: views > 0 ? `${((regs / views) * 100).toFixed(1)}%` : "—" },
+            { label: "Conversion", value: views > 0 && regs <= views ? `${((regs / views) * 100).toFixed(1)}%` : "—" },
           ].map((s) => (
             <div key={s.label} className="rounded-[12px] bg-[#F7F7F9] dark:bg-gray-800/60 px-3 py-3">
               <dt className="text-xs text-gray-600 dark:text-gray-400">{s.label}</dt>

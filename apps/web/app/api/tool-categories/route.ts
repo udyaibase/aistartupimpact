@@ -49,6 +49,18 @@ export async function GET(request: NextRequest) {
       ORDER BY p."sortOrder" ASC, c."sortOrder" ASC, c.name ASC
     `;
 
+    // No subcategories set up yet (a fresh database, or a flat list): offer the top-level categories instead,
+    // so the tool form never shows an empty category list that blocks listing a tool.
+    if (categories.length === 0) {
+      const topLevel = await prisma.$queryRaw<any[]>`
+        SELECT id, name, slug, NULL AS "parentId", NULL AS "parentName", NULL AS "parentSlug", NULL AS "parentIcon"
+        FROM "ToolCategory"
+        WHERE level = 0 AND "isActive" = true
+        ORDER BY "sortOrder" ASC, name ASC
+      `;
+      return NextResponse.json({ success: true, categories: topLevel });
+    }
+
     return NextResponse.json({ success: true, categories });
   } catch (error: any) {
     console.error('Error fetching tool categories:', error);

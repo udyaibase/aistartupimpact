@@ -38,6 +38,7 @@ export default function OrganizerSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [orgMsg, setOrgMsg] = useState("");
 
   // Change password state
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -112,14 +113,17 @@ export default function OrganizerSettingsPage() {
   }, []);
 
   const saveOrg = async () => {
-    setSaving(true); setMsg("");
-    const res = await fetch("/api/organizer/profile", {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ company, phone, website, linkedin }),
-    });
-    const d = await res.json();
-    setMsg(d.success ? "Saved!" : d.error || "Failed");
-    setSaving(false); setTimeout(() => setMsg(""), 3000);
+    setSaving(true); setOrgMsg("");
+    try {
+      const res = await fetch("/api/organizer/profile", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company, phone, website, linkedin }),
+      });
+      const d = await res.json().catch(() => ({}));
+      setOrgMsg(d.success ? "Saved!" : d.error || "Couldn't save. Try again.");
+      if (d.success) setTimeout(() => setOrgMsg(""), 3000);
+    } catch { setOrgMsg("You seem to be offline. Try again."); }
+    finally { setSaving(false); }
   };
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-brand" /></div>;
@@ -134,9 +138,12 @@ export default function OrganizerSettingsPage() {
           <h1 className="portal-title">{teamCtx ? "Your account settings" : "Settings"}</h1>
           <p className="portal-subtitle">{teamCtx ? "Your own sign-in, security and data" : "Organizer workspace settings"}</p>
         </div>
-        <Link href="/organizer/profile" className="inline-flex items-center min-h-[40px] text-sm text-brand hover:underline font-semibold">
-          Edit profile →
-        </Link>
+        {/* The public organization profile belongs to the workspace owner. */}
+        {!teamCtx && (
+          <Link href="/organizer/organization" className="inline-flex items-center min-h-[40px] text-sm text-brand hover:underline font-semibold">
+            Edit profile →
+          </Link>
+        )}
       </div>
 
       {/* Tabs */}
@@ -170,7 +177,7 @@ export default function OrganizerSettingsPage() {
             <div className="p-4 space-y-4 bg-white dark:bg-gray-950">
               <div>
                 <label className={labelClass}>Organization / Company name</label>
-                <input aria-label="Organization or company name" value={company} onChange={e => setCompany(e.target.value)} placeholder="Your organization name (shown on events)" className={inputClass} />
+                <input aria-label="Organization or company name" value={company} onChange={e => setCompany(e.target.value)} placeholder="Organization name" className={inputClass} />
               </div>
               <div>
                 <label className={labelClass}>Contact phone</label>
@@ -187,9 +194,11 @@ export default function OrganizerSettingsPage() {
             </div>
           </div>
 
-          <button onClick={saveOrg} disabled={saving} className="flex items-center justify-center gap-2 w-full sm:w-auto min-h-[48px] px-5 bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-semibold rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors disabled:opacity-50">
+          <button onClick={saveOrg} disabled={saving} className="flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px] px-5 bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-semibold rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors disabled:opacity-50">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
           </button>
+          {/* The result next to the button that caused it (the banner at the top is off screen on a phone). */}
+          {orgMsg && <p role="status" className={`-mt-2 text-sm font-jakarta ${orgMsg === "Saved!" ? "text-green-700 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>{orgMsg}</p>}
 
           <MeetingIntegrations />
         </div>

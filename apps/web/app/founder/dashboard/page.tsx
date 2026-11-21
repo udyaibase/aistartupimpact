@@ -300,7 +300,7 @@ export default async function DashboardPage() {
         <section aria-labelledby="startups-title">
           <div className="flex items-center justify-between gap-4 mb-3">
             <h2 id="startups-title" className="portal-section-title">Your startup</h2>
-            {startups.length > 0 && <Link href="/founder/startups" className="text-sm font-semibold text-brand hover:underline">All startups</Link>}
+            {startups.length > 0 && <Link href="/founder/startups" className="inline-flex items-center min-h-[40px] -my-2 -mr-2 px-2 rounded-[8px] text-sm font-semibold text-brand hover:underline active:bg-gray-100 dark:active:bg-gray-800">All startups</Link>}
           </div>
           {startups.length === 0 ? (
             <div className={`${CARD} px-4 py-8 text-center`}>

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Loader2, Plus, Repeat } from 'lucide-react';
 
 type Row = { id: string; slug: string; name: string; recurrence: unknown; _count: { events: number; followers: number } };
-const input = 'w-full min-h-[40px] px-3 rounded-[10px] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/25 focus:border-brand';
+const input = 'w-full min-h-[44px] px-3 rounded-[10px] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/25 focus:border-brand';
 
 export default function SeriesList() {
   const router = useRouter();
@@ -23,11 +23,13 @@ export default function SeriesList() {
   async function create(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true); setError('');
-    const r = await fetch('/api/organizer/series', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
-    const d = await r.json().catch(() => ({}));
-    setBusy(false);
-    if (!r.ok) { setError(d.error || 'Couldn’t create the series.'); return; }
-    router.push(`/organizer/series/${d.id}`);
+    try {
+      const r = await fetch('/api/organizer/series', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setError(d.error || 'Couldn’t create the series.'); setBusy(false); return; }
+      // Stays "Creating…" until the new series page has opened.
+      router.push(`/organizer/series/${d.id}`);
+    } catch { setError('You seem to be offline. Try again.'); setBusy(false); }
   }
 
   return (
@@ -46,7 +48,7 @@ export default function SeriesList() {
           <div className="flex flex-col sm:flex-row gap-2">
             <input id="series-name" autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={100} placeholder="Bengaluru AI Meetup" className={input} />
             <button type="submit" disabled={busy || name.trim().length < 3} className="inline-flex items-center justify-center gap-2 min-h-[40px] px-4 rounded-[10px] bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-semibold disabled:opacity-50">
-              {busy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} Create
+              {busy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} {busy ? 'Creating…' : 'Create'}
             </button>
             <button type="button" onClick={() => { setCreating(false); setName(''); }} className="min-h-[40px] px-4 rounded-[10px] text-sm font-semibold text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">Cancel</button>
           </div>

@@ -98,7 +98,7 @@ export default function CfpBoard({ eventId }: { eventId: string }) {
 
       <div className="flex flex-wrap items-center gap-1.5 mb-3">
         {[['ALL', `All (${data.submissions.length})`], ['SUBMITTED', `New (${count('SUBMITTED')})`], ['ACCEPTED', `Accepted (${count('ACCEPTED')})`], ['WAITLISTED', `Waitlist (${count('WAITLISTED')})`], ['REJECTED', `Declined (${count('REJECTED')})`]].map(([k, l]) => (
-          <button key={k} type="button" onClick={() => setFilter(k)} aria-pressed={filter === k} className={`h-8 px-3 rounded-[8px] text-[13px] font-semibold ${filter === k ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900' : 'border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300'}`}>{l}</button>
+          <button key={k} type="button" onClick={() => setFilter(k)} aria-pressed={filter === k} className={`h-9 sm:h-8 px-3 rounded-[8px] text-[13px] font-semibold ${filter === k ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900' : 'border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300'}`}>{l}</button>
         ))}
         <label className="ml-auto inline-flex items-center gap-2 text-[13px] text-gray-700 dark:text-gray-300"><input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} className="w-4 h-4 rounded border-gray-300 text-brand" /> Email speakers about decisions</label>
       </div>

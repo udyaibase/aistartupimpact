@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import ConfirmSheet from "@/components/ui/ConfirmSheet";
 import { useRouter } from "next/navigation";
 import {
   Megaphone, CheckCircle, Eye, Loader2, ChevronDown, Pencil, Trash2, Send, ArrowRight, ExternalLink, PenLine, Flag,
@@ -38,6 +39,8 @@ export default function CreatePage() {
   const [startups, setStartups] = useState<any[]>([]);
   const [mentions, setMentions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  // Deleting is asked about in the app's own sheet; a draft isn't public, so the message says so.
+  const [toDelete, setToDelete] = useState<{ id: string; type: "article" | "milestone"; title: string; isPublic: boolean } | null>(null);
   const [startupFilter, setStartupFilter] = useState("");
   const [notice, setNotice] = useState("");
   const [done, setDone] = useState("");
@@ -78,18 +81,22 @@ export default function CreatePage() {
 
   const totalCount = filtered.articles.length + filtered.milestones.length;
 
-  const handleDelete = async (id: string, type: "article" | "milestone", title: string) => {
-    if (!confirm(`Delete “${title}”? It comes off your public pages straight away.`)) return;
+  const handleDelete = (id: string, type: "article" | "milestone", title: string, isPublic = true) => {
     setNotice("");
-    const url = type === "article" ? `/api/founder/content/${id}` : `/api/founder/milestones/${id}`;
+    setToDelete({ id, type, title, isPublic });
+  };
+
+  /** Runs the confirmed delete; returns an error to show in the sheet. */
+  const runDelete = async (): Promise<string | void> => {
+    if (!toDelete) return;
+    const url = toDelete.type === "article" ? `/api/founder/content/${toDelete.id}` : `/api/founder/milestones/${toDelete.id}`;
     try {
       const res = await fetch(url, { method: "DELETE" });
       const d = await res.json().catch(() => ({}));
-      // Say so when it didn't work (a limit, a lost connection): before, nothing happened and nothing was said.
-      if (!res.ok || d.success === false) { setNotice(d.error || "Couldn’t delete that. Please try again in a minute."); return; }
+      if (!res.ok || d.success === false) return d.error || "Couldn’t delete that. Please try again in a minute.";
       fetchContent();
     } catch {
-      setNotice("Couldn’t delete that. Check your connection and try again.");
+      return "Couldn’t delete that. Check your connection and try again.";
     }
   };
 
@@ -170,11 +177,11 @@ export default function CreatePage() {
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-1 mb-4 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 w-fit">
+          <div className="flex gap-1 mb-4 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 w-fit max-w-full overflow-x-auto [scrollbar-width:none]">
             {tabs.map(t => (
-              <button key={t.key} onClick={() => setTab(t.key)} className={`px-3 py-1.5 rounded-md text-xs font-jakarta font-medium transition-all ${tab === t.key ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"}`}>
+              <button key={t.key} onClick={() => setTab(t.key)} className={`min-h-[36px] px-3 rounded-md text-[13px] sm:text-xs font-jakarta font-medium whitespace-nowrap transition-all ${tab === t.key ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"}`}>
                 {t.label}
-                <span className={`ml-1 text-[10px] ${tab === t.key ? "text-brand" : "text-gray-400"}`}>{t.count}</span>
+                <span className={`ml-1 text-[11px] ${tab === t.key ? "text-brand" : "text-gray-400"}`}>{t.count}</span>
               </button>
             ))}
           </div>
@@ -211,8 +218,8 @@ export default function CreatePage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap sm:flex-nowrap items-center gap-x-2 gap-y-1 mb-1 sm:mb-0.5">
                         <h3 className="w-full sm:w-auto text-sm font-jakarta font-semibold text-gray-900 dark:text-white line-clamp-2 sm:line-clamp-none sm:truncate">{a.title}</h3>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-jakarta font-medium shrink-0 ${sb.cls}`}>{sb.label}</span>
-                        {mb && mb.label !== "Approved" && <span className={`text-[10px] font-jakarta font-medium shrink-0 ${mb.cls}`}>{mb.label}</span>}
+                        <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-jakarta font-medium shrink-0 ${sb.cls}`}>{sb.label}</span>
+                        {mb && mb.label !== "Approved" && <span className={`text-[11px] font-jakarta font-medium shrink-0 ${mb.cls}`}>{mb.label}</span>}
                       </div>
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400 font-jakarta [&>span]:whitespace-nowrap">
                         <span className="font-medium text-gray-600 dark:text-gray-300">{isUpdate ? "Update" : "Story"}</span>
@@ -231,7 +238,7 @@ export default function CreatePage() {
                       <button onClick={() => router.push(`/founder/content/${a.id}/edit`)} className={rowAction} aria-label={`Edit “${a.title}”`} title="Edit">
                         <Pencil className="w-4 h-4" aria-hidden />
                       </button>
-                      <button onClick={() => handleDelete(a.id, "article", a.title)} className={`${rowAction} hover:text-red-600 dark:hover:text-red-400`} aria-label={`Delete “${a.title}”`} title="Delete">
+                      <button onClick={() => handleDelete(a.id, "article", a.title, a.status === "PUBLISHED")} className={`${rowAction} hover:text-red-600 dark:hover:text-red-400`} aria-label={`Delete “${a.title}”`} title="Delete">
                         <Trash2 className="w-4 h-4" aria-hidden />
                       </button>
                     </div>
@@ -248,7 +255,7 @@ export default function CreatePage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap sm:flex-nowrap items-center gap-x-2 gap-y-1 mb-1 sm:mb-0.5">
                       <h3 className="w-full sm:w-auto text-sm font-jakarta font-semibold text-gray-900 dark:text-white line-clamp-2 sm:line-clamp-none sm:truncate">{m.title}</h3>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-jakarta font-medium shrink-0">{milestoneTypeLabel(m.type)}</span>
+                      <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-jakarta font-medium shrink-0">{milestoneTypeLabel(m.type)}</span>
                       {m.verificationStatus === "PLATFORM_VERIFIED" && <CheckCircle className="w-3.5 h-3.5 text-green-500 shrink-0" />}
                     </div>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400 font-jakarta [&>span]:whitespace-nowrap">
@@ -290,6 +297,16 @@ export default function CreatePage() {
           )}
         </div>
       </div>
+      <ConfirmSheet
+        open={!!toDelete}
+        title={`Delete “${toDelete?.title ?? ""}”?`}
+        message={toDelete?.isPublic
+          ? <>It comes off your public pages straight away. This can&apos;t be undone.</>
+          : <>It hasn&apos;t been published, so nothing changes on your public pages. This can&apos;t be undone.</>}
+        confirmLabel="Delete"
+        onConfirm={runDelete}
+        onClose={() => setToDelete(null)}
+      />
     </div>
   );
 }
