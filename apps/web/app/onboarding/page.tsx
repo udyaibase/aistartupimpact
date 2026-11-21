@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getUserSession } from '@/lib/user-session';
 import { sql } from '@/lib/db';
+import { safeReturnPath } from '@/lib/safe-return';
 import OnboardingClient from './OnboardingClient';
 import { getJobCategoryCounts } from '@/lib/jobs/search';
 import { JOB_CATEGORIES } from '@/lib/jobs/composer';
@@ -18,7 +19,7 @@ export default async function OnboardingPage({
   }
 
   const params = await searchParams;
-  const returnTo = params.returnTo || '/';
+  const returnTo = safeReturnPath(params.returnTo, '/'); // a path on this site only, never another site
 
   const users = await sql`
     SELECT "onboardingCompleted" FROM "WebUser" WHERE id = ${session.id} LIMIT 1

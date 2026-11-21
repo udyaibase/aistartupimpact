@@ -1,4 +1,5 @@
 import { jwtSecret } from '@/lib/jwt-secret';
+import { siteOnboarding } from '@/lib/auth/site-onboarding';
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { SignJWT } from 'jose';
@@ -65,6 +66,7 @@ export async function POST(request: NextRequest) {
 
     const user = webUsers[0];
 
+    user.onboardingCompleted = (await siteOnboarding(user as { id: string; email: string; onboardingCompleted?: boolean })).onboardingCompleted;
     const sessionId = generateId();
     const token = await new SignJWT({
       userId: user.id,

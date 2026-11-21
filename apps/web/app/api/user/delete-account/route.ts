@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { confirmAccountPassword } from '@/lib/founder/account';
+import { confirmAccountAction } from '@/lib/founder/account';
+import { endAccountSessions } from '@/lib/auth/sessions';
 import { eraseFounderAccount } from '@/lib/founder/erasure';
 import { getUserSession } from '@/lib/user-session';
 import { cookies } from 'next/headers';
@@ -19,8 +20,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
     }
 
-    const body = await request.json().catch(() => ({}));
-    const { password } = body as { password?: unknown };
+    const body = (await request.json().catch(() => ({}))) as { password?: unknown; otpToken?: unknown; code?: unknown };
 
     const user = await prisma.webUser.findUnique({
       where: { id: session.id },
@@ -31,9 +31,12 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    if (!(await confirmAccountPassword(user.email.toLowerCase(), password))) {
-      return NextResponse.json({ success: false, error: 'Incorrect password' }, { status: 401 });
-    }
+    // The password, or for an account without one (Google sign-in) a code emailed to them.
+    const confirmed = await confirmAccountAction({ userId: user.id, email: user.email }, body, 'delete');
+    if (!confirmed.ok) return NextResponse.json({ success: false, error: confirmed.error }, { status: 401 });
+
+    // End this person's sessions on every device before the records go.
+    await endAccountSessions(user.email).catch(() => {});
 
     // One person, one erasure: deleting from Profile also erases their founder account.
     const founder = await prisma.founderUser.findUnique({ where: { email: user.email.toLowerCase() }, select: { id: true } });

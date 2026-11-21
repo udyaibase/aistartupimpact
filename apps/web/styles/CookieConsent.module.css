@@ -495,15 +495,79 @@
 /* ==========================================
    Responsive Adaptation
    ========================================== */
-@media (max-width: 640px) {
+/* Wide screens (no bottom menu): one bar along the bottom edge. It used to be a card in the bottom-right corner,
+   where it covered whatever a page keeps there, such as an event's Register button. */
+@media (min-width: 1024px) {
   .banner {
-    bottom: 4.5rem;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-width: none;
+    border-radius: 0;
+    border-width: 1px 0 0 0;
+    background: rgba(255, 255, 255, 0.98);
+  }
+
+  :global(.dark) .banner {
+    background: rgba(13, 27, 42, 0.98);
+  }
+
+  .bannerContent {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 0.875rem 1.5rem;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 0.5rem 1.25rem;
+  }
+
+  .bannerTitle {
+    font-size: 0.9375rem;
+    white-space: nowrap;
+  }
+
+  .iconWrapper {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.625rem;
+  }
+
+  .bannerActions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .bannerActions .button {
+    padding: 0.625rem 1rem;
+    white-space: nowrap;
+  }
+}
+
+/* Keep the bar to one or two lines on laptops. */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .bannerMore {
+    display: none;
+  }
+}
+
+/* Phones and tablets: a short sheet just above the bottom menu, solid so the page doesn't show through the text. */
+@media (max-width: 1023px) {
+  .banner {
+    bottom: calc(4.0625rem + env(safe-area-inset-bottom, 0px) + 0.5rem);
     right: 0.75rem;
     left: 0.75rem;
     width: auto;
-    max-width: none;
-    border-radius: 0.75rem;
+    max-width: 34rem;
+    margin: 0 auto;
+    border-radius: 0.875rem;
+    background: rgba(255, 255, 255, 0.98);
     box-shadow: 0 4px 20px rgba(13, 27, 42, 0.2);
+  }
+
+  :global(.dark) .banner {
+    background: rgba(13, 27, 42, 0.98);
   }
 
   .bannerContent {
@@ -528,30 +592,37 @@
   }
 
   .bannerTitle {
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
   }
 
   .bannerDescription {
-    font-size: 0.6875rem;
-    line-height: 1.35;
+    font-size: 0.75rem;
+    line-height: 1.4;
   }
 
+  .bannerMore {
+    display: none;
+  }
+
+  /* Three buttons in one row, each a full 44px tall. */
   .bannerActions {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1.2fr;
     gap: 0.375rem;
   }
 
   .bannerActions .button {
-    padding: 0.4375rem 0.5rem;
-    font-size: 0.6875rem;
-    border-radius: 0.5rem;
+    min-height: 2.75rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    border-radius: 0.625rem;
   }
 
   .acceptAllButton {
-    grid-column: span 2;
-    order: -1;
+    grid-column: auto;
   }
+}
 
+@media (max-width: 640px) {
   .modal {
     max-height: 90vh;
     border-radius: 1rem;

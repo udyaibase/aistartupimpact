@@ -24,7 +24,11 @@ type ModeType = 'signin' | 'signup';
 
 export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', defaultTab = 'user', returnTo, fullPage = false, embedded = false }: SignInModalProps) {
   const router = useRouter();
-  const effectiveReturnTo = returnTo || (typeof window !== 'undefined' ? window.location.pathname + window.location.search : null);
+  // Where to go after signing in: the page asked for, else the page the modal was opened on. Never a sign-in page
+  // itself (on /auth/login that used to send people straight back to the sign-in form).
+  const here = typeof window !== 'undefined' ? window.location.pathname + window.location.search : null;
+  const candidate = returnTo || here;
+  const effectiveReturnTo = candidate && candidate.startsWith('/') && !candidate.startsWith('//') && !candidate.startsWith('/auth/') ? candidate : null;
   const [mode, setMode] = useState<ModeType>(defaultMode);
   const [codeSignIn, setCodeSignIn] = useState(false);
   const [formData, setFormData] = useState({
@@ -211,7 +215,7 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
 
       onClose();
       resetForm();
-      router.push(effectiveReturnTo || '/onboarding');
+      router.push(effectiveReturnTo || data.home || '/');
       router.refresh();
     } catch (err: any) {
       setError(err.message);
@@ -274,7 +278,7 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
 
       onClose();
       resetForm();
-      router.push(effectiveReturnTo || '/onboarding');
+      router.push(effectiveReturnTo || (twoFAUserType === 'founder' ? '/founder/dashboard' : '/'));
       router.refresh();
     } catch (err: any) {
       setError(err.message);

@@ -19,8 +19,8 @@ export async function GET() {
         se.id AS "savedId",
         se."createdAt"::text AS "savedAt",
         e.id, e.slug, e.title, e.subtitle, e.format, e.status,
-        e."startAt"::text AS "startAt",
-        e."endAt"::text AS "endAt",
+        to_char(e."startAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "startAt",
+        to_char(e."endAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "endAt",
         e.timezone, e."venueName", e."coverImageUrl"
       FROM "SavedEvent" se
       INNER JOIN "Event" e ON e.id = se."eventId"

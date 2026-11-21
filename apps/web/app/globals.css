@@ -238,6 +238,32 @@
       font-size: 16px;
     }
   }
+  /* ─── Founder story editor (components/founder/StoryEditor.tsx) ─── */
+  /* The grey "Tell your story…" shown while the story is empty. */
+  .story-editor .ProseMirror p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+    color: #9ca3af;
+  }
+  /* The title and subtitle are page text, not form boxes: no border, and their own size on phones too. */
+  .founder-portal .story-editor textarea.story-plain {
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+  @media (max-width: 639px) {
+    .founder-portal .story-editor textarea.story-plain:first-of-type { font-size: 30px; }
+    .founder-portal .story-editor textarea.story-plain + textarea.story-plain { font-size: 18px; }
+  }
+
+  /* A field the form's error list points at (see components/ui/FormProblems.tsx). */
+  .founder-portal [aria-invalid="true"] {
+    border-color: #dc2626 !important;
+    box-shadow: 0 0 0 1px #dc2626;
+  }
+
   .organizer-portal,
   .employer-portal,
   .founder-portal {

@@ -87,6 +87,7 @@ export default function ProsConsManager({
           Top Strengths ({proItems.length}/{maxPros}) <span className="text-gray-400 font-normal">— paste multiple lines at once</span>
         </label>
         <textarea
+          aria-label="Top strengths, one per line"
           value={prosText}
           onChange={(e) => handleProsChange(e.target.value)}
           onPaste={(e) => handlePaste(e, handleProsChange, prosText)}
@@ -115,6 +116,7 @@ export default function ProsConsManager({
           Limitations ({conItems.length}/{maxCons}) <span className="text-gray-400 font-normal">— optional, builds trust</span>
         </label>
         <textarea
+          aria-label="Limitations, one per line"
           value={consText}
           onChange={(e) => handleConsChange(e.target.value)}
           onPaste={(e) => handlePaste(e, handleConsChange, consText)}

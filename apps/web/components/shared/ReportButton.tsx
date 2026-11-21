@@ -52,7 +52,7 @@ export default function ReportButton({ endpoint, title, noun, reasons, note }: {
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className="inline-flex items-center gap-1.5 min-h-[36px] text-xs font-semibold font-jakarta text-gray-600 dark:text-gray-400 hover:text-red-700 dark:hover:text-red-400">
+      <button type="button" onClick={() => setOpen(true)} className="inline-flex items-center gap-1.5 min-h-11 md:min-h-[36px] text-xs font-semibold font-jakarta text-gray-600 dark:text-gray-400 hover:text-red-700 dark:hover:text-red-400">
         <Flag className="w-3.5 h-3.5" aria-hidden /> Report this {noun}
       </button>
 

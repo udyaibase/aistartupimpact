@@ -38,6 +38,8 @@ export default async function VerifyCertificatePage(props: { params: Promise<{ c
             ['Certificate', c.title],
             ['Event', c.eventTitle],
             ['Date', c.date],
+            ...(c.duration ? ([['Duration', c.duration]] as [string, string][]) : []),
+            ...(c.skills.length ? ([['Topics covered', c.skills.join(', ')]] as [string, string][]) : []),
             ['Issued by', c.hostName],
             ['Certificate ID', c.code],
           ].map(([k, v]) => (

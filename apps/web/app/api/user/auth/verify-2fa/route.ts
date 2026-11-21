@@ -1,4 +1,5 @@
 import { jwtSecret } from '@/lib/jwt-secret';
+import { siteOnboarding } from '@/lib/auth/site-onboarding';
 import { NextRequest, NextResponse } from 'next/server';
 import { isTwoFactorOn, verifyAccountCode } from '@/lib/auth/account-two-factor';
 import { TWO_FACTOR_LOCKED_MESSAGE, clearTwoFactorFailures, isTwoFactorLocked, recordTwoFactorFailure } from '@/lib/auth/two-factor-attempts';
@@ -74,6 +75,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid verification code' }, { status: 401 });
     }
 
+    user.onboardingCompleted = (await siteOnboarding(user as { id: string; email: string; onboardingCompleted?: boolean })).onboardingCompleted;
     const sessionId = generateId();
     const jwtToken = await new SignJWT({ userId: user.id, email: user.email, name: user.name, sessionId, onboardingCompleted: user.onboardingCompleted ?? false })
       .setProtectedHeader({ alg: 'HS256' })

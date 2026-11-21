@@ -11,6 +11,7 @@ import { maskEmail } from '@/lib/mask';
 import SavedItems from '@/components/profile/SavedItems';
 import TwoFactorSetup from '@/components/TwoFactorSetup';
 import EmailChangeModal from '@/components/EmailChangeModal';
+import EmailCodeField, { NO_CODE, type EmailCode } from '@/components/ui/EmailCodeField';
 import PreferencesClient from '@/app/settings/preferences/PreferencesClient';
 import { getPreferencesForm } from '@/app/settings/preferences/actions';
 
@@ -206,6 +207,7 @@ function SecurityTab() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [hasPassword, setHasPassword] = useState(true);
+  const [deleteCode, setDeleteCode] = useState<EmailCode>(NO_CODE); // accounts without a password confirm with an emailed code
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [twoFAEnabled, setTwoFAEnabled] = useState(false);
@@ -395,14 +397,16 @@ function SecurityTab() {
               e.preventDefault(); setError('');
               if (deleteConfirmation !== 'DELETE') { setError('Please type DELETE to confirm'); return; }
               if (hasPassword && !deletePassword) { setError('Password is required'); return; }
+              if (!hasPassword && (!deleteCode.otpToken || !deleteCode.code.trim())) { setError('Enter the code we emailed you'); return; }
               setDeleting(true);
               try {
-                const res = await fetch('/api/user/delete-account', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: deletePassword }) });
+                const res = await fetch('/api/user/delete-account', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(hasPassword ? { password: deletePassword } : { otpToken: deleteCode.otpToken, code: deleteCode.code }) });
                 const data = await res.json();
                 if (data.success) { setSuccess('Account deleted. Redirecting...'); setTimeout(() => router.push('/'), 2000); }
                 else { setError(data.error || 'Failed to delete account'); setDeleting(false); }
               } catch { setError('Failed to delete account'); setDeleting(false); }
             }} className="space-y-3">
+              {!hasPassword && <EmailCodeField action="delete" endpoint="/api/user/account-code" value={deleteCode} onChange={setDeleteCode} onError={setError} />}
               {hasPassword && (<div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Enter your password</label>
                 <input type="password" autoComplete="current-password" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} required placeholder="Enter your password" className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500" />
@@ -411,7 +415,7 @@ function SecurityTab() {
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Type <span className="font-bold text-red-600">DELETE</span> to confirm</label>
                 <input type="text" value={deleteConfirmation} onChange={(e) => setDeleteConfirmation(e.target.value)} required placeholder="DELETE" className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500" />
               </div>
-              <button type="submit" disabled={deleting || deleteConfirmation !== 'DELETE' || !deletePassword} className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              <button type="submit" disabled={deleting || deleteConfirmation !== 'DELETE' || (hasPassword ? !deletePassword : !deleteCode.code.trim())} className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                 {deleting ? 'Deleting Account...' : 'Delete My Account'}
               </button>
             </form>
@@ -469,7 +473,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (<div className="border border-gray-200 dark:border-gray-800 rounded-xl"><div className="px-4 py-3 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 rounded-t-xl"><h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{title}</h2></div><div className="p-4 space-y-4 bg-white dark:bg-gray-950 rounded-b-xl">{children}</div></div>);
 }
 function Field({ label, value, onChange, placeholder, multiline, maxLength }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; multiline?: boolean; maxLength?: number }) {
-  return (<div><label className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">{label}{maxLength ? <span className="text-xs text-gray-400 ml-2">{value.length}/{maxLength}</span> : null}</label>{multiline ? <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={3} maxLength={maxLength} className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-brand/30 focus:border-brand resize-none" /> : <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} maxLength={maxLength} className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-brand/30 focus:border-brand" />}</div>);
+  return (<div><label className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">{label}{maxLength ? <span className="text-xs text-gray-400 ml-2">{value.length}/{maxLength}</span> : null}</label>{multiline ? <textarea aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={3} maxLength={maxLength} className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-brand/30 focus:border-brand resize-none" /> : <input aria-label={label} type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} maxLength={maxLength} className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-brand/30 focus:border-brand" />}</div>);
 }
 function WorkspaceRow({ label, active, href, description }: { label: string; active: boolean; href: string; description: string }) {
   return (<div className="flex items-center justify-between py-2"><div><div className="flex items-center gap-2"><span className={`w-2 h-2 rounded-full ${active ? 'bg-green-500' : 'bg-gray-300'}`} /><p className="text-sm font-medium text-gray-900 dark:text-white">{label}</p></div><p className="text-xs text-gray-500 ml-4">{description}</p></div>{active ? <Link href={href} className="px-3 py-1.5 text-xs font-medium text-brand bg-brand/5 rounded-lg hover:bg-brand/10 transition-colors">Open</Link> : <span className="px-3 py-1.5 text-xs font-medium text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-lg">Inactive</span>}</div>);

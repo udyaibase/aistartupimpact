@@ -136,7 +136,7 @@ describe('Upload security — /api/media/upload', () => {
   it('accepts valid JPEG', async () => {
     const { POST } = await import('@/app/api/media/upload/route');
     const res = await POST(createFileRequest(
-      '/api/media/upload', 'photo.jpg', Buffer.from([0xFF, 0xD8, 0xFF]), 'image/jpeg'
+      '/api/media/upload', 'photo.jpg', Buffer.from([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46]), 'image/jpeg'
     ));
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -146,15 +146,24 @@ describe('Upload security — /api/media/upload', () => {
   it('accepts valid PNG', async () => {
     const { POST } = await import('@/app/api/media/upload/route');
     const res = await POST(createFileRequest(
-      '/api/media/upload', 'image.png', Buffer.from([0x89, 0x50, 0x4E, 0x47]), 'image/png'
+      '/api/media/upload', 'image.png', Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D]), 'image/png'
     ));
     expect(res.status).toBe(200);
+  });
+
+  it('refuses a file that only claims to be an image (the type label is not trusted)', async () => {
+    const { POST } = await import('@/app/api/media/upload/route');
+    const res = await POST(createFileRequest(
+      '/api/media/upload', 'logo.png', Buffer.from('<html><script>alert(1)</script></html>'), 'image/png'
+    ));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/valid image/);
   });
 
   it('accepts valid WebP', async () => {
     const { POST } = await import('@/app/api/media/upload/route');
     const res = await POST(createFileRequest(
-      '/api/media/upload', 'image.webp', Buffer.from('RIFF'), 'image/webp'
+      '/api/media/upload', 'image.webp', Buffer.concat([Buffer.from('RIFF'), Buffer.from([0x24, 0x00, 0x00, 0x00]), Buffer.from('WEBPVP8 ')]), 'image/webp'
     ));
     expect(res.status).toBe(200);
   });

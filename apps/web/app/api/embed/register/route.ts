@@ -3,7 +3,7 @@ import { prisma } from "@udyaibase/database";
 import { checkRateLimit, getClientIdentifier } from "@/lib/rate-limit";
 import { registrationRateLimit, embedRegistrationRateLimit } from "@/lib/event-rate-limit";
 import { verifyTurnstileToken } from "@/lib/turnstile";
-import { registerForEvent, RegistrationError } from "@/lib/events/register-event";
+import { registerForEvent, RegistrationError, publicRegistrationReply } from "@/lib/events/register-event";
 
 export const dynamic = "force-dynamic";
 
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
       utmCampaign: clean(body.utmCampaign, 100),
     });
 
-    return NextResponse.json({ success: true, data: result });
+    return NextResponse.json({ success: true, data: publicRegistrationReply(result) });
   } catch (error) {
     if (error instanceof RegistrationError) {
       return fail(error.message, error.statusCode, error.code, error.field);

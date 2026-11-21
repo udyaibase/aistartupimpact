@@ -145,7 +145,7 @@ function AccountMenu({ employer, shell }: Props) {
   const toFounderPortal = async () => {
     const res = await fetch('/api/employer/switch-founder', { method: 'POST' }).catch(() => null);
     const d = await res?.json().catch(() => ({}));
-    window.location.href = d?.redirect || '/founder/login';
+    window.location.href = d?.redirect || '/auth/login?returnTo=%2Ffounder%2Fdashboard';
   };
 
   const [switching, setSwitching] = useState<string | null>(null);

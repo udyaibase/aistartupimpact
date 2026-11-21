@@ -36,7 +36,9 @@ const USER_HTML_OPTIONS: sanitizeHtmlLib.IOptions = {
     'a', 'hr', 'span',
   ],
   allowedAttributes: {
-    'a': ['href', 'title'],
+    // rel and target are set by the transform below (whatever was sent is replaced). They must be listed here or
+    // the filter removes them again, and links went out without "nofollow".
+    'a': ['href', 'title', 'rel', 'target'],
   },
   allowedSchemes: ['http', 'https', 'mailto'],
   transformTags: {

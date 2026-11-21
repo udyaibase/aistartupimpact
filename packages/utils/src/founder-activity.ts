@@ -2,7 +2,7 @@ export type FounderActivity =
   | 'signed_in' | 'sign_in_failed'
   | 'password_changed' | 'password_reset' | 'email_change_requested'
   | '2fa_enabled' | '2fa_disabled'
-  | 'data_exported' | 'account_deactivated' | 'account_reactivated' | 'account_deleted'
+  | 'data_exported' | 'account_deactivated' | 'account_reactivated' | 'account_deleted' | 'signed_out_everywhere' | 'profile_updated'
   | 'public_profile_changed' | 'startup_claim_verified' | 'verification_removed' | 'engagement_email' | 'email_tips_changed' | 'edit_submitted' | 'edit_approved' | 'edit_rejected' | 'team_invite_accepted' | 'team_invite_declined'
   | 'startup_submitted' | 'startup_updated' | 'tool_submitted' | 'tool_updated'
   | 'startup_transfer_started' | 'startup_transfer_accepted'
@@ -31,6 +31,8 @@ const DISPLAY: Record<FounderActivity, { category: ActivityCategory; title: (m: 
   data_exported: { category: 'security', title: () => 'Downloaded your data' },
   account_deactivated: { category: 'security', title: () => 'Deactivated your account' },
   account_reactivated: { category: 'security', title: () => 'Reactivated your account' },
+  signed_out_everywhere: { category: 'security', title: () => 'Signed out on every device' },
+  profile_updated: { category: 'security', title: () => 'Updated your profile' },
   account_deleted: { category: 'security', title: () => 'Deleted your account' },
   public_profile_changed: { category: 'security', title: (m) => (m?.visible === false ? 'Hid you from your startup’s profile' : 'Showed you on your startup’s profile') },
   startup_transfer_started: { category: 'listings', title: () => 'Sent a link to transfer ownership of your startup' },
