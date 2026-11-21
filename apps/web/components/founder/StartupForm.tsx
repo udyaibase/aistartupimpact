@@ -7,6 +7,8 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Upload, X, Loader2, ArrowLeft, ArrowRight, Check, BadgeCheck, ShieldCheck, Clock, Pencil } from 'lucide-react';
 import { submitStartupAction, updateStartupAction, getStartupCategoriesAction, getStartupTypesAction, checkStartupDomainAction, type DomainCheck } from '@/app/founder/startups/actions';
+import { FormProblemList, SectionLinks, useFormProblems } from '@/components/ui/FormProblems';
+import { STARTUP_DESCRIPTION_MAX, STARTUP_TAGLINE_MAX } from '@/lib/founder/listing-validation';
 import ContactEmailField from './ContactEmailField';
 import StartupDomainVerify from './StartupDomainVerify';
 import { FAQManager, type FAQ } from '@/components/shared/FAQManager';
@@ -105,6 +107,17 @@ function hostOf(url: string | null | undefined): string {
   }
 }
 
+/** "PRE_SERIES_A" → "Pre-Series A", "SERIES_B" → "Series B", "PRE_SEED" → "Pre-Seed". */
+function stageLabel(stage: string): string {
+  const words = stage.toLowerCase().split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1));
+  return words[0] === 'Pre' ? `Pre-${words.slice(1).join(' ')}` : words.join(' ');
+}
+
+const EDIT_SECTIONS = [
+  { id: 'startup-basics', label: 'Basics' }, { id: 'startup-links', label: 'Links' }, { id: 'startup-details', label: 'Company details' },
+  { id: 'startup-team', label: 'Founders' }, { id: 'startup-funding', label: 'Funding' }, { id: 'startup-faqs', label: 'FAQs' },
+] as const;
+
 export default function StartupForm({ startup: existing, existingFaqs = [], existingFundingRounds = [], initialFounder, founderEmail, created }: StartupFormProps) {
   const isNew = !existing;
   const startup = existing ?? NEW_STARTUP;
@@ -186,9 +199,10 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
   });
 
 
-  const taglineCharLimit = 60;
+  const formProblems = useFormProblems();
+  const taglineCharLimit = STARTUP_TAGLINE_MAX; // the server checks the same number
   // Same limit as the admin startup editor and the server check (STARTUP_DESCRIPTION_MAX).
-  const descriptionCharLimit = 1000;
+  const descriptionCharLimit = STARTUP_DESCRIPTION_MAX;
   const taglineCharsRemaining = taglineCharLimit - (formData.tagline?.length || 0);
   const descriptionCharsRemaining = descriptionCharLimit - (formData.description?.length || 0);
 
@@ -791,7 +805,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
           >
             {STARTUP_STAGES.map(stage => (
               <option key={stage} value={stage}>
-                {stage.replace('_', ' ')}
+                {stageLabel(stage)}
               </option>
             ))}
           </select>
@@ -879,7 +893,17 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
 
   if (!isNew) {
     return (
-      <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 space-y-6">
+      // noValidate: instead of the browser's one-field-at-a-time bubble, every problem is listed at the top (FormProblems).
+      <form noValidate onSubmit={(e) => {
+        const form = e.currentTarget;
+        if (!formProblems.check(form)) { e.preventDefault(); return; }
+        // Required parts that aren't plain fields (a button group, an upload, a list).
+        const missing = !formData.logoUrl ? 'Upload your logo.' : !formData.stage ? 'Choose a funding stage.' : !foundersDetails.some((f) => f.name.trim()) ? 'Add at least one founder.' : null;
+        if (missing) { e.preventDefault(); setError(missing); form.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+        handleSubmit(e);
+      }} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 space-y-6">
+        {/* The form is long: jump straight to a part of it. */}
+        <SectionLinks label="Parts of this form" sections={EDIT_SECTIONS} />
         {saved && (
           <StatusNote tone={saved.pending.length ? 'waiting' : 'success'} title={saved.pending.length ? 'Saved. Some changes are waiting for our team.' : 'Saved'}>
             {saved.published.length > 0 && `Live now: ${saved.published.join(', ')}. `}
@@ -888,20 +912,27 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
           </StatusNote>
         )}
         {errorBanner}
-        {logoBlock}
-        {nameBlock}
-        {taglineBlock}
-        {descriptionBlock}
-        {categoryBlock}
-        {businessBlock}
-        {websiteBlock}
-        {socialBlock}
-        {detailsBlock}
-        {hqBlock}
-        {contactBlock}
-        {teamBlock}
-        {fundingBlock}
-        {faqsBlock}
+        <FormProblemList problems={formProblems.problems} onJump={formProblems.jumpTo} />
+        <div id="startup-basics" className="space-y-6 scroll-mt-4">
+          {logoBlock}
+          {nameBlock}
+          {taglineBlock}
+          {descriptionBlock}
+          {categoryBlock}
+          {businessBlock}
+        </div>
+        <div id="startup-links" className="space-y-6 scroll-mt-4">
+          {websiteBlock}
+          {socialBlock}
+        </div>
+        <div id="startup-details" className="space-y-6 scroll-mt-4">
+          {detailsBlock}
+          {hqBlock}
+          {contactBlock}
+        </div>
+        <div id="startup-team" className="scroll-mt-4">{teamBlock}</div>
+        <div id="startup-funding" className="scroll-mt-4">{fundingBlock}</div>
+        <div id="startup-faqs" className="scroll-mt-4">{faqsBlock}</div>
       {/* Submit Button */}
       <div className="flex items-center justify-end gap-4 pt-4 border-t border-gray-200 dark:border-gray-800">
         <button
@@ -913,20 +944,9 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
         </button>
         <button
           type="submit"
-          disabled={
-            loading ||
-            !formData.name ||
-            !formData.tagline ||
-            !formData.description ||
-            !formData.websiteUrl ||
-            !formData.category ||
-            !formData.businessType ||
-            !formData.employeeCount ||
-            !formData.foundedYear ||
-            !formData.stage ||
-            !formData.logoUrl ||
-            !foundersDetails.some(f => f.name.trim())
-          }
+          // Only while saving. It used to stay greyed out, with no reason given, until every required field was filled;
+          // now a tap lists what's missing.
+          disabled={loading}
           className="px-6 py-2 bg-brand hover:bg-brand/90 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
           {loading && <Loader2 className="w-4 h-4 animate-spin" />}

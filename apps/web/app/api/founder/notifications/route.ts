@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
-import { requireFounderAuth } from '@/lib/founder-auth';
+import { founderApi, tooMany } from '@/lib/founder/api-session';
+import { founderWriteRateLimit } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 /**
@@ -9,12 +10,16 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await requireFounderAuth();
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     // Get query params
     const { searchParams } = new URL(request.url);
     const unreadOnly = searchParams.get('unreadOnly') === 'true';
-    const limit = parseInt(searchParams.get('limit') || '50');
+    // A number from 1 to 100; anything else (missing, text, huge) falls back to a safe value.
+    const asked = Number.parseInt(searchParams.get('limit') ?? '', 10);
+    const limit = Number.isFinite(asked) ? Math.min(Math.max(asked, 1), 100) : 50;
 
     // Build query
     let query;
@@ -65,7 +70,11 @@ export async function GET(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
   try {
-    const session = await requireFounderAuth();
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
+    const limited = await tooMany(founderWriteRateLimit, `notifications:${session.userId}`);
+    if (limited) return limited;
     const body = await request.json();
     const { notificationId, markAllRead } = body;
 
@@ -114,7 +123,11 @@ export async function PATCH(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    const session = await requireFounderAuth();
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
+    const limited = await tooMany(founderWriteRateLimit, `notifications:${session.userId}`);
+    if (limited) return limited;
     const { searchParams } = new URL(request.url);
     const notificationId = searchParams.get('id');
     const deleteAll = searchParams.get('deleteAll') === 'true';

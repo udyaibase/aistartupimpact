@@ -2,7 +2,7 @@ import { jsonLd } from "@/lib/json-ld";
 import Link from 'next/link';
 import Image from 'next/image';
 import { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { Clock, Calendar, ChevronRight } from 'lucide-react';
 import StorySaveButton from '@/components/StorySaveButton';
 import { sql, getArticleBySlugDirect, getRelatedArticlesDirect } from '@/lib/db';
@@ -50,6 +50,9 @@ export default async function ArticlePage(props: { params: Promise<{ slug: strin
   }
 
   if (!article) notFound();
+
+  // A founder's own update or story belongs under Stories. Opened here it carried a "News" badge, as if we wrote it.
+  if (article.type === 'STARTUP_UPDATE' || article.type === 'FOUNDER_STORY') permanentRedirect(`/stories/${article.slug}`);
 
   const formatDate = (d: string) =>
     d ? new Date(d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '';

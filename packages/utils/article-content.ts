@@ -47,10 +47,21 @@ function blocks(content: unknown): string {
   }).join('');
 }
 
+/**
+ * Text typed into a plain box (a founder's update) → HTML. A blank line starts a new paragraph, a single line break
+ * stays a line break, and web addresses become links. Without this the browser runs it all together as one line.
+ */
+export function plainTextHtml(text: string): string {
+  return text.replace(/\r\n?/g, '\n').split(/\n{2,}/).map((para) => para.trim()).filter(Boolean).map((para) => {
+    const body = esc(para).replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]])/g, '<a href="$1">$1</a>').replace(/\n/g, '<br>');
+    return `<p>${body}</p>`;
+  }).join('');
+}
+
 /** Any stored article body → HTML. Not sanitized: callers sanitize before rendering. */
 export function articleHtml(content: unknown): string {
   if (!content) return '';
-  if (typeof content === 'string') return content;
+  if (typeof content === 'string') return /<[a-z!/][^>]*>/i.test(content) ? content : plainTextHtml(content);
   if (Array.isArray(content)) return blocks(content);
   if (typeof content === 'object') {
     const c = content as { html?: unknown; text?: unknown; type?: unknown; content?: unknown };

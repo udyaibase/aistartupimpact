@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { looksLikeImage } from '@/lib/media/image-signature';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getFounderSession } from '@/lib/founder-auth';
 import { getUserSession } from '@/lib/user-session';
@@ -79,6 +80,10 @@ export async function POST(request: NextRequest) {
 
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
+    // The declared type is only a label: check the file's first bytes really are that kind of image.
+    if (!looksLikeImage(buffer, file.type)) {
+      return NextResponse.json({ error: 'That file isn’t a valid image. Upload a JPEG, PNG, WebP or GIF.' }, { status: 400 });
+    }
 
     if (isR2Configured()) {
       try {

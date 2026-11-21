@@ -4,7 +4,7 @@ import { canManageTeam } from "@/lib/founder-team-permissions";
 import { logFounderActivity } from '@/lib/founder/activity';
 import { maskEmail } from '@/lib/mask';
 import { prisma } from "@udyaibase/database";
-import { getFounderSession } from "@/lib/founder-auth";
+import { founderApi } from "@/lib/founder/api-session";
 import { founderTeamInviteHtml } from "@udyaibase/utils";
 import { sendEmailFireAndForget } from "@/lib/email/send";
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from "@/lib/rate-limit";
@@ -19,8 +19,9 @@ const VALID_ROLES = ["ADMIN", "EDITOR", "VIEWER"] as const;
 
 export async function GET() {
   try {
-    const session = await getFounderSession();
-    if (!session) return NextResponse.json({ success: false }, { status: 401 });
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     const team = await teamContext(session);
     const members = await prisma.founderTeamMember.findMany({
@@ -37,8 +38,9 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getFounderSession();
-    if (!session) return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 });
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     const identifier = getClientIdentifier(request);
     const { success: rlOk } = await checkRateLimit(strictRateLimit, identifier);

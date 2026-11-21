@@ -1,3 +1,4 @@
+import { hostWriteLimit } from '@/lib/organizer-auth/write-limit';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { getOrganizerSession } from '@/lib/organizer-auth';
@@ -12,6 +13,8 @@ export async function POST(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ success: false, error: 'Please sign in.' }, { status: 401 });
     }
+    const limited = await hostWriteLimit(session.id);
+    if (limited) return limited;
 
     const { code } = await request.json();
 

@@ -135,11 +135,13 @@ export default function CompanyEmailSection({ apiBasePath }: CompanyEmailSection
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                   Company Email Address
                 </label>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <div className="relative flex-1">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
                       type="email"
+                      aria-label="Company email address"
+                      autoComplete="email"
                       value={companyEmail}
                       onChange={(e) => setCompanyEmail(e.target.value)}
                       placeholder="you@yourcompany.com"
@@ -149,7 +151,7 @@ export default function CompanyEmailSection({ apiBasePath }: CompanyEmailSection
                   <button
                     onClick={handleSendOtp}
                     disabled={!companyEmail || step === 'sending'}
-                    className="inline-flex items-center gap-1.5 h-11 px-4 rounded-md bg-brand hover:bg-brand/90 text-white text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                    className="inline-flex items-center justify-center gap-1.5 h-11 px-4 rounded-md bg-brand hover:bg-brand/90 text-white text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                   >
                     {step === 'sending' ? (
                       <><Loader2 className="w-4 h-4 animate-spin" /> Sending...</>

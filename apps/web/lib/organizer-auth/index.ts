@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { jwtSecret } from '@/lib/jwt-secret';
 import { SignJWT, jwtVerify } from "jose";
 import { cookies, headers } from "next/headers";
@@ -97,7 +98,10 @@ function asSession(o: OrganizerRow | null | undefined, needVerified: boolean): O
  * 2. user-token cookie (the main site's sign-in, whose email was confirmed by a code) → organizer with that email;
  * 3. unified_session cookie → its linked organizer profile.
  */
-export async function getOrganizerSession(): Promise<OrganizerSession | null> {
+export const getOrganizerSession = cache(readOrganizerSession);
+
+/** Looked up once per request: the layout, the page and its guards all ask, and each ask was three queries. */
+async function readOrganizerSession(): Promise<OrganizerSession | null> {
   const cookieStore = await cookies();
 
   // 1. organizer_session cookie
@@ -157,6 +161,14 @@ export async function getOrganizerSessionFromUserToken(): Promise<OrganizerSessi
     const { payload } = await jwtVerify(userToken, USER_JWT_SECRET);
     const email = normalizeEmail((payload as any).email);
     if (!email) return null;
+
+    // The site session behind this cookie must still exist. Signing out (here or "everywhere") deletes it; without
+    // this check a copy of the cookie kept opening the workspace, attendee lists included, until it expired.
+    const sessionId = typeof payload.sessionId === "string" ? payload.sessionId : null;
+    if (sessionId) {
+      const live = await prisma.webUserSession.findFirst({ where: { id: sessionId, expiresAt: { gt: new Date() } }, select: { id: true } });
+      if (!live) return null;
+    }
 
     const organizer = await prisma.eventOrganizer.findFirst({
       where: { email: { equals: email, mode: "insensitive" } },

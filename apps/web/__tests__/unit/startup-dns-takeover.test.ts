@@ -5,7 +5,9 @@ const { queryRaw, executeRaw, verifyDNS, markStartupVerified, recordTakeover } =
   queryRaw: vi.fn(), executeRaw: vi.fn(), verifyDNS: vi.fn(), markStartupVerified: vi.fn(async () => {}), recordTakeover: vi.fn(async () => {}),
 }));
 vi.mock('@udyaibase/database', () => ({ prisma: { $queryRaw: queryRaw, $executeRaw: executeRaw } }));
-vi.mock('@/lib/founder-auth', () => ({ requireFounderAuth: async () => ({ userId: 'new', name: 'New' }) }));
+vi.mock('@/lib/founder-auth', () => ({ getFounderSession: async () => ({ userId: 'new', name: 'New' }) }));
+// The route limits DNS checks per founder; the limiter itself is not under test (and must not reach a real store).
+vi.mock('@/lib/rate-limit', () => ({ checkRateLimit: async () => ({ success: true, reset: 0 }), rateLimitMessage: () => '', retryAfterHeaders: () => ({}), dnsCheckRateLimit: null }));
 vi.mock('@udyaibase/utils/src/verification/dns', () => ({ verifyDNS }));
 vi.mock('@/lib/startups/claim', () => ({ claimToken: (_s: unknown, who: string) => `tok-${who}` }));
 vi.mock('@/lib/founder/limits', () => ({ founderAtStartupLimit: async () => false, STARTUP_LIMIT_MESSAGE: 'limit' }));

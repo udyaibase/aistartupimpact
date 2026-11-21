@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { usePathname } from 'next/navigation';
 import ConsentManager from '@/lib/consent-manager';
 import { ConsentState } from '@/types/consent';
 import styles from '@/styles/CookieConsent.module.css';
@@ -32,6 +33,24 @@ export default function CookieConsent() {
       setPreferences(manager.getState());
     }
   }, []);
+
+  // Tell the page how much room the banner takes above the phone menu, so anything else pinned to the bottom
+  // (the event page's Register bar) can sit above it instead of underneath.
+  const bannerRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname() ?? '';
+  const inPortal = /^\/(organizer|founder|employer)(\/|$)/.test(pathname) && !/^\/organizer\/(login|signup|reset-password|transfer)/.test(pathname);
+  const bannerOpen = showBanner && !showPreferences && !inPortal;
+  useEffect(() => {
+    const root = document.documentElement;
+    const el = bannerRef.current;
+    if (!bannerOpen || !el) { root.style.removeProperty('--cookie-banner-space'); return; }
+    // offsetHeight, not getBoundingClientRect: the banner is scaled while it pops in. 16 = the gaps below and above it.
+    const report = () => root.style.setProperty('--cookie-banner-space', `${el.offsetHeight + 16}px`);
+    report();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(report) : null;
+    ro?.observe(el);
+    return () => { ro?.disconnect(); root.style.removeProperty('--cookie-banner-space'); };
+  }, [bannerOpen]);
 
   const handleAcceptAll = async () => {
     const manager = ConsentManager.getInstance();
@@ -68,13 +87,16 @@ export default function CookieConsent() {
     }));
   };
 
+  // Not inside the signed-in workspaces: there it stacked on top of the welcome tour and the save bars. Until
+  // someone answers on a public page, nothing optional is switched on, so staying silent here is the private choice.
+  if (inPortal && !showPreferences) return null;
   if (!showBanner && !showPreferences) return null;
 
   return (
     <>
       {/* Banner */}
       {showBanner && !showPreferences && (
-        <div className={styles.banner} role="dialog" aria-label="Cookie consent banner">
+        <div ref={bannerRef} className={styles.banner} role="dialog" aria-label="Cookie consent banner">
           <div className={styles.bannerContent}>
             <div className={styles.bannerHeader}>
               <div className={styles.iconWrapper}>
@@ -83,9 +105,9 @@ export default function CookieConsent() {
               <h2 className={styles.bannerTitle}>We value your privacy</h2>
             </div>
             <p className={styles.bannerDescription}>
-              We use cookies to enhance your browsing experience, serve personalized content, and analyze our traffic. 
-              By clicking "Accept All", you consent to our use of cookies. Read our{' '}
-              <a href="/cookie-policy" className={styles.link}>Cookie Policy</a>.
+              We use cookies to run the site, personalise content and measure traffic.{' '}
+              <span className={styles.bannerMore}>“Accept All” agrees to all of them; you can also choose. </span>
+              Read our <a href="/cookie-policy" className={styles.link}>Cookie Policy</a>.
             </p>
             <div className={styles.bannerActions}>
               <button

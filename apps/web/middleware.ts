@@ -188,6 +188,15 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // 2a. Founder portal with no sign-in at all: go to sign-in and come back to this page afterwards.
+  // (An expired or ended session still has a cookie; the portal layout sends those to sign-in.)
+  if (pathname.startsWith('/founder') && request.method === 'GET' &&
+      !request.cookies.has('founder-token') && !request.cookies.has('user-token') && !request.cookies.has('unified_session')) {
+    const login = new URL('/auth/login', request.url);
+    login.searchParams.set('returnTo', pathname + request.nextUrl.search);
+    return NextResponse.redirect(login);
+  }
+
   // 2. Onboarding enforcement for founders only
   if (pathname.startsWith('/founder') && !pathname.startsWith('/founder/onboarding') && !pathname.startsWith('/founder/profile')) {
     const token = request.cookies.get('founder-token')?.value;

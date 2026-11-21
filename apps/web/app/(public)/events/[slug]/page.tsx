@@ -1,3 +1,5 @@
+import { eventCity } from '@/lib/events/public-place';
+import { eventInstant } from '@/lib/events/zoned-time';
 import { jsonLd } from "@/lib/json-ld";
 import { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
@@ -22,12 +24,12 @@ async function getEvent(slug: string) {
     const rows: any[] = await sql`
       SELECT 
         e.id, e.slug, e."shortCode", e.title, e.subtitle, e.category, e.format, e.status,
-        e."startAt"::text AS "startAt", e."endAt"::text AS "endAt",
+        to_char(e."startAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "startAt", to_char(e."endAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "endAt",
         e.timezone, e."venueName", e.address, e.latitude, e.longitude,
         e."meetingLink", e."revealLinkAfterRegistration",
         e."coverImageUrl", e."galleryImageUrls", e.description,
         e.capacity, e."registrationCount", e.visibility,
-        e."registrationDeadline"::text AS "registrationDeadline",
+        to_char(e."registrationDeadline", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "registrationDeadline",
         e."approvalRequired",
         e."metaTitle", e."metaDescription", e."socialImageUrl",
         e."sourceUrl", e."sourceName",
@@ -45,6 +47,16 @@ async function getEvent(slug: string) {
 
     if (rows.length) {
       const event = rows[0];
+      // Before registration a visitor may know the city, not the street address or map position, and never the
+      // meeting link: that goes to confirmed attendees in their ticket email. This object is sent to the browser as
+      // page data, so anything left on it is public whatever the screen shows. (The link used to stay here unless a
+      // "reveal after registration" setting was on, and no screen lets a host turn that on, so every online event's
+      // link was in its page source.)
+      event.city = eventCity(event.address);
+      delete event.address;
+      delete event.latitude;
+      delete event.longitude;
+      delete event.meetingLink;
       // Soft-deleted → 410 Gone (handled via notFound for now)
       if (event.deletedAt) return { __gone: true };
       // Not published / not visible
@@ -152,7 +164,7 @@ async function getSimilarEvents(eventId: string, category: string) {
     const now = new Date().toISOString();
     const rows = await sql`
       SELECT id, title, slug, category, format,
-             "startAt"::text AS "startAt", "venueName",
+             to_char("startAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "startAt", "venueName",
              "coverImageUrl", "registrationCount"
       FROM "Event"
       WHERE id != ${eventId}
@@ -182,8 +194,8 @@ export async function generateMetadata(
   // Search-friendly title: what, where and when ("HACK 6.0 — Hackathon in Hamirpur, 22 Jan 2027").
   const name = event.title.replace(/\s*\[[A-Z ]+\]\s*$/, "").trim(); // imported titles end in "[ONLINE]"
   const kind = String(event.category || "Event").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase());
-  const place = event.format === "VIRTUAL" ? "Online" : String(event.venueName || event.address || "").split(",")[0].trim();
-  const when = new Date(event.startAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: event.timezone || "Asia/Kolkata" });
+  const place = event.format === "VIRTUAL" ? "Online" : String(event.city || event.venueName || "").split(",")[0].trim();
+  const when = eventInstant(event.startAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: event.timezone || "Asia/Kolkata" });
   const where = place ? (place === "Online" ? " (Online)" : ` in ${place}`) : "";
   const built = `${name} — ${kind}${where}, ${when}`;
   const title = event.metaTitle || (built.length <= 70 ? built : `${name} — ${kind}, ${when}`);
@@ -351,13 +363,13 @@ export default async function EventDetailPage(
   if (event.format === "VIRTUAL") {
     eventSchema.location = {
       "@type": "VirtualLocation",
-      "url": event.meetingLink || eventUrl,
+      "url": eventUrl,
     };
   } else if (event.venueName) {
     eventSchema.location = {
       "@type": "Place",
       "name": event.venueName,
-      ...(event.address ? { "address": event.address } : {}),
+      ...(event.city ? { "address": { "@type": "PostalAddress", "addressLocality": event.city } } : {}),
     };
   }
 

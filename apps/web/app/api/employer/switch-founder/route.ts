@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
   if (guard.error) return guard.error;
   const session = guard.session;
   const f = await founderAccountForHiringSession(session);
-  if (!f) return NextResponse.json({ success: false, error: 'Sign in to the founder portal with your founder account.', redirect: '/founder/login' }, { status: 403 });
+  if (!f) return NextResponse.json({ success: false, error: 'Sign in to the founder portal with your founder account.', redirect: '/auth/login?returnTo=%2Ffounder%2Fdashboard' }, { status: 403 });
   await setFounderSession(f.id, f.email, f.name, f.onboardingCompleted);
   return NextResponse.json({ success: true, redirect: '/founder/dashboard' });
 }

@@ -1,3 +1,4 @@
+import { hostWriteLimit } from '@/lib/organizer-auth/write-limit';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
 import { getOrganizerSession } from "@/lib/organizer-auth";
@@ -21,6 +22,8 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 });
+  const limited = await hostWriteLimit(session.id);
+  if (limited) return limited;
 
   const { name, company, bio, website, linkedin, phone, avatar } = await request.json().catch(() => ({}));
   // Logos must come from our own upload endpoint (R2 media), never an arbitrary outside URL.

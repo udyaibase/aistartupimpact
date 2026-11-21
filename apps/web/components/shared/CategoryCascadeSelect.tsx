@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useId } from 'react';
 import { Search } from 'lucide-react';
 
 interface Category {
@@ -32,6 +32,7 @@ export default function CategoryCascadeSelect({
   className = '',
 }: CategoryCascadeSelectProps) {
   const [categories, setCategories] = useState<Category[]>([]);
+  const fieldId = useId();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -130,10 +131,11 @@ export default function CategoryCascadeSelect({
     <div className={`space-y-3 ${className}`}>
       {/* Parent Category */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+        <label htmlFor={`${fieldId}-category`} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Category <span className="text-red-500">*</span>
         </label>
         <select
+          id={`${fieldId}-category`}
           value={selectedParent}
           onChange={(e) => handleParentChange(e.target.value)}
           required={required}
@@ -151,7 +153,7 @@ export default function CategoryCascadeSelect({
       {/* Subcategory */}
       {selectedParent && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <label htmlFor={`${fieldId}-subcategory`} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Subcategory <span className="text-red-500">*</span>
           </label>
           {currentSubcategories.length > 8 && (
@@ -167,6 +169,7 @@ export default function CategoryCascadeSelect({
             </div>
           )}
           <select
+            id={`${fieldId}-subcategory`}
             value={value}
             onChange={(e) => onChange(e.target.value)}
             required={required}

@@ -1,3 +1,4 @@
+import { hostWriteLimit } from '@/lib/organizer-auth/write-limit';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
 import { requirePermission, canAccessEvent } from "@/lib/organizer-auth/require-permission";
@@ -17,6 +18,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ even
   const { eventId } = await props.params;
   const result = await requirePermission("events.delete");
   if (result instanceof NextResponse) return result;
+  const limited = await hostWriteLimit(result.id);
+  if (limited) return limited;
   if (!canAccessEvent(result, eventId)) return NextResponse.json({ success: false, error: "Not authorized for this event" }, { status: 403 });
 
   const event = await prisma.event.findFirst({

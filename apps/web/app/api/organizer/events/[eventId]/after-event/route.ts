@@ -1,3 +1,8 @@
+import { sanitizeCustomSvg } from '@/lib/events/certificate-custom-server';
+import { checkCustomSvg } from '@/lib/events/certificate-custom';
+import { isOwnMediaUrl } from '@/lib/events/urls';
+import { eventDateText, eventPlaceText } from '@/lib/events/certificates';
+import { hostWriteLimit } from '@/lib/organizer-auth/write-limit';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { afterEventAccess } from '@/lib/events/after-event-access';
@@ -23,6 +28,7 @@ export async function GET(_request: NextRequest, props: { params: Promise<{ even
     where: { id: event.id },
     select: {
       feedbackSettings: true, recapSummary: true, recapLinks: true, galleryImageUrls: true,
+      format: true, venueName: true, address: true, timezone: true, organizer: { select: { name: true, company: true, avatar: true } },
       agendaItems: { orderBy: [{ dayNumber: 'asc' }, { sortOrder: 'asc' }, { startTime: 'asc' }], select: { id: true, dayNumber: true, startTime: true, title: true, recordingUrl: true, slidesUrl: true } },
     },
   });
@@ -50,6 +56,12 @@ export async function GET(_request: NextRequest, props: { params: Promise<{ even
     certificates: {
       allowed, paid: !!event.certificatesPaidAt, pricePaise: CERTIFICATE_PRICE_PAISE, issued,
       configured: !!event.certificateSettings, settings: certificateSettings(event.certificateSettings),
+      // What the form's live preview prints around the host's own choices.
+      sample: {
+        hostName: extra?.organizer.company || extra?.organizer.name || 'Host',
+        logoUrl: extra?.organizer.avatar ?? null,
+        dateLine: [eventDateText(event.startAt, event.endAt, event.timezone), extra ? eventPlaceText(extra) : ''].filter(Boolean).join(' · '),
+      },
     },
     recap: {
       summary: extra?.recapSummary ?? '', links: cleanRecapLinks(extra?.recapLinks), gallery: extra?.galleryImageUrls ?? [],
@@ -68,10 +80,26 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ event
   const { eventId } = await props.params;
   const access = await afterEventAccess(eventId, 'events.edit');
   if (access instanceof NextResponse) return access;
+  const limited = await hostWriteLimit(access.session.id);
+  if (limited) return limited;
   const { event, session } = access;
   const body = await request.json().catch(() => ({}));
   const data: Record<string, unknown> = {};
-  if (body.certificateSettings !== undefined) data.certificateSettings = certificateSettings(body.certificateSettings) as object;
+  if (body.certificateSettings !== undefined) {
+    const asked = (body.certificateSettings && typeof body.certificateSettings === 'object' ? body.certificateSettings : {}) as Record<string, unknown>;
+    // A pasted design is cleaned before it is stored: scripts, outside links and anything not a plain drawing go.
+    const pasted = typeof asked.customSvg === 'string' ? asked.customSvg : '';
+    const customSvg = pasted ? sanitizeCustomSvg(pasted) : '';
+    if (asked.template === 'custom') {
+      const stops = checkCustomSvg(customSvg || pasted).filter((x) => x.level === 'error');
+      if (!customSvg || stops.length) return NextResponse.json({ success: false, field: 'customSvg', error: stops[0]?.message ?? 'This design couldn’t be read as SVG. Paste the whole code, from <svg to </svg>.' }, { status: 400 });
+    }
+    // Logos must be files uploaded here, like the signature: nothing is fetched from other sites.
+    for (const key of ['logoUrl', 'partnerLogoUrl', 'signatureUrl'] as const) {
+      if (typeof asked[key] === 'string' && asked[key] && !isOwnMediaUrl(asked[key] as string)) asked[key] = null;
+    }
+    data.certificateSettings = certificateSettings({ ...asked, customSvg }) as object;
+  }
   if (body.followUpSettings !== undefined) {
     const s = followUpSettings(body.followUpSettings, event.title);
     data.followUpSettings = s as object;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { getFounderSession } from '@/lib/founder-auth';
+import { founderApi, tooMany } from '@/lib/founder/api-session';
+import { founderWriteRateLimit } from '@/lib/rate-limit';
 import {
   getEntitlements,
   SOCIAL_POST_PRICES,
@@ -15,8 +16,9 @@ const VALID_TYPES: SocialPostType[] = ['LINKEDIN', 'INSTAGRAM', 'BUNDLE'];
 // GET — list founder's social post orders
 export async function GET() {
   try {
-    const session = await getFounderSession();
-    if (!session) return NextResponse.json({ success: false }, { status: 401 });
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     const entitlements = await getEntitlements(session.userId);
     if (!entitlements.packageId) {
@@ -39,8 +41,11 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   if (!selfServeAdsEnabled()) return NextResponse.json(SELF_SERVE_ADS_OFF, { status: 503 });
   try {
-    const session = await getFounderSession();
-    if (!session) return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
+    const limited = await tooMany(founderWriteRateLimit, `ads:${session.userId}`);
+    if (limited) return limited;
 
     const body = await request.json();
     const postType = body.postType as SocialPostType;

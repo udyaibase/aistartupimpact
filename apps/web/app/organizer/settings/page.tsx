@@ -170,19 +170,19 @@ export default function OrganizerSettingsPage() {
             <div className="p-4 space-y-4 bg-white dark:bg-gray-950">
               <div>
                 <label className={labelClass}>Organization / Company name</label>
-                <input value={company} onChange={e => setCompany(e.target.value)} placeholder="Your organization name (shown on events)" className={inputClass} />
+                <input aria-label="Organization or company name" value={company} onChange={e => setCompany(e.target.value)} placeholder="Your organization name (shown on events)" className={inputClass} />
               </div>
               <div>
                 <label className={labelClass}>Contact phone</label>
-                <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+91 98765 43210" className={inputClass} />
+                <input aria-label="Contact phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+91 98765 43210" className={inputClass} />
               </div>
               <div>
                 <label className={labelClass}>Website</label>
-                <input value={website} onChange={e => setWebsite(e.target.value)} placeholder="https://yourorg.com" className={inputClass} />
+                <input aria-label="Website" value={website} onChange={e => setWebsite(e.target.value)} placeholder="https://yourorg.com" className={inputClass} />
               </div>
               <div>
                 <label className={labelClass}>LinkedIn</label>
-                <input value={linkedin} onChange={e => setLinkedin(e.target.value)} placeholder="https://linkedin.com/company/..." className={inputClass} />
+                <input aria-label="LinkedIn" value={linkedin} onChange={e => setLinkedin(e.target.value)} placeholder="https://linkedin.com/company/..." className={inputClass} />
               </div>
             </div>
           </div>

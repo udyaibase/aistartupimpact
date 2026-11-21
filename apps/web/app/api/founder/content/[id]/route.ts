@@ -1,18 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
-import { getFounderSession } from "@/lib/founder-auth";
+import { founderApi, tooMany } from "@/lib/founder/api-session";
 import { verifyStartupAccess, UNVERIFIED_STARTUP_ERROR } from "@/lib/founder-content-auth";
 import { canEditOwnContent, canEditAnyContent, canDeleteContent } from "@/lib/founder-team-permissions";
-import { checkRateLimit, getClientIdentifier, strictRateLimit } from "@/lib/rate-limit";
+import { contentWriteRateLimit, draftSaveRateLimit } from "@/lib/rate-limit";
+import { bodyProblem, prepareBody } from "@/lib/founder/content-body";
+import { checkContentFields, UPDATES_PER_DAY } from "@/lib/founder/content-validation";
+import { refreshPublicContent } from "@/lib/founder/refresh-listing";
 
 export const dynamic = "force-dynamic";
 
-const MAX_CONTENT_SIZE = 100000;
-
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getFounderSession();
-    if (!session) return NextResponse.json({ success: false }, { status: 401 });
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     const { id } = await params;
 
@@ -45,18 +47,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getFounderSession();
-    if (!session) return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 });
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
-    const identifier = getClientIdentifier(request);
-    const { success: rlOk } = await checkRateLimit(strictRateLimit, identifier);
-    if (!rlOk) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
 
     const { id } = await params;
 
     const article = await prisma.article.findUnique({
       where: { id },
-      select: { id: true, startupId: true, submittedById: true, status: true, moderationStatus: true, title: true, content: true, excerpt: true, coverImage: true },
+      select: { id: true, slug: true, type: true, startupId: true, submittedById: true, status: true, moderationStatus: true, title: true, content: true, excerpt: true, coverImage: true },
     });
     if (!article || !article.startupId) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
 
@@ -71,14 +71,35 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ success: false, error: "Your role does not allow editing" }, { status: 403 });
     }
 
-    const body = await request.json();
-    const { title, content, excerpt, coverImage, isAutoSave, submitForReview } = body;
-    if (submitForReview && !auth.startupVerified) return NextResponse.json({ success: false, error: UNVERIFIED_STARTUP_ERROR, code: 'startup_unverified' }, { status: 403 });
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object") return NextResponse.json({ success: false, error: "Invalid request" }, { status: 400 });
+    const { isAutoSave, submitForReview } = body;
 
-    if (content !== undefined) {
-      const contentStr = typeof content === "string" ? content : JSON.stringify(content);
-      if (contentStr.length > MAX_CONTENT_SIZE) {
-        return NextResponse.json({ success: false, error: "Content too large" }, { status: 400 });
+    // Saving a draft is frequent (the story editor autosaves); publishing and submitting are counted separately.
+    const quietSave = article.status === "DRAFT" && !submitForReview && body.publish !== true;
+    const limited = quietSave ? await tooMany(draftSaveRateLimit, `draft:${session.userId}`) : await tooMany(contentWriteRateLimit, `content:${session.userId}`);
+    if (limited) return limited;
+
+    const checked = checkContentFields(body, "edit");
+    if (!checked.ok) return NextResponse.json({ success: false, error: checked.error }, { status: 400 });
+    const { title, excerpt, coverImage } = checked.data;
+    const prepared = checked.data.content !== undefined ? prepareBody(checked.data.content) : null;
+    const content = prepared?.content;
+
+    // Publishing a saved draft. Stories go to review (submitForReview); updates go live, like a new update does.
+    const publishUpdate = body.publish === true && article.type === "STARTUP_UPDATE" && article.status === "DRAFT";
+    // What goes public or to our editors must have real text: the new text if any was sent, else what's stored.
+    if (submitForReview || publishUpdate) {
+      const problem = bodyProblem(article.type, prepared ?? prepareBody(typeof article.content === "string" ? article.content : ""));
+      if (problem) return NextResponse.json({ success: false, error: problem }, { status: 400 });
+    }
+    if ((submitForReview || publishUpdate) && !auth.startupVerified) return NextResponse.json({ success: false, error: UNVERIFIED_STARTUP_ERROR, code: 'startup_unverified' }, { status: 403 });
+    if (publishUpdate) {
+      const today = await prisma.article.count({
+        where: { startupId: article.startupId, type: "STARTUP_UPDATE", publishedAt: { gt: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+      });
+      if (today >= UPDATES_PER_DAY) {
+        return NextResponse.json({ success: false, error: `You can publish ${UPDATES_PER_DAY} updates a day. Your draft is saved; publish it tomorrow.`, code: "daily_limit" }, { status: 429 });
       }
     }
 
@@ -100,13 +121,34 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const updateData: any = { updatedAt: new Date() };
-    if (title) updateData.title = title.slice(0, 200);
+    if (title !== undefined) updateData.title = title;
     if (content !== undefined) {
       updateData.content = content;
-      if (typeof content === "string") updateData.contentText = content.slice(0, 50000);
+      updateData.contentText = prepared!.text.slice(0, 50000);
+      updateData.wordCount = prepared!.words;
+      updateData.readTimeMinutes = prepared!.readMinutes;
     }
-    if (excerpt !== undefined) updateData.excerpt = excerpt?.slice(0, 500) || null;
+    if (excerpt !== undefined) updateData.excerpt = excerpt;
     if (coverImage !== undefined) updateData.coverImage = coverImage;
+    // An approved story that is live: a change to what readers see goes back to our editors first. Otherwise a
+    // harmless story could be approved and then rewritten. The approved version is kept in the version history.
+    const same = (a: unknown, b: unknown) => (typeof a === "string" && typeof b === "string" ? a === b : JSON.stringify(a ?? null) === JSON.stringify(b ?? null));
+    const liveStory = article.type === "FOUNDER_STORY" && article.status === "PUBLISHED" && article.moderationStatus === "APPROVED";
+    const changed =
+      (title !== undefined && title !== article.title) ||
+      (content !== undefined && !same(content, article.content)) ||
+      (excerpt !== undefined && (excerpt ?? null) !== (article.excerpt ?? null)) ||
+      (coverImage !== undefined && (coverImage ?? null) !== (article.coverImage ?? null));
+    const backToReview = liveStory && changed; // whatever the request says about autosave: that flag comes from the browser
+    if (backToReview) {
+      updateData.status = "IN_REVIEW";
+      updateData.moderationStatus = "PENDING_REVIEW";
+    }
+    if (publishUpdate) {
+      updateData.status = "PUBLISHED";
+      updateData.moderationStatus = "APPROVED";
+      updateData.publishedAt = new Date();
+    }
 
     if (isAutoSave) {
       updateData.lastSavedAt = new Date();
@@ -125,7 +167,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const updated = await prisma.article.update({ where: { id }, data: updateData });
 
-    const action = isAutoSave ? "EDITED" : submitForReview ? (article.moderationStatus === "REJECTED" ? "RESUBMITTED" : "SUBMITTED_FOR_REVIEW") : "EDITED";
+    const action = isAutoSave ? "EDITED" : publishUpdate ? "PUBLISHED" : backToReview ? "RESUBMITTED" : submitForReview ? (article.moderationStatus === "REJECTED" ? "RESUBMITTED" : "SUBMITTED_FOR_REVIEW") : "EDITED";
     if (!isAutoSave) {
       await prisma.contentActivityLog.create({
         data: {
@@ -139,7 +181,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       });
     }
 
-    return NextResponse.json({ success: true, article: updated });
+    // Anything that is, or just became, public: show the change now, not when the hourly cache runs out.
+    if (article.status === "PUBLISHED" || updated.status === "PUBLISHED") await refreshPublicContent(article.startupId, article.slug);
+
+    return NextResponse.json({ success: true, article: updated, sentToReview: backToReview });
   } catch (err) {
     console.error("[founder/content/[id] PUT]", err);
     return NextResponse.json({ success: false, error: "Something went wrong" }, { status: 500 });
@@ -148,18 +193,18 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getFounderSession();
-    if (!session) return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 });
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
-    const identifier = getClientIdentifier(request);
-    const { success: rlOk } = await checkRateLimit(strictRateLimit, identifier);
-    if (!rlOk) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    const limited = await tooMany(contentWriteRateLimit, `content:${session.userId}`);
+    if (limited) return limited;
 
     const { id } = await params;
 
     const article = await prisma.article.findUnique({
       where: { id },
-      select: { id: true, startupId: true, submittedById: true, title: true },
+      select: { id: true, slug: true, startupId: true, submittedById: true, title: true },
     });
     if (!article || !article.startupId) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
 
@@ -182,6 +227,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
         action: "DELETED",
       },
     });
+
+    await refreshPublicContent(article.startupId, article.slug); // gone from the public pages now
 
     return NextResponse.json({ success: true });
   } catch (err) {

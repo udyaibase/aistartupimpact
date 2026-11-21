@@ -1,3 +1,4 @@
+import { hostWriteLimit } from '@/lib/organizer-auth/write-limit';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
 import { requirePermission } from "@/lib/organizer-auth/require-permission";
@@ -12,6 +13,8 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
   const params = await props.params;
   const result = await requirePermission("team.manage");
   if (result instanceof NextResponse) return result;
+  const limited = await hostWriteLimit(result.id);
+  if (limited) return limited;
   const session = result;
 
   const member = await prisma.eventTeamMember.findFirst({ where: { id: params.id, organizerId: session.organizerId } });
@@ -64,6 +67,8 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
   const params = await props.params;
   const result = await requirePermission("team.manage");
   if (result instanceof NextResponse) return result;
+  const limited = await hostWriteLimit(result.id);
+  if (limited) return limited;
   const session = result;
 
   const member = await prisma.eventTeamMember.findFirst({ where: { id: params.id, organizerId: session.organizerId } });

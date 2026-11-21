@@ -111,6 +111,16 @@ const nextConfig = {
         ],
       },
       {
+        // The certificate page shows this PDF in a frame (same origin only). Without these the site-wide
+        // "frame-ancestors 'none'" / DENY applied and the preview box was always empty.
+        source: '/api/certificates/:code/pdf',
+        headers: [
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'Content-Security-Policy', value: "default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; frame-ancestors 'self'" },
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+        ],
+      },
+      {
         // The resume viewer in the candidate panel frames this route (same origin only). Declared after the
         // site-wide block so these replace "frame-ancestors 'none'" / DENY here. The PDF is our own response,
         // so it gets a minimal policy: nothing loads, nothing runs, and only our pages may frame it.

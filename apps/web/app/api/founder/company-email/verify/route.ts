@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
 import { prisma } from '@udyaibase/database';
-import { requireFounderAuth } from '@/lib/founder-auth';
+import { founderApi } from '@/lib/founder/api-session';
 import { verifyOtp } from '@/lib/otp';
 import { extractEmailDomain } from '@udyaibase/utils';
 
@@ -12,7 +12,9 @@ export async function POST(request: NextRequest) {
   if (!withinLimit) return NextResponse.json({ success: false, error: 'Too many requests. Please try again later.' }, { status: 429 });
 
   try {
-    const session = await requireFounderAuth();
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
     const { code } = await request.json();
 
     if (!code || code.length !== 6) {
@@ -44,9 +46,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, message: 'Company email verified! You now have a Verified badge.' });
   } catch (err: any) {
-    if (err.message === 'Unauthorized - Please login') {
-      return NextResponse.json({ success: false, error: 'Please sign in.' }, { status: 401 });
-    }
     console.error('Company email verify error:', err);
     return NextResponse.json({ success: false, error: 'Something went wrong.' }, { status: 500 });
   }

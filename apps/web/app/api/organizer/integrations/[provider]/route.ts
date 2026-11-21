@@ -1,3 +1,4 @@
+import { hostWriteLimit } from '@/lib/organizer-auth/write-limit';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { requirePermission } from '@/lib/organizer-auth/require-permission';
@@ -13,6 +14,8 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ pr
   if (!isProvider(provider)) return NextResponse.json({ success: false, error: 'Unknown app' }, { status: 404 });
   const session = await requirePermission('settings');
   if (session instanceof NextResponse) return session;
+  const limited = await hostWriteLimit(session.id);
+  if (limited) return limited;
   const row = await prisma.organizerIntegration.findUnique({ where: { organizerId_provider: { organizerId: session.organizerId, provider } } });
   if (!row) return NextResponse.json({ success: true });
   try { await revoke(provider, decryptToken(row.refreshTokenEnc ?? row.accessTokenEnc)); } catch { /* still remove locally */ }

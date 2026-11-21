@@ -158,6 +158,6 @@ export function CityPicker({ value, onChange, country, extraCities, id, placehol
     <Combo id={id} value={value} options={options} label={(c: PlaceCity) => c.city}
       hint={(c: PlaceCity) => [c.state, country ? null : c.country].filter(Boolean).join(', ') || null}
       onPick={onChange} placeholder={placeholder ?? (country ? `Search cities in ${country}` : 'Search a city')}
-      disabled={disabled} empty={empty} ariaLabel={id ? undefined : 'City'} />
+      disabled={disabled} empty={empty} ariaLabel="City" />
   );
 }

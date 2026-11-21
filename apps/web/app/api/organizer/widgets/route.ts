@@ -1,3 +1,4 @@
+import { hostWriteLimit } from '@/lib/organizer-auth/write-limit';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
 import { requirePermission, canAccessEvent, isEventLimited } from "@/lib/organizer-auth/require-permission";
@@ -24,6 +25,8 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const result = await requirePermission("embed.manage");
   if (result instanceof NextResponse) return result;
+  const tooFast = await hostWriteLimit(result.id);
+  if (tooFast) return tooFast;
   const session = result;
 
   const limited = isEventLimited(session);

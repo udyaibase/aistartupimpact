@@ -36,8 +36,8 @@ export async function GET(request: NextRequest) {
         e.slug AS "eventSlug",
         e.category AS "eventCategory",
         e.format AS "eventFormat",
-        e."startAt"::text AS "eventStartAt",
-        e."endAt"::text AS "eventEndAt",
+        to_char(e."startAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "eventStartAt",
+        to_char(e."endAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "eventEndAt",
         e.timezone AS "eventTimezone",
         e."venueName" AS "eventVenueName",
         e."coverImageUrl" AS "eventCoverImageUrl"

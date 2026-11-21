@@ -1,3 +1,4 @@
+import { hostWriteLimit } from '@/lib/organizer-auth/write-limit';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma, Prisma } from '@udyaibase/database';
 import { canAccessEvent, requirePermission, isEventLimited } from '@/lib/organizer-auth/require-permission';
@@ -42,6 +43,8 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
   const { id } = await props.params;
   const session = await requirePermission('events.edit');
   if (session instanceof NextResponse) return session;
+  const limited = await hostWriteLimit(session.id);
+  if (limited) return limited;
   if (isEventLimited(session)) return NextResponse.json({ success: false, error: 'Your role in this workspace doesn’t allow this.' }, { status: 403 });
   const series = await own(id, session.organizerId);
   if (!series) return NextResponse.json({ success: false, error: 'Series not found' }, { status: 404 });
@@ -100,6 +103,8 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
   const { id } = await props.params;
   const session = await requirePermission('events.edit');
   if (session instanceof NextResponse) return session;
+  const limited = await hostWriteLimit(session.id);
+  if (limited) return limited;
   if (isEventLimited(session)) return NextResponse.json({ success: false, error: 'Your role in this workspace doesn’t allow this.' }, { status: 403 });
   const series = await own(id, session.organizerId);
   if (!series) return NextResponse.json({ success: false, error: 'Series not found' }, { status: 404 });

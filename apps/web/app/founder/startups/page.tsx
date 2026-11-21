@@ -8,6 +8,8 @@ import ListingsList from '@/components/founder/ListingsList';
 import { EmptyGuide } from '@/components/founder/Guidance';
 
 // Revalidate every 10 seconds to show fresh data
+export const metadata = { title: 'Startup' };
+
 export const revalidate = 10;
 
 export default async function StartupsPage() {

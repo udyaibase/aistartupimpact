@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getClientIdentifier } from "@/lib/rate-limit";
 import { registrationRateLimit } from "@/lib/event-rate-limit";
 import { verifyTurnstileToken } from "@/lib/turnstile";
-import { registerForEvent, RegistrationError } from "@/lib/events/register-event";
+import { registerForEvent, RegistrationError, publicRegistrationReply } from "@/lib/events/register-event";
 
 export const dynamic = "force-dynamic";
 
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
       registrationSource: "WEBSITE",
     });
 
-    return NextResponse.json({ success: true, data: result });
+    return NextResponse.json({ success: true, data: publicRegistrationReply(result) });
   } catch (error: any) {
     if (error instanceof RegistrationError) {
       return NextResponse.json(

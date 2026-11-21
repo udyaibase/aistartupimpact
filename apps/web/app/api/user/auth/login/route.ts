@@ -11,6 +11,7 @@ import { SignJWT } from 'jose';
 import { randomBytes } from 'crypto';
 import { authRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 import { loginSchema, validateInput } from '@/lib/validation';
+import { siteOnboarding } from '@/lib/auth/site-onboarding';
 import { accountLockoutHtml } from '@udyaibase/utils';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 
@@ -49,6 +50,15 @@ function checkLockout(user: any): NextResponse | null {
   return null;
 }
 
+/**
+ * One answer for every failed sign-in: unknown email, wrong password, or an account that signs in with Google.
+ * Different answers used to tell a stranger which emails have accounts and how they sign in.
+ */
+const FAILED = 'Email or password is incorrect.';
+const failed = () => NextResponse.json({ error: FAILED }, { status: 401 });
+/** Compared against when there is no password to check, so the answer takes as long as a real check. */
+const DUMMY_HASH = bcrypt.hashSync('no-such-account', 12);
+
 function buildLockoutResponse(user: any, newAttempts: number): NextResponse {
   if (newAttempts >= MAX_FAILED_ATTEMPTS) {
     const resetUrl = `${process.env.NEXT_PUBLIC_WEB_URL || 'https://udyaibase.com'}/auth/forgot-password`;
@@ -64,10 +74,7 @@ function buildLockoutResponse(user: any, newAttempts: number): NextResponse {
     }, { status: 429 });
   }
 
-  const remaining = MAX_FAILED_ATTEMPTS - newAttempts;
-  return NextResponse.json({
-    error: `Invalid email or password. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining before account lockout.`
-  }, { status: 401 });
+  return failed();
 }
 
 export async function POST(request: NextRequest) {
@@ -114,11 +121,9 @@ export async function POST(request: NextRequest) {
     if (webUsers.length > 0) {
       const user = webUsers[0];
 
-      if (!user.isActive) {
-        return NextResponse.json({ error: 'Account is deactivated. Please contact support.' }, { status: 403 });
-      }
       if (!user.passwordHash) {
-        return NextResponse.json({ error: 'Please sign in with Google' }, { status: 400 });
+        await bcrypt.compare(password, DUMMY_HASH);
+        return failed();
       }
 
       const lockResponse = checkLockout(user);
@@ -143,6 +148,11 @@ export async function POST(request: NextRequest) {
         return buildLockoutResponse(user, newAttempts);
       }
 
+
+      // Only someone who knows the password is told the account's state.
+      if (!user.isActive) {
+        return NextResponse.json({ error: 'Account is deactivated. Please contact support.' }, { status: 403 });
+      }
 
       // 2FA on any of this person's accounts applies here too.
       const challenge = await secondFactorChallenge(emailLower);
@@ -169,14 +179,9 @@ export async function POST(request: NextRequest) {
     if (founders.length > 0) {
       const founder = founders[0];
 
-      if (founder.status === 'SUSPENDED') {
-        return NextResponse.json({ error: 'Account is suspended. Please contact support.' }, { status: 403 });
-      }
       if (!founder.passwordHash) {
-        return NextResponse.json({ error: 'Please sign in with Google' }, { status: 400 });
-      }
-      if (!founder.emailVerified) {
-        return NextResponse.json({ error: 'Please verify your email first. Check your inbox.' }, { status: 403 });
+        await bcrypt.compare(password, DUMMY_HASH);
+        return failed();
       }
 
       const lockResponse = checkLockout(founder);
@@ -199,6 +204,14 @@ export async function POST(request: NextRequest) {
           await sql`UPDATE "FounderUser" SET "failedLoginAttempts" = ${newAttempts} WHERE id = ${founder.id}`;
         }
         return buildLockoutResponse(founder, newAttempts);
+      }
+
+      // Only someone who knows the password is told the account's state.
+      if (founder.status === 'SUSPENDED') {
+        return NextResponse.json({ error: 'Account is suspended. Please contact support.' }, { status: 403 });
+      }
+      if (!founder.emailVerified) {
+        return NextResponse.json({ error: 'Please verify your email first. Check your inbox.' }, { status: 403 });
       }
 
 
@@ -231,11 +244,9 @@ export async function POST(request: NextRequest) {
     if (organizers.length > 0) {
       const organizer = organizers[0];
 
-      if (organizer.status === 'SUSPENDED') {
-        return NextResponse.json({ error: 'Account is suspended. Please contact support.' }, { status: 403 });
-      }
       if (!organizer.passwordHash) {
-        return NextResponse.json({ error: 'Please sign in with Google' }, { status: 400 });
+        await bcrypt.compare(password, DUMMY_HASH);
+        return failed();
       }
 
       const lockResponse = checkLockout(organizer);
@@ -260,6 +271,10 @@ export async function POST(request: NextRequest) {
         return buildLockoutResponse(organizer, newAttempts);
       }
 
+      if (organizer.status === 'SUSPENDED') {
+        return NextResponse.json({ error: 'Account is suspended. Please contact support.' }, { status: 403 });
+      }
+
 
       if (await isTwoFactorOn(emailLower)) {
         const challengeToken = await new SignJWT({ userId: organizer.id, userType: 'organizer', purpose: '2fa-challenge' })
@@ -278,7 +293,8 @@ export async function POST(request: NextRequest) {
     }
 
     // ─── Nothing found ───────────────────────────────
-    return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+    await bcrypt.compare(password, DUMMY_HASH);
+    return failed();
 
   } catch (error) {
     console.error('Login error:', error);
@@ -288,7 +304,7 @@ export async function POST(request: NextRequest) {
 
 async function ensureWebUser(account: { id: string; email: string; name: string; avatar?: string | null; passwordHash?: string | null }) {
   const existing = await sql`
-    SELECT id, email, name, avatar, slug, "isActive"
+    SELECT id, email, name, avatar, slug, "isActive", "onboardingCompleted"
     FROM "WebUser"
     WHERE email = ${account.email.toLowerCase()}
     LIMIT 1
@@ -308,7 +324,7 @@ async function ensureWebUser(account: { id: string; email: string; name: string;
   `;
 
   const created = await sql`
-    SELECT id, email, name, avatar, slug, "isActive"
+    SELECT id, email, name, avatar, slug, "isActive", "onboardingCompleted"
     FROM "WebUser"
     WHERE email = ${account.email.toLowerCase()}
     LIMIT 1
@@ -318,6 +334,8 @@ async function ensureWebUser(account: { id: string; email: string; name: string;
 }
 
 async function createWebUserSession(user: any, request: NextRequest) {
+  const { onboardingCompleted, isFounder } = await siteOnboarding(user);
+  user = { ...user, onboardingCompleted };
   const sessionId = generateId();
   const token = await new SignJWT({
     userId: user.id,
@@ -347,6 +365,8 @@ async function createWebUserSession(user: any, request: NextRequest) {
   const response = NextResponse.json({
     success: true,
     user: { id: user.id, email: user.email, name: user.name, avatar: user.avatar, slug: user.slug },
+    // Where to land when the sign-in page wasn't asked for a particular page.
+    home: isFounder ? '/founder/dashboard' : '/',
   });
 
   response.cookies.set('user-token', token, {

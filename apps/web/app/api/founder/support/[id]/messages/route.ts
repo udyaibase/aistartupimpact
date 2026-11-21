@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { apiRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
-import { requireFounderAuth } from '@/lib/founder-auth';
+import { founderApi } from '@/lib/founder/api-session';
 import { addUserMessage } from '@/lib/support-tickets';
 import { sql } from '@/lib/db';
 import { supportMessageSchema, validateInput, sanitizeText } from '@/lib/validation';
@@ -13,7 +13,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
 
   const params = await props.params;
   try {
-    const session = await requireFounderAuth();
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
     const reqBody = await request.json();
     const validation = validateInput(supportMessageSchema, { content: reqBody.body });
     if (!validation.success) return NextResponse.json({ success: false, error: validation.error }, { status: 400 });

@@ -10,7 +10,7 @@ import { Plus, Trash2 } from 'lucide-react';
 const PROVISIONAL_USD_INR = 94;
 
 const ROUND_TYPES = [
-  'Pre-Seed', 'Angle', 'Seed', 'Pre-Series A', 'Series A',
+  'Pre-Seed', 'Angel', 'Seed', 'Pre-Series A', 'Series A',
   'Pre-Series B', 'Series B', 'Pre-Series C', 'Series C', 'Pre-Series D', 'Series D',
   'Series E', 'Series F', 'Series G', 'Series I', 'Series J',
   'Growth', 'Bridge', 'Debt', 'Grant', 'Internal Funding',
@@ -98,7 +98,7 @@ export function convertFromDbFormat(dbRounds: any[]): FundingRound[] {
 
     return {
       id: r.id,
-      roundType: r.roundType || '',
+      roundType: r.roundType === 'Angle' ? 'Angel' : r.roundType || '', // rounds saved before the spelling was fixed
       amountValue,
       amountUnit,
       announcedAt: r.announcedAt ? new Date(r.announcedAt).toISOString().split('T')[0] : '',
@@ -171,8 +171,8 @@ export default function FundingRoundsManager({ rounds, onChange, maxRounds = 10 
           <div className="grid grid-cols-2 gap-3">
             {/* Round Type */}
             <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Round Type</label>
-              <select
+              <label htmlFor={`round-type-${index}`} className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Round Type</label>
+              <select id={`round-type-${index}`}
                 value={round.roundType}
                 onChange={(e) => updateRound(index, 'roundType', e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
@@ -183,8 +183,8 @@ export default function FundingRoundsManager({ rounds, onChange, maxRounds = 10 
 
             {/* Date */}
             <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Announced Date</label>
-              <input
+              <label htmlFor={`round-date-${index}`} className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Announced Date</label>
+              <input id={`round-date-${index}`}
                 type="date"
                 value={round.announcedAt}
                 onChange={(e) => updateRound(index, 'announcedAt', e.target.value)}
@@ -195,9 +195,9 @@ export default function FundingRoundsManager({ rounds, onChange, maxRounds = 10 
 
           {/* Amount with unit selector */}
           <div>
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Amount</label>
-            <div className="flex gap-2">
-              <input
+            <label htmlFor={`round-amount-${index}`} className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Amount</label>
+            <div className="flex flex-wrap gap-2">
+              <input id={`round-amount-${index}`}
                 type="number"
                 value={round.amountValue}
                 onChange={(e) => updateRound(index, 'amountValue', e.target.value)}
@@ -206,6 +206,7 @@ export default function FundingRoundsManager({ rounds, onChange, maxRounds = 10 
                 className="flex-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
               />
               <select
+                aria-label="Amount unit"
                 value={round.amountUnit}
                 onChange={(e) => updateRound(index, 'amountUnit', e.target.value)}
                 className="w-24 px-2 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
@@ -213,7 +214,7 @@ export default function FundingRoundsManager({ rounds, onChange, maxRounds = 10 
                 {AMOUNT_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
               </select>
               {getPreview(round) && (
-                <span className="flex items-center text-xs text-emerald-600 dark:text-emerald-400 font-semibold whitespace-nowrap">
+                <span className="flex items-center basis-full sm:basis-auto text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
                   {getPreview(round)}
                 </span>
               )}
@@ -222,8 +223,8 @@ export default function FundingRoundsManager({ rounds, onChange, maxRounds = 10 
 
           {/* Investors */}
           <div>
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Lead Investors <span className="font-normal">(comma-separated)</span></label>
-            <input
+            <label htmlFor={`round-lead-${index}`} className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Lead Investors <span className="font-normal">(comma-separated)</span></label>
+            <input id={`round-lead-${index}`}
               type="text"
               value={round.leadInvestors}
               onChange={(e) => updateRound(index, 'leadInvestors', e.target.value)}
@@ -233,8 +234,8 @@ export default function FundingRoundsManager({ rounds, onChange, maxRounds = 10 
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">All Investors <span className="font-normal">(optional, comma-separated)</span></label>
-            <input
+            <label htmlFor={`round-all-${index}`} className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">All Investors <span className="font-normal">(optional, comma-separated)</span></label>
+            <input id={`round-all-${index}`}
               type="text"
               value={round.allInvestors}
               onChange={(e) => updateRound(index, 'allInvestors', e.target.value)}

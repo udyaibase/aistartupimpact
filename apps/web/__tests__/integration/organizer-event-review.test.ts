@@ -4,6 +4,7 @@ const m = vi.hoisted(() => ({
   event: null as null | Record<string, unknown>,
   update: vi.fn(), canTag: vi.fn(), decision: vi.fn(), boost: vi.fn(),
 }));
+vi.mock('@/lib/organizer-auth/write-limit', () => ({ hostWriteLimit: async () => null }));
 vi.mock('next/server', async (orig) => ({ ...(await orig<typeof import('next/server')>()), after: () => {} }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@udyaibase/database', () => {

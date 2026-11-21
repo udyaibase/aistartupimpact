@@ -1,3 +1,4 @@
+import { hostWriteLimit } from '@/lib/organizer-auth/write-limit';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { afterEventAccess } from '@/lib/events/after-event-access';
@@ -13,6 +14,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ eve
   const { eventId, submissionId } = await props.params;
   const access = await afterEventAccess(eventId, 'events.edit');
   if (access instanceof NextResponse) return access;
+  const limited = await hostWriteLimit(access.session.id);
+  if (limited) return limited;
   const { event } = access;
   const sub = await prisma.eventTalkSubmission.findFirst({ where: { id: submissionId, eventId: event.id } });
   if (!sub) return NextResponse.json({ success: false, error: 'Proposal not found.' }, { status: 404 });

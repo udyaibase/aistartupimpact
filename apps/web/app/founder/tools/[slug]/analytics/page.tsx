@@ -6,6 +6,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowLeft, Eye, MousePointerClick, Bookmark, Star, TrendingUp, ArrowUpRight } from 'lucide-react';
 
+export const metadata = { title: 'Tool analytics' };
+
 export default async function ToolAnalyticsPage(props: { params: Promise<{ slug: string }> }) {
   const params = await props.params;
   const session = await requireFounderAuth();

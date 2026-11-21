@@ -22,3 +22,23 @@ export async function refreshPublicListing(type: 'startup' | 'tool', id: string)
     console.warn('[refreshPublicListing] skipped:', err instanceof Error ? err.message : err);
   }
 }
+
+/**
+ * A founder posted, edited or deleted an update, story or milestone: refresh the pages that show it. Updates and
+ * milestones appear on the startup's own profile only; stories also appear on the Founder Stories page. Story pages are
+ * cached for an hour, so without this a deleted update stayed public until the timer ran out.
+ */
+export async function refreshPublicContent(startupId: string | null, articleSlug?: string | null): Promise<void> {
+  try {
+    const paths = ['/stories'];
+    // Older links to an update point at /news/<slug>; that address has its own cached copy.
+    if (articleSlug) paths.push(`/stories/${articleSlug}`, `/news/${articleSlug}`);
+    if (startupId) {
+      const row = await prisma.startup.findUnique({ where: { id: startupId }, select: { slug: true } });
+      if (row?.slug) paths.push(`/startups/${row.slug}`);
+    }
+    refreshPaths(paths);
+  } catch (err) {
+    console.warn('[refreshPublicContent] skipped:', err instanceof Error ? err.message : err);
+  }
+}

@@ -40,6 +40,10 @@ export default function AttendeesPage() {
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   const [canExport, setCanExport] = useState(false);
+  // Phones draw 25 people at a time: 100 cards, each with its buttons, made a very long and slow screen.
+  const PHONE_ROWS = 25;
+  const [phoneRows, setPhoneRows] = useState(PHONE_ROWS);
+  useEffect(() => { setPhoneRows(PHONE_ROWS); }, [search, statusFilter, page]);
 
   // Wait for typing to pause before searching.
   useEffect(() => {
@@ -160,6 +164,7 @@ export default function AttendeesPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             data-tour="attendee-search"
+            aria-label="Search attendees"
             value={search}
             onChange={e => setSearch(e.target.value)}
             inputMode="search"
@@ -225,7 +230,7 @@ export default function AttendeesPage() {
         ) : (
           <>
           <ul data-tour="attendee-table" className="md:hidden divide-y divide-gray-100 dark:divide-gray-800">
-            {filtered.map(r => {
+            {filtered.slice(0, phoneRows).map(r => {
               const isSel = selected.has(r.id);
               return (
                 <li key={r.id} className={`px-4 py-3.5 ${isSel ? "bg-brand/5" : ""}`}>
@@ -248,6 +253,14 @@ export default function AttendeesPage() {
                 </li>
               );
             })}
+            {filtered.length > phoneRows && (
+              <li className="px-4 py-3 text-center">
+                <button type="button" onClick={() => setPhoneRows(n => n + PHONE_ROWS)} className="min-h-[44px] px-4 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-semibold font-jakarta text-gray-700 dark:text-gray-200">
+                  Show {Math.min(PHONE_ROWS, filtered.length - phoneRows)} more
+                </button>
+                <p className="mt-1 text-xs text-gray-500 font-jakarta">Showing {phoneRows} of {filtered.length}</p>
+              </li>
+            )}
           </ul>
           <div className="hidden md:block overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-800">
@@ -258,6 +271,7 @@ export default function AttendeesPage() {
                       type="checkbox"
                       checked={selected.size === filtered.length && filtered.length > 0}
                       onChange={selectAll}
+                      aria-label="Select everyone on this page"
                       className="w-3.5 h-3.5 rounded text-brand focus:ring-brand"
                     />
                   </th>
@@ -277,6 +291,7 @@ export default function AttendeesPage() {
                         type="checkbox"
                         checked={selected.has(r.id)}
                         onChange={() => toggleSelect(r.id)}
+                        aria-label={`Select ${r.guestName || r.guestEmail || "guest"}`}
                         className="w-3.5 h-3.5 rounded text-brand focus:ring-brand"
                       />
                     </td>

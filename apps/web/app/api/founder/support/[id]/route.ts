@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireFounderAuth } from '@/lib/founder-auth';
+import { founderApi } from '@/lib/founder/api-session';
 import { getTicketDetail } from '@/lib/support-tickets';
 
 export const dynamic = 'force-dynamic';
@@ -7,7 +7,9 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   try {
-    const session = await requireFounderAuth();
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
     const ticket = await getTicketDetail(params.id, 'FOUNDER', session.userId);
     if (!ticket) return NextResponse.json({ success: false, error: 'Ticket not found' }, { status: 404 });
     return NextResponse.json({ success: true, ticket });

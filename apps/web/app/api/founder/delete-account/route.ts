@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { requireFounderAuth } from '@/lib/founder-auth';
-import { confirmAccountPassword } from '@/lib/founder/account';
+import { founderApi } from '@/lib/founder/api-session';
+import { confirmAccountAction } from '@/lib/founder/account';
+import { endAccountSessions } from '@/lib/auth/sessions';
 import { eraseFounderAccount } from '@/lib/founder/erasure';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
 
@@ -13,13 +14,16 @@ export async function DELETE(request: NextRequest) {
     const { success } = await checkRateLimit(strictRateLimit, identifier);
     if (!success) return NextResponse.json({ error: 'Too many requests. Try again later.' }, { status: 429 });
 
-    const session = await requireFounderAuth();
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
-    const body = await request.json().catch(() => ({}));
-    if (!(await confirmAccountPassword(session.email.toLowerCase(), (body as { password?: unknown }).password))) {
-      return NextResponse.json({ success: false, error: 'Incorrect password' }, { status: 401 });
-    }
+    const body = (await request.json().catch(() => ({}))) as { password?: unknown; otpToken?: unknown; code?: unknown };
+    const confirmed = await confirmAccountAction(session, body, 'delete');
+    if (!confirmed.ok) return NextResponse.json({ success: false, error: confirmed.error }, { status: 401 });
 
+    // Before the records go: end this person's sessions on every device, so no copy of a cookie outlives the account.
+    await endAccountSessions(session.email).catch(() => {});
     await eraseFounderAccount(session.userId);
 
     const store = await cookies();
@@ -29,9 +33,6 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true, message: 'Account deleted successfully' });
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized - Please login') {
-      return NextResponse.json({ success: false, error: 'Please sign in again.' }, { status: 401 });
-    }
     console.error('Error deleting account:', error instanceof Error ? error.message : 'unknown error');
     return NextResponse.json({ success: false, error: 'Failed to delete account' }, { status: 500 });
   }

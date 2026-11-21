@@ -20,7 +20,7 @@ async function putHandler(request: NextRequest, props: { params: Promise<{ id: s
 
     const article = await prisma.article.findUnique({
       where: { id: params.id },
-      select: { id: true, type: true, startupId: true, moderationStatus: true },
+      select: { id: true, type: true, startupId: true, moderationStatus: true, publishedAt: true },
     });
     if (!article) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -34,7 +34,8 @@ async function putHandler(request: NextRequest, props: { params: Promise<{ id: s
     if (action === "approve") {
       updateData.moderationStatus = "APPROVED";
       updateData.status = "PUBLISHED";
-      updateData.publishedAt = new Date();
+      // A story approved again after the founder edited it keeps its original date.
+      updateData.publishedAt = article.publishedAt ?? new Date();
     } else if (action === "reject") {
       updateData.moderationStatus = "REJECTED";
       updateData.status = "DRAFT";

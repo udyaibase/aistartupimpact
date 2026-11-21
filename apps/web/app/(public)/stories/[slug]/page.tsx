@@ -53,6 +53,9 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
   const formatDate = (d: string) =>
     d ? new Date(d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '';
 
+  // A short update posted by a startup, or a longer founder story reviewed by our editors.
+  const kind = story.type === 'STARTUP_UPDATE' ? 'Startup Update' : 'Founder Story';
+
   const bodyHtml = articleBodyHtml(story);
 
   const entityCards = await getArticleEntityCards(bodyHtml);
@@ -70,7 +73,7 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
     updatedAt: story.updatedAt,
     url: storyUrl,
     imageUrl: story.coverImage || undefined,
-    category: 'Founder Story',
+    category: kind,
     isStory: true,
     founderData: story.linkedStartup && story.linkedStartup.founders?.length > 0 ? {
       name: story.linkedStartup.founders[0],
@@ -95,13 +98,13 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
         <ChevronRight className="w-3 h-3" />
         <Link href="/stories" className="hover:text-brand">Stories</Link>
         <ChevronRight className="w-3 h-3" />
-        <span className="text-gray-600 dark:text-gray-300 truncate max-w-[200px]">Founder Story</span>
+        <span className="text-gray-600 dark:text-gray-300 truncate max-w-[200px]">{kind}</span>
       </nav>
 
       <div className="flex flex-col lg:flex-row gap-10">
         {/* ── Main Article ── */}
         <article className="flex-1 min-w-0">
-          <span className="badge-brand text-xs mb-4 inline-block">Founder Story</span>
+          <span className="badge-brand text-xs mb-4 inline-block">{kind}</span>
 
           <h1 className="font-sora font-extrabold text-[22px] leading-[1.2] sm:text-3xl md:text-[36px] md:leading-[1.2] text-navy dark:text-white">
             {story.title}
@@ -140,6 +143,9 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
             <div className="relative aspect-[16/9] rounded-xl overflow-hidden my-6 sm:my-8">
               <Image src={story.coverImage} alt={story.title} fill sizes="100vw" className="object-cover" />
             </div>
+          ) : story.type === 'STARTUP_UPDATE' ? (
+            // A short update with no picture goes straight to the text; the big placeholder pushed it off the screen.
+            <div className="my-4" />
           ) : (
             <div className="aspect-[16/9] bg-gradient-to-br from-brand-50 to-gray-50 dark:from-brand-900/20 dark:to-gray-900 rounded-xl my-6 sm:my-8 flex items-center justify-center">
               <Users className="w-20 h-20 text-brand/20" />

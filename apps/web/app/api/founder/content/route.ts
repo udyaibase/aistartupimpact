@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
-import { getFounderSession } from "@/lib/founder-auth";
+import { founderApi, tooMany } from "@/lib/founder/api-session";
 import { verifyStartupAccess, getFounderStartups, UNVERIFIED_STARTUP_ERROR } from "@/lib/founder-content-auth";
 import { canCreateContent, canViewAllDrafts } from "@/lib/founder-team-permissions";
-import { checkRateLimit, getClientIdentifier, strictRateLimit } from "@/lib/rate-limit";
+import { contentWriteRateLimit, draftSaveRateLimit } from "@/lib/rate-limit";
+import { bodyProblem, prepareBody } from "@/lib/founder/content-body";
+import { checkContentFields, UPDATES_PER_DAY } from "@/lib/founder/content-validation";
+import { refreshPublicContent } from "@/lib/founder/refresh-listing";
 import { generateUniqueSlug } from "@udyaibase/utils";
 import crypto from "crypto";
 
@@ -23,8 +26,9 @@ const SYSTEM_AUTHOR_ID = "system-founder-content";
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getFounderSession();
-    if (!session) return NextResponse.json({ success: false }, { status: 401 });
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     const { searchParams } = new URL(request.url);
     const startupId = searchParams.get("startupId");
@@ -89,19 +93,24 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getFounderSession();
-    if (!session) return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 });
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
-    const identifier = getClientIdentifier(request);
-    const { success: rlOk } = await checkRateLimit(strictRateLimit, identifier);
-    if (!rlOk) return NextResponse.json({ error: "Too many requests. Try again later." }, { status: 429 });
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object") return NextResponse.json({ success: false, error: "Invalid request" }, { status: 400 });
+    const { type, startupId, isDraft } = body;
 
-    const body = await request.json();
-    const { title, content, excerpt, type, startupId, coverImage, isDraft } = body;
+    // Saving a draft is frequent (the story editor autosaves); publishing and submitting are counted separately.
+    const limited = isDraft ? await tooMany(draftSaveRateLimit, `draft:${session.userId}`) : await tooMany(contentWriteRateLimit, `content:${session.userId}`);
+    if (limited) return limited;
 
-    if (!startupId) return NextResponse.json({ success: false, error: "Startup is required" }, { status: 400 });
-    if (!title || typeof title !== "string" || title.length < 3) return NextResponse.json({ success: false, error: "Title must be at least 3 characters" }, { status: 400 });
-    if (title.length > 200) return NextResponse.json({ success: false, error: "Title must be 200 characters or less" }, { status: 400 });
+    if (!startupId || typeof startupId !== "string") return NextResponse.json({ success: false, error: "Startup is required" }, { status: 400 });
+    const checked = checkContentFields(body, "create");
+    if (!checked.ok) return NextResponse.json({ success: false, error: checked.error }, { status: 400 });
+    const { excerpt, coverImage } = checked.data;
+    const title = checked.data.title as string;
+    const prepared = prepareBody(checked.data.content);
 
     const auth = await verifyStartupAccess(startupId);
     if (!auth) return NextResponse.json({ success: false, error: "Not authorized for this startup" }, { status: 403 });
@@ -109,6 +118,22 @@ export async function POST(request: NextRequest) {
     if (!canCreateContent(auth.role)) return NextResponse.json({ success: false, error: "Your role does not allow creating content" }, { status: 403 });
 
     const articleType = VALID_TYPES.includes(type) ? type : "STARTUP_UPDATE";
+
+    // A draft can be anything; what goes public or to our editors must have real text.
+    if (!isDraft) {
+      const problem = bodyProblem(articleType, prepared);
+      if (problem) return NextResponse.json({ success: false, error: problem }, { status: 400 });
+    }
+
+    // Updates go public at once, so each startup gets a daily allowance.
+    if (!isDraft && articleType === "STARTUP_UPDATE") {
+      const today = await prisma.article.count({
+        where: { startupId, type: "STARTUP_UPDATE", publishedAt: { gt: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+      });
+      if (today >= UPDATES_PER_DAY) {
+        return NextResponse.json({ success: false, error: `You can publish ${UPDATES_PER_DAY} updates a day. Save this one as a draft and publish it tomorrow.`, code: "daily_limit" }, { status: 429 });
+      }
+    }
 
     let articleStatus: string;
     let moderationStatus: string;
@@ -138,11 +163,13 @@ export async function POST(request: NextRequest) {
     const article = await prisma.article.create({
       data: {
         id,
-        title: title.slice(0, 200),
+        title,
         slug,
-        content: content || {},
-        contentText: typeof content === "string" ? content.slice(0, 50000) : "",
-        excerpt: excerpt?.slice(0, 500) || null,
+        content: prepared.content,
+        contentText: prepared.text.slice(0, 50000),
+        wordCount: prepared.words,
+        readTimeMinutes: prepared.readMinutes,
+        excerpt: excerpt ?? null,
         type: articleType,
         status: articleStatus as any,
         authorId: SYSTEM_AUTHOR_ID,
@@ -165,6 +192,8 @@ export async function POST(request: NextRequest) {
         action: isDraft ? "CREATED" : articleType === "STARTUP_UPDATE" ? "PUBLISHED" : "SUBMITTED_FOR_REVIEW",
       },
     });
+
+    if (articleStatus === "PUBLISHED") await refreshPublicContent(startupId, article.slug);
 
     return NextResponse.json({ success: true, article });
   } catch (err) {

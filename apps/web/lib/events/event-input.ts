@@ -71,6 +71,9 @@ export function cleanEventInput(input: unknown): { ok: true; data: Raw } | Probl
     if (data[key] === undefined || data[key] === null || data[key] === '') { if (data[key] !== undefined) data[key] = undefined; continue; }
     if (Number.isNaN(new Date(data[key]).getTime())) return fail(key, 'Enter a valid date and time.');
   }
+  // The form checks this too, but a request sent straight to the server skipped it and saved an event that ended
+  // before it began. (An edit that sends only one of the two is checked against the saved event in the route.)
+  if (data.startAt && data.endAt && new Date(data.endAt) <= new Date(data.startAt)) return fail('endAt', 'The end must be after the start.');
 
   for (const key of ['meetingLink', 'venueMapUrl'] as const) {
     if (data[key] === undefined) continue;

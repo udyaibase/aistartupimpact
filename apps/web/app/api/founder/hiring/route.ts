@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { getFounderSession } from '@/lib/founder-auth';
+import { founderApi, tooMany } from '@/lib/founder/api-session';
+import { founderWriteRateLimit } from '@/lib/rate-limit';
 import { openFounderWorkspace, WorkspaceError } from '@/lib/employer/founder-workspace';
 
 export const dynamic = 'force-dynamic';
 
 /** "Start hiring" from the founder portal: opens the startup's hiring workspace and signs the founder in. */
 export async function POST(request: NextRequest) {
-  const session = await getFounderSession();
-  if (!session) return NextResponse.json({ error: 'Please sign in again.' }, { status: 401 });
+  const guard = await founderApi();
+  if (guard.error) return guard.error;
+  const session = guard.session;
+  const limited = await tooMany(founderWriteRateLimit, `hiring:${session.userId}`);
+  if (limited) return limited;
 
   const { startupId } = await request.json().catch(() => ({}));
   if (typeof startupId !== 'string' || !startupId) return NextResponse.json({ error: 'Choose a startup.' }, { status: 400 });

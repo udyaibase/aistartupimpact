@@ -5,7 +5,7 @@ import { Download, ExternalLink, ShieldCheck } from 'lucide-react';
 import { certificateByCode, linkedInAddUrl, verifyUrl } from '@/lib/events/certificates';
 
 export const dynamic = 'force-dynamic';
-export const metadata: Metadata = { title: 'Your certificate | Udyaibase', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'Your certificate', robots: { index: false, follow: false } };
 
 /** The attendee's certificate: view, download, add to LinkedIn, share the verification link. */
 export default async function CertificatePage(props: { params: Promise<{ code: string }> }) {
@@ -21,11 +21,22 @@ export default async function CertificatePage(props: { params: Promise<{ code: s
       <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{c.title}</p>
       <h1 className="mt-1 text-2xl sm:text-3xl font-semibold tracking-tight text-gray-900 dark:text-white">{c.eventTitle}</h1>
       <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{c.recipientName} · {c.date} · {c.hostName}</p>
+      {(c.description || c.skills.length > 0) && (
+        <div className="mt-3 text-sm text-gray-700 dark:text-gray-300">
+          {c.description && <p>{c.description}</p>}
+          {c.skills.length > 0 && (
+            <ul aria-label="Topics covered" className="mt-2 flex flex-wrap gap-1.5">
+              {c.skills.map((k) => <li key={k} className="rounded-full border border-gray-200 dark:border-gray-700 px-2.5 py-0.5 text-xs font-medium">{k}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="mt-6 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden bg-gray-50 dark:bg-gray-900">
-        <object data={`${pdfUrl}#toolbar=0&view=FitH`} type="application/pdf" className="w-full aspect-[842/595]" aria-label="Certificate preview">
-          <p className="p-6 text-sm text-gray-600 dark:text-gray-400">Your browser can’t show the PDF here. <a href={pdfUrl} className="underline">Open it</a>.</p>
-        </object>
+        {/* A frame, not <object>: the site's policy forbids plugins (object-src 'none'), which left this box showing
+            only its fallback text in every browser. The PDF route allows framing by our own pages. */}
+        <iframe src={`${pdfUrl}#toolbar=0&view=FitH`} title="Certificate preview" className="w-full aspect-[842/595] border-0" />
+        <p className="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">Can’t see it? <a href={pdfUrl} className="underline">Open the PDF</a>.</p>
       </div>
 
       <div className="mt-5 flex flex-col sm:flex-row gap-2">

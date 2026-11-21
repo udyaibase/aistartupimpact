@@ -15,9 +15,12 @@ const OTHER = { icon: Flag, label: 'Milestone', tone: 'text-gray-500 dark:text-g
 
 export const milestoneType = (type: string | null | undefined) => TYPES[type ?? ''] ?? OTHER;
 
-/** The milestone type's icon, in its colour. Size it with className (e.g. "w-5 h-5"). */
-export function MilestoneIcon({ type, className = 'w-5 h-5' }: { type: string | null | undefined; className?: string }) {
+/**
+ * The milestone type's icon. Size it with className (e.g. "w-5 h-5"). By default it is in the type's colour;
+ * `plain` draws it in the surrounding text colour, for screens that keep to one neutral icon style.
+ */
+export function MilestoneIcon({ type, className = 'w-5 h-5', plain = false }: { type: string | null | undefined; className?: string; plain?: boolean }) {
   const t = milestoneType(type);
   const Icon = t.icon;
-  return <Icon className={`${t.tone} ${className}`} aria-label={t.label} role="img" />;
+  return <Icon className={`${plain ? '' : t.tone} ${className}`.trim()} strokeWidth={plain ? 1.75 : undefined} aria-label={t.label} role="img" />;
 }

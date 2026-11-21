@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
-import { getFounderSession } from "@/lib/founder-auth";
+import { founderApi, tooMany } from "@/lib/founder/api-session";
+import { checkMilestoneAmount, checkMilestoneCurrency, checkMilestoneDate } from "@/lib/founder/content-validation";
+import { refreshPublicContent } from "@/lib/founder/refresh-listing";
 import { verifyStartupAccess } from "@/lib/founder-content-auth";
 import { canEditOwnContent, canEditAnyContent, canDeleteContent } from "@/lib/founder-team-permissions";
-import { checkRateLimit, getClientIdentifier, strictRateLimit } from "@/lib/rate-limit";
+import { contentWriteRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -11,12 +13,13 @@ const VALID_TYPES = ["FUNDING", "LAUNCH", "PARTNERSHIP", "ACQUISITION", "AWARD",
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getFounderSession();
-    if (!session) return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 });
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
-    const identifier = getClientIdentifier(request);
-    const { success: rlOk } = await checkRateLimit(strictRateLimit, identifier);
-    if (!rlOk) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    // Per founder, shared with updates and stories. It was 3 an hour per network, shared with unrelated actions.
+    const limited = await tooMany(contentWriteRateLimit, `content:${session.userId}`);
+    if (limited) return limited;
 
     const { id } = await params;
 
@@ -40,12 +43,27 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const body = await request.json();
     const updateData: any = {};
 
-    if (body.title) updateData.title = body.title.slice(0, 200);
-    if (body.description !== undefined) updateData.description = body.description?.slice(0, 500) || null;
+    if (body.title !== undefined) {
+      if (typeof body.title !== "string" || body.title.trim().length < 3) return NextResponse.json({ success: false, error: "Title must be at least 3 characters" }, { status: 400 });
+      updateData.title = body.title.trim().slice(0, 200);
+    }
+    if (body.description !== undefined) updateData.description = typeof body.description === "string" ? body.description.slice(0, 500) || null : null;
     if (body.type && VALID_TYPES.includes(body.type)) updateData.type = body.type;
-    if (body.amount !== undefined) updateData.amount = body.amount ? parseFloat(body.amount) : null;
-    if (body.currency) updateData.currency = body.currency.slice(0, 10);
-    if (body.date) updateData.date = new Date(body.date);
+    if (body.amount !== undefined) {
+      const amount = checkMilestoneAmount(body.amount);
+      if (!amount.ok) return NextResponse.json({ success: false, error: amount.error }, { status: 400 });
+      updateData.amount = amount.data;
+    }
+    if (body.currency) {
+      const currency = checkMilestoneCurrency(body.currency);
+      if (!currency.ok) return NextResponse.json({ success: false, error: currency.error }, { status: 400 });
+      updateData.currency = currency.data;
+    }
+    if (body.date) {
+      const date = checkMilestoneDate(body.date);
+      if (!date.ok) return NextResponse.json({ success: false, error: date.error }, { status: 400 });
+      updateData.date = date.data;
+    }
     if (body.isPublic !== undefined) updateData.isPublic = body.isPublic;
 
     const updated = await prisma.founderMilestone.update({ where: { id }, data: updateData });
@@ -61,6 +79,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       },
     });
 
+    await refreshPublicContent(milestone.startupId);
     return NextResponse.json({ success: true, milestone: updated });
   } catch (err) {
     console.error("[founder/milestones/[id] PUT]", err);
@@ -70,12 +89,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getFounderSession();
-    if (!session) return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 });
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
-    const identifier = getClientIdentifier(request);
-    const { success: rlOk } = await checkRateLimit(strictRateLimit, identifier);
-    if (!rlOk) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    // Per founder, shared with updates and stories. It was 3 an hour per network, shared with unrelated actions.
+    const limited = await tooMany(contentWriteRateLimit, `content:${session.userId}`);
+    if (limited) return limited;
 
     const { id } = await params;
 
@@ -105,6 +125,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       },
     });
 
+    await refreshPublicContent(milestone.startupId);
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("[founder/milestones/[id] DELETE]", err);

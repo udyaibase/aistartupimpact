@@ -6,6 +6,8 @@ import Link from 'next/link';
 import StatCard from '@/components/founder/StatCard';
 import ListingCard from '@/components/founder/ListingCard';
 
+export const metadata = { title: 'Home' };
+
 export const revalidate = 10;
 
 function greeting() {
@@ -160,7 +162,8 @@ export default async function DashboardPage() {
             <Plus className="w-4 h-4" aria-hidden /> Submit your startup
           </Link>
         ) : (
-          <Link href="/founder/content" className="btn-brand gap-2 shrink-0">
+          // On a phone the tab bar already has Create, so this one shows from tablet width up.
+          <Link href="/founder/content" className="btn-brand gap-2 shrink-0 hidden md:inline-flex">
             <Plus className="w-4 h-4" aria-hidden /> Create
           </Link>
         )}
@@ -346,13 +349,13 @@ export default async function DashboardPage() {
             <span className="block text-[13px] text-gray-600 dark:text-gray-400">Reach 45K+ AI professionals</span>
           </span>
         </Link>
-        <a href="/organizer/login" className={`${CARD} p-4 flex items-center gap-3 hover:border-gray-300 dark:hover:border-gray-700 transition-colors group`}>
+        <Link href="/organizer/login" className={`${CARD} p-4 flex items-center gap-3 hover:border-gray-300 dark:hover:border-gray-700 transition-colors group`}>
           <span className="w-10 h-10 rounded-[10px] bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 flex items-center justify-center shrink-0" aria-hidden><CalendarDays className="w-5 h-5" /></span>
           <span className="min-w-0">
             <span className="block text-sm font-semibold text-gray-900 dark:text-white group-hover:text-brand transition-colors">Hosting an event? Create one</span>
             <span className="block text-[13px] text-gray-600 dark:text-gray-400">List your AI event for free</span>
           </span>
-        </a>
+        </Link>
       </div>
     </div>
   );

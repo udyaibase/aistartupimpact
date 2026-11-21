@@ -39,6 +39,20 @@ export default function ProfileDropdown({ user, onLogout }: ProfileDropdownProps
     } catch {}
   };
 
+  const handleLogoutEverywhere = async () => {
+    if (!window.confirm('Sign out on every device? You’ll need to sign in again everywhere, including here.')) return;
+    try {
+      import('@/lib/events/offline-checkin-store').then((m) => m.clearOfflineRosters()).catch(() => {});
+      const res = await fetch("/api/user/auth/logout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ everywhere: true }) });
+      if (!res.ok) { window.alert('Couldn’t sign out everywhere. Please try again.'); return; }
+      await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+      if (onLogout) onLogout();
+      else window.location.href = "/";
+    } catch {
+      window.alert('Couldn’t sign out everywhere. Please try again.');
+    }
+  };
+
   if (!user) return null;
 
   const initials = (user.name || "U").charAt(0).toUpperCase();
@@ -91,6 +105,13 @@ export default function ProfileDropdown({ user, onLogout }: ProfileDropdownProps
             >
               <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3-3h-9m9 0-3-3m3 3-3 3" /></svg>
               Sign out
+            </button>
+            <button
+              onClick={() => { setOpen(false); handleLogoutEverywhere(); }}
+              className="flex items-center gap-2.5 w-full text-left px-4 py-2 text-[13px] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
+              <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0V12a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 12V5.25" /></svg>
+              Sign out everywhere
             </button>
           </div>
         </div>

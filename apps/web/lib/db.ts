@@ -1,4 +1,5 @@
 // Direct DB queries for server components — bypasses the need for the API server
+import { withoutAddress } from '@/lib/events/public-place';
 import { neon, NeonQueryFunction } from '@neondatabase/serverless';
 import { cached, CK } from './cache';
 import { assertNotProductionInDev } from '@udyaibase/database/dev-guard';
@@ -38,10 +39,13 @@ export async function getArticleBySlugDirect(slug: string) {
         a."updatedAt"::text AS "updatedAt",
         u.name AS "authorName", u.slug AS "authorSlug",
         c.name AS "categoryName", c.slug AS "categorySlug",
-        a."toolId", a."startupId"
+        a."toolId", a."startupId",
+        -- The founder who wrote it, unless they've chosen not to be shown on their startup's public pages.
+        CASE WHEN COALESCE((SELECT public_profile FROM founder_settings WHERE user_id = fu.id), true) THEN fu.name END AS "founderAuthorName"
       FROM "Article" a
       LEFT JOIN "User" u ON u.id = a."authorId"
       LEFT JOIN "Category" c ON c.id = a."categoryId"
+      LEFT JOIN "FounderUser" fu ON fu.id = a."founderAuthorId" AND fu."deletedAt" IS NULL
       WHERE a.slug = ${slug} AND a.status = 'PUBLISHED' AND a."deletedAt" IS NULL
       LIMIT 1
     `;
@@ -79,9 +83,13 @@ export async function getArticleBySlugDirect(slug: string) {
       }
     }
 
+    // Founder-written posts are stored under one shared system author. Show who really wrote it: the founder, or
+    // the startup when the founder prefers not to be named.
+    const byline = a.type === 'FOUNDER_STORY' || a.type === 'STARTUP_UPDATE' ? (a.founderAuthorName || linkedStartup?.name || null) : null;
+
     return {
       ...a,
-      author: { name: a.authorName, slug: a.authorSlug },
+      author: byline ? { name: byline, slug: null } : { name: a.authorName, slug: a.authorSlug },
       category: { name: a.categoryName, slug: a.categorySlug },
       linkedTool,
       linkedStartup
@@ -1087,10 +1095,16 @@ export async function getArticlesDirect(params: { type?: string; limit?: number;
           a.id, a.title, a.slug, a.type, a.excerpt, a."coverImage", a."thumbnailImage",
           a."readTimeMinutes", a."isFeatured",
           a."publishedAt"::text AS "publishedAt",
-          u.name AS "authorName",
+          -- A founder's own story is stored under one shared system author ("Founder Content"). Show who wrote it:
+          -- the founder, or their startup when they've chosen not to be named.
+          COALESCE(CASE WHEN a."founderAuthorId" IS NOT NULL THEN COALESCE(
+            CASE WHEN COALESCE((SELECT public_profile FROM founder_settings WHERE user_id = fu.id), true) THEN fu.name END, st.name) END,
+            u.name) AS "authorName",
           c.name AS "categoryName"
         FROM "Article" a
         LEFT JOIN "User" u ON u.id = a."authorId"
+        LEFT JOIN "FounderUser" fu ON fu.id = a."founderAuthorId" AND fu."deletedAt" IS NULL
+        LEFT JOIN "Startup" st ON st.id = a."startupId"
         LEFT JOIN "Category" c ON c.id = a."categoryId"
         WHERE a.status = 'PUBLISHED' AND a."deletedAt" IS NULL
           AND a.type = ${params.type} AND a."isFeatured" = ${params.isFeatured}
@@ -1108,10 +1122,16 @@ export async function getArticlesDirect(params: { type?: string; limit?: number;
           a.id, a.title, a.slug, a.type, a.excerpt, a."coverImage", a."thumbnailImage",
           a."readTimeMinutes", a."isFeatured",
           a."publishedAt"::text AS "publishedAt",
-          u.name AS "authorName",
+          -- A founder's own story is stored under one shared system author ("Founder Content"). Show who wrote it:
+          -- the founder, or their startup when they've chosen not to be named.
+          COALESCE(CASE WHEN a."founderAuthorId" IS NOT NULL THEN COALESCE(
+            CASE WHEN COALESCE((SELECT public_profile FROM founder_settings WHERE user_id = fu.id), true) THEN fu.name END, st.name) END,
+            u.name) AS "authorName",
           c.name AS "categoryName"
         FROM "Article" a
         LEFT JOIN "User" u ON u.id = a."authorId"
+        LEFT JOIN "FounderUser" fu ON fu.id = a."founderAuthorId" AND fu."deletedAt" IS NULL
+        LEFT JOIN "Startup" st ON st.id = a."startupId"
         LEFT JOIN "Category" c ON c.id = a."categoryId"
         WHERE a.status = 'PUBLISHED' AND a."deletedAt" IS NULL AND a.type = ${params.type}
         ORDER BY a."publishedAt" DESC NULLS LAST
@@ -1128,12 +1148,19 @@ export async function getArticlesDirect(params: { type?: string; limit?: number;
           a.id, a.title, a.slug, a.type, a.excerpt, a."coverImage", a."thumbnailImage",
           a."readTimeMinutes", a."isFeatured",
           a."publishedAt"::text AS "publishedAt",
-          u.name AS "authorName",
+          -- A founder's own story is stored under one shared system author ("Founder Content"). Show who wrote it:
+          -- the founder, or their startup when they've chosen not to be named.
+          COALESCE(CASE WHEN a."founderAuthorId" IS NOT NULL THEN COALESCE(
+            CASE WHEN COALESCE((SELECT public_profile FROM founder_settings WHERE user_id = fu.id), true) THEN fu.name END, st.name) END,
+            u.name) AS "authorName",
           c.name AS "categoryName"
         FROM "Article" a
         LEFT JOIN "User" u ON u.id = a."authorId"
+        LEFT JOIN "FounderUser" fu ON fu.id = a."founderAuthorId" AND fu."deletedAt" IS NULL
+        LEFT JOIN "Startup" st ON st.id = a."startupId"
         LEFT JOIN "Category" c ON c.id = a."categoryId"
         WHERE a.status = 'PUBLISHED' AND a."deletedAt" IS NULL AND a."isFeatured" = ${params.isFeatured}
+          AND a.type <> 'STARTUP_UPDATE'
         ORDER BY a."publishedAt" DESC NULLS LAST
         LIMIT ${limit}
       `;
@@ -1148,12 +1175,21 @@ export async function getArticlesDirect(params: { type?: string; limit?: number;
           a.id, a.title, a.slug, a.type, a.excerpt, a."coverImage", a."thumbnailImage",
           a."readTimeMinutes", a."isFeatured",
           a."publishedAt"::text AS "publishedAt",
-          u.name AS "authorName",
+          -- A founder's own story is stored under one shared system author ("Founder Content"). Show who wrote it:
+          -- the founder, or their startup when they've chosen not to be named.
+          COALESCE(CASE WHEN a."founderAuthorId" IS NOT NULL THEN COALESCE(
+            CASE WHEN COALESCE((SELECT public_profile FROM founder_settings WHERE user_id = fu.id), true) THEN fu.name END, st.name) END,
+            u.name) AS "authorName",
           c.name AS "categoryName"
         FROM "Article" a
         LEFT JOIN "User" u ON u.id = a."authorId"
+        LEFT JOIN "FounderUser" fu ON fu.id = a."founderAuthorId" AND fu."deletedAt" IS NULL
+        LEFT JOIN "Startup" st ON st.id = a."startupId"
         LEFT JOIN "Category" c ON c.id = a."categoryId"
         WHERE a.status = 'PUBLISHED' AND a."deletedAt" IS NULL
+          -- A startup's own updates are shown on its profile only. Without this, the newest update could become the
+          -- home page's lead story or sit in its "latest" list.
+          AND a.type <> 'STARTUP_UPDATE'
         ORDER BY a."publishedAt" DESC NULLS LAST
         LIMIT ${limit}
       `;
@@ -1183,7 +1219,7 @@ export async function getTrendingNewsDirect(limit = 10): Promise<string[]> {
   try {
     const rows = await sql`
       SELECT title FROM "Article"
-      WHERE status = 'PUBLISHED' AND "deletedAt" IS NULL
+      WHERE status = 'PUBLISHED' AND "deletedAt" IS NULL AND type <> 'STARTUP_UPDATE'
       ORDER BY "viewCount" DESC
       LIMIT ${limit}
     `;
@@ -1699,8 +1735,8 @@ export async function getUpcomingEventsDirect(limit = 4) {
   try {
     const rows = await sql`
       SELECT e.id, e.slug, e.title, e.subtitle, e.category, e.format,
-             e."startAt"::text, e."endAt"::text,
-             e."venueName", e.address, e."coverImageUrl",
+             to_char(e."startAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "startAt", to_char(e."endAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "endAt",
+             e."venueName", e.address, e."coverImageUrl", e.timezone,
              e.capacity, e."registrationCount",
              o."organizationName"
       FROM "Event" e
@@ -1712,26 +1748,8 @@ export async function getUpcomingEventsDirect(limit = 4) {
       ORDER BY e."startAt" ASC
       LIMIT ${limit}
     `;
-    return rows as any[];
-  } catch {
-    return [];
-  }
-}
-
-export async function getRecentMilestonesDirect(limit = 6) {
-  try {
-    const rows = await sql`
-      SELECT fm.id, fm.title, fm.type, fm.amount, fm.currency,
-             fm.date::text AS date, fm."verificationStatus",
-             s.name AS "startupName", s.slug AS "startupSlug"
-      FROM "FounderMilestone" fm
-      JOIN "Startup" s ON s.id = fm."startupId"
-      WHERE fm.status = 'ACTIVE' AND fm."isPublic" = true
-        AND s."isApproved" = true AND s."deletedAt" IS NULL
-      ORDER BY fm.date DESC
-      LIMIT ${limit}
-    `;
-    return rows as any[];
+    // Home page cards show the city; the street address is for people who register.
+    return (rows as any[]).map(withoutAddress) as any[];
   } catch {
     return [];
   }

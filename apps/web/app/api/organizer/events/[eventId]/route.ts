@@ -1,3 +1,5 @@
+import { promoteWaitlist, sendMeetingLinkUpdate } from "@/lib/events/waitlist";
+import { hostWriteLimit } from '@/lib/organizer-auth/write-limit';
 import { NextRequest, NextResponse, after } from "next/server";
 import { hasPermission } from "@/lib/organizer-auth/permissions";
 import { descriptionTooLong, DESCRIPTION_TOO_LONG } from "@/lib/events/description-limit";
@@ -31,6 +33,8 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ ev
   const params = await props.params;
   const result = await requirePermission("events.delete");
   if (result instanceof NextResponse) return result;
+  const limited = await hostWriteLimit(result.id);
+  if (limited) return limited;
   const session = result;
 
   if (!canAccessEvent(session, params.eventId)) {
@@ -62,6 +66,8 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ event
   const params = await props.params;
   const result = await requirePermission("events.edit");
   if (result instanceof NextResponse) return result;
+  const limited = await hostWriteLimit(result.id);
+  if (limited) return limited;
   const session = result;
 
   if (!canAccessEvent(session, params.eventId)) {
@@ -70,7 +76,7 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ event
 
   const event = await prisma.event.findUnique({
     where: { id: params.eventId, deletedAt: null },
-    select: { organizerId: true, slug: true, title: true, startAt: true, endAt: true, timezone: true, status: true, startupId: true, heldAt: true, meetingExternalId: true, meetingProvider: true },
+    select: { organizerId: true, slug: true, title: true, startAt: true, endAt: true, timezone: true, status: true, startupId: true, heldAt: true, meetingExternalId: true, meetingProvider: true, meetingLink: true },
   });
   if (!event) return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 });
   if (event.organizerId !== session.organizerId) return NextResponse.json({ success: false, error: "Not authorized" }, { status: 403 });
@@ -86,6 +92,12 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ event
     data.meetingExternalId = null;
   }
 
+  // Changing only the start or only the end must still leave the end after the start.
+  if (data.startAt || data.endAt) {
+    const start = data.startAt ? new Date(data.startAt) : event.startAt;
+    const end = data.endAt ? new Date(data.endAt) : event.endAt;
+    if (start && end && end <= start) return NextResponse.json({ success: false, field: "endAt", error: "The end must be after the start." }, { status: 400 });
+  }
   if (data.status !== undefined && !EVENT_STATUSES.includes(data.status)) {
     return NextResponse.json({ success: false, error: "Unknown event status." }, { status: 400 });
   }
@@ -291,6 +303,16 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ event
     throw err;
   }
 
+  // A new or changed join link goes to the people already registered: their ticket email has the old one, or none.
+  if (typeof data.meetingLink === "string" && data.meetingLink && data.meetingLink !== event.meetingLink) {
+    after(() => sendMeetingLinkUpdate(params.eventId).catch(() => 0));
+  }
+
+  // More seats (or no limit) now: the people waiting get them, earliest first, each with their ticket by email.
+  // Their waitlist email promised this would happen by itself; before, they stayed waiting until the host moved
+  // each one by hand. Does nothing when the event is still full.
+  if (data.capacity !== undefined) await promoteWaitlist(params.eventId).catch(() => 0);
+
   // Move the Zoom / Google meeting when the time or title changed (it was made for the old ones).
   const timeChanged = (data.startAt && new Date(data.startAt).getTime() !== event.startAt.getTime())
     || (data.endAt && new Date(data.endAt).getTime() !== event.endAt.getTime())
@@ -378,27 +400,45 @@ export async function GET(request: NextRequest, props: { params: Promise<{ event
     return NextResponse.json({ success: false, error: "Not authorized for this event" }, { status: 403 });
   }
 
-  const event = await prisma.event.findUnique({
-    where: { id: params.eventId, deletedAt: null },
-    include: {
-      speakers: { orderBy: { sortOrder: "asc" } },
-      agendaItems: { orderBy: { sortOrder: "asc" } },
-      ticketTiers: { orderBy: { createdAt: "asc" } },
-      customQuestions: { where: { hiddenAt: null }, orderBy: { sortOrder: "asc" } },
-      // Attendees' names and emails only for roles that may see attendees (not Check-in).
-      ...(hasPermission(session.role, "registrations.view")
-        ? { registrations: { where: { deletedAt: null }, orderBy: { registeredAt: "desc" as const }, select: { id: true, guestName: true, guestEmail: true, guestOccupation: true, status: true, registeredAt: true } } }
-        : {}),
-    },
-  });
+  const canEdit = hasPermission(session.role, "events.edit");
+  const canViewAttendees = hasPermission(session.role, "registrations.view");
+  // Attendees' names and emails only for roles that may see attendees (not Check-in).
+  const registrations = canViewAttendees
+    ? { registrations: { where: { deletedAt: null }, orderBy: { registeredAt: "desc" as const }, select: { id: true, guestName: true, guestEmail: true, guestOccupation: true, status: true, registeredAt: true } } }
+    : {};
+  // Someone outside this workspace gets the same "not found" as for an id that doesn't exist.
+  const where = { id: params.eventId, organizerId: session.organizerId, deletedAt: null };
+
+  const event = canEdit
+    ? await prisma.event.findFirst({
+        where,
+        include: {
+          speakers: { orderBy: { sortOrder: "asc" } },
+          agendaItems: { orderBy: { sortOrder: "asc" } },
+          ticketTiers: { orderBy: { createdAt: "asc" } },
+          customQuestions: { where: { hiddenAt: null }, orderBy: { sortOrder: "asc" } },
+          ...registrations,
+        },
+      })
+    // Staff and Check-in see a read-only summary, so they get only what that screen shows: no meeting link,
+    // certificate or follow-up settings, registration questions or payment details.
+    : await prisma.event.findFirst({
+        where,
+        select: {
+          id: true, slug: true, title: true, subtitle: true, description: true, category: true, format: true, status: true,
+          startAt: true, endAt: true, timezone: true, venueName: true, address: true, coverImageUrl: true,
+          capacity: true, registrationCount: true,
+          speakers: { orderBy: { sortOrder: "asc" }, select: { id: true, name: true, title: true, company: true } },
+          agendaItems: { orderBy: { sortOrder: "asc" }, select: { id: true, title: true, dayNumber: true, startTime: true, endTime: true, track: true } },
+          ticketTiers: { orderBy: { createdAt: "asc" }, select: { id: true, name: true, priceCents: true, quantity: true, soldCount: true } },
+          ...registrations,
+        },
+      });
 
   if (!event) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
-  if (event.organizerId !== session.organizerId) return NextResponse.json({ success: false, error: "Not authorized" }, { status: 403 });
 
   // Staff and Check-in can look but not change: the page shows a read-only view (saving is refused anyway).
   return NextResponse.json({
-    success: true, event,
-    canEdit: hasPermission(session.role, "events.edit"),
-    canViewAttendees: hasPermission(session.role, "registrations.view"),
+    success: true, event, canEdit, canViewAttendees,
   });
 }

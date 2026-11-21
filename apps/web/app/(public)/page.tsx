@@ -1,3 +1,4 @@
+import { eventInstant, cleanTimeZone } from '@/lib/events/zoned-time';
 import { salaryText } from '@/lib/jobs/format';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -28,7 +29,6 @@ import {
   getActiveHeroSlotsDirect,
   getFeaturedToolsDirect,
   getPriorityToolsDirect,
-  getRecentMilestonesDirect,
   getLatestJobsDirect,
   getUpcomingEventsDirect,
 } from '@/lib/db';
@@ -49,7 +49,6 @@ import {
 // Dynamic imports for heavy client components — reduces initial JS bundle
 import { FeaturedPartnerRotator, SponsorStrip, HeroCarousel } from '@/components/ClientOnly';
 import ForYouSection from '@/components/ForYouSection';
-import { MilestoneIcon } from '@/components/milestones/MilestoneIcon';
 
 const formatDate = (isoString: string) =>
   new Date(isoString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -77,7 +76,6 @@ export default async function HomePage() {
     fetchedHeroSlots,
     fetchedFeaturedTools,
     fetchedPriorityTools,
-    fetchedMilestones,
     fetchedJobs,
     fetchedEvents,
   ] = await Promise.all([
@@ -97,7 +95,6 @@ export default async function HomePage() {
     getActiveHeroSlotsDirect(),
     getFeaturedToolsDirect(),
     getPriorityToolsDirect(12),
-    getRecentMilestonesDirect(6),
     getLatestJobsDirect(6),
     getUpcomingEventsDirect(4),
   ]);
@@ -747,9 +744,11 @@ export default async function HomePage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {fetchedEvents.map((event: any) => {
-              const start = new Date(event.startAt);
-              const month = start.toLocaleDateString('en-US', { month: 'short' });
-              const day = start.getDate();
+              // The date in the event's own time zone: this page is built on a server whose clock is UTC.
+              const start = eventInstant(event.startAt);
+              const timeZone = cleanTimeZone(event.timezone);
+              const month = start.toLocaleDateString('en-US', { month: 'short', timeZone });
+              const day = start.toLocaleDateString('en-US', { day: 'numeric', timeZone });
               return (
                 <Link
                   key={event.id}
@@ -917,46 +916,7 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
-      {/* ╔════════════════════════════════════════════╗
-          ║  10b. STARTUP MILESTONES                    ║
-          ╚════════════════════════════════════════════╝ */}
-      {fetchedMilestones && fetchedMilestones.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 cv-auto">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="font-sora font-extrabold text-lg sm:text-xl text-navy dark:text-white">
-                Startup Milestones
-              </h2>
-              <p className="text-gray-500 dark:text-gray-400 font-jakarta text-xs sm:text-sm mt-0.5">
-                Recent achievements from the ecosystem
-              </p>
-            </div>
-            <Link href="/milestones" className="text-brand font-semibold text-xs sm:text-sm hover:underline flex items-center gap-1 font-jakarta" aria-label="View all startup milestones">
-              View All <ChevronRight className="w-4 h-4" />
-            </Link>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {fetchedMilestones.map((m: any) => {
-              return (
-                <Link key={m.id} href={`/startups/${m.startupSlug}`} className="card p-4 hover:border-brand/20 transition-colors group">
-                  <div className="flex items-start gap-3">
-                    <span className="w-9 h-9 rounded-lg bg-gray-50 dark:bg-gray-800 flex items-center justify-center shrink-0"><MilestoneIcon type={m.type} className="w-[18px] h-[18px]" /></span>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-sora font-bold text-sm text-navy dark:text-white group-hover:text-brand transition-colors truncate">{m.title}</p>
-                      <p className="text-xs text-brand font-jakarta font-medium mt-0.5">{m.startupName}</p>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-gray-400 font-jakarta">
-                        <span>{new Date(m.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                        {m.amount && <span className="font-medium text-gray-600 dark:text-gray-300">{m.currency} {Number(m.amount).toLocaleString()}</span>}
-                        {m.verificationStatus === 'PLATFORM_VERIFIED' && <span className="text-green-500">✓ Verified</span>}
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-      )}
+      {/* Milestones are shown on each startup's own profile only, not here. */}
 
       {/* ╔════════════════════════════════════════════╗
           ║  11. CTA — Founders / Organizers / Employers║

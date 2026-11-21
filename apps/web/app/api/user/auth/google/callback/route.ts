@@ -1,5 +1,7 @@
 import { jwtSecret } from '@/lib/jwt-secret';
+import { siteOnboarding } from '@/lib/auth/site-onboarding';
 import { NextRequest, NextResponse } from 'next/server';
+import { clearOAuthState, readOAuthState } from '@/lib/auth/oauth-state';
 import { logFounderSignIn } from '@/lib/founder/activity';
 import { secondFactorChallenge } from '@/lib/auth/second-factor';
 import { clientIp } from '@/lib/client-ip';
@@ -32,7 +34,6 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const code = searchParams.get('code');
-    const state = searchParams.get('state') || '/profile';
     const error = searchParams.get('error');
 
     if (error) {
@@ -41,6 +42,12 @@ export async function GET(request: NextRequest) {
 
     if (!code) {
       return NextResponse.redirect(new URL('/?error=oauth_failed', request.url));
+    }
+
+    // The answer must belong to a sign-in this browser started (see lib/auth/oauth-state.ts).
+    const state = readOAuthState(request, '/profile');
+    if (!state) {
+      return clearOAuthState(NextResponse.redirect(new URL('/auth/login?error=oauth_state', request.url)));
     }
 
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
@@ -140,6 +147,8 @@ export async function GET(request: NextRequest) {
     // Applications sent with this address before they had an account are theirs from this moment (Google proved it).
     await claimApplications({ id: user.id, email: String(user.email).toLowerCase(), name: user.name, emailVerified: true }).catch(() => 0);
 
+    // A founder who finished founder onboarding isn't asked the site's onboarding questions again.
+    user.onboardingCompleted = (await siteOnboarding(user as { id: string; email: string; onboardingCompleted?: boolean })).onboardingCompleted;
     const sessionId = generateId();
     const token = await new SignJWT({
       userId: user.id,
@@ -186,7 +195,7 @@ export async function GET(request: NextRequest) {
       path: '/',
     });
 
-    return response;
+    return clearOAuthState(response);
   } catch (error) {
     console.error('Google OAuth callback error:', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.redirect(new URL('/?error=oauth_error', request.url));

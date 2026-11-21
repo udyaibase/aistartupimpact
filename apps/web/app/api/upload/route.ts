@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { looksLikeImage } from '@/lib/media/image-signature';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getFounderSession } from '@/lib/founder-auth';
 import { apiRateLimit, getClientIdentifier, checkRateLimit } from '@/lib/rate-limit';
@@ -69,11 +70,16 @@ export async function POST(request: NextRequest) {
     const timestamp = Date.now();
     const randomString = Math.random().toString(36).substring(2, 15);
     const extension = ALLOWED_MIME[file.type];
-    const filename = `${type || 'upload'}/${session.userId}/${timestamp}-${randomString}.${extension}`;
+    const folder = typeof type === 'string' && /^[a-z][a-z0-9-]{0,40}$/.test(type) ? type : 'upload'; // a plain folder name only
+    const filename = `${folder}/${session.userId}/${timestamp}-${randomString}.${extension}`;
 
     // Convert file to buffer
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
+    // The declared type is only a label: check the file's first bytes really are that kind of image.
+    if (!looksLikeImage(buffer, file.type)) {
+      return NextResponse.json({ error: 'That file isn’t a valid image. Upload a JPEG, PNG, WebP or GIF.' }, { status: 400 });
+    }
 
     // Upload to R2
     const command = new PutObjectCommand({

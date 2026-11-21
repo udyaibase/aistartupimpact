@@ -1,3 +1,4 @@
+import { milestoneAmount } from '@/lib/milestones/amount';
 import { salaryText } from '@/lib/jobs/format';
 import { articlePath } from '@/lib/seo';
 import Link from 'next/link';
@@ -106,7 +107,7 @@ const getStartup = cache(async (slug: string) => {
         SELECT title, slug, type::text AS type, "publishedAt"::text AS "publishedAt"
         FROM "Article" a
         WHERE status = 'PUBLISHED' AND "deletedAt" IS NULL
-          AND type NOT IN ('STORY', 'STARTUP_UPDATE')
+          AND type NOT IN ('STORY', 'FOUNDER_STORY', 'STARTUP_UPDATE') -- stories and updates have their own boxes
           AND ("startupId" = ${s.id}
             OR EXISTS (SELECT 1 FROM "ArticleStartupMention" m WHERE m."articleId" = a.id AND m."startupId" = ${s.id})
             OR EXISTS (SELECT 1 FROM "ArticleToolMention" m JOIN "AiTool" t ON t.id = m."toolId" WHERE m."articleId" = a.id AND t."startupId" = ${s.id}))
@@ -117,7 +118,7 @@ const getStartup = cache(async (slug: string) => {
         SELECT title, slug, excerpt, "publishedAt"::text AS "publishedAt"
         FROM "Article" a
         WHERE status = 'PUBLISHED' AND "deletedAt" IS NULL
-          AND type = 'STORY'
+          AND type IN ('STORY', 'FOUNDER_STORY') -- our own stories about them, and the founder's stories (shown on Founder Stories too)
           AND ("startupId" = ${s.id}
             OR EXISTS (SELECT 1 FROM "ArticleStartupMention" m WHERE m."articleId" = a.id AND m."startupId" = ${s.id})
             OR EXISTS (SELECT 1 FROM "ArticleToolMention" m JOIN "AiTool" t ON t.id = m."toolId" WHERE m."articleId" = a.id AND t."startupId" = ${s.id}))
@@ -803,7 +804,7 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
               </h2>
               <div className="space-y-3">
                 {startup.startupUpdates.map((u: any) => (
-                  <Link key={u.id} href={`/news/${u.slug}`} className="block p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
+                  <Link key={u.id} href={`/stories/${u.slug}`} className="block p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
                     <h3 className="font-sora font-bold text-xs text-navy dark:text-white mb-1">{u.title}</h3>
                     {u.contentText && <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta line-clamp-2">{u.contentText.slice(0, 200)}</p>}
                     <span className="text-xs text-gray-400 font-jakarta mt-1 block">
@@ -811,42 +812,6 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
                     </span>
                   </Link>
                 ))}
-              </div>
-            </div>
-          )}
-
-          {/* Milestones */}
-          {startup.startupMilestones?.length > 0 && (
-            <div className="card p-5 sm:p-6">
-              <h2 className="section-title mb-4 flex items-center gap-2">
-                <Star className="w-4 h-4 text-brand" /> Milestones
-              </h2>
-              <div className="relative">
-                <div className="absolute left-[19px] top-0 bottom-0 w-px bg-gray-200 dark:bg-gray-700" />
-                <div className="space-y-4">
-                  {startup.startupMilestones.map((m: any) => {
-                    return (
-                      <div key={m.id} className="flex items-start gap-3 relative">
-                        <div className="w-10 h-10 rounded-full bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 flex items-center justify-center text-lg shrink-0 z-[1]">
-                          <MilestoneIcon type={m.type} className="w-[18px] h-[18px]" />
-                        </div>
-                        <div className="pt-1.5">
-                          <h3 className="font-sora font-bold text-xs text-navy dark:text-white flex items-center gap-1.5">
-                            {m.title}
-                            {m.verificationStatus === 'PLATFORM_VERIFIED' && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 font-jakarta">Verified</span>
-                            )}
-                          </h3>
-                          {m.description && <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta mt-0.5">{m.description}</p>}
-                          <div className="flex items-center gap-2 mt-1 text-xs text-gray-400 font-jakarta">
-                            <span>{new Date(m.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                            {m.amount && <span>{m.currency} {Number(m.amount).toLocaleString()}</span>}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
               </div>
             </div>
           )}
@@ -1125,6 +1090,36 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
             claimedBy={startup.claimedBy ?? null}
           />
           
+          {/* Milestones: a short timeline in the side column, next to the story of the company on the left. */}
+          {startup.startupMilestones?.length > 0 && (
+            <div className="card p-5">
+              <h2 className="font-sora font-bold text-xs text-navy dark:text-white mb-4 flex items-center gap-2">
+                <Star className="w-4 h-4 text-brand" aria-hidden /> Milestones
+              </h2>
+              <ol className="relative space-y-4">
+                <span className="absolute left-[15px] top-1 bottom-1 w-px bg-gray-200 dark:bg-gray-700" aria-hidden />
+                {startup.startupMilestones.map((m: any) => (
+                  <li key={m.id} className="flex items-start gap-3 relative">
+                    <span className="w-8 h-8 rounded-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 flex items-center justify-center shrink-0 z-[1]">
+                      <MilestoneIcon type={m.type} className="w-4 h-4" />
+                    </span>
+                    <div className="min-w-0 pt-0.5">
+                      <h3 className="font-sora font-bold text-xs leading-snug text-navy dark:text-white">{m.title}</h3>
+                      {m.description && <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta mt-0.5 line-clamp-3">{m.description}</p>}
+                      <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-xs text-gray-500 dark:text-gray-400 font-jakarta">
+                        <span>{new Date(m.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                        {m.amount && <span className="font-semibold text-gray-700 dark:text-gray-200">{milestoneAmount(m.amount, m.currency)}</span>}
+                        {m.verificationStatus === 'PLATFORM_VERIFIED' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Verified</span>
+                        )}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
           {/* EmbedBadge temporarily hidden - can be shown in future */}
           {/* <EmbedBadge urlSlug={startup.slug} type="startups" /> */}
 
@@ -1132,7 +1127,7 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
           {/* Stories */}
           {startup.founderStories?.length > 0 && (
             <div className="card p-5">
-              <h4 className="font-sora font-bold text-xs text-navy dark:text-white mb-4">Stories</h4>
+              <h4 className="font-sora font-bold text-xs text-navy dark:text-white mb-4">Founder Stories</h4>
               <div className="space-y-3">
                 {startup.founderStories.map((story: any) => (
                   <Link key={story.slug} href={`/stories/${story.slug}`} className="group block">

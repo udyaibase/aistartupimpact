@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
-import { requireFounderAuth } from '@/lib/founder-auth';
+import { founderApi, tooMany } from '@/lib/founder/api-session';
+import { founderWriteRateLimit } from '@/lib/rate-limit';
 import { logFounderActivity } from '@/lib/founder/activity';
 
 export const dynamic = 'force-dynamic';
@@ -10,7 +11,9 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await requireFounderAuth();
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     // Get settings
     const settings = await sql`
@@ -69,7 +72,11 @@ export async function GET(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
   try {
-    const session = await requireFounderAuth();
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
+    const limited = await tooMany(founderWriteRateLimit, `settings:${session.userId}`);
+    if (limited) return limited;
     const body = await request.json();
 
     // Convert camelCase to snake_case
@@ -109,10 +116,6 @@ export async function PATCH(request: NextRequest) {
         )
       `;
     } else {
-      // Build dynamic update query
-      const setClauses = Object.keys(updates).map(key => `${key} = $${key}`).join(', ');
-      const values = { ...updates, userId: session.userId };
-      
       // Update settings
       await sql`
         UPDATE founder_settings

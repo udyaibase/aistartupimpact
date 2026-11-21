@@ -392,6 +392,19 @@ export function founderTeamOtpHtml(action: string, code: string): string {
   <p style="color: #6b7280; font-size: 13px;">This code expires in 10 minutes. If you didn't request this, ignore this email.</p>`);
 }
 
+/** Code to confirm an account action (deactivate, delete) for someone who signs in without a password. */
+export function accountActionOtpHtml(action: string, code: string): string {
+  return eventsWrapper(`
+  <p style="color: #374151; font-size: 16px; line-height: 1.6;">Security code</p>
+  <p style="color: #374151; font-size: 14px; line-height: 1.6;">
+    You asked to <strong>${action}</strong>. Enter this code to confirm:
+  </p>
+  <div style="margin: 24px 0; text-align: center;">
+    <div style="display: inline-block; padding: 16px 32px; background: #f3f4f6; border-radius: 12px; letter-spacing: 8px; font-size: 32px; font-weight: 700; color: #111827;">${code}</div>
+  </div>
+  <p style="color: #6b7280; font-size: 13px;">This code expires in 10 minutes. If this wasn't you, don't share the code: change how you sign in and contact support.</p>`);
+}
+
 // ── Event: Registration Confirmation ─────────────────────────────────────
 
 export interface EventEmailData {
@@ -406,6 +419,10 @@ export interface EventEmailData {
   mapUrl?: string;
   format: string;
   qrToken: string;
+  /** "I didn't register" page for this registration. */
+  notMeUrl?: string;
+  /** Where to join an online or hybrid event. Only ever sent to confirmed attendees. */
+  meetingLink?: string;
   googleCalendarUrl: string;
   startAtIso?: string;
   endAtIso?: string;
@@ -417,23 +434,30 @@ export function eventRegistrationHtml(name: string, data: EventEmailData): strin
   const checkInUrl = `${siteUrl}/events/check-in?token=${data.qrToken}`;
   const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(checkInUrl)}`;
 
+  // https links only, and escaped: the host typed this.
+  const joinUrl = data.meetingLink && /^https:\/\/\S+$/i.test(data.meetingLink) ? esc(data.meetingLink) : '';
+  const joinHtml = joinUrl
+    ? `<p style="color: #374151; font-size: 14px; margin: 12px 0 0 0;"><strong>Join online:</strong> <a href="${joinUrl}" style="color: #6366f1;">${joinUrl}</a></p>
+       <p style="color: #9ca3af; font-size: 12px; margin: 4px 0 0 0;">This link is for registered attendees. Please don't share it.</p>`
+    : '';
   const locationHtml = data.format === 'VIRTUAL'
-    ? `<p style="color: #6b7280; font-size: 14px;">Location: Virtual Event — link will be shared before the event</p>`
+    ? `<p style="color: #6b7280; font-size: 14px;">Location: Online${joinUrl ? '' : ' — the host will send the link before the event'}</p>`
     : data.venueName
-    ? `<p style="color: #6b7280; font-size: 14px;">Location: ${data.venueName}${data.address ? `, ${data.address}` : ''}${data.mapUrl && /^https?:\/\//i.test(data.mapUrl) ? ` · <a href="${data.mapUrl.replace(/"/g, '&quot;')}" style="color: #6366f1;">Open in Maps</a>` : ''}</p>`
+    ? `<p style="color: #6b7280; font-size: 14px;">Location: ${esc(data.venueName)}${data.address ? `, ${esc(data.address)}` : ''}${data.mapUrl && /^https?:\/\//i.test(data.mapUrl) ? ` · <a href="${data.mapUrl.replace(/"/g, '&quot;')}" style="color: #6366f1;">Open in Maps</a>` : ''}</p>`
     : '';
 
   return eventsWrapper(`
-  <p style="color: #374151; font-size: 16px; line-height: 1.6;">Hi ${name},</p>
+  <p style="color: #374151; font-size: 16px; line-height: 1.6;">Hi ${esc(name)},</p>
   <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
-    You're confirmed for <strong>${data.eventTitle}</strong>! Here are your event details:
+    You're confirmed for <strong>${esc(data.eventTitle)}</strong>! Here are your event details:
   </p>
 
   <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; margin-bottom: 24px;">
-    <h2 style="color: #111827; font-size: 18px; font-weight: 700; margin: 0 0 12px 0;">${data.eventTitle}</h2>
+    <h2 style="color: #111827; font-size: 18px; font-weight: 700; margin: 0 0 12px 0;">${esc(data.eventTitle)}</h2>
     <p style="color: #6b7280; font-size: 14px; margin: 4px 0;">Date: ${data.eventDate}</p>
     <p style="color: #6b7280; font-size: 14px; margin: 4px 0;">Time: ${data.eventTime} (${data.eventTimezone})</p>
     ${locationHtml}
+    ${joinHtml}
   </div>
 
   <div style="text-align: center; margin: 32px 0; padding: 24px; background: #ffffff; border: 2px dashed #e5e7eb; border-radius: 12px;">
@@ -447,7 +471,8 @@ export function eventRegistrationHtml(name: string, data: EventEmailData): strin
     ${secondaryButton(eventUrl, 'View Event')}
   </div>
 
-  <p style="color: #6b7280; font-size: 13px; line-height: 1.5;">See you there!</p>`);
+  <p style="color: #6b7280; font-size: 13px; line-height: 1.5;">See you there!</p>${data.notMeUrl ? `
+  <p style="color: #9ca3af; font-size: 12px; line-height: 1.5; margin-top: 24px;">Didn't register for this? <a href="${data.notMeUrl}" style="color: #9ca3af; text-decoration: underline;">Tell us</a> and we'll cancel it.</p>` : ''}`);
 }
 
 // ── Event: Newsletter Welcome ────────────────────────────────────────────

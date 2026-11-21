@@ -47,7 +47,7 @@ export default function ScheduleView({ sessions, tracks, event }: {
     .sort((a, b) => a.dayNumber - b.dayNumber || a.startTime.localeCompare(b.startTime));
   const mySessions = sessions.filter((s) => mine.includes(s.id));
 
-  const chip = (active: boolean) => `h-8 px-3 rounded-[8px] text-[13px] font-semibold transition-colors ${active ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900' : 'border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-400'}`;
+  const chip = (active: boolean) => `h-11 md:h-8 px-3 rounded-[8px] text-[13px] font-semibold transition-colors ${active ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900' : 'border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-400'}`;
 
   return (
     <div>
@@ -106,12 +106,12 @@ export default function ScheduleView({ sessions, tracks, event }: {
                 </div>
                 <div className="flex flex-col items-center gap-1 shrink-0">
                   <button type="button" onClick={() => toggle(s.id)} aria-pressed={starred} aria-label={starred ? `Remove ${s.title} from my schedule` : `Add ${s.title} to my schedule`}
-                    className="w-9 h-9 inline-flex items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-gray-800">
+                    className="w-11 h-11 md:w-9 md:h-9 inline-flex items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-gray-800">
                     <Star className={`w-4 h-4 ${starred ? 'fill-amber-400 text-amber-400' : 'text-gray-400'}`} aria-hidden />
                   </button>
                   {!event.ended && (
                     <button type="button" onClick={() => downloadIcs(ics([s]), `${event.slug}-${s.id.slice(0, 6)}.ics`)} aria-label={`Add ${s.title} to calendar`}
-                      className="w-9 h-9 inline-flex items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
+                      className="w-11 h-11 md:w-9 md:h-9 inline-flex items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
                       <CalendarPlus className="w-4 h-4" aria-hidden />
                     </button>
                   )}

@@ -10,6 +10,8 @@ import PublishedModal from "@/components/organizer/embed/PublishedModal";
 import RestoreEventButton from "./RestoreEventButton";
 import { RESTORE_DAYS } from "@/lib/events/restore";
 
+export const metadata = { title: 'Events' };
+
 export const dynamic = "force-dynamic";
 
 export default async function OrganizerEventsPage({
@@ -125,7 +127,7 @@ export default async function OrganizerEventsPage({
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-500 font-jakarta">
                     <span className="flex items-center gap-1">
                       <Calendar className="w-3 h-3" />
-                      {new Date(event.startAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                      {new Date(event.startAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}
                     </span>
                     {event.venueName && (
                       <span className="flex items-center gap-1 min-w-0 max-w-[12rem] truncate"><MapPin className="w-3 h-3 shrink-0" /><span className="truncate">{event.venueName}</span></span>
@@ -154,8 +156,8 @@ export default async function OrganizerEventsPage({
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-gray-700 dark:text-gray-200">{e.title}</p>
                   <p className="text-xs text-gray-500 font-jakarta">
-                    Deleted {e.deletedAt!.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} · restorable until{" "}
-                    {new Date(e.deletedAt!.getTime() + RESTORE_DAYS * 864e5).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                    Deleted {e.deletedAt!.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" })} · restorable until{" "}
+                    {new Date(e.deletedAt!.getTime() + RESTORE_DAYS * 864e5).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" })}
                   </p>
                 </div>
                 <RestoreEventButton eventId={e.id} title={e.title} />

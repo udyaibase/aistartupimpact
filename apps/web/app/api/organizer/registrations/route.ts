@@ -24,6 +24,11 @@ export async function GET(request: NextRequest) {
   const search = (q.get("q") || "").trim().slice(0, 100);
   if (eventId && !canAccessEvent(session, eventId)) return NextResponse.json({ success: false, error: "Not authorized for this event" }, { status: 403 });
 
+  // An event outside this workspace is "not found", not an empty list.
+  if (eventId && !(await prisma.event.findFirst({ where: { id: eventId, organizerId: session.organizerId }, select: { id: true } }))) {
+    return NextResponse.json({ success: false, error: "Event not found" }, { status: 404 });
+  }
+
   const scope = {
     deletedAt: null,
     event: { ...eventScope(session), deletedAt: null },

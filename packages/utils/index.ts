@@ -24,6 +24,7 @@ export {
   teamInviteHtml,
   founderTeamInviteHtml,
   founderTeamOtpHtml,
+  accountActionOtpHtml,
   eventRegistrationHtml,
   eventNewsletterWelcomeHtml,
   eventCancellationHtml,

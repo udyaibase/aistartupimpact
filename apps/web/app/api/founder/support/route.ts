@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { apiRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
-import { requireFounderAuth } from '@/lib/founder-auth';
+import { founderApi } from '@/lib/founder/api-session';
 import { createTicket, getTicketsForUser } from '@/lib/support-tickets';
 import { sql } from '@/lib/db';
 import { supportTicketSchema, validateInput, sanitizeText } from '@/lib/validation';
@@ -9,7 +9,9 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await requireFounderAuth();
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
@@ -29,7 +31,9 @@ export async function POST(request: NextRequest) {
   if (!withinLimit) return NextResponse.json({ success: false, error: 'Too many requests. Please try again later.' }, { status: 429 });
 
   try {
-    const session = await requireFounderAuth();
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
     const body = await request.json();
     const validation = validateInput(supportTicketSchema, body);
     if (!validation.success) {

@@ -88,6 +88,62 @@ export const accountCodeRateLimit = redis ? new Ratelimit({
   prefix: "ratelimit:acctcode",
 }) : null;
 
+/** Founder portal writes that had no limit of their own (settings, notifications, URL changes), per founder. */
+export const founderWriteRateLimit = redis ? new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(60, "1 m"),
+  analytics: false,
+  prefix: "ratelimit:founderwrite",
+}) : null;
+
+/** Host portal writes that had no limit of their own (events, series, widgets, team, profile, billing details), per person. */
+export const organizerWriteRateLimit = redis ? new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(90, "1 m"),
+  analytics: false,
+  prefix: "ratelimit:organizerwrite",
+}) : null;
+
+/** Re-sending a ticket when someone registers an email that is already registered, per event and email. */
+export const repeatRegistrationEmailRateLimit = redis ? new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(2, "1 d"),
+  analytics: false,
+  prefix: "ratelimit:repeatreg",
+}) : null;
+
+/** Saving, publishing or deleting updates, stories and milestones, per founder. */
+export const contentWriteRateLimit = redis ? new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(30, "1 h"),
+  analytics: false,
+  prefix: "ratelimit:foundercontent",
+}) : null;
+
+/** Saving a draft, including the story editor's autosave (about one every 20 seconds while writing), per founder. */
+export const draftSaveRateLimit = redis ? new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(240, "1 h"),
+  analytics: false,
+  prefix: "ratelimit:founderdraft",
+}) : null;
+
+/** DNS ownership checks for a startup or tool, per founder. Each one makes outside DNS lookups. */
+export const dnsCheckRateLimit = redis ? new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(6, "1 m"),
+  analytics: false,
+  prefix: "ratelimit:dnscheck",
+}) : null;
+
+/** Using an emailed link (reset password, verify email), per network. Own counter, separate from sign-in attempts. */
+export const emailLinkRateLimit = redis ? new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(10, "15 m"),
+  analytics: false,
+  prefix: "ratelimit:emaillink",
+}) : null;
+
 /** Codes any one inbox may receive in an hour, from every account and purpose combined (stops inbox flooding). */
 export const recipientCodeRateLimit = redis ? new Ratelimit({
   redis,

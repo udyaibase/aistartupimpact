@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Bell, HelpCircle, Search } from "lucide-react";
+import { HelpCircle, Search } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { hasGuide, openGuide } from "./guide/GuideHost";
 import ProfileDropdown from "@/components/ProfileDropdown";
@@ -72,10 +72,6 @@ export default function OrganizerHeader({ organizer, access = OWNER_ACCESS }: Pr
             </button>
           )}
           <ThemeToggle />
-          <button className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md relative">
-            <Bell className="w-4 h-4" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-brand rounded-full" />
-          </button>
           <ProfileDropdown user={{ name: organizer.name, email: organizer.email, avatar: organizer.avatar }} />
         </div>
       </header>

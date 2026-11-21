@@ -5,7 +5,7 @@ import { sendAdminReviewAlert, sendSubmissionReceivedEmail } from '@/lib/founder
 import { prisma, readListingFields, saveListingEdit } from '@udyaibase/database';
 import { revalidatePath } from 'next/cache';
 import { validateInput } from '@/lib/validation';
-import { startupSubmissionSchema } from '@/lib/founder/listing-validation';
+import { startupSubmissionSchema, overFormLimit, STARTUP_TAGLINE_MAX } from '@/lib/founder/listing-validation';
 import { listingFieldLabel } from '@udyaibase/utils';
 import { listingAccess } from '@/lib/founder/listing-access';
 import { refreshPublicListing } from '@/lib/founder/refresh-listing';
@@ -112,6 +112,8 @@ export async function submitStartupAction(data: StartupSubmission): Promise<Subm
     const checked = validateInput(startupSubmissionSchema, data);
     if (!checked.success) return { success: false, error: checked.error };
     data = checked.data as unknown as StartupSubmission;
+    const taglineProblem = overFormLimit('Tagline', data.tagline, STARTUP_TAGLINE_MAX);
+    if (taglineProblem) return { success: false, error: taglineProblem };
     // Headquarters only from the standard city list.
     if (data.headquartersCity) {
       const loc = await checkLocation({ city: data.headquartersCity });
@@ -342,6 +344,11 @@ export async function updateStartupAction(id: string, data: StartupSubmission) {
     if (!access?.canEdit) {
       return { success: false, error: 'Startup not found or you do not have permission to edit it' };
     }
+
+    // The form's limit applies to what the founder changes; a longer tagline already on the listing may stay.
+    const stored = await prisma.startup.findUnique({ where: { id }, select: { tagline: true } });
+    const taglineProblem = overFormLimit('Tagline', data.tagline, STARTUP_TAGLINE_MAX, stored?.tagline ?? null);
+    if (taglineProblem) return { success: false, error: taglineProblem };
 
     // Private contact email: not part of the public listing, so it saves straight away, once confirmed.
     if (data.contactEmail !== undefined) {

@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { lookupTransfer } from '@/app/founder/startups/transfer-actions';
 import TransferRespond from './TransferRespond';
 
+export const metadata = { title: 'Ownership transfer' };
+
 export const dynamic = 'force-dynamic';
 
 export default async function TransferPage(props: { params: Promise<{ token: string }> }) {

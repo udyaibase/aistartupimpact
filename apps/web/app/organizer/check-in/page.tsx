@@ -42,7 +42,8 @@ export default function CheckInPage() {
 
   useEffect(() => {
     fetch("/api/organizer/events").then(r => r.json()).then(d => {
-      if (d.success) setEvents(d.events || []);
+      // Only events with a door to work: drafts, events waiting for review and cancelled ones have no one to admit.
+      if (d.success) setEvents((d.events || []).filter((e: any) => e.status === "PUBLISHED" || e.status === "COMPLETED"));
     });
   }, []);
 
@@ -231,7 +232,7 @@ export default function CheckInPage() {
     // A list to pick from isn't a scan yet.
     if (d.status === "CHOOSE") { setLoading(false); return; }
     setStats(s => ({ ...s, scans: s.scans + 1 }));
-    if (d.attendee) setRecentScans(prev => [{ ...d.attendee, scanStatus: d.status, offline: !!d.offline, time: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) }, ...prev].slice(0, 20));
+    if (d.attendee) setRecentScans(prev => [{ ...d.attendee, scanStatus: d.status, offline: !!d.offline, time: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) }, ...prev.filter(s => s.id !== d.attendee.id)].slice(0, 20));
     if (d.success) { setStats(s => ({ ...s, checkedIn: s.checkedIn + 1 })); setInput(""); }
     setLoading(false);
   };

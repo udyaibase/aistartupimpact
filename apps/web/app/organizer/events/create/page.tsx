@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requirePermission, eventScope } from "@/lib/organizer-auth/require-permission";
 import OrganizerEventForm from "./OrganizerEventForm";
+export const metadata = { title: 'Create event' };
+
 export const dynamic = "force-dynamic";
 export default async function CreateEventPage({ searchParams }: { searchParams: Promise<{ template?: string }> }) {
   // The active workspace (their own, or a team they chose), with the same role rules as the API.

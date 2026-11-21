@@ -4,6 +4,8 @@ import { prisma } from "@udyaibase/database";
 import { sql } from "@/lib/db";
 import { BarChart3, Users, TrendingUp, Eye, Share2, Globe, Search, AtSign, Link2, CalendarDays, UserCheck } from "lucide-react";
 
+export const metadata = { title: 'Analytics' };
+
 export const dynamic = "force-dynamic";
 
 export default async function AnalyticsPage() {
@@ -176,7 +178,7 @@ export default async function AnalyticsPage() {
                   <div className="flex items-baseline justify-between gap-3">
                     <p className="text-sm font-semibold text-gray-900 dark:text-white font-jakarta truncate">{e.title}</p>
                     <p className="text-xs text-gray-400 font-jakarta shrink-0">
-                      {new Date(e.startAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                      {new Date(e.startAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" })}
                     </p>
                   </div>
                   <dl className="mt-2 grid grid-cols-3 gap-2 text-center">
@@ -220,7 +222,7 @@ export default async function AnalyticsPage() {
                     <tr key={e.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
                       <td className="py-2.5 pr-4 text-gray-700 dark:text-gray-300 truncate max-w-[200px] font-medium">{e.title}</td>
                       <td className="py-2.5 px-2 text-center text-gray-400">
-                        {new Date(e.startAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                        {new Date(e.startAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" })}
                       </td>
                       <td className="py-2.5 px-2 text-center text-navy dark:text-white font-semibold">{a.views}</td>
                       <td className="py-2.5 px-2 text-center text-green-600 font-semibold">{e.registrationCount}</td>

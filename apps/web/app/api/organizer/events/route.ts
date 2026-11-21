@@ -1,3 +1,4 @@
+import { hostWriteLimit } from '@/lib/organizer-auth/write-limit';
 import { NextRequest, NextResponse } from "next/server";
 import { createEventParts, hasPaidTickets, planAgenda } from "@/lib/events/new-event-parts";
 import { canSellTickets } from "@/lib/events/payouts";
@@ -25,6 +26,8 @@ export const dynamic = "force-dynamic";
 export async function POST(request: NextRequest) {
   const result = await requirePermission("events.create");
   if (result instanceof NextResponse) return result;
+  const limited = await hostWriteLimit(result.id);
+  if (limited) return limited;
   const session = result;
 
   try {

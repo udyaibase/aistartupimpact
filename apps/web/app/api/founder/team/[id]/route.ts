@@ -3,7 +3,7 @@ import { teamContext } from "@/lib/founder/access";
 import { logFounderActivity } from '@/lib/founder/activity';
 import { maskEmail } from '@/lib/mask';
 import { prisma } from "@udyaibase/database";
-import { getFounderSession } from "@/lib/founder-auth";
+import { founderApi } from "@/lib/founder/api-session";
 import { canChangeRole, canRemoveMember, canManageTeam } from "@/lib/founder-team-permissions";
 import { verifyOTP } from "@/lib/action-otp";
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from "@/lib/rate-limit";
@@ -15,8 +15,9 @@ const VALID_ROLES = ["ADMIN", "EDITOR", "VIEWER"] as const;
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getFounderSession();
-    if (!session) return NextResponse.json({ success: false }, { status: 401 });
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     const identifier = getClientIdentifier(request);
     const { success: rlOk } = await checkRateLimit(strictRateLimit, identifier);
@@ -62,8 +63,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getFounderSession();
-    if (!session) return NextResponse.json({ success: false }, { status: 401 });
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     const identifier = getClientIdentifier(request);
     const { success: rlOk } = await checkRateLimit(strictRateLimit, identifier);

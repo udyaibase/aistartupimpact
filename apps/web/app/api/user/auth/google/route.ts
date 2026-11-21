@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { startOAuthState } from '@/lib/auth/oauth-state';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +18,8 @@ export async function GET(request: NextRequest) {
   googleAuthUrl.searchParams.append('scope', 'openid email profile');
   googleAuthUrl.searchParams.append('access_type', 'offline');
   googleAuthUrl.searchParams.append('prompt', 'consent');
-  googleAuthUrl.searchParams.append('state', returnTo);
-
-  return NextResponse.redirect(googleAuthUrl.toString());
+  // The state is tied to this browser by a cookie, and checked when Google sends the person back.
+  const { state, attach } = startOAuthState(returnTo, '/profile');
+  googleAuthUrl.searchParams.append('state', state);
+  return attach(NextResponse.redirect(googleAuthUrl.toString()));
 }

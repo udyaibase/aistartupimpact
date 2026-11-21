@@ -6,6 +6,8 @@ import { founderAtStartupLimit, STARTUP_LIMIT_MESSAGE } from '@/lib/founder/limi
 import { emailMatchesDomain } from '@/lib/jobs/trust';
 import { emailVerificationDomain } from '@/lib/startups/listing-domain';
 
+export const metadata = { title: 'Add your startup' };
+
 export default async function NewStartupPage(props: { searchParams: Promise<{ created?: string }> }) {
   const session = await requireFounderAuth();
   const { created: createdId } = await props.searchParams;

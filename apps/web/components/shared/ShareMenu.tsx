@@ -86,7 +86,7 @@ export default function ShareMenu({
       ) : (
         <button
           onClick={handleClick}
-          className="w-full flex items-center justify-center gap-2 py-2 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-jakarta text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          className="w-full flex items-center justify-center gap-2 py-2 min-h-11 md:min-h-0 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-jakarta text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
         >
           {copied ? (
             <><Check className="w-3.5 h-3.5 text-green-500" />Copied!</>

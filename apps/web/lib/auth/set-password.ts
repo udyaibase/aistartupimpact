@@ -1,4 +1,5 @@
 import { sql } from '@/lib/db';
+import { endAccountSessions } from '@/lib/auth/sessions';
 
 /**
  * Changes a person's password everywhere it's stored. One person can have several account records with the same
@@ -26,14 +27,7 @@ export async function setAccountPassword(
     RETURNING id, email, name, "onboardingCompleted"
   `;
 
-  if (opts.keepWebSessionId) {
-    await sql`DELETE FROM "WebUserSession" WHERE "webUserId" IN (SELECT id FROM "WebUser" WHERE email = ${address}) AND id != ${opts.keepWebSessionId}`;
-  } else {
-    await sql`DELETE FROM "WebUserSession" WHERE "webUserId" IN (SELECT id FROM "WebUser" WHERE email = ${address})`;
-  }
-  await sql`DELETE FROM "UnifiedSession" WHERE "userId" IN (SELECT id FROM "UnifiedUser" WHERE email = ${address})`;
-  await sql`DELETE FROM "EventOrganizerSession" WHERE "organizerId" IN (SELECT id FROM "EventOrganizer" WHERE lower(email) = ${address})`;
-  await sql`DELETE FROM "FounderSession" WHERE "userId" IN (SELECT id FROM "FounderUser" WHERE email = ${address})`;
+  await endAccountSessions(address, opts);
 
   if (founders.length === 0) return null;
   const f = founders[0];

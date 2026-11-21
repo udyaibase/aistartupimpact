@@ -17,6 +17,8 @@ interface PageProps {
   }>;
 }
 
+export const metadata = { title: 'Edit AI tool' };
+
 export default async function EditToolPage(props: PageProps) {
   const params = await props.params;
   const session = await requireFounderAuth();

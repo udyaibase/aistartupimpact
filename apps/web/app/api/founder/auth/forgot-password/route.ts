@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyTurnstileToken } from '@/lib/turnstile';
 import { prisma } from '@udyaibase/database';
 import { randomBytes } from 'crypto';
+import { hashResetToken } from '@/lib/employer/reset-token';
 import { authRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
     // Find user by email
     const user = await prisma.founderUser.findUnique({
       where: { email: email.toLowerCase() },
-      select: { id: true, name: true, email: true, authProvider: true },
+      select: { id: true, name: true, email: true },
     });
 
     // Always return success to prevent email enumeration
@@ -45,13 +46,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Don't allow password reset for Google OAuth users
-    if (user.authProvider === 'google') {
-      return NextResponse.json({
-        success: true,
-        message: 'If an account exists, a reset link has been sent.',
-      });
-    }
+    // An account that signs in with Google can set a password this way too: the emailed link proves the inbox is theirs.
 
     // Generate reset token (expires in 1 hour)
     const resetToken = randomBytes(32).toString('hex');
@@ -61,7 +56,7 @@ export async function POST(request: NextRequest) {
     await prisma.founderUser.update({
       where: { id: user.id },
       data: {
-        resetToken,
+        resetToken: hashResetToken(resetToken), // only a hash is kept: reading the table doesn't give a working link
         resetExpiry,
         updatedAt: new Date(),
       },

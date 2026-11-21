@@ -1,3 +1,4 @@
+import { hostWriteLimit } from '@/lib/organizer-auth/write-limit';
 import { NextRequest, NextResponse } from 'next/server';
 import { getOrganizerSession } from '@/lib/organizer-auth';
 import { addUserMessage } from '@/lib/support-tickets';
@@ -10,6 +11,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   try {
     const session = await getOrganizerSession();
     if (!session) return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
+    const limited = await hostWriteLimit(session.id);
+    if (limited) return limited;
 
     const reqBody = await request.json();
     const validation = validateInput(supportMessageSchema, { content: reqBody.body });

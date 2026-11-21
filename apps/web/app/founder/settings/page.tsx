@@ -2,6 +2,8 @@ import { requireFounderAuth } from '@/lib/founder-auth';
 import SecuritySection from './SecuritySection';
 import SettingsClient from './SettingsClient';
 
+export const metadata = { title: 'Settings' };
+
 export default async function SettingsPage() {
   const session = await requireFounderAuth();
 
