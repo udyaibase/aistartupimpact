@@ -31,6 +31,8 @@ export default function CheckInPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scanIntervalRef = useRef<any>(null);
+  // jsQR, loaded only on browsers without a built-in QR reader.
+  const jsQRRef = useRef<null | ((data: Uint8ClampedArray, width: number, height: number, options?: { inversionAttempts?: "dontInvert" | "onlyInvert" | "attemptBoth" | "invertFirst" }) => { data: string } | null)>(null);
   // Offline list for this event (kept on this device) and scans waiting to upload.
   const [roster, setRoster] = useState<Roster | null>(null);
   const [pending, setPending] = useState(0);
@@ -49,6 +51,17 @@ export default function CheckInPage() {
 
   // Camera QR scanning
   const startCamera = async () => {
+    // Say exactly why the camera can't start, and what to do, instead of one "denied" for every case.
+    const fail = (message: string) => { setResult({ status: "ERROR", message }); setMode("manual"); };
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      fail("This browser can't open the camera here. Open the check-in page in Chrome or Safari, or type the ticket code below.");
+      return;
+    }
+    // Safari (iPhone, iPad, Mac) has no built-in QR reader: load the small jsQR reader once, before the camera opens.
+    if (!("BarcodeDetector" in window) && !jsQRRef.current) {
+      try { jsQRRef.current = (await import("jsqr")).default; }
+      catch { fail("The QR reader couldn't load. Check your connection, then tap Camera again, or type the ticket code below."); return; }
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
       if (videoRef.current) {
@@ -59,8 +72,16 @@ export default function CheckInPage() {
         scanIntervalRef.current = setInterval(scanFrame, 500);
       }
     } catch (err) {
-      setResult({ status: "ERROR", message: "Camera access denied. Use manual input." });
-      setMode("manual");
+      const name = (err as DOMException)?.name;
+      if (name === "NotAllowedError" || name === "SecurityError") {
+        fail("Camera access is off for Udyaibase. Allow it in your phone's settings (for the browser or the installed app), then tap Camera again. You can also type the ticket code below.");
+      } else if (name === "NotFoundError" || name === "OverconstrainedError") {
+        fail("No camera was found on this device. Type the ticket code or search by name below.");
+      } else if (name === "NotReadableError" || name === "AbortError") {
+        fail("The camera is being used by another app. Close it, then tap Camera again.");
+      } else {
+        fail("The camera couldn't start. Tap Camera to try again, or type the ticket code below.");
+      }
     }
   };
 
@@ -77,26 +98,39 @@ export default function CheckInPage() {
     if (!videoRef.current || !canvasRef.current) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx || video.readyState !== video.HAVE_ENOUGH_DATA) return;
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0);
+    // At most 800px wide: plenty for a ticket QR, and keeps reading fast on older phones.
+    const scale = Math.min(1, 800 / (video.videoWidth || 800));
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const found = (code: string) => {
+      // Extract token from URL or use as-is
+      const token = parseScanValue(code);
+      if (token && token !== input) {
+        setInput(token);
+        doCheckIn(token);
+      }
+    };
+
+    // No built-in reader (Safari on iPhone and iPad): jsQR reads the same frame.
+    if (!("BarcodeDetector" in window)) {
+      const read = jsQRRef.current;
+      if (!read) return;
+      const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const hit = read(frame.data, frame.width, frame.height, { inversionAttempts: "dontInvert" });
+      if (hit?.data) found(hit.data);
+      return;
+    }
 
     // Use BarcodeDetector if available (Chrome 88+, mobile browsers)
-    if ("BarcodeDetector" in window) {
+    {
       const detector = new (window as any).BarcodeDetector({ formats: ["qr_code"] });
       detector.detect(canvas).then((barcodes: any[]) => {
-        if (barcodes.length > 0) {
-          const code = barcodes[0].rawValue;
-          // Extract token from URL or use as-is
-          const token = parseScanValue(code);
-          if (token && token !== input) {
-            setInput(token);
-            doCheckIn(token);
-          }
-        }
+        if (barcodes.length > 0) found(barcodes[0].rawValue);
       }).catch(() => {});
     }
   };
