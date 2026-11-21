@@ -289,62 +289,86 @@
   .dark .employer-portal { --brand-color: #DC2626; }
   .dark .employer-portal :is(.text-brand, .text-\[\#A50F15\]) { color: #F87171; }
 
-  /* ─── Employer portal controls (audited 2026-11-19) ───
+  /* ─── Employer and organizer portal controls (audited 2026-11-19; organizer 2026-11-21) ───
      Corners: buttons, inputs and dropdowns 10px; small chips and icon buttons (≤36px) 8px; cards 14px; pills round.
      This project's scale makes rounded-lg 12px and rounded-xl 16px, which had drifted onto controls; bring them to 10px. */
-  .employer-portal :is(button, a, input, select, textarea):is(.rounded-lg, .rounded-xl, .rounded-2xl),
+  :is(.employer-portal, .organizer-portal) :is(button, a, input, select, textarea):is(.rounded-lg, .rounded-xl, .rounded-2xl),
   .employer-portal .btn-brand,
-  .employer-portal .btn-brand-outline { border-radius: 10px; }
+  .organizer-portal .btn-brand,
+  .employer-portal .btn-brand-outline,
+  .organizer-portal .btn-brand-outline { border-radius: 10px; }
   @media (min-width: 640px) {
-    .employer-portal :is(.btn-brand, .btn-brand-outline) { min-height: 40px; padding-top: 0; padding-bottom: 0; }
+    :is(.employer-portal, .organizer-portal) :is(.btn-brand, .btn-brand-outline) { min-height: 40px; padding-top: 0; padding-bottom: 0; }
   }
 
   /* Checkboxes and radios: one portal style instead of the browser default. 18px, brand fill, white mark. */
   .employer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none),
-  .employer-portal input[type="radio"]:not(.sr-only):not(.appearance-none) {
+  .organizer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none),
+  .employer-portal input[type="radio"]:not(.sr-only):not(.appearance-none),
+  .organizer-portal input[type="radio"]:not(.sr-only):not(.appearance-none) {
     appearance: none; -webkit-appearance: none; margin: 0; flex-shrink: 0;
     width: 18px; height: 18px; cursor: pointer; vertical-align: middle;
     border: 1.5px solid #9CA3AF; background-color: #fff;
     background-repeat: no-repeat; background-position: center;
     transition: background-color .15s, border-color .15s, box-shadow .15s;
   }
-  .employer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none) { border-radius: 5px; }
-  .employer-portal input[type="radio"]:not(.sr-only):not(.appearance-none) { border-radius: 9999px; }
+  .employer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none),
+  .organizer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none) { border-radius: 5px; }
+  .employer-portal input[type="radio"]:not(.sr-only):not(.appearance-none),
+  .organizer-portal input[type="radio"]:not(.sr-only):not(.appearance-none) { border-radius: 9999px; }
   .employer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):hover:not(:disabled),
-  .employer-portal input[type="radio"]:not(.sr-only):not(.appearance-none):hover:not(:disabled) { border-color: var(--brand-color); }
-  .employer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):checked {
+  .organizer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):hover:not(:disabled),
+  .employer-portal input[type="radio"]:not(.sr-only):not(.appearance-none):hover:not(:disabled),
+  .organizer-portal input[type="radio"]:not(.sr-only):not(.appearance-none):hover:not(:disabled) { border-color: var(--brand-color); }
+  .employer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):checked,
+  .organizer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):checked {
     background-color: var(--brand-color); border-color: var(--brand-color);
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
     background-size: 12px;
   }
-  .employer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):indeterminate {
+  .employer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):indeterminate,
+  .organizer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):indeterminate {
     background-color: var(--brand-color); border-color: var(--brand-color);
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' stroke='white' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M4 8h8'/%3E%3C/svg%3E");
     background-size: 12px;
   }
-  .employer-portal input[type="radio"]:not(.sr-only):not(.appearance-none):checked {
+  .employer-portal input[type="radio"]:not(.sr-only):not(.appearance-none):checked,
+  .organizer-portal input[type="radio"]:not(.sr-only):not(.appearance-none):checked {
     border-color: var(--brand-color);
     background-image: radial-gradient(circle, var(--brand-color) 0 4.5px, transparent 5px);
   }
   .employer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):focus-visible,
-  .employer-portal input[type="radio"]:not(.sr-only):focus-visible { outline: 2px solid var(--brand-color); outline-offset: 2px; }
+  .organizer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):focus-visible,
+  .employer-portal input[type="radio"]:not(.sr-only):focus-visible,
+  .organizer-portal input[type="radio"]:not(.sr-only):focus-visible { outline: 2px solid var(--brand-color); outline-offset: 2px; }
   .employer-portal input[type="checkbox"]:disabled,
-  .employer-portal input[type="radio"]:disabled { opacity: .5; cursor: not-allowed; }
+  .organizer-portal input[type="checkbox"]:disabled,
+  .employer-portal input[type="radio"]:disabled,
+  .organizer-portal input[type="radio"]:disabled { opacity: .5; cursor: not-allowed; }
   .dark .employer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):not(:checked):not(:indeterminate),
-  .dark .employer-portal input[type="radio"]:not(.sr-only):not(.appearance-none) { background-color: #111827; border-color: #4B5563; }
+  .dark .organizer-portal input[type="checkbox"]:not([role="switch"]):not(.sr-only):not(.appearance-none):not(:checked):not(:indeterminate),
+  .dark .employer-portal input[type="radio"]:not(.sr-only):not(.appearance-none),
+  .dark .organizer-portal input[type="radio"]:not(.sr-only):not(.appearance-none) { background-color: #111827; border-color: #4B5563; }
 
   /* Dropdowns: one chevron, consistent padding, in place of the browser's default arrow. */
-  .employer-portal select:not([multiple]):not(.appearance-none) {
+  .employer-portal select:not([multiple]):not(.appearance-none),
+  .organizer-portal select:not([multiple]):not(.appearance-none) {
     appearance: none; -webkit-appearance: none; cursor: pointer;
     padding-right: 2.25rem;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%236B7280' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
     background-repeat: no-repeat; background-position: right .7rem center; background-size: 16px;
   }
-  .dark .employer-portal select:not([multiple]):not(.appearance-none) {
+  .dark .employer-portal select:not([multiple]):not(.appearance-none),
+  .dark .organizer-portal select:not([multiple]):not(.appearance-none) {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%239CA3AF' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
   }
-  .employer-portal select:disabled { cursor: not-allowed; opacity: .6; }
-  .dark .employer-portal select { color-scheme: dark; }   /* dark option list */
+  .employer-portal select:disabled,
+  .organizer-portal select:disabled { cursor: not-allowed; opacity: .6; }
+  .dark .employer-portal select,
+  .dark .organizer-portal select { color-scheme: dark; }   /* dark option list */
+
+  /* Organizer cards: rounded-xl/2xl (16/20px) on panels, down to the 14px cards the employer portal uses. */
+  .organizer-portal :is(div, section, article, form, li, aside, header, details):is(.rounded-xl, .rounded-2xl) { border-radius: 14px; }
 
   .portal-eyebrow {
     @apply font-jakarta text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400;
