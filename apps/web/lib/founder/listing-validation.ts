@@ -28,7 +28,8 @@ const webUrl = (label: string) => z.string().trim().max(2000, `${label} is too l
 const optionalWebUrl = (label: string) => z.union([z.literal(''), webUrl(label)]).optional().nullable();
 
 const text = (label: string, min: number, max: number) =>
-  z.string({ required_error: `${label} is required` }).trim()
+  // zod 4: one `error` option replaces required_error / invalid_type_error.
+  z.string({ error: (iss) => (iss.input === undefined ? `${label} is required` : `${label} must be text`) }).trim()
     .min(min, min === 1 ? `${label} is required` : `${label} must be at least ${min} characters`)
     .max(max, `${label} must be ${max.toLocaleString('en-IN')} characters or fewer`);
 const optionalText = (label: string, max: number) =>
@@ -38,7 +39,7 @@ const shortList = (label: string, items: number, length: number) =>
 
 const year = (label: string) => {
   const latest = new Date().getFullYear() + 1;
-  return z.number({ required_error: `${label} is required`, invalid_type_error: `${label} must be a year` }).int()
+  return z.number({ error: (iss) => (iss.input === undefined ? `${label} is required` : `${label} must be a year`) }).int()
     .min(1900, `${label} looks wrong`).max(latest, `${label} can’t be after ${latest}`);
 };
 const amount = (label: string) => z.number().min(0, `${label} can’t be negative`).max(1e15, `${label} looks too large`);
