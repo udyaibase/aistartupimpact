@@ -73,6 +73,25 @@ const fundingRounds = z.array(z.object({
   allInvestors: shortList('investors', 200, 200).optional(),
 }).passthrough()).max(100, 'You can add up to 100 funding rounds').optional();
 
+/**
+ * The limits the founder forms show. One place, so the counter on the form and the check on the server can't drift.
+ * A listing first written by our team may already be longer; see `overFormLimit`.
+ */
+export const STARTUP_TAGLINE_MAX = 60;
+export const TOOL_TAGLINE_MAX = 100;
+export const TOOL_DESCRIPTION_MAX = 1000;
+
+/**
+ * A message when text is over the form's limit, or null when it's fine. Text that is already stored and wasn't
+ * changed passes, so a founder editing another field isn't blocked by a long tagline they didn't write.
+ */
+export function overFormLimit(label: string, value: string | null | undefined, max: number, stored?: string | null): string | null {
+  const text = (value ?? '').trim();
+  if (text.length <= max) return null;
+  if (stored !== undefined && stored !== null && text === stored.trim()) return null;
+  return `${label} must be ${max.toLocaleString('en-IN')} characters or fewer`;
+}
+
 /** Startup descriptions are capped at 1,000 characters everywhere (founder portal and admin). */
 export const STARTUP_DESCRIPTION_MAX = 1000;
 

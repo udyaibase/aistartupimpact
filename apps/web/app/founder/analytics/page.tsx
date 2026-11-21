@@ -12,6 +12,8 @@ import {
   ArrowDown,
   Minus
 } from 'lucide-react';
+export const metadata = { title: 'Analytics' };
+
 export default async function AnalyticsPage() {
   const session = await requireFounderAuth();
   const ownerIds = await workspaceOwnerIds(session);

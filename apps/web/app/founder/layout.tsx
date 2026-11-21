@@ -23,18 +23,19 @@ export default async function FounderLayout({
     if (account && (account.status === 'SUSPENDED' || account.deactivatedAt)) redirect('/account/reactivate');
     redirect('/auth/login');
   }
-  const [profile] = await sql`SELECT avatar FROM "FounderUser" WHERE id = ${founderSession.userId} LIMIT 1`;
-  const session = { ...founderSession, avatar: profile?.avatar ?? null };
-
-  // Query unverified startups owned by the founder
-  const unverifiedStartups = await sql`
-    SELECT id, name, slug FROM "Startup"
-    WHERE "ownerId" = ${session.userId} AND "isVerified" = false AND "deletedAt" IS NULL
-  `;
-
-  const shell = await getFounderShell(session.userId, session.name, await workspaceOwnerIds(session)).catch(() => ({
-    workspaceName: session.name, logoUrl: null, startupSlug: null, verified: false, listings: [],
-  }));
+  // One round trip's worth of waiting instead of three in a row.
+  const [profileRows, unverifiedStartups, shell] = await Promise.all([
+    sql`SELECT avatar FROM "FounderUser" WHERE id = ${founderSession.userId} LIMIT 1`,
+    // Unverified startups owned by the founder, for the verification reminder.
+    sql`
+      SELECT id, name, slug FROM "Startup"
+      WHERE "ownerId" = ${founderSession.userId} AND "isVerified" = false AND "deletedAt" IS NULL
+    `,
+    workspaceOwnerIds(founderSession)
+      .then((ownerIds) => getFounderShell(founderSession.userId, founderSession.name, ownerIds))
+      .catch(() => ({ workspaceName: founderSession.name, logoUrl: null, startupSlug: null, verified: false, listings: [] })),
+  ]);
+  const session = { ...founderSession, avatar: profileRows[0]?.avatar ?? null };
 
   return (
     <SidebarProvider storageKey="founder-sidebar-collapsed">
@@ -48,7 +49,7 @@ export default async function FounderLayout({
         <div className="flex-1 flex flex-col overflow-hidden">
           <FounderHeader session={session} shell={shell} />
           <main className="relative flex-1 overflow-y-auto overscroll-contain px-4 md:px-8 lg:px-10 py-4 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-4">
-            <CompanyEmailBanner userType="founder" />
+            <CompanyEmailBanner userType="founder" alreadyVerified={shell.verified} />
             {children}
           </main>
         </div>

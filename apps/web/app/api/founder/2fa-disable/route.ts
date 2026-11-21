@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getFounderSession } from '@/lib/founder-auth';
+import { founderApi } from '@/lib/founder/api-session';
 import { turnOffTwoFactor, twoFactorDisableCheck } from '@/lib/auth/account-two-factor';
 import { TWO_FACTOR_LOCKED_MESSAGE, clearTwoFactorFailures, isTwoFactorLocked, recordTwoFactorFailure } from '@/lib/auth/two-factor-attempts';
 import { checkRateLimit, getClientIdentifier, twoFactorRateLimit } from '@/lib/rate-limit';
@@ -12,8 +12,9 @@ export async function POST(request: NextRequest) {
     const { success: allowed } = await checkRateLimit(twoFactorRateLimit, getClientIdentifier(request));
     if (!allowed) return NextResponse.json({ success: false, error: 'Too many attempts. Please try again later.' }, { status: 429 });
 
-    const session = await getFounderSession();
-    if (!session) return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
     if (await isTwoFactorLocked('founder', session.userId)) {
       return NextResponse.json({ success: false, error: TWO_FACTOR_LOCKED_MESSAGE }, { status: 429 });
     }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
-import { generateToken } from '@/lib/founder-auth';
+import { newVerifyToken } from '@/lib/organizer-auth/verify-token';
 import { sendVerificationEmail } from '@/lib/founder-email';
 import { z } from 'zod';
 import { authRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
@@ -48,12 +48,13 @@ export async function POST(request: NextRequest) {
     }
     
     // Generate new verification token
-    const verifyToken = generateToken();
+    // The email carries the link; the table keeps only its hash and issue time (it works for 24 hours).
+    const { link: verifyToken, stored } = newVerifyToken();
     
     // Update user with new token
     await sql`
       UPDATE "FounderUser"
-      SET "verifyToken" = ${verifyToken}, "updatedAt" = NOW()
+      SET "verifyToken" = ${stored}, "updatedAt" = NOW()
       WHERE id = ${user.id}
     `;
     

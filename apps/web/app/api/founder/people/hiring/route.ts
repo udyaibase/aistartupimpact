@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getFounderSession } from '@/lib/founder-auth';
+import { founderApi } from '@/lib/founder/api-session';
 import { checkRateLimit, strictRateLimit } from '@/lib/rate-limit';
 import { peopleWithAccess, removeHiringAccess } from '@/lib/people/access';
 
@@ -7,8 +7,9 @@ export const dynamic = 'force-dynamic';
 
 /** Remove someone from every hiring team of this founder's startups ({ email }). They lose access at once. */
 export async function DELETE(request: NextRequest) {
-  const session = await getFounderSession();
-  if (!session) return NextResponse.json({ success: false, error: 'Please sign in again.' }, { status: 401 });
+  const guard = await founderApi();
+  if (guard.error) return guard.error;
+  const session = guard.session;
   const { success } = await checkRateLimit(strictRateLimit, `founder-people:${session.userId}`);
   if (!success) return NextResponse.json({ success: false, error: 'Too many requests. Try again shortly.' }, { status: 429 });
   const { email } = await request.json().catch(() => ({}));

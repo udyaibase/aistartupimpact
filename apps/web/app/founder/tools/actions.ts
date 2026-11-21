@@ -6,7 +6,7 @@ import { sendAdminReviewAlert, sendSubmissionReceivedEmail } from '@/lib/founder
 import { prisma, saveListingEdit } from '@udyaibase/database';
 import { revalidatePath } from 'next/cache';
 import { validateInput } from '@/lib/validation';
-import { toolSubmissionSchema } from '@/lib/founder/listing-validation';
+import { toolSubmissionSchema, overFormLimit, TOOL_TAGLINE_MAX, TOOL_DESCRIPTION_MAX } from '@/lib/founder/listing-validation';
 import { listingFieldLabel } from '@udyaibase/utils';
 import { listingAccess } from '@/lib/founder/listing-access';
 import { refreshPublicListing } from '@/lib/founder/refresh-listing';
@@ -57,7 +57,9 @@ export async function submitToolAction(data: ToolSubmission) {
       if (!loc.ok) return { success: false, error: loc.error };
       data = { ...data, headquartersCity: loc.city ?? undefined, headquartersCountry: loc.country ?? undefined };
     }
-    if (data.tagline) data.tagline = data.tagline.trim().slice(0, 100);
+    // Say so, rather than quietly cutting the text off.
+    const limitProblem = overFormLimit('Tagline', data.tagline, TOOL_TAGLINE_MAX) ?? overFormLimit('Description', data.description, TOOL_DESCRIPTION_MAX);
+    if (limitProblem) return { success: false, error: limitProblem };
 
     // Generate slug from name
     const slug = data.name
@@ -261,6 +263,12 @@ export async function updateToolAction(id: string, data: ToolSubmission) {
     if (!access?.canEdit) {
       return { success: false, error: 'Tool not found or you do not have permission to edit it' };
     }
+
+    // The form's limits apply to what the founder changes; longer text already on the listing may stay.
+    const stored = await prisma.aiTool.findUnique({ where: { id }, select: { tagline: true, description: true } });
+    const limitProblem = overFormLimit('Tagline', data.tagline, TOOL_TAGLINE_MAX, stored?.tagline ?? null)
+      ?? overFormLimit('Description', data.description, TOOL_DESCRIPTION_MAX, stored?.description ?? null);
+    if (limitProblem) return { success: false, error: limitProblem };
 
     const result = await saveListingEdit('tool', id, {
       name: data.name,

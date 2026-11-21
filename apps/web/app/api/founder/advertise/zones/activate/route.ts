@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { getFounderSession } from '@/lib/founder-auth';
+import { founderApi, tooMany } from '@/lib/founder/api-session';
+import { founderWriteRateLimit } from '@/lib/rate-limit';
 import {
   getEntitlements,
   canAccessZone,
@@ -21,8 +22,11 @@ const VALID_ZONES: AdvZoneSlot[] = [
 export async function POST(request: NextRequest) {
   if (!selfServeAdsEnabled()) return NextResponse.json(SELF_SERVE_ADS_OFF, { status: 503 });
   try {
-    const session = await getFounderSession();
-    if (!session) return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
+    const limited = await tooMany(founderWriteRateLimit, `ads:${session.userId}`);
+    if (limited) return limited;
 
     const body = await request.json();
     const zone = body.zone as AdvZoneSlot;

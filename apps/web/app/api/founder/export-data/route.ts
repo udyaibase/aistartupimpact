@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { requireFounderAuth } from '@/lib/founder-auth';
+import { founderApi } from '@/lib/founder/api-session';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
 import { logFounderActivity } from '@/lib/founder/activity';
 import { isTwoFactorOn } from '@/lib/auth/account-two-factor';
@@ -13,7 +13,9 @@ export async function GET(request: NextRequest) {
     const { success } = await checkRateLimit(strictRateLimit, identifier);
     if (!success) return NextResponse.json({ error: 'Too many requests. Try again later.' }, { status: 429 });
 
-    const session = await requireFounderAuth();
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     const user = await prisma.founderUser.findUnique({
       where: { id: session.userId },

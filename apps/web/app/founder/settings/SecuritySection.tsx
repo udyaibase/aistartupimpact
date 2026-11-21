@@ -7,6 +7,7 @@ import { Lock, X, AlertTriangle, Shield, Trash2, Mail } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Toast from '@/components/Toast';
 import TwoFactorSetup from './SecuritySection2FA';
+import EmailCodeField, { NO_CODE, type EmailCode } from '@/components/ui/EmailCodeField';
 import EmailChangeModal from '@/components/EmailChangeModal';
 
 type ToastType = {
@@ -50,6 +51,9 @@ export default function SecuritySection() {
   const [hasPassword, setHasPassword] = useState(true);
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
+  // Accounts without a password (Google sign-in) confirm with a code we email instead.
+  const [deactivateCode, setDeactivateCode] = useState<EmailCode>(NO_CODE);
+  const [deleteCode, setDeleteCode] = useState<EmailCode>(NO_CODE);
 
   // Fetch current 2FA status on mount
   useEffect(() => {
@@ -123,12 +127,16 @@ export default function SecuritySection() {
       setToast({ type: 'error', message: 'Password is required' });
       return;
     }
+    if (!hasPassword && (!deactivateCode.otpToken || !deactivateCode.code.trim())) {
+      setToast({ type: 'error', message: 'Enter the code we emailed you' });
+      return;
+    }
     setDeactivateLoading(true);
     try {
       const res = await fetch('/api/founder/deactivate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: deactivatePassword }),
+        body: JSON.stringify(hasPassword ? { password: deactivatePassword } : { otpToken: deactivateCode.otpToken, code: deactivateCode.code }),
       });
       const data = await res.json();
       if (data.success) {
@@ -156,6 +164,10 @@ export default function SecuritySection() {
       setToast({ type: 'error', message: 'Please enter your password to confirm' });
       return;
     }
+    if (!hasPassword && (!deleteCode.otpToken || !deleteCode.code.trim())) {
+      setToast({ type: 'error', message: 'Enter the code we emailed you' });
+      return;
+    }
 
     if (!confirm('Are you absolutely sure? This action cannot be undone and all your data will be permanently deleted.')) {
       return;
@@ -167,7 +179,7 @@ export default function SecuritySection() {
       const res = await fetch('/api/founder/delete-account', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: deletePassword }),
+        body: JSON.stringify(hasPassword ? { password: deletePassword } : { otpToken: deleteCode.otpToken, code: deleteCode.code }),
       });
 
       const data = await res.json();
@@ -372,7 +384,7 @@ export default function SecuritySection() {
         <div className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="relative bg-white dark:bg-gray-900 rounded-2xl p-8 max-w-md w-full shadow-2xl border border-amber-200 dark:border-amber-800 animate-in zoom-in-95 duration-200">
             <button
-              onClick={() => { setShowDeactivateModal(false); setDeactivatePassword(''); }}
+              onClick={() => { setShowDeactivateModal(false); setDeactivatePassword(''); setDeactivateCode(NO_CODE); }}
               className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               aria-label="Close"
             >
@@ -383,7 +395,7 @@ export default function SecuritySection() {
                 <Shield className="w-6 h-6 text-amber-600 dark:text-amber-400" />
               </div>
               <h3 className="font-semibold text-xl text-amber-600 dark:text-amber-400 mb-1">Deactivate Account</h3>
-              <p className="text-gray-600 dark:text-gray-400 text-sm">You can reactivate anytime by signing in again again.</p>
+              <p className="text-gray-600 dark:text-gray-400 text-sm">You can reactivate anytime by signing in again.</p>
             </div>
             <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-4">
               <p className="text-sm text-amber-800 dark:text-amber-300 font-semibold mb-2">This will temporarily:</p>
@@ -398,7 +410,8 @@ export default function SecuritySection() {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Enter your password to confirm</label>
                 <input type="password" autoComplete="current-password" value={deactivatePassword} onChange={(e) => setDeactivatePassword(e.target.value)} required placeholder="Enter your password" className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-navy dark:text-white focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 font-jakarta text-sm transition-all" />
               </div>)}
-              <button type="submit" disabled={deactivateLoading || (hasPassword && !deactivatePassword)} className="w-full px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              {!hasPassword && <EmailCodeField action="deactivate" value={deactivateCode} onChange={setDeactivateCode} onError={(message) => setToast({ type: 'error', message })} />}
+              <button type="submit" disabled={deactivateLoading || (hasPassword ? !deactivatePassword : !deactivateCode.code.trim())} className="w-full px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                 {deactivateLoading ? 'Deactivating...' : 'Deactivate My Account'}
               </button>
             </form>
@@ -411,7 +424,7 @@ export default function SecuritySection() {
         <div className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="relative bg-white dark:bg-gray-900 rounded-2xl p-8 max-w-md w-full shadow-2xl border border-red-200 dark:border-red-800 animate-in zoom-in-95 duration-200">
             <button
-              onClick={() => { setShowDeleteModal(false); setDeletePassword(''); setDeleteConfirmation(''); }}
+              onClick={() => { setShowDeleteModal(false); setDeletePassword(''); setDeleteConfirmation(''); setDeleteCode(NO_CODE); }}
               className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               aria-label="Close"
             >
@@ -461,6 +474,8 @@ export default function SecuritySection() {
                   className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-navy dark:text-white focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/20 font-jakarta text-sm transition-all"
                 />
               </div>)}
+
+              {!hasPassword && <EmailCodeField action="delete" value={deleteCode} onChange={setDeleteCode} onError={(message) => setToast({ type: 'error', message })} />}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

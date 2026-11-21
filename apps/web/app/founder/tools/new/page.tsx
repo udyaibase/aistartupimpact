@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import ToolForm from '@/components/founder/ToolForm';
 import { founderAtToolLimit } from '@/lib/founder/limits';
 
+export const metadata = { title: 'List your AI tool' };
+
 export default async function NewToolPage() {
   const session = await requireFounderAuth();
   if (await founderAtToolLimit(session.userId)) redirect('/founder/tools');
@@ -12,7 +14,7 @@ export default async function NewToolPage() {
       {/* Header */}
       <div>
         <h1 className="portal-title">
-          Submit Your AI Tool
+          List your AI tool
         </h1>
         <p className="portal-subtitle">
           Share your AI tool with the community. Our team will review your submission within 2-3 business days.

@@ -3,14 +3,19 @@ import { passwordProblem } from "@/lib/password-rules";
 import { logFounderActivity } from '@/lib/founder/activity';
 import { setAccountPassword } from '@/lib/auth/set-password';
 import { verifyTurnstileToken } from '@/lib/turnstile';
+import { checkRateLimit, emailLinkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 import { prisma } from '@udyaibase/database';
 import { sql } from '@/lib/db';
 import bcrypt from 'bcryptjs';
+import { hashResetToken } from '@/lib/employer/reset-token';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    const { success: allowed } = await checkRateLimit(emailLinkRateLimit, `founder-reset:${getClientIdentifier(request)}`);
+    if (!allowed) return NextResponse.json({ error: 'Too many attempts. Please try again later.' }, { status: 429 });
+
     const body = await request.json();
     const { token, password } = body;
     if (!body.turnstileToken) {
@@ -45,7 +50,7 @@ export async function POST(request: NextRequest) {
     // Find user by reset token
     const user = await prisma.founderUser.findFirst({
       where: {
-        resetToken: token,
+        resetToken: hashResetToken(String(token)),
         resetExpiry: {
           gt: new Date(), // Token not expired
         },

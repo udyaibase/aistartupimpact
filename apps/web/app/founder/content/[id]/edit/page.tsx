@@ -4,6 +4,7 @@ import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, History, Activity, ChevronDown } from "lucide-react";
 import ContentSubmissionForm from "@/components/founder/ContentSubmissionForm";
+import StoryEditor from "@/components/founder/StoryEditor";
 
 const ACTION_LABELS: Record<string, string> = {
   CREATED: "Created", EDITED: "Edited", SUBMITTED_FOR_REVIEW: "Submitted for review",
@@ -55,28 +56,35 @@ export default function EditContentPage({ params }: { params: Promise<{ id: stri
   return (
     <div>
       <div>
-        <button onClick={() => router.push("/founder/content")} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-jakarta mb-4">
-          <ArrowLeft className="w-4 h-4" /> Back to Content
-        </button>
+        {isStory ? (
+          // Stories open in the writing page; it has its own way back and its own status line.
+          <StoryEditor startups={startups} existing={article} />
+        ) : (
+          <>
+          <button onClick={() => router.push("/founder/content")} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-jakarta mb-4">
+            <ArrowLeft className="w-4 h-4" /> Back to Content
+          </button>
 
-        <div className="mb-6">
-          <h1 className="text-2xl font-sora font-bold text-gray-900 dark:text-white">
-            Edit {isStory ? "Story" : "Update"}
-          </h1>
-          {article.moderationStatus === "REJECTED" && (
-            <p className="text-sm text-amber-600 dark:text-amber-400 font-jakarta mt-1">This content was returned for revision. Make changes and resubmit.</p>
-          )}
-        </div>
+          <div className="mb-6">
+            <h1 className="text-2xl font-sora font-bold text-gray-900 dark:text-white">
+              Edit {isStory ? "Story" : "Update"}
+            </h1>
+            {article.moderationStatus === "REJECTED" && (
+              <p className="text-sm text-amber-600 dark:text-amber-400 font-jakarta mt-1">This content was returned for revision. Make changes and resubmit.</p>
+            )}
+          </div>
 
-        <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-6">
-          <ContentSubmissionForm
-            contentType={article.type}
-            startups={startups}
-            existingData={article}
-            onSuccess={() => router.push("/founder/content")}
-            onCancel={() => router.push("/founder/content")}
-          />
-        </div>
+          <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-6">
+            <ContentSubmissionForm
+              contentType={article.type}
+              startups={startups}
+              existingData={article}
+              onSuccess={() => router.push("/founder/content")}
+              onCancel={() => router.push("/founder/content")}
+            />
+          </div>
+          </>
+        )}
 
         {/* Version History */}
         {versions.length > 0 && (

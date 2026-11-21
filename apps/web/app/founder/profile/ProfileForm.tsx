@@ -329,6 +329,11 @@ export default function ProfileForm({ founder }: ProfileFormProps) {
               value={formData.phone}
               onChange={handleChange}
               placeholder="+91 98765 43210"
+              inputMode="tel"
+              autoComplete="tel"
+              maxLength={20}
+              pattern="\+?[0-9 ()\-]{7,20}"
+              title="Digits, spaces, brackets and dashes, with an optional + at the start"
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
             />
           </div>

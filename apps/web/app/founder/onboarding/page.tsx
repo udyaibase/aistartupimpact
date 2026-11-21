@@ -3,6 +3,8 @@ import { getFounderSession } from '@/lib/founder-auth';
 import { prisma } from '@udyaibase/database';
 import OnboardingClient from './OnboardingClient';
 
+export const metadata = { title: 'Welcome' };
+
 export default async function OnboardingPage(
   props: {
     searchParams: Promise<{ returnTo?: string }>;

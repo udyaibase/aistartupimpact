@@ -11,6 +11,8 @@ interface PageProps {
   searchParams: Promise<{ method?: string }>;
 }
 
+export const metadata = { title: 'Claim your startup' };
+
 export default async function ClaimStartupPage(props: PageProps) {
   const params = await props.params;
   const { method } = await props.searchParams;

@@ -4,24 +4,28 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import ContentSubmissionForm from "@/components/founder/ContentSubmissionForm";
+import StoryEditor from "@/components/founder/StoryEditor";
 
 function NewContentInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const typeParam = searchParams.get("type");
   const contentType = typeParam === "FOUNDER_STORY" ? "FOUNDER_STORY" : "STARTUP_UPDATE";
+  // Set by the story editor after its first save. Read once, when the page loads: on a reload it reopens that draft.
+  const [reopenDraft] = useState(() => searchParams.get("draft"));
   const [startups, setStartups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (reopenDraft) { router.replace(`/founder/content/${encodeURIComponent(reopenDraft)}/edit`); return; }
     fetch("/api/founder/content")
       .then(r => r.json())
       .then(d => setStartups(d.startups || []))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [reopenDraft, router]);
 
-  if (loading) {
+  if (loading || reopenDraft) {
     return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>;
   }
 
@@ -36,6 +40,9 @@ function NewContentInner() {
   }
 
   const isStory = contentType === "FOUNDER_STORY";
+
+  // A story is written on a page of its own (title, subtitle, story), not in the short update form.
+  if (isStory) return <StoryEditor startups={startups} />;
 
   return (
     <div>

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
-import { getFounderSession } from '@/lib/founder-auth';
+import { founderApi, tooMany } from '@/lib/founder/api-session';
+import { founderWriteRateLimit } from '@/lib/rate-limit';
+import { slugFormatProblem, slugTakenByAnother } from '@/lib/founder/slug-rules';
 
 export const dynamic = 'force-dynamic';
 const COOLDOWN_DAYS = 45;
@@ -8,16 +10,18 @@ const COOLDOWN_DAYS = 45;
 export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   try {
-    const session = await getFounderSession();
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
+    const limited = await tooMany(founderWriteRateLimit, `slug:${session.userId}`);
+    if (limited) return limited;
 
     const { id } = params;
     const body = await request.json();
     const newSlug = body.slug?.trim().toLowerCase();
 
-    if (!newSlug || newSlug.length < 3) return NextResponse.json({ error: 'Slug must be at least 3 characters' }, { status: 400 });
-    if (newSlug.length > 80) return NextResponse.json({ error: 'Slug must be under 80 characters' }, { status: 400 });
-    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(newSlug)) return NextResponse.json({ error: 'Only lowercase letters, numbers, and hyphens allowed' }, { status: 400 });
+    const problem = slugFormatProblem(newSlug);
+    if (problem) return NextResponse.json({ error: problem }, { status: 400 });
 
     const tools = await sql`
       SELECT id, slug, "slugChangedAt", "previousSlugs", "ownerId"
@@ -41,17 +45,12 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
       }
     }
 
-    // Uniqueness check
-    const existing = await sql`SELECT id FROM "AiTool" WHERE slug = ${newSlug} AND id != ${id} LIMIT 1`;
-    if (existing.length > 0) return NextResponse.json({ error: 'This URL is already taken' }, { status: 409 });
-
-    // Also check Startup slugs (cross-table uniqueness)
-    const startupCheck = await sql`SELECT id FROM "Startup" WHERE slug = ${newSlug} LIMIT 1`;
-    if (startupCheck.length > 0) {
-      return NextResponse.json({ error: 'This URL is already in use. Try a different one.' }, { status: 409 });
+    // Free now, and not another listing's old URL (those keep redirecting to the listing that moved).
+    if (await slugTakenByAnother(newSlug, { type: 'tool', id })) {
+      return NextResponse.json({ error: 'This URL is already taken. Try a different one.' }, { status: 409 });
     }
 
-    const previousSlugs = tool.previousSlugs || [];
+    const previousSlugs = (tool.previousSlugs || []).filter((old: string) => old !== newSlug); // taking an old URL back
     if (!previousSlugs.includes(tool.slug)) previousSlugs.push(tool.slug);
 
     await sql`

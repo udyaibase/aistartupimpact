@@ -3,11 +3,16 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Megaphone, FileText, Trophy, Clock, CheckCircle, XCircle,
-  Eye, Loader2, ChevronDown, Pencil, Trash2, MoreHorizontal,
-  Send, BookOpen, ArrowRight,
+  Megaphone, CheckCircle, Eye, Loader2, ChevronDown, Pencil, Trash2, Send, ArrowRight, ExternalLink, PenLine, Flag,
 } from "lucide-react";
+import { milestoneAmount, milestoneTypeLabel } from "@/lib/milestones/amount";
 import { MilestoneIcon } from '@/components/milestones/MilestoneIcon';
+
+/** Edit, delete and view: always on show (they used to appear only on hover, so not on a phone or by keyboard). */
+const rowAction = "w-10 h-10 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800";
+
+/** One icon style for this screen: a line icon in a quiet bordered tile, no colour per type. */
+const iconTile = "flex items-center justify-center shrink-0 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200";
 
 type Tab = "all" | "updates" | "stories" | "milestones";
 
@@ -34,8 +39,18 @@ export default function CreatePage() {
   const [mentions, setMentions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [startupFilter, setStartupFilter] = useState("");
+  const [notice, setNotice] = useState("");
+  const [done, setDone] = useState("");
 
   useEffect(() => { fetchContent(); }, []);
+
+  // "Milestone added" and the like, left by the form that sent the founder back here. Shown once.
+  useEffect(() => {
+    try {
+      const flash = sessionStorage.getItem("founder-content-flash");
+      if (flash) { setDone(flash); sessionStorage.removeItem("founder-content-flash"); }
+    } catch {}
+  }, []);
 
   const fetchContent = async () => {
     setLoading(true);
@@ -63,34 +78,39 @@ export default function CreatePage() {
 
   const totalCount = filtered.articles.length + filtered.milestones.length;
 
-  const handleDelete = async (id: string, type: "article" | "milestone") => {
-    if (!confirm("Delete this item?")) return;
+  const handleDelete = async (id: string, type: "article" | "milestone", title: string) => {
+    if (!confirm(`Delete “${title}”? It comes off your public pages straight away.`)) return;
+    setNotice("");
     const url = type === "article" ? `/api/founder/content/${id}` : `/api/founder/milestones/${id}`;
-    await fetch(url, { method: "DELETE" }).catch(() => {});
-    fetchContent();
+    try {
+      const res = await fetch(url, { method: "DELETE" });
+      const d = await res.json().catch(() => ({}));
+      // Say so when it didn't work (a limit, a lost connection): before, nothing happened and nothing was said.
+      if (!res.ok || d.success === false) { setNotice(d.error || "Couldn’t delete that. Please try again in a minute."); return; }
+      fetchContent();
+    } catch {
+      setNotice("Couldn’t delete that. Check your connection and try again.");
+    }
   };
 
   const CREATE_OPTIONS = [
     {
       icon: Megaphone,
       title: "Startup Update",
-      desc: "Share news, progress, or announcements. Publishes instantly.",
+      desc: "Share news or progress. Shows on your startup’s profile straight away.",
       href: "/founder/content/new?type=STARTUP_UPDATE",
-      color: "from-blue-500 to-cyan-500",
     },
     {
-      icon: BookOpen,
+      icon: PenLine,
       title: "Founder Story",
-      desc: "Tell your journey. Reviewed by our editorial team before publishing.",
+      desc: "Tell your journey. Reviewed by our editors, then shown on Founder Stories.",
       href: "/founder/content/new?type=FOUNDER_STORY",
-      color: "from-purple-500 to-pink-500",
     },
     {
-      icon: Trophy,
+      icon: Flag,
       title: "Milestone",
-      desc: "Record a key achievement — funding, launch, partnership, or award.",
+      desc: "Record a funding round, launch, partnership or award on your startup’s profile.",
       href: "/founder/milestones/new",
-      color: "from-amber-500 to-orange-500",
     },
   ];
 
@@ -115,16 +135,18 @@ export default function CreatePage() {
               <button
                 key={opt.title}
                 onClick={() => router.push(opt.href)}
-                className="group text-left p-4 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl hover:border-brand/30 dark:hover:border-brand/30 hover:shadow-lg hover:shadow-brand/5 transition-all duration-200"
+                className="group text-left p-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl hover:border-gray-400 dark:hover:border-gray-600 transition-colors flex sm:block items-start gap-3"
               >
-                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${opt.color} flex items-center justify-center text-white mb-3 group-hover:scale-110 transition-transform`}>
-                  <opt.icon className="w-5 h-5" aria-hidden />
+                <div className={`${iconTile} w-10 h-10 sm:mb-3 group-hover:border-gray-300 dark:group-hover:border-gray-600 group-hover:text-gray-900 dark:group-hover:text-white transition-colors`}>
+                  <opt.icon className="w-5 h-5" strokeWidth={1.75} aria-hidden />
                 </div>
-                <h3 className="text-sm font-sora font-bold text-gray-900 dark:text-white mb-1 flex items-center gap-1.5">
-                  {opt.title}
-                  <ArrowRight className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600 group-hover:text-brand group-hover:translate-x-0.5 transition-all" />
-                </h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta leading-relaxed">{opt.desc}</p>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-sora font-bold text-gray-900 dark:text-white mb-1 flex items-center gap-1.5">
+                    {opt.title}
+                    <ArrowRight className="w-3.5 h-3.5 text-gray-400 dark:text-gray-600 group-hover:text-gray-900 dark:group-hover:text-white group-hover:translate-x-0.5 transition-all" aria-hidden />
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta leading-relaxed">{opt.desc}</p>
+                </div>
               </button>
             ))}
           </div>
@@ -157,6 +179,14 @@ export default function CreatePage() {
             ))}
           </div>
 
+          {done && (
+            <p role="status" className="mb-3 flex items-center justify-between gap-3 text-sm font-jakarta px-3 py-2 rounded-lg bg-green-50 text-green-800 dark:bg-green-900/30 dark:text-green-300">
+              <span className="flex items-center gap-2"><CheckCircle className="w-4 h-4 shrink-0" aria-hidden /> {done}</span>
+              <button type="button" onClick={() => setDone("")} className="font-semibold underline shrink-0">Dismiss</button>
+            </p>
+          )}
+          {notice && <p role="alert" className="mb-3 text-sm font-jakarta px-3 py-2 rounded-lg bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300">{notice}</p>}
+
           {/* Content Feed */}
           {loading ? (
             <div className="flex justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
@@ -175,29 +205,34 @@ export default function CreatePage() {
                 const isUpdate = a.type === "STARTUP_UPDATE";
                 return (
                   <div key={a.id} className="group flex items-center gap-3 px-4 py-3.5 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl hover:border-gray-200 dark:hover:border-gray-700 transition-colors">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isUpdate ? "bg-blue-50 dark:bg-blue-900/20" : "bg-purple-50 dark:bg-purple-900/20"}`}>
-                      {isUpdate ? <Megaphone className="w-4 h-4 text-blue-500" /> : <BookOpen className="w-4 h-4 text-purple-500" />}
+                    <div className={`${iconTile} w-9 h-9`}>
+                      {isUpdate ? <Megaphone className="w-4 h-4" strokeWidth={1.75} aria-hidden /> : <PenLine className="w-4 h-4" strokeWidth={1.75} aria-hidden />}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <h3 className="text-sm font-jakarta font-semibold text-gray-900 dark:text-white truncate">{a.title}</h3>
+                      <div className="flex flex-wrap sm:flex-nowrap items-center gap-x-2 gap-y-1 mb-1 sm:mb-0.5">
+                        <h3 className="w-full sm:w-auto text-sm font-jakarta font-semibold text-gray-900 dark:text-white line-clamp-2 sm:line-clamp-none sm:truncate">{a.title}</h3>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-jakarta font-medium shrink-0 ${sb.cls}`}>{sb.label}</span>
                         {mb && mb.label !== "Approved" && <span className={`text-[10px] font-jakarta font-medium shrink-0 ${mb.cls}`}>{mb.label}</span>}
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-gray-400 font-jakarta">
-                        <span className={`${isUpdate ? "text-blue-500" : "text-purple-500"} font-medium`}>{isUpdate ? "Update" : "Story"}</span>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400 font-jakarta [&>span]:whitespace-nowrap">
+                        <span className="font-medium text-gray-600 dark:text-gray-300">{isUpdate ? "Update" : "Story"}</span>
                         <span>·</span>
-                        {a.Startup && <><span>{a.Startup.name}</span><span>·</span></>}
-                        <span>{new Date(a.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                        {a.Startup && startups.length > 1 && <><span>{a.Startup.name}</span><span>·</span></>}
+                        <span>{new Date(a.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                         {a.viewCount > 0 && <><span>·</span><span className="flex items-center gap-0.5"><Eye className="w-3 h-3" />{a.viewCount}</span></>}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => router.push(`/founder/content/${a.id}/edit`)} className="p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg" aria-label="Edit">
-                        <Pencil className="w-3.5 h-3.5" />
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      {a.status === "PUBLISHED" && (
+                        <a href={`/stories/${a.slug}`} target="_blank" rel="noopener" className={rowAction} aria-label={`View “${a.title}” on the site`} title="View on the site">
+                          <ExternalLink className="w-4 h-4" aria-hidden />
+                        </a>
+                      )}
+                      <button onClick={() => router.push(`/founder/content/${a.id}/edit`)} className={rowAction} aria-label={`Edit “${a.title}”`} title="Edit">
+                        <Pencil className="w-4 h-4" aria-hidden />
                       </button>
-                      <button onClick={() => handleDelete(a.id, "article")} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg" aria-label="Delete">
-                        <Trash2 className="w-3.5 h-3.5" />
+                      <button onClick={() => handleDelete(a.id, "article", a.title)} className={`${rowAction} hover:text-red-600 dark:hover:text-red-400`} aria-label={`Delete “${a.title}”`} title="Delete">
+                        <Trash2 className="w-4 h-4" aria-hidden />
                       </button>
                     </div>
                   </div>
@@ -207,26 +242,29 @@ export default function CreatePage() {
               {/* Milestones */}
               {filtered.milestones.map(m => (
                 <div key={m.id} className="group flex items-center gap-3 px-4 py-3.5 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl hover:border-gray-200 dark:hover:border-gray-700 transition-colors">
-                  <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center text-base shrink-0">
-                    <MilestoneIcon type={m.type} className="w-4 h-4" />
+                  <div className={`${iconTile} w-9 h-9`}>
+                    <MilestoneIcon type={m.type} className="w-4 h-4" plain />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <h3 className="text-sm font-jakarta font-semibold text-gray-900 dark:text-white truncate">{m.title}</h3>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 font-jakarta font-medium shrink-0">{m.type.replace("_", " ")}</span>
+                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-x-2 gap-y-1 mb-1 sm:mb-0.5">
+                      <h3 className="w-full sm:w-auto text-sm font-jakarta font-semibold text-gray-900 dark:text-white line-clamp-2 sm:line-clamp-none sm:truncate">{m.title}</h3>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-jakarta font-medium shrink-0">{milestoneTypeLabel(m.type)}</span>
                       {m.verificationStatus === "PLATFORM_VERIFIED" && <CheckCircle className="w-3.5 h-3.5 text-green-500 shrink-0" />}
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-400 font-jakarta">
-                      <span className="text-amber-500 font-medium">Milestone</span>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400 font-jakarta [&>span]:whitespace-nowrap">
+                      <span className="font-medium text-gray-600 dark:text-gray-300">Milestone</span>
                       <span>·</span>
-                      {m.startup && <><span>{m.startup.name}</span><span>·</span></>}
-                      <span>{new Date(m.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                      {m.amount && <><span>·</span><span>{m.currency} {Number(m.amount).toLocaleString()}</span></>}
+                      {m.startup && startups.length > 1 && <><span>{m.startup.name}</span><span>·</span></>}
+                      <span>{new Date(m.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                      {m.amount && <><span>·</span><span>{milestoneAmount(m.amount, m.currency)}</span></>}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => handleDelete(m.id, "milestone")} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg" aria-label="Delete">
-                      <Trash2 className="w-3.5 h-3.5" />
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    <button onClick={() => router.push(`/founder/milestones/${m.id}/edit`)} className={rowAction} aria-label={`Edit “${m.title}”`} title="Edit">
+                      <Pencil className="w-4 h-4" aria-hidden />
+                    </button>
+                    <button onClick={() => handleDelete(m.id, "milestone", m.title)} className={`${rowAction} hover:text-red-600 dark:hover:text-red-400`} aria-label={`Delete “${m.title}”`} title="Delete">
+                      <Trash2 className="w-4 h-4" aria-hidden />
                     </button>
                   </div>
                 </div>

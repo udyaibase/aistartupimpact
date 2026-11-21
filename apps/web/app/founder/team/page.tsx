@@ -277,7 +277,7 @@ export default function FounderTeamPage() {
           <p className="portal-subtitle">Invite people to help manage your startup</p>
         </div>
         {canManage && <button onClick={() => setShowInvite(true)} className="inline-flex items-center gap-1.5 px-3 py-2 bg-brand hover:bg-brand-600 text-white text-xs font-bold font-jakarta rounded-lg">
-          <Plus className="w-3.5 h-3.5"/> Invite Member
+          <Plus className="w-3.5 h-3.5"/> Invite a teammate
         </button>}
       </div>
 

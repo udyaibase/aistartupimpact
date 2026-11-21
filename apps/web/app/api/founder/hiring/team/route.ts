@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { getFounderSession } from '@/lib/founder-auth';
+import { founderApi } from '@/lib/founder/api-session';
 import { founderOwnsVerifiedStartup } from '@/lib/startups/ownership';
 import { apiRateLimit, checkRateLimit } from '@/lib/rate-limit';
 import { inviteTeammate, listTeam } from '@/lib/employer/team';
@@ -12,8 +12,9 @@ export const dynamic = 'force-dynamic';
  * only the founder who owns the verified startup, and only for that startup's own hiring workspace.
  */
 async function workspaceFor(startupId: unknown) {
-  const session = await getFounderSession();
-  if (!session) return { error: NextResponse.json({ error: 'Please sign in again.' }, { status: 401 }) };
+  const guard = await founderApi();
+  if (guard.error) return { error: guard.error };
+  const session = guard.session;
   if (typeof startupId !== 'string' || !startupId) return { error: NextResponse.json({ error: 'Choose a startup.' }, { status: 400 }) };
   if (!(await founderOwnsVerifiedStartup(session.userId, startupId))) {
     return { error: NextResponse.json({ error: 'Verify ownership of this startup first.' }, { status: 403 }) };

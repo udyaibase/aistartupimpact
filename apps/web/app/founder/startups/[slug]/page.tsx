@@ -18,6 +18,8 @@ interface PageProps {
   }>;
 }
 
+export const metadata = { title: 'Edit startup' };
+
 export default async function EditStartupPage(props: PageProps) {
   const params = await props.params;
   const session = await requireFounderAuth();

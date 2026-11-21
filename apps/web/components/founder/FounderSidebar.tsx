@@ -4,7 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import {
   LayoutDashboard, Rocket, Wrench, BarChart3, User, Users,
-  Plus, Settings, History, HelpCircle, Briefcase, BadgeCheck, AlertTriangle, CalendarDays, Megaphone,
+  Plus, Settings, History, HelpCircle, Briefcase, BadgeCheck, AlertTriangle, CalendarDays, Megaphone, FileText,
 } from 'lucide-react';
 import CollapsibleSidebar from '@/components/ui/CollapsibleSidebar';
 import SidebarNav, { type NavItem } from '@/components/ui/SidebarNav';
@@ -16,6 +16,7 @@ const NAV_ITEMS: NavItem[] = [
   { type: 'divider', label: 'Listings' },
   { label: 'Startup', href: '/founder/startups', icon: Rocket },
   { label: 'AI Tool', href: '/founder/tools', icon: Wrench },
+  { label: 'Content', href: '/founder/content', icon: FileText },
   { label: 'Hiring', href: '/founder/hiring', icon: Briefcase, badge: 'New' },
   { label: 'Events', href: '/founder/events', icon: CalendarDays },
   { type: 'divider', label: 'Insights' },

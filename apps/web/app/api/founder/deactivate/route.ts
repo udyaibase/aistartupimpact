@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { confirmAccountPassword } from '@/lib/founder/account';
+import { confirmAccountAction } from '@/lib/founder/account';
 import { logFounderActivity } from '@/lib/founder/activity';
-import { requireFounderAuth, clearFounderSession } from '@/lib/founder-auth';
+import { clearFounderSession } from '@/lib/founder-auth';
+import { founderApi } from '@/lib/founder/api-session';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
@@ -13,10 +14,12 @@ export async function POST(request: NextRequest) {
     const { success } = await checkRateLimit(strictRateLimit, identifier);
     if (!success) return NextResponse.json({ error: 'Too many requests. Try again later.' }, { status: 429 });
 
-    const session = await requireFounderAuth();
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
-    const body = await request.json().catch(() => ({}));
-    const { password } = (await request.json().catch(() => ({}))) as { password?: unknown };
+    // Read once: a request body can't be read a second time.
+    const body = (await request.json().catch(() => ({}))) as { password?: unknown; otpToken?: unknown; code?: unknown };
 
     const user = await prisma.founderUser.findUnique({
       where: { id: session.userId },
@@ -31,9 +34,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Account is already deactivated' }, { status: 400 });
     }
 
-    if (!(await confirmAccountPassword(session.email.toLowerCase(), password))) {
-      return NextResponse.json({ error: 'Incorrect password' }, { status: 401 });
-    }
+    const confirmed = await confirmAccountAction(session, body, 'deactivate');
+    if (!confirmed.ok) return NextResponse.json({ error: confirmed.error }, { status: 401 });
 
     await prisma.$transaction(async (tx) => {
       await tx.founderUser.update({
@@ -58,14 +60,11 @@ export async function POST(request: NextRequest) {
     });
 
     await logFounderActivity(session.userId, 'account_deactivated', { request });
-    // The session cookies stay: the portal shows this person the reactivate page next time they come back.
+    // The other sign-in cookies stay: the portal shows this person the reactivate page next time they come back.
     await clearFounderSession();
 
     return NextResponse.json({ success: true, message: 'Account deactivated' });
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized - Please login') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
     console.error('Founder deactivation error:', error);
     return NextResponse.json({ error: 'Failed to deactivate account' }, { status: 500 });
   }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
 import { clientIp } from '@/lib/client-ip';
-import { requireFounderAuth } from '@/lib/founder-auth';
+import { founderApi } from '@/lib/founder/api-session';
 import { prisma } from '@udyaibase/database';
 import { claimToken } from '@/lib/startups/claim';
 import { founderAtStartupLimit, STARTUP_LIMIT_MESSAGE } from '@/lib/founder/limits';
@@ -14,16 +14,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
 
   const params = await props.params;
   try {
-    // Authenticate founder
-    let session;
-    try {
-      session = await requireFounderAuth();
-    } catch (authError) {
-      return NextResponse.json(
-        { error: 'Unauthorized - Please login' },
-        { status: 401 }
-      );
-    }
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     const { id } = params;
 

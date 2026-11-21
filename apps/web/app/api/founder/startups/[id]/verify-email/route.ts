@@ -2,7 +2,7 @@ import { founderAtStartupLimit, STARTUP_LIMIT_MESSAGE } from '@/lib/founder/limi
 import { logFounderActivity } from '@/lib/founder/activity';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { getFounderSession } from '@/lib/founder-auth';
+import { founderApi } from '@/lib/founder/api-session';
 import { clientIp } from '@/lib/client-ip';
 import { authRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 import { emailDomain, emailMatchesDomain, isFreeMailDomain } from '@/lib/jobs/trust';
@@ -21,8 +21,9 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const { id } = await props.params;
-  const session = await getFounderSession();
-  if (!session) return NextResponse.json({ error: 'Please sign in again.' }, { status: 401 });
+  const guard = await founderApi();
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const body = await request.json().catch(() => ({}));
   const step = body.step === 'verify' ? 'verify' : 'send';

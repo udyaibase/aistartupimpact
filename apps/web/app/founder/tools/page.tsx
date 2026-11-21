@@ -8,6 +8,8 @@ import ListingsList from '@/components/founder/ListingsList';
 import { EmptyGuide } from '@/components/founder/Guidance';
 
 // Revalidate every 10 seconds to show fresh data
+export const metadata = { title: 'AI tool' };
+
 export const revalidate = 10;
 
 export default async function ToolsPage() {
@@ -51,7 +53,7 @@ export default async function ToolsPage() {
           className="inline-flex items-center gap-1.5 px-3 py-2 bg-gray-900 dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-100 text-white dark:text-gray-900 text-sm font-medium rounded-lg transition-colors"
         >
           <Plus className="w-4 h-4" />
-          Submit Tool
+          List a tool
         </Link>
         )}
       </div>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit, emailCodeRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 import { prisma } from '@udyaibase/database';
-import { requireFounderAuth } from '@/lib/founder-auth';
+import { founderApi } from '@/lib/founder/api-session';
 import { createOtp } from '@/lib/otp';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 import { isDisposableEmail, isFreeEmailProvider, companyEmailOtpHtml, extractEmailDomain } from '@udyaibase/utils';
@@ -13,7 +13,9 @@ export async function POST(request: NextRequest) {
   if (!withinLimit) return NextResponse.json({ success: false, error: 'Too many requests. Please try again later.' }, { status: 429 });
 
   try {
-    const session = await requireFounderAuth();
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
     const { companyEmail } = await request.json();
 
     if (!companyEmail || typeof companyEmail !== 'string' || companyEmail.length > 255 || !companyEmail.includes('@') || !companyEmail.split('@')[1]?.includes('.')) {
@@ -49,9 +51,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, message: 'Verification code sent to your company email.' });
   } catch (err: any) {
-    if (err.message === 'Unauthorized - Please login') {
-      return NextResponse.json({ success: false, error: 'Please sign in.' }, { status: 401 });
-    }
     console.error('Company email send-otp error:', err);
     return NextResponse.json({ success: false, error: 'Something went wrong.' }, { status: 500 });
   }

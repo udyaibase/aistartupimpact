@@ -5,6 +5,7 @@ import { jwtVerify } from 'jose';
 import { prisma } from '@udyaibase/database';
 import { verifyFounderToken } from '@/lib/founder-auth';
 import { getUnifiedSession } from '@/lib/unified-auth';
+import { verifyOTP } from '@/lib/action-otp';
 
 /**
  * A person can have a password on any of their sign-in records, or none at all (Google). Returns those hashes, so a
@@ -32,6 +33,29 @@ export async function confirmAccountPassword(email: string, password: unknown): 
     if (await bcrypt.compare(password, hash)) return true;
   }
   return false;
+}
+
+export type AccountAction = 'deactivate' | 'delete';
+export const accountActionKey = (action: AccountAction) => `account_${action}`;
+
+/**
+ * Confirms it's really the account holder before deactivating or deleting. With a password on file, that password.
+ * Without one (Google sign-in), a 6-digit code emailed to them: a signed-in browser alone isn't enough to delete an account.
+ */
+export async function confirmAccountAction(
+  session: { userId: string; email: string },
+  body: { password?: unknown; otpToken?: unknown; code?: unknown },
+  action: AccountAction,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const email = session.email.toLowerCase();
+  if (await accountHasPassword(email)) {
+    return (await confirmAccountPassword(email, body.password)) ? { ok: true } : { ok: false, error: 'Incorrect password' };
+  }
+  if (typeof body.otpToken !== 'string' || typeof body.code !== 'string' || !body.code.trim()) {
+    return { ok: false, error: 'Enter the code we emailed you.' };
+  }
+  const result = verifyOTP(body.otpToken, body.code, session.userId, accountActionKey(action));
+  return result.valid ? { ok: true } : { ok: false, error: result.error ?? 'Incorrect code' };
 }
 
 /**

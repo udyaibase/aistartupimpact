@@ -4,7 +4,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
-import { requireFounderAuth, setFounderSession, hashPassword } from '@/lib/founder-auth';
+import { setFounderSession, hashPassword } from '@/lib/founder-auth';
+import { founderApi } from '@/lib/founder/api-session';
 import { changePasswordSchema, validateInput } from '@/lib/validation';
 import { logFounderActivity } from '@/lib/founder/activity';
 import { accountHasPassword, confirmAccountPassword } from '@/lib/founder/account';
@@ -16,7 +17,9 @@ export async function POST(request: NextRequest) {
   if (!withinLimit) return NextResponse.json({ success: false, error: 'Too many requests. Please try again later.' }, { status: 429 });
 
   try {
-    const session = await requireFounderAuth();
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     const body = await request.json();
     const validation = validateInput(changePasswordSchema, body);
@@ -59,9 +62,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized - Please login') {
-      return NextResponse.json({ success: false, error: 'Please sign in again.' }, { status: 401 });
-    }
     console.error('Error changing password:', error instanceof Error ? error.message : 'unknown error');
     return NextResponse.json(
       { success: false, error: 'Failed to change password' },

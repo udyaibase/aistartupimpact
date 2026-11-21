@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFounderSession } from "@/lib/founder-auth";
+import { founderApi } from "@/lib/founder/api-session";
 import { generateOTP } from "@/lib/action-otp";
 import { founderTeamOtpHtml } from "@udyaibase/utils";
 import { sendEmailFireAndForget } from "@/lib/email/send";
@@ -16,8 +16,9 @@ const ACTION_LABELS: Record<string, string> = {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getFounderSession();
-    if (!session) return NextResponse.json({ success: false }, { status: 401 });
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     const identifier = getClientIdentifier(request);
     const { success: rlOk } = await checkRateLimit(strictRateLimit, identifier);

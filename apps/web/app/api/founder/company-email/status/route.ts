@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { requireFounderAuth } from '@/lib/founder-auth';
+import { founderApi } from '@/lib/founder/api-session';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const session = await requireFounderAuth();
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
 
     const founder = await prisma.founderUser.findUnique({
       where: { id: session.userId },
@@ -25,9 +27,6 @@ export async function GET() {
       companyDomain: founder.companyDomain,
     });
   } catch (err: any) {
-    if (err.message === 'Unauthorized - Please login') {
-      return NextResponse.json({ success: false, error: 'Please sign in.' }, { status: 401 });
-    }
     return NextResponse.json({ success: false, error: 'Something went wrong.' }, { status: 500 });
   }
 }

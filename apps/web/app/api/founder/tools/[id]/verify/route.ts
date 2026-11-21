@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { requireFounderAuth } from '@/lib/founder-auth';
+import { founderApi, tooMany } from '@/lib/founder/api-session';
+import { dnsCheckRateLimit } from '@/lib/rate-limit';
 import { prisma } from '@udyaibase/database';
 import { verifyDNS } from '@udyaibase/utils/src/verification/dns';
 
 export const dynamic = 'force-dynamic';
 
-function generateToken(): string {
-  return 'aisitool_' + crypto.randomBytes(8).toString('hex');
+/**
+ * The value a founder puts in their DNS to prove they control the tool's domain. Made from a server secret, so it
+ * can't be worked out from the tool's public id, and tied to the owner, so it stops working if the tool changes hands.
+ */
+function toolVerifyToken(toolId: string, ownerId: string): string {
+  const secret = process.env.NEXTAUTH_SECRET;
+  if (!secret) throw new Error('NEXTAUTH_SECRET is not set');
+  return 'aisitool_' + crypto.createHmac('sha256', `${secret}:tool-verify`).update(`${toolId}\n${ownerId}`).digest('hex').slice(0, 20);
 }
+const legacyToolVerifyToken = (toolId: string) => 'aisitool_' + toolId.substring(0, 10);
 
 function extractDomain(url: string): string {
   try {
@@ -24,7 +32,9 @@ function extractDomain(url: string): string {
 export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   try {
-    const session = await requireFounderAuth();
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
     const { id } = params;
 
     const tools = await prisma.$queryRaw<any[]>`
@@ -47,9 +57,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
       return NextResponse.json({ verified: true, message: 'Tool is already verified' });
     }
 
-    // Generate or retrieve verification token
-    // Store in a simple pattern: we'll use a deterministic token based on tool ID
-    const token = 'aisitool_' + tool.id.substring(0, 10);
+    const token = toolVerifyToken(tool.id, session.userId);
     const domain = extractDomain(tool.websiteUrl || '');
 
     return NextResponse.json({
@@ -68,9 +76,6 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
       },
     });
   } catch (error: any) {
-    if (error.message?.includes('Unauthorized')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 }
@@ -79,7 +84,11 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   try {
-    const session = await requireFounderAuth();
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
+    const limited = await tooMany(dnsCheckRateLimit, `dns:${session.userId}`);
+    if (limited) return limited;
     const { id } = params;
 
     const tools = await prisma.$queryRaw<any[]>`
@@ -102,7 +111,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       return NextResponse.json({ verified: true, message: 'Already verified' });
     }
 
-    const token = 'aisitool_' + tool.id.substring(0, 10);
+    const token = toolVerifyToken(tool.id, session.userId);
     const domain = extractDomain(tool.websiteUrl || '');
 
     if (!domain) {
@@ -110,7 +119,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     }
 
     // Verify DNS
-    const result = await verifyDNS(domain, token);
+    let result = await verifyDNS(domain, token);
+    // Records added before tokens became unguessable used a token made from the tool's id. Still accepted, so a
+    // founder who already added one isn't asked to change their DNS.
+    if (!result.verified) result = await verifyDNS(domain, legacyToolVerifyToken(tool.id));
 
     if (result.verified) {
       await prisma.$executeRaw`
@@ -132,9 +144,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       message: 'DNS record not found yet. Please ensure the TXT record is added and wait for propagation (1-5 minutes).',
     });
   } catch (error: any) {
-    if (error.message?.includes('Unauthorized')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
     console.error('Tool verification error:', error);
     return NextResponse.json({ error: 'Verification failed' }, { status: 500 });
   }

@@ -9,6 +9,8 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Upload, X, Loader2, Plus } from 'lucide-react';
 import { submitToolAction, updateToolAction, getTagGroupsForFounderAction, getToolTagIdsAction } from '@/app/founder/tools/actions';
+import { FormProblemList, useFormProblems } from '@/components/ui/FormProblems';
+import { TOOL_DESCRIPTION_MAX, TOOL_TAGLINE_MAX } from '@/lib/founder/listing-validation';
 import { FAQManager, type FAQ } from '@/components/shared/FAQManager';
 import CategoryCascadeSelect from '@/components/shared/CategoryCascadeSelect';
 import ToolTagSelector from '@/components/shared/ToolTagSelector';
@@ -243,6 +245,8 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
   };
 
 
+  const formProblems = useFormProblems();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -334,7 +338,8 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 space-y-6">
+    // noValidate: instead of the browser's one-field-at-a-time bubble, every problem is listed at the top (FormProblems).
+    <form noValidate onSubmit={(e) => { if (!formProblems.check(e.currentTarget)) { e.preventDefault(); return; } handleSubmit(e); }} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 space-y-6">
       {saved && (
         <StatusNote tone={saved.pending.length ? 'waiting' : 'success'} title={saved.pending.length ? 'Saved. Some changes are waiting for our team.' : 'Saved'}>
           {saved.published.length > 0 && `Live now: ${saved.published.join(', ')}. `}
@@ -343,10 +348,11 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
         </StatusNote>
       )}
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+        <div role="alert" className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
         </div>
       )}
+      <FormProblemList problems={formProblems.problems} onJump={formProblems.jumpTo} />
 
       {/* Logo Upload */}
       <div>
@@ -425,12 +431,12 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
           value={formData.tagline}
           onChange={handleChange}
           required
-          maxLength={100}
+          maxLength={TOOL_TAGLINE_MAX}
           className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
           placeholder="A short, catchy description (max 100 characters)"
         />
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          {formData.tagline.length}/100 characters
+          {formData.tagline.length}/{TOOL_TAGLINE_MAX} characters
         </p>
       </div>
 
@@ -445,13 +451,13 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
           value={formData.description}
           onChange={handleChange}
           required
-          maxLength={1000}
+          maxLength={TOOL_DESCRIPTION_MAX}
           rows={6}
           className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent resize-none"
           placeholder="Describe your tool, its features, and what makes it unique..."
         />
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          {formData.description.length}/1000 characters
+          {formData.description.length}/{TOOL_DESCRIPTION_MAX.toLocaleString('en-IN')} characters
         </p>
       </div>
 
@@ -516,8 +522,8 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
         <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">Social Links</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Twitter / X</label>
-            <input
+            <label htmlFor="tool-twitter-x" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Twitter / X</label>
+            <input id="tool-twitter-x"
               type="url"
               name="twitterUrl"
               value={formData.twitterUrl}
@@ -527,8 +533,8 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">LinkedIn</label>
-            <input
+            <label htmlFor="tool-linkedin" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">LinkedIn</label>
+            <input id="tool-linkedin"
               type="url"
               name="linkedinUrl"
               value={formData.linkedinUrl}
@@ -543,7 +549,7 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
           <div className="space-y-2">
             {socialLinks.map((link, index) => (
               <div key={index} className="flex gap-2 items-center">
-                <select
+                <select aria-label="Social platform"
                   value={link.platform}
                   onChange={(e) => {
                     const updated = [...socialLinks];
@@ -605,7 +611,7 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
           >
             {PRICING_MODELS.map(model => (
               <option key={model} value={model}>
-                {model.replace('_', ' ')}
+                {model.replace(/_/g, ' ')}
               </option>
             ))}
           </select>
@@ -834,7 +840,7 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
           className="px-6 py-2 bg-brand hover:bg-brand/90 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
           {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-          {loading ? (isNew ? 'Submitting...' : 'Saving...') : isNew ? 'Submit Tool' : 'Save changes'}
+          {loading ? (isNew ? 'Submitting...' : 'Saving...') : isNew ? 'Submit for review' : 'Save changes'}
         </button>
       </div>
     </form>

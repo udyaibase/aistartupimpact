@@ -21,11 +21,13 @@ export async function verifyStartupAccess(
   const session = await getFounderSession();
   if (!session) return null;
 
-  const startup = await prisma.startup.findUnique({
-    where: { id: startupId },
+  if (typeof startupId !== 'string' || !startupId) return null;
+  const startup = await prisma.startup.findFirst({
+    where: { id: startupId, deletedAt: null },
     select: { id: true, ownerId: true, isVerified: true },
   });
-  if (!startup) return null;
+  // A listing nobody has claimed has no owner and no team: nobody can post for it.
+  if (!startup || !startup.ownerId) return null;
 
   if (startup.ownerId === session.userId) {
     return {
@@ -41,7 +43,7 @@ export async function verifyStartupAccess(
 
   const membership = await prisma.founderTeamMember.findFirst({
     where: {
-      founderId: startup.ownerId!,
+      founderId: startup.ownerId,
       email: session.email.toLowerCase(),
       status: "ACTIVE",
     },

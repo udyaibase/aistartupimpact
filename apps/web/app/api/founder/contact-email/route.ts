@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getFounderSession } from '@/lib/founder-auth';
+import { founderApi } from '@/lib/founder/api-session';
 import { authRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 import { checkDomainCode, sendDomainCode } from '@/lib/startups/domain-otp';
 import { founderAlreadyOwnsEmail, isPlausibleEmail, normalizeEmail, signContactEmailProof } from '@/lib/startups/contact-email';
@@ -12,8 +12,9 @@ export const dynamic = 'force-dynamic';
  * Returns { confirmed: true, proof } once proven; the founder's own verified email is confirmed straight away.
  */
 export async function POST(request: NextRequest) {
-  const session = await getFounderSession();
-  if (!session) return NextResponse.json({ error: 'Please sign in again.' }, { status: 401 });
+  const guard = await founderApi();
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const body = await request.json().catch(() => ({}));
   const step = body.step === 'verify' ? 'verify' : body.step === 'check' ? 'check' : 'send';

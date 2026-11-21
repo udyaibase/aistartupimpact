@@ -3,7 +3,7 @@ import { confirmAccountPassword } from '@/lib/founder/account';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
 import { logFounderActivity } from '@/lib/founder/activity';
 import { prisma } from '@udyaibase/database';
-import { requireFounderAuth } from '@/lib/founder-auth';
+import { founderApi } from '@/lib/founder/api-session';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 import crypto from 'crypto';
 import { changeEmailSchema, validateInput } from '@/lib/validation';
@@ -15,7 +15,9 @@ export async function POST(request: NextRequest) {
   if (!withinLimit) return NextResponse.json({ success: false, error: 'Too many requests. Please try again later.' }, { status: 429 });
 
   try {
-    const session = await requireFounderAuth();
+    const guard = await founderApi();
+    if (guard.error) return guard.error;
+    const session = guard.session;
     const body = await request.json();
     const validation = validateInput(changeEmailSchema, body);
     if (!validation.success) {
