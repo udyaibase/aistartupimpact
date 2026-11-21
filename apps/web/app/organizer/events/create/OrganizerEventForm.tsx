@@ -33,6 +33,18 @@ function durationMinutes(start: string, end: string): number | null {
   return minutes > 0 ? minutes : null;
 }
 
+/** Whether some HTML has any text outside its tags (an empty editor gives "<p></p>"). Only a yes/no, nothing is
+ *  cleaned or shown, so a simple scan is enough. */
+function hasVisibleText(html: string): boolean {
+  let inTag = false;
+  for (const ch of html) {
+    if (ch === "<") inTag = true;
+    else if (ch === ">") inTag = false;
+    else if (!inTag && ch.trim()) return true;
+  }
+  return false;
+}
+
 export default function OrganizerEventForm({ organizerId, template, event }: { organizerId: string; template?: string; event?: EventData }) {
   const tpl = template ? TEMPLATES[template] : undefined;
   const isEdit = !!event;
@@ -279,7 +291,7 @@ export default function OrganizerEventForm({ organizerId, template, event }: { o
 
   // A new event with something typed in: warn before the page is closed or reloaded, so work isn't lost by accident.
   const savedRef = useRef(false);
-  const hasWork = !isEdit && !!(title.trim() || subtitle.trim() || venueName.trim() || startDate || (typeof description === "string" && description.replace(/<[^>]*>/g, "").trim()));
+  const hasWork = !isEdit && !!(title.trim() || subtitle.trim() || venueName.trim() || startDate || (typeof description === "string" && hasVisibleText(description)));
   useEffect(() => {
     if (!hasWork) return;
     const warn = (e: BeforeUnloadEvent) => { if (savedRef.current) return; e.preventDefault(); e.returnValue = ""; };

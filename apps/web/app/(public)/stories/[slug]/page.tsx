@@ -12,6 +12,7 @@ import { sql, getArticleBySlugDirect, getRelatedArticlesDirect } from '@/lib/db'
 import { defaultFounderSpotlights } from '@/lib/fallbacks';
 import { buildArticleMetadata, generateArticleSchema, generateBreadcrumbSchema } from '@/lib/seo';
 import { articleBodyHtml } from '@/lib/article-body';
+import { addHeadingIds, comparableText } from '@/lib/article-headings';
 import { getArticleEntityCards } from '@/lib/article-entities';
 import EntityHoverCards from '@/components/article/EntityHoverCards';
 import ShareButton from '@/components/ShareButton';
@@ -39,23 +40,6 @@ export async function generateStaticParams() {
   } catch {
     return [];
   }
-}
-
-/** Give each section heading an id (for the contents list) and collect them. */
-function withHeadingIds(html: string) {
-  const used = new Set<string>();
-  const headings: { id: string; text: string }[] = [];
-  const out = html.replace(/<h2(\s[^>]*)?>([\s\S]*?)<\/h2>/gi, (m, attrs = '', inner) => {
-    const text = String(inner).replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').trim();
-    if (!text) return m;
-    const existing = /\sid=["']([^"']+)["']/i.exec(attrs)?.[1];
-    let id = existing || text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'section';
-    if (!existing) { let n = 2; const base = id; while (used.has(id)) id = `${base}-${n++}`; }
-    used.add(id);
-    headings.push({ id, text });
-    return existing ? m : `<h2${attrs} id="${id}">${inner}</h2>`;
-  });
-  return { html: out, headings };
 }
 
 /** SERIES_A → "Series A", PRE_SEED → "Pre-Seed", IDEA → "Idea stage". */
@@ -93,11 +77,10 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
   // A founder who chose not to be named is shown as their startup; then there's no personal card.
   const namedFounder = founder && author.name && author.name !== startup?.name;
 
-  const { html: bodyHtml, headings } = withHeadingIds(articleBodyHtml(story));
+  const { html: bodyHtml, headings } = addHeadingIds(articleBodyHtml(story));
 
   // Many stories open with the summary as their first paragraph; don't print it twice.
-  const plain = (h: string) => h.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
-  const showLede = !!story.excerpt && !plain(bodyHtml).startsWith(plain(story.excerpt).slice(0, 120));
+  const showLede = !!story.excerpt && !comparableText(bodyHtml).startsWith(comparableText(story.excerpt).slice(0, 120));
 
   const entityCards = await getArticleEntityCards(bodyHtml);
 
