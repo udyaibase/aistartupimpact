@@ -15,6 +15,9 @@ import { activeMembership, OWN_WORKSPACE } from "@/lib/organizer-auth/workspace"
 import { getPermissions } from "@/lib/organizer-auth/permissions";
 import { accessFor, canOpen } from "@/lib/organizer-auth/nav";
 
+// A screen that forgets its own title still says where you are, instead of the site's home-page title.
+export const metadata = { title: { default: 'Events workspace', template: '%s | Udyaibase' } };
+
 export default async function OrganizerWorkspaceLayout({
   children,
 }: {

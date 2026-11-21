@@ -1,3 +1,4 @@
+import { MAX_CUSTOM_SVG } from './certificate-custom';
 import crypto from 'crypto';
 import { prisma } from '@udyaibase/database';
 import { effectiveHostPlan, isPlatformOrganizer } from '@/lib/events/plans';
@@ -14,7 +15,25 @@ export const CERTIFICATE_PRICE_PAISE = 49_900;
 export const FREE_FOLLOW_UPS_PER_EVENT = 1;
 export const FOLLOW_UP_AUTO_DELAY_MS = 2 * 60 * 60 * 1000;
 
-export type CertificateTemplate = 'classic' | 'modern' | 'minimal';
+export const CERTIFICATE_TEMPLATES = ['classic', 'modern', 'minimal', 'executive', 'heritage', 'tech', 'custom'] as const;
+/** Where the logo sits on the built-in designs. */
+export const CERTIFICATE_LOGO_POSITIONS = ['center', 'left', 'right'] as const;
+export type CertificateLogoPosition = (typeof CERTIFICATE_LOGO_POSITIONS)[number];
+export const CERTIFICATE_LOGO_SIZES = ['small', 'medium', 'large'] as const;
+export type CertificateLogoSize = (typeof CERTIFICATE_LOGO_SIZES)[number];
+export type CertificateTemplate = (typeof CERTIFICATE_TEMPLATES)[number];
+
+/** How the certificate says what the person did: "<name> <phrase> <event>". */
+export const CERTIFICATE_PHRASES = {
+  participated: 'participated in',
+  attended: 'attended',
+  completed: 'successfully completed',
+  spoke: 'spoke at',
+  volunteered: 'volunteered at',
+} as const;
+export type CertificatePhrase = keyof typeof CERTIFICATE_PHRASES;
+export const MAX_CERTIFICATE_SKILLS = 6;
+export const MAX_CERTIFICATE_DESCRIPTION = 160;
 export type CertificateAudience = 'CHECKED_IN' | 'REGISTERED';
 
 export interface CertificateSettings {
@@ -27,6 +46,24 @@ export interface CertificateSettings {
   signatureUrl: string | null;
   /** Issue at check-in, so people can download it straight after the event. */
   autoIssue: boolean;
+  /** "participated in", "successfully completed"… */
+  phrase: CertificatePhrase;
+  /** One sentence on what the event was: "A hands-on day of building and shipping AI agents." */
+  description: string;
+  /** What people learned or worked on, shown as "Topics covered". Up to 6 short items. */
+  skills: string[];
+  /** "6 hours", "2 days": added to the date line. */
+  duration: string;
+  /** A logo for certificates. Null means the host's profile picture, as before. */
+  logoUrl: string | null;
+  /** A second logo beside the first: a partner, sponsor or accrediting body. */
+  partnerLogoUrl: string | null;
+  logoPosition: CertificateLogoPosition;
+  logoSize: CertificateLogoSize;
+  /** Print the host's name under the logo (it is always printed when there is no logo). */
+  showHostName: boolean;
+  /** The host's own design, as cleaned SVG code. Used when template is "custom". */
+  customSvg: string;
 }
 
 export interface FollowUpSettings {
@@ -42,7 +79,20 @@ const clip = (v: unknown, n: number) => String(v ?? '').trim().slice(0, n);
 
 export function certificateSettings(raw: unknown): CertificateSettings {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
-  const template = (['classic', 'modern', 'minimal'] as const).includes(r.template as CertificateTemplate) ? (r.template as CertificateTemplate) : 'classic';
+  const httpsUrl = (v: unknown) => (typeof v === 'string' && /^https:\/\/\S+$/i.test(v) ? v.slice(0, 500) : null);
+  // Kept as saved: it was cleaned when the host saved it (see the after-event route) and is cleaned again when drawn.
+  const customSvg = typeof r.customSvg === 'string' ? r.customSvg.slice(0, MAX_CUSTOM_SVG) : '';
+  const asked = CERTIFICATE_TEMPLATES.includes(r.template as CertificateTemplate) ? (r.template as CertificateTemplate) : 'classic';
+  // "Your own design" with nothing pasted falls back to Classic rather than an empty page.
+  const template: CertificateTemplate = asked === 'custom' && !customSvg ? 'classic' : asked;
+  // Typed as a list, or as one line with commas. Short items only, no repeats.
+  const rawSkills = Array.isArray(r.skills) ? r.skills : typeof r.skills === 'string' ? r.skills.split(',') : [];
+  const skills: string[] = [];
+  for (const item of rawSkills) {
+    const text = clip(item, 32).replace(/\s+/g, ' ');
+    if (text && !skills.some((k) => k.toLowerCase() === text.toLowerCase())) skills.push(text);
+    if (skills.length >= MAX_CERTIFICATE_SKILLS) break;
+  }
   const signatureUrl = typeof r.signatureUrl === 'string' && /^https:\/\/\S+$/i.test(r.signatureUrl) ? r.signatureUrl.slice(0, 500) : null;
   return {
     template,
@@ -52,6 +102,16 @@ export function certificateSettings(raw: unknown): CertificateSettings {
     signerTitle: clip(r.signerTitle, 80),
     signatureUrl,
     autoIssue: r.autoIssue === true,
+    phrase: typeof r.phrase === 'string' && r.phrase in CERTIFICATE_PHRASES ? (r.phrase as CertificatePhrase) : 'participated',
+    description: clip(r.description, MAX_CERTIFICATE_DESCRIPTION).replace(/\s+/g, ' '),
+    skills,
+    duration: clip(r.duration, 24),
+    logoUrl: httpsUrl(r.logoUrl),
+    partnerLogoUrl: httpsUrl(r.partnerLogoUrl),
+    logoPosition: CERTIFICATE_LOGO_POSITIONS.includes(r.logoPosition as CertificateLogoPosition) ? (r.logoPosition as CertificateLogoPosition) : 'center',
+    logoSize: CERTIFICATE_LOGO_SIZES.includes(r.logoSize as CertificateLogoSize) ? (r.logoSize as CertificateLogoSize) : 'medium',
+    showHostName: r.showHostName === true,
+    customSvg,
   };
 }
 
@@ -150,6 +210,9 @@ export const seriesFollowToken = (followerId: string, action: 'confirm' | 'stop'
 export const verifySeriesFollowToken = (token: unknown, action: 'confirm' | 'stop') => verifyId(`series-${action}`, token);
 export const hostOptOutToken = (registrationId: string) => signId('host-optout', registrationId);
 export const verifyHostOptOutToken = (token: unknown) => verifyId('host-optout', token);
+/** "I didn't register" link in a registration email: names one registration, and only its recipient has it. */
+export const notMeToken = (registrationId: string) => signId('not-me', registrationId);
+export const verifyNotMeToken = (token: unknown) => verifyId('not-me', token);
 export const feedbackToken = (registrationId: string) => signId('event-feedback', registrationId);
 export const verifyFeedbackToken = (token: unknown) => verifyId('event-feedback', token);
 export const speakerPortalToken = (speakerId: string) => signId('speaker-portal', speakerId);

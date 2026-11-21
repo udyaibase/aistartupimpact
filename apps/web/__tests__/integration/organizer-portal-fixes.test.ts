@@ -4,12 +4,13 @@ import { NextRequest, NextResponse } from 'next/server';
 /** The caller: role plus (for limited teammates) the events they're assigned. */
 const who = vi.hoisted(() => ({ role: 'OWNER', assigned: undefined as string[] | undefined }));
 const db = vi.hoisted(() => ({
-  event: { findMany: vi.fn(async () => []), findUnique: vi.fn() },
+  event: { findMany: vi.fn(async () => []), findUnique: vi.fn(), findFirst: vi.fn() },
   eventEmailCampaign: { findMany: vi.fn(async () => []) },
 }));
 const promo = vi.hoisted(() => ({ startPromo: vi.fn(async () => ({ ok: true, recipients: 3, send: async () => {} })), promoAudienceSize: vi.fn(async () => 10) }));
 const limit = vi.hoisted(() => ({ ok: true }));
 
+vi.mock('@/lib/organizer-auth/write-limit', () => ({ hostWriteLimit: async () => null }));
 vi.mock('@udyaibase/database', () => ({ prisma: db }));
 vi.mock('@/lib/organizer-auth/require-permission', async () => {
   const actual = await vi.importActual<any>('@/lib/organizer-auth/require-permission');
@@ -55,17 +56,21 @@ describe('promote respects a teammate’s assigned events', () => {
 
 describe('event details by role', () => {
   const call = () => eventGET(new NextRequest('http://localhost/api/organizer/events/e1'), { params: Promise.resolve({ eventId: 'e1' }) });
-  beforeEach(() => db.event.findUnique.mockResolvedValue({ id: 'e1', organizerId: 'org1' }));
+  beforeEach(() => { db.event.findFirst.mockReset(); db.event.findFirst.mockResolvedValue({ id: 'e1', organizerId: 'org1' }); });
   it('check-in teammates get a view-only event without the attendee list', async () => {
     who.role = 'CHECK_IN';
     const d = await (await call()).json();
     expect(d).toMatchObject({ success: true, canEdit: false, canViewAttendees: false });
-    expect((db.event.findUnique.mock.calls as any)[0][0].include.registrations).toBeUndefined();
+    const query = (db.event.findFirst.mock.calls as any)[0][0];
+    expect(query.select.registrations).toBeUndefined();
+    // Only what the read-only screen shows: no meeting link or settings, and only this workspace's events.
+    expect(query.select.meetingLink).toBeUndefined();
+    expect(query.where.organizerId).toBeDefined();
   });
   it('staff see attendees but can’t edit; managers can edit', async () => {
     who.role = 'STAFF';
     expect(await (await call()).json()).toMatchObject({ canEdit: false, canViewAttendees: true });
-    expect((db.event.findUnique.mock.calls as any)[0][0].include.registrations).toBeDefined();
+    expect((db.event.findFirst.mock.calls as any)[0][0].select.registrations).toBeDefined();
     who.role = 'MANAGER';
     expect(await (await call()).json()).toMatchObject({ canEdit: true, canViewAttendees: true });
   });

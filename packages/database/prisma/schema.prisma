@@ -3139,6 +3139,7 @@ model EventRegistration {
   /// Unpaid seat hold ends here.
   paymentExpiresAt      DateTime?
   /// Why this person was waitlisted: "plan_limit" (host plan cap) or "capacity" (host-set capacity).
+  /// On a CANCELLED row, "not_me" means the address's owner said they never registered (see registration-trust.ts).
   waitlistReason        String?
   paidAt                DateTime?
   refundId              String?

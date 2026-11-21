@@ -1,3 +1,4 @@
+import { hostWriteLimit } from '@/lib/organizer-auth/write-limit';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { afterEventAccess } from '@/lib/events/after-event-access';
@@ -38,6 +39,8 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ event
   const { eventId } = await props.params;
   const access = await afterEventAccess(eventId, 'events.edit');
   if (access instanceof NextResponse) return access;
+  const limited = await hostWriteLimit(access.session.id);
+  if (limited) return limited;
   const { event, session } = access;
   const body = await request.json().catch(() => ({}));
   const tracks = cleanTracks(body.tracks);

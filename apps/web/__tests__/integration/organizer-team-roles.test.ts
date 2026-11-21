@@ -10,6 +10,7 @@ const db = vi.hoisted(() => ({
   $transaction: vi.fn(async (ops: unknown[]) => ops),
 }));
 
+vi.mock('@/lib/organizer-auth/write-limit', () => ({ hostWriteLimit: async () => null }));
 vi.mock('@udyaibase/database', () => ({ prisma: db }));
 vi.mock('@/lib/organizer-auth/require-permission', async () => {
   const { hasPermission } = await vi.importActual<any>('@/lib/organizer-auth/permissions');

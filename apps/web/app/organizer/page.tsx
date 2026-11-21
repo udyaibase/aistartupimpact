@@ -1,3 +1,4 @@
+import { cleanTimeZone } from "@/lib/events/zoned-time";
 import { redirect } from "next/navigation";
 import { getPermissions } from "@/lib/organizer-auth/permissions";
 import { accessFor, canOpen } from "@/lib/organizer-auth/nav";
@@ -7,9 +8,11 @@ import { prisma } from "@udyaibase/database";
 import Link from "next/link";
 import {
   CalendarDays, Users, TrendingUp, Plus, ArrowRight, Check,
-  AlertCircle, Pencil, ShieldAlert, MoreHorizontal, Code2, Mic2, Monitor, Building2,
+  AlertCircle, Pencil, ShieldAlert, Code2, Mic2, Monitor, Building2,
   BookOpen, QrCode, MessageCircle, ChevronRight, CodeXml,
 } from "lucide-react";
+
+export const metadata = { title: 'Dashboard' };
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +64,7 @@ export default async function OrganizerHome() {
     select: {
       id: true, title: true, slug: true, status: true,
       startAt: true, endAt: true, registrationCount: true,
-      capacity: true, venueName: true, meetingLink: true,
+      capacity: true, venueName: true, meetingLink: true, timezone: true,
       format: true, address: true, updatedAt: true,
     },
   });
@@ -252,7 +255,7 @@ export default async function OrganizerHome() {
       {/* Upcoming events + Latest registrations */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6">
         {/* Upcoming events table */}
-        <div data-tour="upcoming" className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md">
+        <div data-tour="upcoming" className="min-w-0 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md">
           <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
             <h2 className="portal-section-title">Upcoming events</h2>
             <Link href="/organizer/events" className="text-xs text-brand font-semibold font-jakarta hover:underline flex items-center gap-0.5">
@@ -278,8 +281,11 @@ export default async function OrganizerHome() {
               const wlCount = waitlistByEvent[e.id] || 0;
               const statusLabel = e.status === "DRAFT" ? "Draft" : isSoldOut ? "Sold out" : "Live";
               const statusColor = e.status === "DRAFT" ? "text-gray-500" : isSoldOut ? "text-brand" : "text-green-600";
-              const month = e.startAt.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
-              const day = e.startAt.getDate().toString().padStart(2, "0");
+              // In the event's own time zone. This page is built on the server, whose clock is UTC in production, so
+              // without it a 10:00 AM India event read "4:30 AM IST".
+              const timeZone = cleanTimeZone(e.timezone);
+              const month = e.startAt.toLocaleDateString("en-US", { month: "short", timeZone }).toUpperCase();
+              const day = e.startAt.toLocaleDateString("en-US", { day: "2-digit", timeZone });
               const loc = e.venueName || (e.meetingLink ? "Online" : "");
 
               return (
@@ -296,8 +302,8 @@ export default async function OrganizerHome() {
                         <span className={`ml-1.5 font-semibold ${statusColor}`}>· {statusLabel}</span>
                       </p>
                       <p className="text-xs text-gray-400 font-jakarta">
-                        {e.startAt.toLocaleDateString("en-US", { weekday: "short" })}{" "}
-                        {e.startAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })} IST
+                        {e.startAt.toLocaleDateString("en-US", { weekday: "short", timeZone })}{" "}
+                        {e.startAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone })} {timeZone === "Asia/Kolkata" ? "IST" : timeZone.split("/").pop()?.replace(/_/g, " ")}
                         {loc ? ` · ${loc}` : ""}
                       </p>
                     </div>
@@ -315,9 +321,9 @@ export default async function OrganizerHome() {
                     )}
                   </div>
                   <span className={`hidden sm:block text-xs font-semibold font-jakarta ${statusColor}`}>{statusLabel}</span>
-                  <button className="hidden sm:flex items-center justify-center w-7 h-7 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
-                    <MoreHorizontal className="w-4 h-4" />
-                  </button>
+                  <span aria-hidden className="hidden sm:flex items-center justify-center w-7 h-7 text-gray-400">
+                    <ArrowRight className="w-4 h-4" />
+                  </span>
                 </Link>
               );
             })}
@@ -337,16 +343,16 @@ export default async function OrganizerHome() {
                 </div>
                 <span className="hidden sm:block text-sm text-gray-400 font-jakarta">—</span>
                 <span className="hidden sm:block text-xs font-semibold font-jakarta text-gray-500">Draft</span>
-                <button className="hidden sm:flex items-center justify-center w-7 h-7 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
-                  <MoreHorizontal className="w-4 h-4" />
-                </button>
+                <span aria-hidden className="hidden sm:flex items-center justify-center w-7 h-7 text-gray-400">
+                  <ArrowRight className="w-4 h-4" />
+                </span>
               </Link>
             )}
           </div>
         </div>
 
-        {/* Latest registrations */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md">
+        {/* Latest registrations. min-w-0: a grid column otherwise grows to fit a long unbroken name. */}
+        <div className="min-w-0 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md">
           <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
             <h2 className="portal-section-title">Latest registrations</h2>
             <Link href="/organizer/attendees" className="text-xs text-brand font-semibold font-jakarta hover:underline flex items-center gap-0.5">
@@ -378,7 +384,7 @@ export default async function OrganizerHome() {
                     <p className="text-sm font-semibold text-gray-900 dark:text-white font-jakarta truncate">{r.guestName || "Guest"}</p>
                     <p className="text-xs text-gray-400 font-jakarta truncate">{r.event.title} · {timeAgo}</p>
                   </div>
-                  <span className={`text-[11px] font-semibold font-jakarta px-2 py-0.5 rounded-full ${statusColor}`}>
+                  <span className={`shrink-0 text-[11px] font-semibold font-jakarta px-2 py-0.5 rounded-full ${statusColor}`}>
                     {statusLabel}
                   </span>
                 </div>

@@ -1,3 +1,4 @@
+import { hostWriteLimit } from '@/lib/organizer-auth/write-limit';
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/organizer-auth/require-permission';
 import { invoiceEmailResponse } from '@/lib/billing/invoice-routes';
@@ -9,5 +10,7 @@ export async function POST(_request: NextRequest, props: { params: Promise<{ id:
   const { id } = await props.params;
   const result = await requirePermission('billing');
   if (result instanceof NextResponse) return result;
+  const limited = await hostWriteLimit(result.id);
+  if (limited) return limited;
   return invoiceEmailResponse('organizer', id, result.organizerId);
 }

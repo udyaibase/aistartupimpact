@@ -1,6 +1,6 @@
 import { prisma } from '@udyaibase/database';
 import { isPlatformOrganizer, effectiveHostPlan } from '@/lib/events/plans';
-import { certificateSettings, certificatesAllowed, eventPeople, isCertificateCode, newCertificateCode } from './after-event';
+import { certificateSettings, certificatesAllowed, eventPeople, isCertificateCode, newCertificateCode, CERTIFICATE_PHRASES } from './after-event';
 import type { CertificateData } from './certificate-pdf';
 
 const SITE = (process.env.NEXT_PUBLIC_SITE_URL || 'https://udyaibase.com').replace(/\/$/, '');
@@ -94,9 +94,12 @@ export async function certificateByCode(code: unknown) {
     title: s.title,
     recipientName: cert.recipientName,
     eventTitle: e.title,
-    dateLine: [date, place].filter(Boolean).join(' · '),
+    dateLine: [date, place, s.duration].filter(Boolean).join(' · '),
+    phrase: CERTIFICATE_PHRASES[s.phrase], description: s.description, skills: s.skills,
     hostName,
-    logoUrl: e.organizer.avatar,
+    logoUrl: s.logoUrl ?? e.organizer.avatar,
+    partnerLogoUrl: s.partnerLogoUrl, logoPosition: s.logoPosition, logoSize: s.logoSize, showHostName: s.showHostName,
+    customSvg: s.customSvg, duration: s.duration,
     signerName: s.signerName,
     signerTitle: s.signerTitle,
     signatureUrl: s.signatureUrl,
@@ -115,6 +118,7 @@ export async function certificateByCode(code: unknown) {
     hostName,
     date,
     place,
+    phrase: CERTIFICATE_PHRASES[s.phrase], description: s.description, skills: s.skills, duration: s.duration,
     pdf,
   };
 }

@@ -1,3 +1,4 @@
+import { hostWriteLimit } from '@/lib/organizer-auth/write-limit';
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@udyaibase/database";
@@ -28,6 +29,8 @@ export async function GET(_request: NextRequest, { params }: Ctx) {
 export async function PUT(request: NextRequest, { params }: Ctx) {
   const result = await requirePermission("embed.manage");
   if (result instanceof NextResponse) return result;
+  const limited = await hostWriteLimit(result.id);
+  if (limited) return limited;
   const { widgetId } = await params;
   if (isEventLimited(result)) return NextResponse.json({ success: false, error: "Your role in this workspace doesn’t allow this." }, { status: 403 });
 
@@ -69,6 +72,8 @@ export async function PUT(request: NextRequest, { params }: Ctx) {
 export async function DELETE(request: NextRequest, { params }: Ctx) {
   const result = await requirePermission("embed.manage");
   if (result instanceof NextResponse) return result;
+  const limited = await hostWriteLimit(result.id);
+  if (limited) return limited;
   const { widgetId } = await params;
   if (isEventLimited(result)) return NextResponse.json({ success: false, error: "Your role in this workspace doesn’t allow this." }, { status: 403 });
 

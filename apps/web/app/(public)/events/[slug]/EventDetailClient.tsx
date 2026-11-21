@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { eventInstant } from '@/lib/events/zoned-time';
+import { useEffect, useRef, useState } from "react";
+import { eventPriceLabel } from '@/lib/events/price-label';
 import Link from "next/link";
 import Image from "next/image";
 import ScheduleView from "@/components/events/ScheduleView";
@@ -38,10 +40,8 @@ interface Event {
   endAt: string;
   timezone: string;
   venueName?: string;
-  address?: string;
-  latitude?: number;
-  longitude?: number;
-  meetingLink?: string;
+  /** The city only: the street address is for people who have registered. */
+  city?: string;
   revealLinkAfterRegistration: boolean;
   coverImageUrl?: string;
   galleryImageUrls: string[];
@@ -137,15 +137,15 @@ function safeZone(timezone?: string) {
 }
 
 function formatDate(dateStr: string, timezone?: string) {
-  return new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: safeZone(timezone) }).format(new Date(dateStr));
+  return new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: safeZone(timezone) }).format(eventInstant(dateStr));
 }
 
 function formatTime(dateStr: string, timezone: string) {
-  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: safeZone(timezone) }).format(new Date(dateStr));
+  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: safeZone(timezone) }).format(eventInstant(dateStr));
 }
 
 function isUpcoming(dateStr: string) {
-  return new Date(dateStr) > new Date();
+  return eventInstant(dateStr) > new Date();
 }
 
 function isRegistrationOpen(event: Event) {
@@ -174,19 +174,35 @@ export default function EventDetailClient({
   const spotsLeft = event.capacity ? event.capacity - event.registrationCount : null;
   const isFull = event.capacity ? event.registrationCount >= event.capacity : false;
 
+  const price = eventPriceLabel(ticketTiers.map((t) => t.priceCents));
+  const registerLabel = price.free ? "Register Now — Free" : "Get tickets";
+
+  // On phones the main Register button sits below the details. Until it scrolls into view, a bar at the bottom
+  // of the screen carries the price and the button.
+  const ctaRef = useRef<HTMLDivElement>(null);
+  const [ctaInView, setCtaInView] = useState(false);
+  useEffect(() => {
+    const el = ctaRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([entry]) => setCtaInView(entry.isIntersecting), { threshold: 0.6 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  const showStickyBar = !ctaInView && !showRegistration && (event.sourceUrl ? true : regOpen);
+
   const eventUrl = event.shortCode
     ? `https://udyaibase.com/e/${event.shortCode}`
     : `https://udyaibase.com/events/${event.slug}`;
 
 
   return (
-    <div className="max-w-5xl mx-auto px-6 sm:px-10 lg:px-16 py-6 sm:py-8">
+    <div className="max-w-5xl mx-auto px-6 sm:px-10 lg:px-16 py-6 sm:py-8 pb-24 md:pb-8">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 text-xs font-jakarta text-gray-400 dark:text-gray-500 mb-5">
-        <Link href="/" className="hover:text-brand transition-colors">Home</Link>
-        <ChevronRight className="w-3 h-3" />
-        <Link href="/events" className="hover:text-brand transition-colors">AI Events</Link>
-        <ChevronRight className="w-3 h-3" />
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs font-jakarta text-gray-400 dark:text-gray-500 mb-3 md:mb-5">
+        <Link href="/" className="hover:text-brand transition-colors inline-flex items-center min-h-11 md:min-h-0">Home</Link>
+        <ChevronRight className="w-3 h-3" aria-hidden />
+        <Link href="/events" className="hover:text-brand transition-colors inline-flex items-center min-h-11 md:min-h-0">AI Events</Link>
+        <ChevronRight className="w-3 h-3" aria-hidden />
         <span className="text-gray-600 dark:text-gray-300 truncate max-w-[250px]">{event.title}</span>
       </nav>
 
@@ -194,8 +210,8 @@ export default function EventDetailClient({
       <div className="grid grid-cols-1 md:grid-cols-7 gap-6 md:gap-8 mb-8">
         {/* Left: Image + Host (3 cols) */}
         <div className="md:col-span-3 space-y-3">
-          {/* Cover Image — square */}
-          <div className="rounded-xl overflow-hidden bg-gradient-to-br from-brand/5 to-brand/10 relative aspect-square">
+          {/* Cover image, square. Without one: a slim band, so the title and Register aren't pushed down by an empty box. */}
+          <div className={`rounded-xl overflow-hidden bg-gradient-to-br from-brand/5 to-brand/10 relative ${event.coverImageUrl ? "aspect-square" : "h-16 md:h-28"}`}>
             {event.coverImageUrl ? (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
@@ -206,11 +222,11 @@ export default function EventDetailClient({
                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <Calendar className="w-12 h-12 text-brand/20" />
+              <div className="w-full h-full flex items-center justify-end pr-4">
+                <Calendar className="w-7 h-7 md:w-9 md:h-9 text-brand/20" aria-hidden />
               </div>
             )}
-            <div className="absolute top-3 left-3 flex gap-1.5">
+            <div className={`absolute left-3 flex gap-1.5 ${event.coverImageUrl ? "top-3" : "top-1/2 -translate-y-1/2"}`}>
               <span className="text-xs font-bold uppercase tracking-wider bg-white/90 backdrop-blur-sm text-brand px-2 py-0.5 rounded-full">{event.category.replace(/_/g, " ")}</span>
               <span className="text-xs font-bold uppercase tracking-wider bg-white/90 backdrop-blur-sm text-navy px-2 py-0.5 rounded-full">{event.format.replace(/_/g, " ")}</span>
             </div>
@@ -267,7 +283,7 @@ export default function EventDetailClient({
             <h1 className="font-sora font-bold text-xl sm:text-2xl text-navy dark:text-white leading-tight">
               {event.title}
             </h1>
-            <BookmarkButton type="event" itemId={event.slug} itemName={event.title} className="shrink-0" />
+            <BookmarkButton type="event" itemId={event.slug} itemName={event.title} className="shrink-0 min-w-11 min-h-11 md:min-w-0 md:min-h-0" />
           </div>
           {event.subtitle && (
             <p className="text-sm text-gray-500 dark:text-gray-400 font-jakarta mb-4">{event.subtitle}</p>
@@ -287,7 +303,7 @@ export default function EventDetailClient({
             {event.venueName && (
               <div className="flex items-center gap-2 text-sm font-jakarta">
                 <MapPin className="w-4 h-4 text-blue-500 shrink-0" />
-                <span className="text-gray-400 italic">Register to See Address</span>
+                <span className="text-gray-600 dark:text-gray-300">{event.city ? `${event.city} · ` : ""}<span className="text-gray-400 italic">full address after you register</span></span>
               </div>
             )}
             {event.format === "VIRTUAL" && (
@@ -326,7 +342,7 @@ export default function EventDetailClient({
           )}
 
           {/* Register CTA */}
-          <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-800 space-y-3">
+          <div ref={ctaRef} className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-800 space-y-3">
             {event.sourceUrl ? (
               <>
                 <a
@@ -344,14 +360,14 @@ export default function EventDetailClient({
             ) : (
               <>
                 <div className="flex items-center justify-between">
-                  <span className="text-lg font-sora font-bold text-navy dark:text-white">Free</span>
+                  <span className="text-lg font-sora font-bold text-navy dark:text-white">{price.label}</span>
                   {event.registrationDeadline && (
-                    <span className="text-xs text-gray-400 font-jakarta">Closes {new Date(event.registrationDeadline).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+                    <span className="text-xs text-gray-400 font-jakarta">Closes {eventInstant(event.registrationDeadline).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: safeZone(event.timezone) })}</span>
                   )}
                 </div>
                 {regOpen ? (
                   <button onClick={() => setShowRegistration(true)} className="w-full py-3 bg-brand hover:bg-brand-600 text-white font-bold font-jakarta text-sm rounded-xl transition-colors shadow-lg shadow-brand/20">
-                    Register Now — Free
+                    {registerLabel}
                   </button>
                 ) : isFull ? (
                   <button disabled className="w-full py-3 bg-gray-200 dark:bg-gray-700 text-gray-500 font-bold font-jakarta text-sm rounded-xl cursor-not-allowed">Event Full</button>
@@ -387,7 +403,7 @@ export default function EventDetailClient({
             <ScheduleView
               sessions={agenda}
               tracks={Array.isArray((event as { agendaTracks?: unknown }).agendaTracks) ? ((event as { agendaTracks?: string[] }).agendaTracks ?? []) : []}
-              event={{ slug: event.slug, title: event.title, startAt: event.startAt, timezone: event.timezone, location: event.format === "VIRTUAL" ? "Online" : [event.venueName, event.address?.split("|||")[0]].filter(Boolean).join(", "), ended: new Date(event.endAt) < new Date() }}
+              event={{ slug: event.slug, title: event.title, startAt: event.startAt, timezone: event.timezone, location: event.format === "VIRTUAL" ? "Online" : [event.venueName, event.city].filter(Boolean).join(", "), ended: new Date(event.endAt) < new Date() }}
             />
           )}
 
@@ -428,10 +444,7 @@ export default function EventDetailClient({
                       {se.title}
                     </p>
                     <p className="text-xs text-gray-400 font-jakarta mt-2">
-                      {new Date(se.startAt).toLocaleDateString("en-GB", {
-                        day: "numeric",
-                        month: "short",
-                      })}
+                      {eventInstant(se.startAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: safeZone(event.timezone) })}
                       {se.venueName && ` · ${se.venueName}`}
                     </p>
                   </Link>
@@ -440,6 +453,30 @@ export default function EventDetailClient({
             </div>
           )}
       </div>
+
+      {/* ─── Phones: price and Register, until the main button is on screen. Sits above the bottom menu and, on a
+          first visit, above the cookie banner (which reports its height in --cookie-banner-space). ─── */}
+      {showStickyBar && (
+        <div
+          data-sticky-register
+          className="md:hidden fixed inset-x-0 z-40 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-4 py-2 flex items-center gap-3 shadow-[0_-4px_16px_rgba(13,27,42,0.08)]"
+          style={{ bottom: "calc(4.0625rem + env(safe-area-inset-bottom, 0px) + var(--cookie-banner-space, 0px))" }}
+        >
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-sora font-bold text-navy dark:text-white truncate">{event.sourceUrl ? (event.sourceName || "External event") : price.label}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta truncate">{formatDate(event.startAt, event.timezone).replace(/^\w+, /, "")} · {formatTime(event.startAt, event.timezone)}</p>
+          </div>
+          {event.sourceUrl ? (
+            <a href={event.sourceUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 inline-flex items-center justify-center gap-1.5 h-11 px-5 bg-brand hover:bg-brand-600 text-white font-bold font-jakarta text-sm rounded-xl">
+              Register <ExternalLink className="w-4 h-4" aria-hidden />
+            </a>
+          ) : (
+            <button type="button" onClick={() => setShowRegistration(true)} className="shrink-0 h-11 px-6 bg-brand hover:bg-brand-600 text-white font-bold font-jakarta text-sm rounded-xl">
+              {price.free ? "Register" : "Get tickets"}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ─── Registration Modal ─── */}
       {showRegistration && (
@@ -484,7 +521,7 @@ function DescriptionSection({ description }: { description: any }) {
       {isLong ? (
         <button
           onClick={() => setExpanded(!expanded)}
-          className="text-xs text-brand font-semibold font-jakarta mt-1.5 hover:underline"
+          className="text-xs text-brand font-semibold font-jakarta mt-1.5 hover:underline min-h-11 md:min-h-0 inline-flex items-center"
         >
           {expanded ? "Show less" : "See more"}
         </button>

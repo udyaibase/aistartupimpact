@@ -19,7 +19,9 @@ export default function GuideHost() {
 
   useEffect(() => {
     setOpen(false);
-    if (!tour || tourSeen(tour.id)) return;
+    // Only the welcome tour opens by itself, once. Every other screen's tips wait for the Guide button: before,
+    // each screen started its own "Step 1 of 4" the first time it was opened.
+    if (!tour || tour.id !== "home" || tourSeen(tour.id)) return;
     if (new URLSearchParams(window.location.search).has("customize")) return;
     // Client-rendered pages load their data after mount; give anchors a moment to appear.
     const t = setTimeout(() => setOpen(true), 900);

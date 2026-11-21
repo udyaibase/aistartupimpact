@@ -1,3 +1,4 @@
+import { hostWriteLimit } from '@/lib/organizer-auth/write-limit';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
 import { getOrganizerSession } from "@/lib/organizer-auth";
@@ -26,6 +27,8 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 });
+  const limited = await hostWriteLimit(session.id);
+  if (limited) return limited;
   const { workspace } = await request.json().catch(() => ({}));
   if (typeof workspace !== "string" || !workspace) return NextResponse.json({ success: false, error: "Choose a workspace." }, { status: 400 });
   if (workspace !== OWN_WORKSPACE && !(await teamMemberships(session.id, session.email)).some((m) => m.organizerId === workspace)) {
@@ -42,6 +45,8 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const session = await getOrganizerSession();
   if (!session) return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 });
+  const limited = await hostWriteLimit(session.id);
+  if (limited) return limited;
   const { workspace } = await request.json().catch(() => ({}));
   const membership = (await teamMemberships(session.id, session.email)).find((m) => m.organizerId === workspace);
   if (!membership) return NextResponse.json({ success: false, error: "You’re not on that team." }, { status: 404 });

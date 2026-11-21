@@ -1,3 +1,4 @@
+import { hostWriteLimit } from '@/lib/organizer-auth/write-limit';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { requirePermission, isEventLimited } from '@/lib/organizer-auth/require-permission';
@@ -24,6 +25,8 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const session = await requirePermission('events.edit');
   if (session instanceof NextResponse) return session;
+  const limited = await hostWriteLimit(session.id);
+  if (limited) return limited;
   if (isEventLimited(session)) return NextResponse.json({ success: false, error: 'Your role in this workspace doesn’t allow this.' }, { status: 403 });
   const body = await request.json().catch(() => ({}));
   const name = String(body.name ?? '').trim().replace(/\s+/g, ' ').slice(0, 100);

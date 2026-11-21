@@ -1,3 +1,4 @@
+import { eventCity } from '@/lib/events/public-place';
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { generateICSContent } from "@/lib/events/calendar";
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
   try {
     const rows: any[] = await sql`
       SELECT 
-        title, slug, subtitle, "startAt"::text AS "startAt", "endAt"::text AS "endAt",
+        title, slug, subtitle, to_char("startAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "startAt", to_char("endAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "endAt",
         timezone, "venueName", address, format
       FROM "Event"
       WHERE slug = ${slug}
@@ -35,8 +36,10 @@ export async function GET(request: NextRequest) {
     const SITE_URL =
       process.env.NEXT_PUBLIC_SITE_URL || "https://udyaibase.com";
 
+    // Anyone can download this file, so it carries the venue and city. The street address goes to people who register.
+    const city = eventCity(event.address);
     const location = event.venueName
-      ? `${event.venueName}${event.address ? `, ${event.address}` : ""}`
+      ? `${event.venueName}${city ? `, ${city}` : ""}`
       : event.format === "VIRTUAL"
       ? "Virtual Event"
       : undefined;

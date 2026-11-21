@@ -1,3 +1,4 @@
+import { hostWriteLimit } from '@/lib/organizer-auth/write-limit';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { requirePermission } from '@/lib/organizer-auth/require-permission';
@@ -10,6 +11,8 @@ export const dynamic = 'force-dynamic';
 export async function PATCH(request: NextRequest) {
   const result = await requirePermission('billing');
   if (result instanceof NextResponse) return result;
+  const limited = await hostWriteLimit(result.id);
+  if (limited) return limited;
   const parsed = parseBillingProfile(await request.json().catch(() => ({})));
   if (!parsed.ok) return NextResponse.json({ success: false, error: parsed.error, field: parsed.field }, { status: 400 });
   await prisma.eventOrganizer.update({ where: { id: result.organizerId }, data: parsed.data });

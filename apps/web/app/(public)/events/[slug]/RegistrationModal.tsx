@@ -162,7 +162,7 @@ export default function RegistrationModal({ event, customQuestions, ticketTiers,
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
                   <span className="flex items-center gap-1 text-xs text-gray-500 font-jakarta">
                     <Calendar className="w-3 h-3 text-brand" />
-                    {new Date(event.startAt).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })} • {new Date(event.startAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                    {new Date(event.startAt).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: event.timezone || "Asia/Kolkata" })} • {new Date(event.startAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: event.timezone || "Asia/Kolkata" })}
                   </span>
                   {event.venueName ? (
                     <span className="flex items-center gap-1 text-xs text-gray-500 font-jakarta">

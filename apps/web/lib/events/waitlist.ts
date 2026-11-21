@@ -24,7 +24,7 @@ const button = (href: string, label: string) =>
 const rupees = (paise: number) => `₹${(paise / 100).toLocaleString('en-IN')}`;
 
 /** To the attendee: on the waitlist (no ticket yet), or waiting for the host to approve. */
-export function sendRegistrationStatusEmail(opts: { to: string; name: string; eventTitle: string; slug: string; status: 'WAITLISTED' | 'PENDING_APPROVAL'; position?: number }) {
+export function sendRegistrationStatusEmail(opts: { to: string; name: string; eventTitle: string; slug: string; status: 'WAITLISTED' | 'PENDING_APPROVAL'; position?: number; notMeUrl?: string }) {
   const waitlisted = opts.status === 'WAITLISTED';
   sendEmailFireAndForget({
     to: opts.to,
@@ -36,8 +36,43 @@ export function sendRegistrationStatusEmail(opts: { to: string; name: string; ev
       ? `<strong>${esc(opts.eventTitle)}</strong> is full right now${opts.position ? ` and you’re number ${opts.position} in line` : ''}. If a spot opens, you’ll get it automatically and we’ll email your ticket.`
       : `the host of <strong>${esc(opts.eventTitle)}</strong> reviews every request. We’ll email you, with your ticket, as soon as you’re approved.`}</p>
 <p style="margin:0 0 16px;font-size:14px;color:#6b7280">This isn’t a ticket yet, so please don’t go to the venue until you hear from us.</p>
-<p style="margin:0">${button(`${SITE}/events/${opts.slug}`, 'View the event')}</p>`),
+<p style="margin:0">${button(`${SITE}/events/${opts.slug}`, 'View the event')}</p>${opts.notMeUrl ? `
+<p style="margin:20px 0 0;font-size:12px;color:#6b7280">Didn’t register for this? <a href="${opts.notMeUrl}" style="color:#6b7280;text-decoration:underline">Tell us</a> and we’ll cancel it.</p>` : ''}`),
   });
+}
+
+/**
+ * To everyone with a seat: the join link for an online or hybrid event, when the host adds or changes it after they
+ * registered. Their ticket email has the link as it was on the day they registered (or none), so without this they
+ * would be holding a dead link. Returns how many people were emailed.
+ */
+export async function sendMeetingLinkUpdate(eventId: string): Promise<number> {
+  const ev = await prisma.event.findFirst({
+    where: { id: eventId, deletedAt: null, status: 'PUBLISHED' },
+    select: { title: true, slug: true, startAt: true, endAt: true, timezone: true, format: true, meetingLink: true },
+  });
+  if (!ev || ev.format === 'IN_PERSON' || ev.endAt < new Date() || !ev.meetingLink || !/^https:\/\/\S+$/i.test(ev.meetingLink)) return 0;
+  const people = await prisma.eventRegistration.findMany({
+    where: { eventId, deletedAt: null, status: { in: ['CONFIRMED', 'CHECKED_IN'] }, guestEmail: { not: null } },
+    select: { guestEmail: true, guestName: true },
+  });
+  const timeZone = ev.timezone || 'Asia/Kolkata';
+  const when = `${ev.startAt.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', timeZone })}, ${ev.startAt.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone })}`;
+  const link = esc(ev.meetingLink);
+  for (const p of people) {
+    sendEmailFireAndForget({
+      to: p.guestEmail!,
+      from: FROM,
+      subject: `Join link for ${ev.title}`,
+      type: 'event_meeting_link',
+      html: shell(`<h1 style="font-size:20px;margin:0 0 8px">Here’s where to join</h1>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.6">Hi ${esc((p.guestName || 'there').split(' ')[0])}, the host of <strong>${esc(ev.title)}</strong> (${esc(when)}) has set the link for joining online. Use this one; it replaces any link in an earlier email.</p>
+<p style="margin:0 0 16px">${button(link, 'Join the event')}</p>
+<p style="margin:0 0 16px;font-size:13px;color:#6b7280;word-break:break-all">${link}</p>
+<p style="margin:0;font-size:12px;color:#6b7280">This link is for registered attendees. Please don’t share it.</p>`),
+    });
+  }
+  return people.length;
 }
 
 /** Tell the host, once per event, that people are being waitlisted because of their plan's cap. */

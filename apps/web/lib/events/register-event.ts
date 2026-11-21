@@ -5,7 +5,11 @@ import { generateQrToken } from "@/lib/events/qr-token";
 import { sendRegistrationConfirmationEmail, sendNewsletterWelcomeEmail } from "@/lib/events/email";
 import { generateGoogleCalendarUrl } from "@/lib/events/calendar";
 import { refreshPaths } from "@/lib/revalidate";
+import { cleanTimeZone } from "@/lib/events/zoned-time";
 import { cleanRegistrationInput, RegistrationInputError } from "@/lib/events/registration-input";
+import { emailBlocked, emailOverDailyLimit } from "@/lib/events/registration-trust";
+import { notMeToken } from "@/lib/events/after-event";
+import { checkRateLimit, repeatRegistrationEmailRateLimit } from "@/lib/rate-limit";
 
 const CONSENT_TEXT =
   "Keep me updated about upcoming AI events, conferences, and opportunities in my area. You can unsubscribe anytime.";
@@ -48,14 +52,15 @@ export async function registerForEvent(
     eventId, role, ticketTierId, newsletterConsent, whatsappConsent,
     locationCity, registrationSource, referrerUrl, embedWidgetId, utmSource, utmMedium, utmCampaign,
   } = params;
-  const name = String(params.name ?? '').trim().replace(/\s+/g, ' ').slice(0, 100);
+  // No angle brackets in a name: it is shown in many places, and none of them should depend on being escaped.
+  const name = String(params.name ?? '').replace(/[<>]/g, '').trim().replace(/\s+/g, ' ').slice(0, 100);
   if (!name) throw new RegistrationError("Enter your name.", 400, "invalid", "name");
 
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     select: {
       id: true, status: true, capacity: true, registrationCount: true,
-      registrationDeadline: true, startAt: true, approvalRequired: true, boostedAt: true,
+      registrationDeadline: true, startAt: true, endAt: true, approvalRequired: true, boostedAt: true,
       deletedAt: true, title: true, slug: true, tags: { select: { tagId: true } },
       organizer: { select: { plan: true, planExpiresAt: true, email: true } },
     },
@@ -63,6 +68,12 @@ export async function registerForEvent(
 
   if (!event || event.deletedAt || event.status !== "PUBLISHED") {
     throw new RegistrationError("Event not found or not available.", 404, "not_found");
+  }
+
+  // The page hides the button once an event is over, but a request sent straight here was still accepted, and the
+  // person got a ticket for something that had already happened. A host can still add walk-ins while wrapping up.
+  if (registrationSource !== "WALK_IN" && event.endAt < new Date()) {
+    throw new RegistrationError("This event has ended.", 400, "closed");
   }
 
   if (event.registrationDeadline && new Date(event.registrationDeadline) < new Date()) {
@@ -102,12 +113,25 @@ export async function registerForEvent(
   const hostPlan = effectiveHostPlan(event.organizer);
   const limit = registrationLimit(hostPlan, event);
 
+  const guestForm = registrationSource !== "WALK_IN";
+  // The owner of this address told us they never registered. Said plainly: only they would see this often.
+  if (guestForm && await emailBlocked(email)) {
+    throw new RegistrationError("This email address can’t be registered right now. If it’s yours, contact support.", 403, "blocked", "email");
+  }
+
   const existingReg = await prisma.eventRegistration.findUnique({
     where: { eventId_guestEmail: { eventId, guestEmail: email } },
-    select: { deletedAt: true },
+    select: { id: true, status: true, qrToken: true, waitlistReason: true, guestName: true, deletedAt: true },
   });
   if (existingReg && !existingReg.deletedAt) {
-    throw new RegistrationError("You are already registered for this event.", 409, "already_registered");
+    // A host adding a walk-in is told straight. A public form gets the same answer as a first registration, so it
+    // can't be used to find out whether an address is registered; the address itself gets its ticket again.
+    if (!guestForm) throw new RegistrationError("You are already registered for this event.", 409, "already_registered");
+    return repeatRegistration(existingReg, { eventId, email, title: event.title, slug: event.slug });
+  }
+
+  if (guestForm && await emailOverDailyLimit(email)) {
+    throw new RegistrationError("This email address has been used for several registrations today. Try again tomorrow.", 429, "too_many", "email");
   }
 
   // One statement, so it works on the Neon HTTP driver (no interactive transactions).
@@ -140,6 +164,12 @@ export async function registerForEvent(
       RETURNING id, status::text AS status, "qrToken"`;
   } catch (err) {
     if (String((err as Error)?.message).includes("23505")) {
+      // Two requests for the same address at once: the other one won.
+      const other = guestForm ? await prisma.eventRegistration.findUnique({
+        where: { eventId_guestEmail: { eventId, guestEmail: email } },
+        select: { id: true, status: true, qrToken: true, waitlistReason: true, guestName: true, deletedAt: true },
+      }) : null;
+      if (other && !other.deletedAt) return repeatRegistration(other, { eventId, email, title: event.title, slug: event.slug });
       throw new RegistrationError("You are already registered for this event.", 409, "already_registered");
     }
     throw err;
@@ -185,7 +215,7 @@ export async function registerForEvent(
   if (registration.status === "CONFIRMED") {
     sendConfirmationEmail(eventId, email, name, qrToken).catch(() => {});
   } else if (registration.status === "WAITLISTED" || registration.status === "PENDING_APPROVAL") {
-    sendRegistrationStatusEmail({ to: email, name, eventTitle: event.title, slug: event.slug, status: registration.status, position: waitlistPosition });
+    sendRegistrationStatusEmail({ to: email, name, eventTitle: event.title, slug: event.slug, status: registration.status, position: waitlistPosition, notMeUrl: notMeUrl(registration.id) });
   }
 
   return {
@@ -194,6 +224,52 @@ export async function registerForEvent(
     qrToken: registration.qrToken,
     waitlistPosition,
     waitlistReason: reason,
+  };
+}
+
+const notMeUrl = (registrationId: string) =>
+  `${process.env.NEXT_PUBLIC_SITE_URL || "https://udyaibase.com"}/events/not-me?t=${notMeToken(registrationId)}`;
+
+/** What the public forms may be told: never the ticket code or the record's id, which go to the email address only. */
+export function publicRegistrationReply(r: RegisterForEventResult) {
+  return { status: r.status, waitlistPosition: r.waitlistPosition, waitlistReason: r.waitlistReason };
+}
+
+type ExistingRegistration = { id: string; status: string; qrToken: string; waitlistReason: string | null; guestName: string | null };
+
+/**
+ * Someone registered an address that is already registered for this event. The form hears what a first registration
+ * would hear; the address gets its ticket (or its waitlist note) again, at most twice a day.
+ */
+async function repeatRegistration(reg: ExistingRegistration, ev: { eventId: string; email: string; title: string; slug: string }): Promise<RegisterForEventResult> {
+  if (reg.status === "CANCELLED") {
+    throw new RegistrationError("This email address can’t be registered for this event. Contact the organizer.", 409, "unavailable", "email");
+  }
+  const waiting = reg.status === "WAITLISTED" || reg.status === "PENDING_APPROVAL" || reg.status === "PENDING_PAYMENT";
+  let waitlistPosition: number | undefined;
+  if (reg.status === "WAITLISTED") {
+    const [pos] = await prisma.$queryRaw<{ n: number }[]>`
+      SELECT COUNT(*)::int AS n FROM "EventRegistration"
+      WHERE "eventId" = ${ev.eventId} AND status = 'WAITLISTED' AND "deletedAt" IS NULL
+        AND "registeredAt" <= (SELECT "registeredAt" FROM "EventRegistration" WHERE id = ${reg.id})`;
+    waitlistPosition = pos?.n;
+  }
+  const { success: maySend } = await checkRateLimit(repeatRegistrationEmailRateLimit, `${ev.eventId}:${ev.email}`);
+  if (maySend) {
+    const name = reg.guestName || "there";
+    if (reg.status === "WAITLISTED" || reg.status === "PENDING_APPROVAL") {
+      sendRegistrationStatusEmail({ to: ev.email, name, eventTitle: ev.title, slug: ev.slug, status: reg.status, position: waitlistPosition, notMeUrl: notMeUrl(reg.id) });
+    } else if (reg.status !== "PENDING_PAYMENT") {
+      sendConfirmationEmail(ev.eventId, ev.email, name, reg.qrToken).catch(() => {});
+    }
+  }
+  return {
+    registrationId: reg.id,
+    // Checked in already is still "you're registered" to the form.
+    status: waiting ? (reg.status === "PENDING_PAYMENT" ? "PENDING_APPROVAL" : reg.status) : "CONFIRMED",
+    qrToken: reg.qrToken,
+    waitlistPosition,
+    waitlistReason: reg.status === "WAITLISTED" ? ((reg.waitlistReason as 'capacity' | 'plan_limit' | null) ?? undefined) : undefined,
   };
 }
 
@@ -306,7 +382,7 @@ export async function sendConfirmationEmail(eventId: string, email: string, name
     where: { id: eventId },
     select: {
       title: true, slug: true, startAt: true, endAt: true,
-      timezone: true, venueName: true, address: true, venueMapUrl: true, format: true,
+      timezone: true, venueName: true, address: true, venueMapUrl: true, format: true, meetingLink: true,
     },
   });
 
@@ -315,12 +391,15 @@ export async function sendConfirmationEmail(eventId: string, email: string, name
   const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://udyaibase.com";
   const eventUrl = `${SITE_URL}/events/${eventForEmail.slug}`;
 
+  // In the event's own time zone: the server's clock is UTC, which showed 4:30 AM for a 10:00 AM event in India.
+  const timeZone = cleanTimeZone(eventForEmail.timezone);
   const eventDate = eventForEmail.startAt.toLocaleDateString("en-IN", {
-    weekday: "long", day: "numeric", month: "long", year: "numeric",
+    weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone,
   });
   const eventTime = eventForEmail.startAt.toLocaleTimeString("en-IN", {
-    hour: "2-digit", minute: "2-digit",
+    hour: "2-digit", minute: "2-digit", timeZone,
   });
+  const reg = await prisma.eventRegistration.findUnique({ where: { qrToken }, select: { id: true } });
 
   const location = eventForEmail.venueName
     ? `${eventForEmail.venueName}${eventForEmail.address ? `, ${eventForEmail.address}` : ""}`
@@ -345,6 +424,9 @@ export async function sendConfirmationEmail(eventId: string, email: string, name
     mapUrl: eventForEmail.venueMapUrl || undefined,
     format: eventForEmail.format,
     qrToken,
+    notMeUrl: reg ? notMeUrl(reg.id) : undefined,
+    // The join link for an online or hybrid event. This email goes only to confirmed attendees.
+    meetingLink: eventForEmail.format !== "IN_PERSON" && eventForEmail.meetingLink ? eventForEmail.meetingLink : undefined,
     googleCalendarUrl: googleCalUrl,
     startAtIso: eventForEmail.startAt.toISOString(),
     endAtIso: eventForEmail.endAt.toISOString(),

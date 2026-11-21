@@ -53,3 +53,15 @@ export function utcToZoned(iso: string | Date | null | undefined, timeZone: stri
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
   return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${get('hour')}:${get('minute')}` };
 }
+
+/**
+ * A stored event time as a real instant. The database keeps UTC without a zone marker, and a query that returns it
+ * as text ("2026-11-28 04:30:00") was read by browsers as local time, so a 10:00 AM event in India showed as 4:30 AM
+ * to visitors in India. Text without a zone is UTC here, whatever the device's own zone.
+ */
+export function eventInstant(value: string | Date | null | undefined): Date {
+  if (value instanceof Date) return value;
+  const text = String(value ?? '').trim();
+  const bare = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)$/.exec(text);
+  return new Date(bare ? `${bare[1]}T${bare[2]}Z` : text);
+}

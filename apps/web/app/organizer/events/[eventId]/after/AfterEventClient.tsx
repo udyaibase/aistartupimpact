@@ -4,9 +4,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Award, CheckCircle2, ExternalLink, Eye, ImagePlus, Loader2, Lock, Mail, MessageSquareText, Plus, Send, Star, Trash2, Upload, Users, X } from 'lucide-react';
 import { payWithRazorpay } from '@/lib/billing/checkout-client';
+import CertificatePreview from './CertificatePreview';
+import { CERTIFICATE_MARKERS, certificatePrompt, checkCustomSvg } from '@/lib/events/certificate-custom';
 
-type Template = 'classic' | 'modern' | 'minimal';
-type CertSettings = { template: Template; audience: 'CHECKED_IN' | 'REGISTERED'; title: string; signerName: string; signerTitle: string; signatureUrl: string | null; autoIssue: boolean };
+type Template = 'classic' | 'modern' | 'minimal' | 'executive' | 'heritage' | 'tech' | 'custom';
+type Phrase = 'participated' | 'attended' | 'completed' | 'spoke' | 'volunteered';
+type CertSettings = { template: Template; audience: 'CHECKED_IN' | 'REGISTERED'; title: string; signerName: string; signerTitle: string; signatureUrl: string | null; autoIssue: boolean; phrase: Phrase; description: string; skills: string[]; duration: string; logoUrl: string | null; partnerLogoUrl: string | null; logoPosition: 'center' | 'left' | 'right'; logoSize: 'small' | 'medium' | 'large'; showHostName: boolean; customSvg: string };
 type FollowSettings = { auto: boolean; includeMissed: boolean; attendedSubject: string; attendedBody: string; missedSubject: string; missedBody: string };
 type FeedbackSettings = { enabled: boolean; questions: string[] };
 type RecapLink = { kind: 'recording' | 'slides' | 'other'; title: string; url: string };
@@ -20,7 +23,7 @@ type Data = {
   event: { id: string; slug: string; title: string; startAt: string; endAt: string; started: boolean; ended: boolean };
   counts: { registered: number; attended: number; missed: number; optedOut: number };
   sources: { label: string; count: number }[];
-  certificates: { allowed: boolean; paid: boolean; pricePaise: number; issued: number; configured: boolean; settings: CertSettings };
+  certificates: { allowed: boolean; paid: boolean; pricePaise: number; issued: number; configured: boolean; settings: CertSettings; sample?: { hostName: string; logoUrl: string | null; dateLine: string } };
   recap: Recap;
   feedback: Feedback;
   followUp: { settings: FollowSettings; left: number | null; autoSentAt: string | null; history: { id: string; status: string; sentAt: string; recipients: number }[] };
@@ -50,16 +53,30 @@ function Toggle({ id, checked, onChange, children }: { id: string; checked: bool
   );
 }
 
-const TEMPLATES: { id: Template; name: string; swatch: string }[] = [
+const TEMPLATES: { id: Template; name: string; swatch: string; dark?: boolean }[] = [
   { id: 'classic', name: 'Classic', swatch: 'bg-[#FDFAF4] border-[#B08C3D] border-[3px] [outline:1px_solid_#B08C3D] [outline-offset:-7px]' },
   { id: 'modern', name: 'Modern', swatch: 'bg-white border-l-[6px] border-l-[#DB2645] border-t-[3px] border-t-gray-900' },
   { id: 'minimal', name: 'Minimal', swatch: 'bg-white border border-gray-300' },
+  { id: 'executive', name: 'Executive', swatch: 'bg-[#0D182E] border-[#D4B05C] border-2 [outline:1px_solid_#D4B05C] [outline-offset:-6px]', dark: true },
+  { id: 'heritage', name: 'Heritage', swatch: 'bg-[#FCF9F2] border-[#851C26] border-[3px] [outline:1px_solid_#B8943F] [outline-offset:-7px]' },
+  { id: 'tech', name: 'Tech', swatch: 'bg-white border-t-[14px] border-t-[#0F172A] border-b-[3px] border-b-[#0D9488]' },
+  { id: 'custom', name: 'Your own', swatch: 'bg-gray-50 border-2 border-dashed border-gray-400' },
+];
+
+const PHRASES: { id: Phrase; text: string }[] = [
+  { id: 'participated', text: 'participated in' },
+  { id: 'attended', text: 'attended' },
+  { id: 'completed', text: 'successfully completed' },
+  { id: 'spoke', text: 'spoke at' },
+  { id: 'volunteered', text: 'volunteered at' },
 ];
 
 export default function AfterEventClient({ eventId }: { eventId: string }) {
   const [data, setData] = useState<Data | null>(null);
   const [loadError, setLoadError] = useState('');
   const [cert, setCert] = useState<CertSettings | null>(null);
+  // The topics are typed as one line with commas; the server turns them into the list (up to 6).
+  const [skillsText, setSkillsText] = useState<string | null>(null);
   const [follow, setFollow] = useState<FollowSettings | null>(null);
   const [fb, setFb] = useState<FeedbackSettings | null>(null);
   const [recap, setRecap] = useState<Recap | null>(null);
@@ -69,6 +86,9 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
   const [busy, setBusy] = useState<'' | 'issue' | 'send' | 'buy' | 'upload' | 'photos'>('');
   const [confirmSend, setConfirmSend] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const logoRef = useRef<HTMLInputElement>(null);
+  const partnerRef = useRef<HTMLInputElement>(null);
+  const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -76,7 +96,8 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
       const d = await r.json();
       if (!r.ok || !d.success) { setLoadError(d.error || 'Couldn’t load this event.'); return; }
       setData(d);
-      setCert((c) => c ?? d.certificates.settings);
+      setCert((c) => c ?? { phrase: 'participated', description: '', skills: [], duration: '', logoUrl: null, partnerLogoUrl: null, logoPosition: 'center', logoSize: 'medium', showHostName: false, customSvg: '', ...d.certificates.settings });
+      setSkillsText((t) => t ?? (d.certificates.settings.skills ?? []).join(', '));
       setFollow((f) => f ?? d.followUp.settings);
       setFb((f) => f ?? d.feedback.settings);
       setRecap((r) => r ?? d.recap);
@@ -90,7 +111,7 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
 
   async function save(which: 'cert' | 'follow' | 'feedback' | 'recap') {
     setSaving(which);
-    const body = which === 'cert' ? { certificateSettings: cert }
+    const body = which === 'cert' ? { certificateSettings: { ...cert, skills: skillsText ?? '' } }
       : which === 'follow' ? { followUpSettings: follow }
       : which === 'feedback' ? { feedbackSettings: fb }
       : { recap: recap && { summary: recap.summary, links: recap.links.filter((l) => l.url.trim()), gallery: recap.gallery, sessions: recap.sessions } };
@@ -146,7 +167,7 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
     finally { setBusy(''); }
   }
 
-  async function uploadSignature(file: File) {
+  async function uploadImage(file: File, field: 'signatureUrl' | 'logoUrl' | 'partnerLogoUrl' = 'signatureUrl') {
     setBusy('upload');
     try {
       const body = new FormData();
@@ -154,9 +175,9 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
       const r = await fetch('/api/organizer/upload', { method: 'POST', body });
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !d.url) flash('error', d.error || 'Upload failed.');
-      else setCert((c) => (c ? { ...c, signatureUrl: d.url } : c));
+      else setCert((c) => (c ? { ...c, [field]: d.url } : c));
     } catch { flash('error', 'You seem to be offline.'); }
-    finally { setBusy(''); if (fileRef.current) fileRef.current.value = ''; }
+    finally { setBusy(''); for (const r of [fileRef, logoRef, partnerRef]) if (r.current) r.current.value = ''; }
   }
 
   async function uploadPhotos(files: FileList) {
@@ -190,7 +211,7 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
   const { counts, certificates, followUp, event, feedback } = data;
   const rate = counts.registered ? Math.round((counts.attended / counts.registered) * 100) : 0;
   const recipients = counts.attended + (follow.includeMissed ? counts.missed : 0) - counts.optedOut;
-  const previewHref = `/api/organizer/events/${eventId}/certificates/preview?settings=${encodeURIComponent(JSON.stringify(cert))}`;
+  const previewHref = `/api/organizer/events/${eventId}/certificates/preview?settings=${encodeURIComponent(JSON.stringify({ ...cert, customSvg: undefined, skills: skillsText ?? '' }))}`;
   const eligible = cert.audience === 'CHECKED_IN' ? counts.attended : counts.registered;
 
   return (
@@ -331,21 +352,141 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
 
           <fieldset>
             <legend className={label}>Design</legend>
-            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 sm:gap-3">
               {TEMPLATES.map((t) => (
                 <label key={t.id} className={`cursor-pointer rounded-[12px] border p-2 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand/40 ${cert.template === t.id ? 'border-brand bg-brand/5' : 'border-gray-200 dark:border-gray-800 hover:border-gray-300'}`}>
                   <input type="radio" name="cert-template" value={t.id} checked={cert.template === t.id} onChange={() => setCert({ ...cert, template: t.id })} className="sr-only" />
                   <span className={`block aspect-[842/595] rounded-[6px] ${t.swatch}`} aria-hidden>
                     <span className="flex h-full flex-col items-center justify-center gap-1">
-                      <span className="block h-1 w-1/2 rounded bg-gray-800/70" />
-                      <span className="block h-1.5 w-2/3 rounded bg-gray-900" />
-                      <span className="block h-0.5 w-1/3 rounded bg-gray-400" />
+                      <span className={`block h-1 w-1/2 rounded ${t.dark ? 'bg-[#D4B05C]/80' : 'bg-gray-800/70'}`} />
+                      <span className={`block h-1.5 w-2/3 rounded ${t.dark ? 'bg-[#F8F3E7]' : 'bg-gray-900'}`} />
+                      <span className={`block h-0.5 w-1/3 rounded ${t.dark ? 'bg-[#D4B05C]/60' : 'bg-gray-400'}`} />
                     </span>
                   </span>
                   <span className="mt-1.5 block text-center text-[13px] font-semibold text-gray-800 dark:text-gray-200">{t.name}</span>
                 </label>
               ))}
             </div>
+          </fieldset>
+
+          {/* Follows every change below as it is typed. Stays in view on wider screens while the host fills the form. */}
+          <div className="md:sticky md:top-0 z-10 -mx-1 px-1 py-2 bg-white dark:bg-gray-900">
+            <div className="mx-auto max-w-[460px]">
+              <div className="flex items-baseline justify-between gap-3 mb-1.5">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">Live preview</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Updates as you type. The name is an example.</p>
+              </div>
+              <div className="rounded-[8px] overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm">
+                <CertificatePreview
+                  template={cert.template}
+                  title={cert.title}
+                  phrase={PHRASES.find((p) => p.id === (cert.phrase ?? 'participated'))?.text ?? 'participated in'}
+                  description={cert.description ?? ''}
+                  skills={(skillsText ?? '').split(',')}
+                  dateLine={[certificates.sample?.dateLine, (cert.duration ?? '').trim()].filter(Boolean).join(' · ')}
+                  eventTitle={event.title}
+                  hostName={certificates.sample?.hostName ?? ''}
+                  logoUrl={cert.logoUrl ?? certificates.sample?.logoUrl ?? null}
+                  partnerLogoUrl={cert.partnerLogoUrl}
+                  logoPosition={cert.logoPosition ?? 'center'}
+                  logoSize={cert.logoSize ?? 'medium'}
+                  showHostName={!!cert.showHostName}
+                  customSvg={cert.customSvg ?? ''}
+                  duration={cert.duration ?? ''}
+                  signerName={cert.signerName}
+                  signerTitle={cert.signerTitle}
+                  signatureUrl={cert.signatureUrl}
+                  sampleName="Priya Sharma"
+                />
+              </div>
+            </div>
+          </div>
+
+          {cert.template === 'custom' && (() => {
+            const problems = checkCustomSvg(cert.customSvg ?? '');
+            return (
+              <div className="rounded-[12px] border border-gray-200 dark:border-gray-800 p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label htmlFor="cert-custom-svg" className="text-sm font-semibold text-gray-900 dark:text-white">Your design (SVG code)</label>
+                  <button type="button" className={secondary}
+                    onClick={async () => { try { await navigator.clipboard.writeText(certificatePrompt(event.title)); setCopied(true); setTimeout(() => setCopied(false), 2500); } catch { flash('error', 'Couldn’t copy. Select the text in “What to ask” below instead.'); } }}>
+                    {copied ? 'Copied' : 'Copy prompt for Claude or ChatGPT'}
+                  </button>
+                </div>
+                <p className="text-[13px] text-gray-600 dark:text-gray-400">
+                  Paste the prompt into Claude or ChatGPT, then paste the SVG it gives you here. A design exported as SVG from Figma, Canva or Illustrator works too. The name, event and other details below are filled into its markers for each attendee.
+                </p>
+                <textarea id="cert-custom-svg" value={cert.customSvg ?? ''} onChange={(e) => setCert({ ...cert, customSvg: e.target.value })} rows={8} spellCheck={false}
+                  placeholder={'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 842 595">\n  …\n  <text x="421" y="300" text-anchor="middle">{{name}}</text>\n</svg>'}
+                  aria-describedby="cert-custom-problems" aria-invalid={problems.some((x) => x.level === 'error') && !!cert.customSvg}
+                  className="w-full px-3 py-2 rounded-[10px] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-[12px] leading-5 font-mono text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand/40" />
+                <ul id="cert-custom-problems" className="space-y-1" aria-live="polite">
+                  {problems.map((x) => (
+                    <li key={x.message} className={`text-[13px] ${x.level === 'error' ? 'text-red-700 dark:text-red-400' : 'text-amber-800 dark:text-amber-300'}`}>
+                      <strong>{x.level === 'error' ? 'Fix: ' : 'Note: '}</strong>{x.message}
+                    </li>
+                  ))}
+                  {problems.length === 0 && <li className="text-[13px] text-green-700 dark:text-green-400">This design is ready. Check the preview, then save.</li>}
+                </ul>
+                <details className="text-[13px] text-gray-700 dark:text-gray-300">
+                  <summary className="cursor-pointer font-semibold min-h-[32px] inline-flex items-center">Markers you can use</summary>
+                  <dl className="mt-2 grid sm:grid-cols-2 gap-x-6 gap-y-1">
+                    {Object.entries(CERTIFICATE_MARKERS).map(([key, what]) => (
+                      <div key={key} className="flex gap-2"><dt className="font-mono text-[12px] shrink-0">{`{{${key}}}`}</dt><dd className="text-gray-500 dark:text-gray-400">{what}</dd></div>
+                    ))}
+                  </dl>
+                  <p className="mt-2 text-gray-500 dark:text-gray-400">The QR code, certificate ID and verify address are always added by Udyaibase, so every certificate can be checked. Scripts, animations and links to other websites are removed.</p>
+                </details>
+                <details className="text-[13px] text-gray-700 dark:text-gray-300">
+                  <summary className="cursor-pointer font-semibold min-h-[32px] inline-flex items-center">What to ask Claude or ChatGPT</summary>
+                  <pre className="mt-2 whitespace-pre-wrap rounded-[8px] bg-gray-50 dark:bg-gray-800 p-3 text-[12px] leading-5 select-all">{certificatePrompt(event.title)}</pre>
+                </details>
+              </div>
+            );
+          })()}
+
+          <fieldset className="rounded-[12px] border border-gray-200 dark:border-gray-800 p-4">
+            <legend className="px-1 text-sm font-semibold text-gray-900 dark:text-white">Logo</legend>
+            <div className="grid sm:grid-cols-2 gap-4">
+              {([['logoUrl', 'Your logo', logoRef, 'Upload logo'], ['partnerLogoUrl', 'Partner logo (optional)', partnerRef, 'Add partner logo']] as const).map(([field, name, ref, action]) => (
+                <div key={field}>
+                  <p className={label}>{name}</p>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {cert[field] && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={cert[field]!} alt={name} className="h-12 max-w-[140px] object-contain rounded border border-gray-200 dark:border-gray-700 bg-white p-1" />
+                    )}
+                    <input ref={ref} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" aria-label={name} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadImage(f, field); }} />
+                    <button type="button" onClick={() => ref.current?.click()} disabled={busy === 'upload'} className={secondary}>
+                      {busy === 'upload' ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Upload className="w-4 h-4" aria-hidden />} {cert[field] ? 'Replace' : action}
+                    </button>
+                    {cert[field] && <button type="button" onClick={() => setCert({ ...cert, [field]: null })} className="text-sm font-semibold text-gray-600 hover:underline min-h-[32px]">Remove</button>}
+                  </div>
+                </div>
+              ))}
+              <div>
+                <label htmlFor="cert-logo-position" className={label}>Position</label>
+                <select id="cert-logo-position" value={cert.logoPosition ?? 'center'} onChange={(e) => setCert({ ...cert, logoPosition: e.target.value as CertSettings['logoPosition'] })} className={input}>
+                  <option value="center">Top centre</option>
+                  <option value="left">Top left</option>
+                  <option value="right">Top right</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="cert-logo-size" className={label}>Size</label>
+                <select id="cert-logo-size" value={cert.logoSize ?? 'medium'} onChange={(e) => setCert({ ...cert, logoSize: e.target.value as CertSettings['logoSize'] })} className={input}>
+                  <option value="small">Small</option>
+                  <option value="medium">Medium</option>
+                  <option value="large">Large</option>
+                </select>
+              </div>
+            </div>
+            <div className="mt-3">
+              <Toggle id="cert-show-host" checked={!!cert.showHostName} onChange={(v) => setCert({ ...cert, showHostName: v })}>Also print your organization’s name</Toggle>
+            </div>
+            <p className="mt-2 text-[13px] text-gray-500 dark:text-gray-400">
+              {cert.logoUrl ? 'A PNG with a transparent background looks best.' : 'Without a logo here, your profile picture is used if you have one; otherwise your organization’s name is printed.'}
+            </p>
           </fieldset>
 
           <div className="grid sm:grid-cols-2 gap-4">
@@ -360,6 +501,26 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
                 <Toggle id="aud-all" checked={cert.audience === 'REGISTERED'} onChange={() => setCert({ ...cert, audience: 'REGISTERED' })}>Everyone who registered ({counts.registered})</Toggle>
               </div>
             </fieldset>
+            <div>
+              <label htmlFor="cert-phrase" className={label}>Wording</label>
+              <select id="cert-phrase" value={cert.phrase ?? 'participated'} onChange={(e) => setCert({ ...cert, phrase: e.target.value as Phrase })} className={input}>
+                {PHRASES.map((p) => <option key={p.id} value={p.id}>[Name] {p.text} [event]</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="cert-duration" className={label}>Duration <span className="font-normal text-gray-500">(optional)</span></label>
+              <input id="cert-duration" value={cert.duration ?? ''} maxLength={24} onChange={(e) => setCert({ ...cert, duration: e.target.value })} className={input} placeholder="e.g. 6 hours, 2 days" />
+            </div>
+            <div className="sm:col-span-2">
+              <label htmlFor="cert-description" className={label}>About the event <span className="font-normal text-gray-500">(optional, one sentence)</span></label>
+              <input id="cert-description" value={cert.description ?? ''} maxLength={160} onChange={(e) => setCert({ ...cert, description: e.target.value })} className={input} placeholder="e.g. A hands-on day of building and shipping AI agents." aria-describedby="cert-description-count" />
+              <p id="cert-description-count" className="mt-1 text-xs text-gray-500">{(cert.description ?? '').length}/160. Printed under the date.</p>
+            </div>
+            <div className="sm:col-span-2">
+              <label htmlFor="cert-skills" className={label}>Topics covered <span className="font-normal text-gray-500">(optional)</span></label>
+              <input id="cert-skills" value={skillsText ?? ''} onChange={(e) => setSkillsText(e.target.value)} className={input} placeholder="e.g. Prompt design, RAG pipelines, Evaluation" aria-describedby="cert-skills-help" />
+              <p id="cert-skills-help" className="mt-1 text-xs text-gray-500">What people learned or worked on. Separate with commas; up to 6, printed as “Topics covered”.</p>
+            </div>
             <div>
               <label htmlFor="cert-signer" className={label}>Signed by</label>
               <input id="cert-signer" value={cert.signerName} maxLength={80} onChange={(e) => setCert({ ...cert, signerName: e.target.value })} className={input} placeholder="e.g. Priya Sharma" />
@@ -377,13 +538,13 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={cert.signatureUrl} alt="Signature" className="h-12 max-w-[180px] object-contain rounded border border-gray-200 dark:border-gray-700 bg-white p-1" />
               )}
-              <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadSignature(f); }} />
+              <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadImage(f); }} />
               <button type="button" onClick={() => fileRef.current?.click()} disabled={busy === 'upload'} className={secondary}>
                 {busy === 'upload' ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Upload className="w-4 h-4" aria-hidden />} {cert.signatureUrl ? 'Replace' : 'Upload signature'}
               </button>
               {cert.signatureUrl && <button type="button" onClick={() => setCert({ ...cert, signatureUrl: null })} className="text-sm font-semibold text-gray-600 hover:underline">Remove</button>}
             </div>
-            <p className="mt-1.5 text-[13px] text-gray-500 dark:text-gray-400">A PNG with a transparent background looks best. Your profile logo appears at the top.</p>
+            <p className="mt-1.5 text-[13px] text-gray-500 dark:text-gray-400">A PNG with a transparent background looks best.</p>
           </div>
 
           <Toggle id="cert-auto" checked={cert.autoIssue} onChange={(v) => setCert({ ...cert, autoIssue: v })}>
@@ -437,7 +598,7 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
               <div className="space-y-4">
                 <div className="grid grid-cols-3 gap-3">
                   <div><p className="text-xs text-gray-500">Average rating</p><p className="mt-0.5 text-xl font-semibold text-gray-900 dark:text-white inline-flex items-center gap-1">{feedback.averageRating?.toFixed(1)} <Star className="w-4 h-4 fill-amber-400 text-amber-400" aria-hidden /></p></div>
-                  <div><p className="text-xs text-gray-500">Would recommend</p><p className="mt-0.5 text-xl font-semibold text-gray-900 dark:text-white" title="Net Promoter Score: % who'd score 9–10 minus % who'd score 0–6">{feedback.nps === null ? '–' : `${feedback.nps > 0 ? '+' : ''}${feedback.nps}`}</p></div>
+                  <div><p className="text-xs text-gray-500">Recommendation score</p><p className="mt-0.5 text-xl font-semibold text-gray-900 dark:text-white">{feedback.nps === null ? '–' : `${feedback.nps > 0 ? '+' : ''}${feedback.nps}`}</p><p className="mt-0.5 text-[11px] leading-snug text-gray-500">From −100 to +100: people who’d recommend it (9–10) minus those who wouldn’t (0–6).</p></div>
                   <div><p className="text-xs text-gray-500">Responses</p><p className="mt-0.5 text-xl font-semibold text-gray-900 dark:text-white">{feedback.responses}{feedback.responseRate !== null ? <span className="text-sm font-normal text-gray-500"> · {feedback.responseRate}%</span> : null}</p></div>
                 </div>
                 <div className="space-y-1">

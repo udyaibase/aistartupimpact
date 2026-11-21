@@ -1,5 +1,7 @@
 'use client';
 
+import { eventPriceLabel } from '@/lib/events/price-label';
+import { cleanTimeZone, eventInstant } from '@/lib/events/zoned-time';
 import BookmarkButton from '@/components/BookmarkButton';
 import { useState, useMemo, useEffect } from 'react';
 import IntentLink from '@/components/IntentLink';
@@ -17,7 +19,8 @@ interface Event {
   startAt: string;
   endAt: string;
   venueName?: string;
-  address?: string;
+  /** The city only: the street address is for people who have registered. */
+  city?: string;
   coverImageUrl?: string;
   registrationCount: number;
   capacity?: number;
@@ -27,6 +30,8 @@ interface Event {
   hostStartupName?: string | null;
   organizerAvatar?: string;
   sourceUrl?: string;
+  minPricePaise?: number | null;
+  maxPricePaise?: number | null;
   sourceName?: string;
   /** Paid placement (Event Boost or Pro). */
   featured?: boolean;
@@ -47,14 +52,13 @@ function formatCategory(cat: string) {
   return cat.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }
 
-function formatDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+// Dates and times on a card are in the event's own time zone, the same as on the event's page.
+function formatDate(dateStr: string, timeZone: string): string {
+  return eventInstant(dateStr).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: cleanTimeZone(timeZone) });
 }
 
-function formatTime(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+function formatTime(dateStr: string, timeZone: string): string {
+  return eventInstant(dateStr).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: cleanTimeZone(timeZone) });
 }
 
 /** Whole calendar days from `from` to `to` in the viewer's timezone (11th 11pm → 12th 1am is 1 day). */
@@ -69,7 +73,7 @@ function calendarDaysBetween(from: Date, to: Date): number {
  * blocks, so an event at 1am two days away (36 hours) showed as "Tomorrow".
  */
 export function getRelativeLabel(dateStr: string, now: Date): string {
-  const d = new Date(dateStr);
+  const d = eventInstant(dateStr);
   const diffMs = d.getTime() - now.getTime();
   if (diffMs <= 0) return diffMs > -3 * 60 * 60 * 1000 ? 'Live Now' : '';
   const days = calendarDaysBetween(now, d);
@@ -94,19 +98,11 @@ function useNow(): Date | null {
   return now;
 }
 
-function extractCity(address: string): string {
-  if (!address) return '';
-  const cleaned = address.replace(/https?:\/\/[^\s,|]+/g, '').replace(/\|\|/g, ',');
-  const noCoords = cleaned.replace(/\b\d+\.\d{4,}\b/g, '');
-  const parts = noCoords.split(/[,|]/).map(s => s.trim()).filter(s => s.length > 2 && !/^\d+$/.test(s));
-  return parts[0] || '';
-}
-
 function EventCard({ event, now }: { event: Event; now: Date | null }) {
   const isFull = event.capacity ? event.registrationCount >= event.capacity : false;
   const fewSpots = event.capacity ? (event.capacity - event.registrationCount) <= 10 && !isFull : false;
   const relLabel = now ? getRelativeLabel(event.startAt, now) : '';
-  const city = extractCity(event.address || event.venueName || '');
+  const city = event.city || '';
   const catColor = CATEGORY_COLORS[event.category] || 'bg-gray-600';
 
   const isExternal = !!event.sourceUrl;
@@ -120,10 +116,10 @@ function EventCard({ event, now }: { event: Event; now: Date | null }) {
         {/* Date block */}
         <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg flex flex-col items-center justify-center shrink-0 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
           <span className="text-[10px] font-bold font-jakarta text-brand uppercase leading-none">
-            {new Date(event.startAt).toLocaleDateString('en-US', { month: 'short' })}
+            {eventInstant(event.startAt).toLocaleDateString('en-US', { month: 'short', timeZone: cleanTimeZone(event.timezone) })}
           </span>
           <span className="text-lg font-sora font-extrabold text-navy dark:text-white leading-none mt-0.5">
-            {new Date(event.startAt).getDate()}
+            {eventInstant(event.startAt).toLocaleDateString('en-US', { day: 'numeric', timeZone: cleanTimeZone(event.timezone) })}
           </span>
         </div>
 
@@ -160,7 +156,7 @@ function EventCard({ event, now }: { event: Event; now: Date | null }) {
           <div className="hidden sm:flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-gray-500 dark:text-gray-400 font-jakarta">
             <span className="inline-flex items-center gap-1">
               <Clock className="w-3 h-3" />
-              {formatDate(event.startAt)} · {formatTime(event.startAt)}
+              {formatDate(event.startAt, event.timezone)} · {formatTime(event.startAt, event.timezone)}
             </span>
             <span className="inline-flex items-center gap-1">
               {event.format === 'VIRTUAL' ? (
@@ -180,7 +176,7 @@ function EventCard({ event, now }: { event: Event; now: Date | null }) {
           {/* Meta info - mobile */}
           <div className="flex sm:hidden flex-wrap gap-1.5 mt-2">
             <span className="text-[11px] font-jakarta bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2.5 py-1 rounded-md">
-              {formatDate(event.startAt)}
+              {formatDate(event.startAt, event.timezone)}
             </span>
             <span className="text-[11px] font-jakarta bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2.5 py-1 rounded-md">
               {event.format === 'VIRTUAL' ? 'Online' : city || 'In Person'}
@@ -205,9 +201,10 @@ function EventCard({ event, now }: { event: Event; now: Date | null }) {
                 Few Spots Left
               </span>
             )}
-            {!isFull && !fewSpots && (
+            {/* The real price. An event listed from another site has its price there, so nothing is claimed. */}
+            {!isFull && !fewSpots && !isExternal && (
               <span className="text-[11px] font-jakarta bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 px-2.5 py-0.5 rounded-md">
-                Free
+                {eventPriceLabel([event.minPricePaise, event.maxPricePaise]).label}
               </span>
             )}
           </div>
@@ -243,7 +240,7 @@ function EventCard({ event, now }: { event: Event; now: Date | null }) {
               {event.registrationCount > 0 ? `${event.registrationCount} going` : ''}
             </span>
             <span className="text-[11px] font-semibold font-jakarta text-brand">
-              {formatTime(event.startAt)}
+              {formatTime(event.startAt, event.timezone)}
             </span>
           </div>
         </div>

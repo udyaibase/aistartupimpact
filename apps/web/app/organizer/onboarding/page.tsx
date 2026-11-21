@@ -3,6 +3,8 @@ import { getOrganizerSession } from '@/lib/organizer-auth';
 import { prisma } from '@udyaibase/database';
 import OnboardingClient from './OnboardingClient';
 
+export const metadata = { title: 'Set up your workspace' };
+
 export default async function OrganizerOnboardingPage(
   props: {
     searchParams: Promise<{ returnTo?: string }>;
