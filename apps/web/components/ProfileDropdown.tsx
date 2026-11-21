@@ -30,6 +30,8 @@ export default function ProfileDropdown({ user, onLogout }: ProfileDropdownProps
       await Promise.allSettled([
         fetch("/api/user/auth/logout", { method: "POST" }),
         fetch("/api/auth/logout", { method: "POST" }),
+        // In the organizer portal, also end the organizer session on the server (and its workspace choice).
+        ...(pathname?.startsWith("/organizer") ? [fetch("/api/organizer/auth/logout", { method: "POST" })] : []),
       ]);
       if (onLogout) {
         onLogout();
@@ -46,6 +48,7 @@ export default function ProfileDropdown({ user, onLogout }: ProfileDropdownProps
       const res = await fetch("/api/user/auth/logout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ everywhere: true }) });
       if (!res.ok) { window.alert('Couldn’t sign out everywhere. Please try again.'); return; }
       await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+      if (pathname?.startsWith("/organizer")) await fetch("/api/organizer/auth/logout", { method: "POST" }).catch(() => {});
       if (onLogout) onLogout();
       else window.location.href = "/";
     } catch {
@@ -80,9 +83,18 @@ export default function ProfileDropdown({ user, onLogout }: ProfileDropdownProps
           </div>
 
           <div className="py-1">
-            <DropdownItem href={pathname?.startsWith('/founder') ? '/founder/profile' : pathname?.startsWith('/organizer') ? '/organizer/profile' : '/profile'} icon="user" onClick={() => setOpen(false)}>Profile</DropdownItem>
-            <DropdownItem href="/my-applications" icon="briefcase" onClick={() => setOpen(false)}>My Applications</DropdownItem>
-            <DropdownItem href="/events/my-events" icon="calendar" onClick={() => setOpen(false)}>My Events</DropdownItem>
+            {pathname?.startsWith('/organizer') ? (
+              /* Organizer accounts are separate from the main site's: their profile is the organization page and settings. */
+              <>
+                <DropdownItem href="/organizer/settings" icon="user" onClick={() => setOpen(false)}>Profile &amp; settings</DropdownItem>
+              </>
+            ) : (
+              <>
+                <DropdownItem href={pathname?.startsWith('/founder') ? '/founder/profile' : '/profile'} icon="user" onClick={() => setOpen(false)}>Profile</DropdownItem>
+                <DropdownItem href="/my-applications" icon="briefcase" onClick={() => setOpen(false)}>My Applications</DropdownItem>
+                <DropdownItem href="/events/my-events" icon="calendar" onClick={() => setOpen(false)}>My Events</DropdownItem>
+              </>
+            )}
           </div>
 
           {/* Workspace switching */}

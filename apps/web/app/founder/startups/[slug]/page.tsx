@@ -146,7 +146,7 @@ export default async function EditStartupPage(props: PageProps) {
       {isOwner && <OwnershipTransferCard startupId={startup.id} startupName={startup.name} pending={pendingTransfer} />}
 
       {/* Profile URL Editor — LinkedIn-style, 45-day cooldown */}
-      <div className="card p-5 sm:p-6">
+      <div className="card -mx-4 sm:mx-0 rounded-none sm:rounded-[14px] border-x-0 sm:border-x px-4 py-5 sm:p-6">
         <h2 className="font-sora font-bold text-sm text-navy dark:text-white mb-4">Profile URL</h2>
         {isOwner && <SlugEditor
           currentSlug={startup.slug}

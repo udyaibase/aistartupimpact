@@ -95,7 +95,7 @@ export default function SettingsClient() {
       <CompanyEmailSection apiBasePath="/api/founder" />
 
       {/* Privacy */}
-      <div className="bg-white dark:bg-gray-900 rounded-[14px] border border-gray-200 dark:border-gray-800">
+      <div className="portal-edge bg-white dark:bg-gray-900 rounded-[14px] border border-gray-200 dark:border-gray-800">
         <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center gap-2">
           <Eye className="w-4 h-4 text-gray-400" aria-hidden />
           <h2 className="portal-section-title">Privacy</h2>
@@ -105,12 +105,12 @@ export default function SettingsClient() {
             <p className="text-sm font-medium text-gray-900 dark:text-white">Show me on my startup’s profile</p>
             <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">Your name, role, bio, photo and links appear on your startup’s public profile. Turn this off to hide them.</p>
           </div>
-          <Toggle enabled={settings.publicProfile} onChange={(value) => handleToggle('publicProfile', value)} disabled={loading} />
+          <Toggle label="Show me on my startup’s profile" enabled={settings.publicProfile} onChange={(value) => handleToggle('publicProfile', value)} disabled={loading} />
         </div>
       </div>
 
       {/* Emails */}
-      <div className="bg-white dark:bg-gray-900 rounded-[14px] border border-gray-200 dark:border-gray-800">
+      <div className="portal-edge bg-white dark:bg-gray-900 rounded-[14px] border border-gray-200 dark:border-gray-800">
         <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800">
           <h2 className="portal-section-title">Emails from us</h2>
         </div>
@@ -119,7 +119,7 @@ export default function SettingsClient() {
             <p className="text-sm font-medium text-gray-900 dark:text-white">Tips and reports</p>
             <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">Your profile views and ideas for your listing, at most once a week.</p>
           </div>
-          <Toggle enabled={settings.emailNotifications} onChange={(value) => handleToggle('emailNotifications', value)} disabled={loading} />
+          <Toggle label="Tips and reports" enabled={settings.emailNotifications} onChange={(value) => handleToggle('emailNotifications', value)} disabled={loading} />
         </div>
         <p className="px-4 pb-4 text-xs text-gray-600 dark:text-gray-400">
           We always email you about your account, security and listing reviews, because the service needs them. Our newsletter is separate: use the unsubscribe link in any issue to stop it.

@@ -74,7 +74,7 @@ export default async function FounderEventsPage() {
         </div>
         <div className="flex items-center gap-3 shrink-0">
           {['PUBLISHED', 'COMPLETED'].includes(e.status) && (
-            <a href={`/events/${e.slug}`} target="_blank" rel="noopener" className="inline-flex items-center gap-1 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-brand">
+            <a href={`/events/${e.slug}`} target="_blank" rel="noopener" className="inline-flex items-center gap-1 min-h-[40px] -my-2 -ml-1 px-1 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-brand">
               View <ExternalLink className="w-3.5 h-3.5" aria-hidden />
             </a>
           )}
@@ -85,7 +85,7 @@ export default async function FounderEventsPage() {
   };
 
   const section = (id: string, title: string, items: typeof events) => (
-    <section aria-labelledby={id} className={CARD}>
+    <section aria-labelledby={id} className={`portal-edge ${CARD}`}>
       <h2 id={id} className="portal-section-title px-4 sm:px-5 pt-4 pb-3">{title}</h2>
       <ul className="divide-y divide-gray-100 dark:divide-gray-800 border-t border-gray-100 dark:border-gray-800">
         {items.map(row)}

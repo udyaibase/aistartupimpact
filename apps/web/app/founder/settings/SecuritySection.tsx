@@ -212,7 +212,7 @@ export default function SecuritySection() {
         />
       )}
 
-      <div className="bg-white dark:bg-gray-900 rounded-[14px] border border-gray-200 dark:border-gray-800 overflow-hidden">
+      <div className="portal-edge bg-white dark:bg-gray-900 rounded-[14px] border border-gray-200 dark:border-gray-800 overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800">
           <div className="flex items-center gap-2">
             <Lock className="w-4 h-4 text-gray-400" />

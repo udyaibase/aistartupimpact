@@ -65,35 +65,36 @@ export default function FounderHeader({ session, shell }: Props) {
 
   return (
     <>
-      <header className="h-14 bg-white dark:bg-gray-950 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between px-4 md:px-6 shrink-0">
-        {/* Left: Mobile logo + Search trigger */}
-        <div className="flex items-center gap-3">
-          <Link href="/founder/dashboard" className="md:hidden flex items-center gap-2">
-            <Image src="/logo-light.svg" alt="Udyaibase" width={24} height={24} sizes="24px" className="h-6 w-auto dark:hidden" />
-            <Image src="/logo-dark.svg" alt="Udyaibase" width={24} height={24} sizes="24px" className="h-6 w-auto hidden dark:block" />
+      {/* Phones: logo on the left, actions on the right (like a native app bar), clear of the notch in the installed app.
+          Computers: the search bar on the left; the brand is in the sidebar. */}
+      <header className="relative z-sticky shrink-0 bg-white/95 dark:bg-gray-950/95 backdrop-blur-md border-b border-gray-100 dark:border-gray-800 pt-[env(safe-area-inset-top)]">
+        <div className="h-14 flex items-center justify-between gap-2 px-4 md:px-6">
+          <Link href="/founder/dashboard" aria-label="Udyaibase founder home" className="md:hidden flex items-center shrink-0 rounded-[10px] active:opacity-70">
+            <Image src="/logo-light.svg" alt="" width={48} height={48} sizes="48px" priority className="h-12 w-12 shrink-0 dark:hidden" />
+            <Image src="/logo-dark.svg" alt="" width={48} height={48} sizes="48px" priority className="h-12 w-12 shrink-0 hidden dark:block" />
           </Link>
           <button
             onClick={() => setCommandOpen(true)}
-            className="hidden md:flex items-center gap-2 w-80 lg:w-96 pl-3 pr-3 py-1.5 rounded-md border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 text-sm font-jakarta text-gray-400 hover:border-gray-300 dark:hover:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+            className="hidden md:flex items-center gap-2 w-80 lg:w-96 h-9 px-3 rounded-[10px] border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 text-sm font-jakarta text-gray-400 hover:border-gray-300 dark:hover:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
           >
-            <Search className="w-4 h-4 text-gray-400 shrink-0" />
+            <Search className="w-4 h-4 text-gray-400 shrink-0" aria-hidden />
             <span className="flex-1 text-left">Search listings, pages...</span>
             <kbd className="text-[10px] font-jakarta font-medium text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded px-1.5 py-0.5">⌘K</kbd>
           </button>
-          <button
-            onClick={() => setCommandOpen(true)}
-            aria-label="Search"
-            className="md:hidden w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md"
-          >
-            <Search className="w-4 h-4" />
-          </button>
-        </div>
 
-        {/* Right */}
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <NotificationDropdown />
-          <ProfileDropdown user={{ name: session.name, email: session.email, avatar: session.avatar }} />
+          {/* Right: actions */}
+          <div className="portal-header-actions flex items-center gap-0.5 sm:gap-1.5 shrink-0">
+            <button
+              onClick={() => setCommandOpen(true)}
+              aria-label="Search listings and pages"
+              className="md:hidden w-10 h-10 flex items-center justify-center rounded-full text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 active:bg-gray-200 dark:active:bg-gray-700 transition-colors"
+            >
+              <Search className="w-5 h-5" aria-hidden />
+            </button>
+            <ThemeToggle />
+            <NotificationDropdown />
+            <div className="ml-1"><ProfileDropdown user={{ name: session.name, email: session.email, avatar: session.avatar }} /></div>
+          </div>
         </div>
       </header>
 

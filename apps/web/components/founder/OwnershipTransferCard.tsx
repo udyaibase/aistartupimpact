@@ -39,7 +39,7 @@ export default function OwnershipTransferCard({ startupId, startupName, pending:
   };
 
   return (
-    <div className="card p-5 sm:p-6">
+    <div className="card -mx-4 sm:mx-0 rounded-none sm:rounded-[14px] border-x-0 sm:border-x px-4 py-5 sm:p-6">
       <h2 className="flex items-center gap-2 font-sora font-bold text-sm text-navy dark:text-white mb-1">
         <UserRoundCog className="w-4 h-4" aria-hidden /> Transfer ownership
       </h2>

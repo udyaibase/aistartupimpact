@@ -17,12 +17,12 @@ export const dynamic = "force-dynamic";
 export default async function OrganizerEventsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ published?: string; review?: string }>;
+  searchParams: Promise<{ published?: string; review?: string; saved?: string }>;
 }) {
   // The active workspace (their own, or a team they chose), with the same role rules as the API.
   const session = await requirePermission("events.view");
   if (session instanceof NextResponse) return session.status === 401 ? null : <p className="py-16 text-center text-sm text-gray-500 dark:text-gray-400">Your role in this workspace doesn’t include this page.</p>;
-  const { published, review } = await searchParams;
+  const { published, review, saved } = await searchParams;
   const can = (p: Parameters<typeof hasPermission>[1]) => hasPermission(session.role, p);
   const allowed = {
     edit: can("events.edit"), del: can("events.delete"), promote: can("promote"),
@@ -58,9 +58,16 @@ export default async function OrganizerEventsPage({
     : null;
 
   const reviewEvent = review ? events.find((e) => e.id === review && e.status === "PENDING_REVIEW") : undefined;
+  const savedDraft = saved ? events.find((e) => e.id === saved && e.status === "DRAFT") : undefined;
 
   return (
     <div className="space-y-6">
+      {savedDraft && (
+        <div role="status" className="rounded-[12px] border border-green-200 dark:border-green-900/50 bg-green-50 dark:bg-green-900/10 px-4 py-3 text-sm text-green-900 dark:text-green-200 font-jakarta">
+          <p className="font-semibold">Draft saved</p>
+          <p className="mt-0.5">“{savedDraft.title}” is private until you publish it. Tap it any time to carry on.</p>
+        </div>
+      )}
       {reviewEvent && (
         <div role="status" className="rounded-[12px] border border-violet-200 dark:border-violet-900/50 bg-violet-50 dark:bg-violet-900/10 px-4 py-3 text-sm text-violet-900 dark:text-violet-200 font-jakarta">
           <p className="font-semibold">“{reviewEvent.title}” is waiting for a quick review</p>
@@ -95,7 +102,7 @@ export default async function OrganizerEventsPage({
       ) : (
         <div data-tour="events-list" className="space-y-3">
           {events.map((event) => (
-            <div key={event.id} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3 sm:p-4 hover:border-brand/20 transition-all">
+            <div key={event.id} className="relative bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3 sm:p-4 hover:border-brand/20 active:bg-gray-50 dark:active:bg-gray-800/60 transition-all">
               <div className="flex items-center gap-3 sm:gap-4">
                 {/* Thumbnail */}
                 <div className="hidden min-[400px]:block w-16 sm:w-20 h-10 sm:h-12 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 shrink-0" style={{ aspectRatio: "16/9" }}>
@@ -108,8 +115,9 @@ export default async function OrganizerEventsPage({
 
                 {/* Info */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5 min-w-0">
-                    <Link href={`/organizer/events/${event.id}`} className="min-w-0 truncate font-sora font-bold text-sm text-navy dark:text-white hover:underline">
+                  {/* Phones: the name can use two lines with the status under it; the whole card opens the event. */}
+                  <div className="flex flex-col items-start sm:flex-row sm:items-center gap-1 sm:gap-2 mb-1 sm:mb-0.5 min-w-0">
+                    <Link href={`/organizer/events/${event.id}`} className="min-w-0 max-w-full line-clamp-2 sm:line-clamp-none sm:truncate font-sora font-bold text-[15px] sm:text-sm leading-snug text-navy dark:text-white hover:underline after:absolute after:inset-0 after:content-[''] after:rounded-xl">
                       {event.title}
                     </Link>
                     <span className={`shrink-0 text-[11px] font-bold px-1.5 py-0.5 rounded ${
@@ -139,7 +147,7 @@ export default async function OrganizerEventsPage({
                 </div>
 
                 {/* Actions */}
-                <EventActions eventId={event.id} eventSlug={event.slug} eventTitle={event.title} shortCode={event.shortCode} status={event.status} registrationCount={event.registrationCount} allowed={allowed} />
+                <div className="relative z-10 has-[[data-menu-open]]:z-30 shrink-0"><EventActions eventId={event.id} eventSlug={event.slug} eventTitle={event.title} shortCode={event.shortCode} status={event.status} registrationCount={event.registrationCount} allowed={allowed} /></div>
               </div>
             </div>
           ))}

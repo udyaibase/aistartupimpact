@@ -1,9 +1,10 @@
-import { htmlToPlainText, sanitizeUserHtml } from '@/lib/sanitize';
+import { htmlToPlainText, sanitizeStoryHtml } from '@/lib/sanitize';
 
 /**
  * What a founder writes, made ready to store. Stories come from the story editor as formatted text (HTML); updates
- * are plain text. Formatted text is cleaned here, on the way in, to headings, bold, italics, quotes, lists and links:
- * no scripts, images, styles or anything else, whatever the request contained.
+ * are plain text. Formatted text is cleaned here, on the way in, to headings, bold, italics, quotes, lists, links and
+ * pictures uploaded through our own media upload: no scripts, outside images, styles or anything else, whatever the
+ * request contained.
  */
 
 /** A story needs at least this much text before it can go to our editors. */
@@ -24,7 +25,7 @@ export interface PreparedBody {
 export function prepareBody(raw: string | undefined | null): PreparedBody {
   const given = raw ?? '';
   const formatted = HAS_TAGS.test(given);
-  const content = formatted ? sanitizeUserHtml(given).trim() : given;
+  const content = formatted ? sanitizeStoryHtml(given).trim() : given;
   // Block ends become spaces before the tags go, so "end.</p><p>Start" doesn't read "end.Start".
   const text = formatted ? htmlToPlainText(content.replace(/<\/(p|h[1-6]|li|blockquote|pre)>|<br\s*\/?>/gi, ' ')) : given.replace(/\s+/g, ' ').trim();
   const words = text ? text.split(/\s+/).length : 0;

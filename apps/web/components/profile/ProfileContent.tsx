@@ -77,7 +77,7 @@ export default function ProfileContent({ showBack = true }: ProfileContentProps)
     // showBack means it's inside a portal, which sets the page width; the public page has no sidebar, so stays narrow.
     <div className={showBack ? undefined : 'max-w-3xl mx-auto'}>
       {showBack && (
-        <button onClick={() => router.back()} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 mb-4 -ml-1 transition-colors">
+        <button type="button" onClick={() => router.back()} className="flex items-center gap-1.5 min-h-[40px] -ml-1 px-1 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 mb-2 transition-colors">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
           Back
         </button>
@@ -174,7 +174,7 @@ function OverviewTab({ profile, setProfile }: { profile: UserProfile; setProfile
           <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden border-2 border-gray-200 dark:border-gray-700">
             {profile.avatar ? <Image src={profile.avatar} alt="" className="w-full h-full object-cover" width={64} height={64} sizes="64px" /> : <span className="text-xl font-bold text-gray-400">{(profile.name || 'U').charAt(0)}</span>}
           </div>
-          <button onClick={() => fileRef.current?.click()} disabled={uploadingAvatar} className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+          <button type="button" onClick={() => fileRef.current?.click()} disabled={uploadingAvatar} aria-label="Change profile photo" className="absolute inset-0 rounded-full bg-black/40 max-sm:bg-black/25 opacity-0 max-sm:opacity-100 group-hover:opacity-100 focus-visible:opacity-100 flex items-center justify-center transition-opacity">
             {uploadingAvatar ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : <Camera className="w-4 h-4 text-white" />}
           </button>
           <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
@@ -186,9 +186,13 @@ function OverviewTab({ profile, setProfile }: { profile: UserProfile; setProfile
         <Field label="Bio" value={form.bio} onChange={(v) => setForm({ ...form, bio: v })} multiline placeholder="Tell us about yourself" maxLength={500} />
       </Section>
       <Section title="Social links"><SocialLinksEditor form={form} setForm={setForm} /></Section>
-      <button onClick={handleSave} disabled={saving} className="px-6 py-2.5 bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-semibold rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors disabled:opacity-50 flex items-center gap-2">
-        {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : 'Save changes'}
-      </button>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+        <button onClick={handleSave} disabled={saving} className="w-full sm:w-auto min-h-[44px] justify-center px-6 py-2.5 bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-semibold rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors disabled:opacity-50 flex items-center gap-2">
+          {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : 'Save changes'}
+        </button>
+        {/* The result next to the button (the message at the top is off screen on a phone). */}
+        {(success || error) && <p role="status" className={`text-sm font-semibold ${error ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>{error || (success === 'Saved' ? 'Saved ✓' : success)}</p>}
+      </div>
       <Section title="Saved items"><SavedItems /></Section>
     </div>
   );
@@ -470,13 +474,13 @@ function WorkspacesTab({ profile }: { profile: UserProfile }) {
 // ─── Shared ───────────────────────────────────────
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (<div className="border border-gray-200 dark:border-gray-800 rounded-xl"><div className="px-4 py-3 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 rounded-t-xl"><h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{title}</h2></div><div className="p-4 space-y-4 bg-white dark:bg-gray-950 rounded-b-xl">{children}</div></div>);
+  return (<div className="portal-edge border border-gray-200 dark:border-gray-800 rounded-xl"><div className="px-4 py-3 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 rounded-t-xl"><h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{title}</h2></div><div className="p-4 space-y-4 bg-white dark:bg-gray-950 rounded-b-xl">{children}</div></div>);
 }
 function Field({ label, value, onChange, placeholder, multiline, maxLength }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; multiline?: boolean; maxLength?: number }) {
   return (<div><label className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">{label}{maxLength ? <span className="text-xs text-gray-400 ml-2">{value.length}/{maxLength}</span> : null}</label>{multiline ? <textarea aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={3} maxLength={maxLength} className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-brand/30 focus:border-brand resize-none" /> : <input aria-label={label} type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} maxLength={maxLength} className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-brand/30 focus:border-brand" />}</div>);
 }
 function WorkspaceRow({ label, active, href, description }: { label: string; active: boolean; href: string; description: string }) {
-  return (<div className="flex items-center justify-between py-2"><div><div className="flex items-center gap-2"><span className={`w-2 h-2 rounded-full ${active ? 'bg-green-500' : 'bg-gray-300'}`} /><p className="text-sm font-medium text-gray-900 dark:text-white">{label}</p></div><p className="text-xs text-gray-500 ml-4">{description}</p></div>{active ? <Link href={href} className="px-3 py-1.5 text-xs font-medium text-brand bg-brand/5 rounded-lg hover:bg-brand/10 transition-colors">Open</Link> : <span className="px-3 py-1.5 text-xs font-medium text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-lg">Inactive</span>}</div>);
+  return (<div className="flex items-center justify-between py-2"><div><div className="flex items-center gap-2"><span className={`w-2 h-2 rounded-full ${active ? 'bg-green-500' : 'bg-gray-300'}`} /><p className="text-sm font-medium text-gray-900 dark:text-white">{label}</p></div><p className="text-xs text-gray-500 ml-4">{description}</p></div>{active ? <Link href={href} className="inline-flex items-center min-h-[36px] px-4 text-[13px] font-semibold text-brand bg-brand/5 rounded-lg hover:bg-brand/10 transition-colors">Open</Link> : <span className="px-3 py-1.5 text-xs font-medium text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-lg">Inactive</span>}</div>);
 }
 function SocialLinksEditor({ form, setForm }: { form: any; setForm: (f: any) => void }) {
   const [showAdd, setShowAdd] = useState(false);
@@ -493,7 +497,7 @@ function SocialLinksEditor({ form, setForm }: { form: any; setForm: (f: any) => 
   return (
     <div className="space-y-3">
       {activeLinks.map(p => (<div key={p.key} className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2"><span className="text-xs font-medium text-gray-500 sm:w-20 shrink-0">{p.label}</span><div className="flex items-center gap-2 flex-1 min-w-0"><input type="url" value={form[p.key] || ''} onChange={(e) => setForm({ ...form, [p.key]: e.target.value })} placeholder={p.placeholder} className="flex-1 min-w-0 px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-brand/30 focus:border-brand" /><button onClick={() => { setActivePlatforms(activePlatforms.filter(k => k !== p.key)); setForm({ ...form, [p.key]: '' }); }} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors shrink-0"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg></button></div></div>))}
-      {availableToAdd.length > 0 && (<div className="relative"><button onClick={() => setShowAdd(!showAdd)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors"><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>Add link</button>{showAdd && (<div className="absolute left-0 top-full mt-1 w-44 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg z-10 py-1">{availableToAdd.map(p => (<button key={p.key} onClick={() => { setActivePlatforms([...activePlatforms, p.key]); setShowAdd(false); }} className="block w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">{p.label}</button>))}</div>)}</div>)}
+      {availableToAdd.length > 0 && (<div className="relative"><button onClick={() => setShowAdd(!showAdd)} className="flex items-center gap-1.5 min-h-[40px] px-3 text-[13px] font-medium text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors"><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>Add link</button>{showAdd && (<div className="absolute left-0 top-full mt-1 w-44 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg z-10 py-1">{availableToAdd.map(p => (<button key={p.key} onClick={() => { setActivePlatforms([...activePlatforms, p.key]); setShowAdd(false); }} className="block w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">{p.label}</button>))}</div>)}</div>)}
       {activeLinks.length === 0 && !showAdd && <p className="text-xs text-gray-400">No social links added yet</p>}
     </div>
   );

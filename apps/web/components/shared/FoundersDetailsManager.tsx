@@ -84,7 +84,7 @@ export default function FoundersDetailsManager({ founders, onChange, maxFounders
           <button
             type="button"
             onClick={addFounder}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-brand bg-brand/10 hover:bg-brand/20 rounded-lg transition-colors"
+            className="inline-flex items-center gap-1.5 min-h-[40px] px-3.5 text-[13px] font-semibold text-brand bg-brand/10 hover:bg-brand/20 rounded-lg whitespace-nowrap shrink-0 transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
             Add Founder
@@ -97,7 +97,7 @@ export default function FoundersDetailsManager({ founders, onChange, maxFounders
       )}
 
       {founders.map((founder, index) => (
-        <div key={index} className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3 relative">
+        <div key={index} className="border border-gray-200 dark:border-gray-700 rounded-xl p-3 sm:p-4 space-y-3 relative">
           <button
             type="button"
             onClick={() => removeFounder(index)}
@@ -173,7 +173,7 @@ export default function FoundersDetailsManager({ founders, onChange, maxFounders
           {/* Row 2: LinkedIn + Twitter */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">LinkedIn URL</label>
+              <label className="block text-[13px] font-semibold text-gray-600 dark:text-gray-300 mb-1">LinkedIn URL</label>
               <input
                 type="url"
                 value={founder.linkedin || ''}
@@ -183,7 +183,7 @@ export default function FoundersDetailsManager({ founders, onChange, maxFounders
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Twitter URL</label>
+              <label className="block text-[13px] font-semibold text-gray-600 dark:text-gray-300 mb-1">Twitter URL</label>
               <input
                 type="url"
                 value={founder.twitter || ''}
@@ -197,7 +197,7 @@ export default function FoundersDetailsManager({ founders, onChange, maxFounders
           {/* Row 3: Bio */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Short Bio</label>
+              <label className="text-[13px] font-semibold text-gray-600 dark:text-gray-300">Short Bio</label>
               <span className="text-xs text-gray-400">{(founder.bio || '').length}/800</span>
             </div>
             <textarea

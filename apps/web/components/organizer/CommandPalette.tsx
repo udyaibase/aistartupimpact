@@ -33,6 +33,8 @@ export const ORGANIZER_PAGES: SearchResult[] = [
   { id: "events", label: "Events", description: "Manage your events", href: "/organizer/events", icon: <CalendarDays className="w-4 h-4" />, category: "page" },
   { id: "attendees", label: "Attendees", description: "View attendee list", href: "/organizer/attendees", icon: <Users className="w-4 h-4" />, category: "page" },
   { id: "checkin", label: "Check-in & on-site", description: "On-site management", href: "/organizer/check-in", icon: <QrCode className="w-4 h-4" />, category: "page" },
+  { id: "series", label: "Series", description: "Recurring events", href: "/organizer/series", icon: <CalendarDays className="w-4 h-4" />, category: "page" },
+  { id: "onsite", label: "On-site tools", description: "Badges, kiosk and door tools", href: "/organizer/on-site", icon: <QrCode className="w-4 h-4" />, category: "page" },
   { id: "analytics", label: "Analytics", description: "Event performance", href: "/organizer/analytics", icon: <BarChart3 className="w-4 h-4" />, category: "page" },
   { id: "promote", label: "Promote", description: "Email your event to nearby subscribers", href: "/organizer/promote", icon: <Send className="w-4 h-4" />, category: "page" },
   { id: "team", label: "Team", description: "Manage team members", href: "/organizer/team", icon: <Users className="w-4 h-4" />, category: "page" },
@@ -45,16 +47,21 @@ export const ORGANIZER_ACTIONS: SearchResult[] = [
   { id: "create-event", label: "Create new event", description: "Start a new event", href: "/organizer/events/create", icon: <Plus className="w-4 h-4" />, category: "action" },
 ];
 
+// The events list API returns every event the person can see (title, startAt); match the query here.
 async function searchOrganizerEvents(q: string): Promise<SearchResult[]> {
-  const data = await fetch(`/api/organizer/events?search=${encodeURIComponent(q)}&limit=5`).then((r) => r.json());
-  return (data.events ?? []).map((e: { id: string; name: string; date?: string }) => ({
-    id: `event-${e.id}`,
-    label: e.name,
-    description: e.date ? new Date(e.date).toLocaleDateString() : undefined,
-    href: `/organizer/events/${e.id}`,
-    icon: <CalendarDays className="w-4 h-4" />,
-    category: "event" as const,
-  }));
+  const data = await fetch(`/api/organizer/events`).then((r) => r.json());
+  const needle = q.trim().toLowerCase();
+  return ((data.events ?? []) as { id: string; title?: string; startAt?: string }[])
+    .filter((e) => (e.title ?? "").toLowerCase().includes(needle))
+    .slice(0, 5)
+    .map((e) => ({
+      id: `event-${e.id}`,
+      label: e.title ?? "Untitled event",
+      description: e.startAt ? new Date(e.startAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : undefined,
+      href: `/organizer/events/${e.id}`,
+      icon: <CalendarDays className="w-4 h-4" />,
+      category: "event" as const,
+    }));
 }
 
 export default function CommandPalette({

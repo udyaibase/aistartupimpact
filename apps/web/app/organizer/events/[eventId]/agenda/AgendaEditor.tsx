@@ -182,11 +182,12 @@ export default function AgendaEditor({ eventId }: { eventId: string }) {
         {speakers.length === 0 && <p className="text-[13px] text-gray-500">Add speakers in the event form to assign them to sessions.</p>}
       </div>
 
-      <div className="sticky z-10 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-0 mt-6 -mx-4 md:mx-0 px-4 md:px-0 py-3 bg-white/95 dark:bg-gray-950/95 backdrop-blur border-t border-gray-200 dark:border-gray-800 flex flex-wrap items-center gap-3">
+      {/* Phones: an ordinary row at the end (nothing floating over the sessions); bigger screens keep it in view. */}
+      <div className="mt-6 md:sticky md:z-10 md:bottom-0 py-3 md:bg-white/95 md:dark:bg-gray-950/95 md:backdrop-blur border-t border-gray-200 dark:border-gray-800 flex flex-wrap items-center gap-3">
         <p role="status" className={`flex-1 text-[13px] ${note ? (note.ok ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400') : 'text-gray-500'}`}>
           {note?.text ?? (dirty ? 'Unsaved changes' : `${sessions.length} session${sessions.length === 1 ? '' : 's'}`)}
         </p>
-        <button type="button" onClick={save} disabled={saving} className="inline-flex items-center gap-2 min-h-[44px] px-5 rounded-[10px] bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-semibold disabled:opacity-50">
+        <button type="button" onClick={save} disabled={saving} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 min-h-[44px] px-5 rounded-[10px] bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-semibold disabled:opacity-50">
           {saving && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} Save agenda
         </button>
       </div>

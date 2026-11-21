@@ -1,6 +1,8 @@
 import { jsonLd } from "@/lib/json-ld";
 import Link from 'next/link';
-import Image from 'next/image';
+import { Suspense } from 'react';
+import { ArrowRight, PenLine } from 'lucide-react';
+import { storyTopic } from '@/components/stories/storyMeta';
 import { Metadata } from 'next';
 import { getArticlesDirect } from '@/lib/db';
 import { generateCollectionPageSchema, generateItemListSchema, generateBreadcrumbSchema } from '@/lib/seo';
@@ -28,9 +30,6 @@ export const metadata: Metadata = {
     creator: '@aikitstartup',
   },
 };
-
-const formatDate = (d: string) =>
-  d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
 
 export const revalidate = 300;
 
@@ -71,6 +70,14 @@ export default async function StoriesPage() {
     { name: 'Founder Stories', url: `${siteUrl}/stories` },
   ]);
 
+  // Lead story: the newest featured one, otherwise the newest story.
+  const leadSlug = (featured[0] || articles[0])?.slug || null;
+
+  // Topics that actually have stories, as links into the filtered list.
+  const topicCounts = new Map<string, number>();
+  articles.forEach((a) => { const t = storyTopic(a); topicCounts.set(t, (topicCounts.get(t) || 0) + 1); });
+  const topics = Array.from(topicCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(collectionSchema) }} />
@@ -79,145 +86,75 @@ export default async function StoriesPage() {
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(itemListSchema) }} />
       )}
 
-      {/* Header */}
-      <div className="mb-6 sm:mb-8">
-        <h1 className="font-sora font-extrabold text-2xl sm:text-3xl md:text-4xl text-navy dark:text-white leading-tight tracking-tight">
-          Founder Stories.{' '}
-          <span className="text-brand">Unfiltered.</span>
+      <header className="mb-5 sm:mb-7 max-w-3xl">
+        <h1 className="font-sora font-extrabold text-[28px] sm:text-4xl text-navy dark:text-white leading-tight tracking-tight">
+          Founder Stories
         </h1>
-        <p className="text-gray-500 dark:text-gray-400 font-jakarta text-sm max-w-2xl mt-2">
-          Deep-dive interviews and profiles of the founders building the AI future — their journeys, challenges, and hard-won insights.
+        <p className="text-gray-600 dark:text-gray-400 font-jakarta text-[15px] sm:text-base leading-relaxed mt-2">
+          How India&apos;s AI startups are being built, told by the founders themselves and by the Udyaibase team.
         </p>
-      </div>
+      </header>
 
       {articles.length === 0 && (
         <EmptyState title="No stories yet" description="Check back soon for founder stories and deep-dive interviews." />
       )}
 
       <div className="flex flex-col lg:flex-row gap-8 lg:gap-10">
-        {/* ── Main column ── */}
         <div className="flex-1 min-w-0">
           {articles.length > 0 && (
-            <StoriesListClient stories={articles} excludeSlugs={featured.map((a) => a.slug)}>
-              {/* Featured — rendered between filters and story grid */}
-              {featured.length > 0 && (
-                <div className="relative mb-8 sm:mb-10">
-                  <div className="absolute -top-10 left-0 w-px h-10 bg-gradient-to-t from-gray-300 dark:from-gray-600 to-transparent hidden sm:block" />
-                  <div className="absolute top-0 -left-10 h-px w-10 bg-gradient-to-l from-gray-300 dark:from-gray-600 to-transparent hidden sm:block" />
-                  <div className="absolute -top-10 right-0 w-px h-10 bg-gradient-to-t from-gray-300 dark:from-gray-600 to-transparent hidden sm:block" />
-                  <div className="absolute top-0 -right-10 h-px w-10 bg-gradient-to-r from-gray-300 dark:from-gray-600 to-transparent hidden sm:block" />
-                  <div className="absolute -bottom-10 left-0 w-px h-10 bg-gradient-to-b from-gray-300 dark:from-gray-600 to-transparent hidden sm:block" />
-                  <div className="absolute bottom-0 -left-10 h-px w-10 bg-gradient-to-l from-gray-300 dark:from-gray-600 to-transparent hidden sm:block" />
-                  <div className="absolute -bottom-10 right-0 w-px h-10 bg-gradient-to-b from-gray-300 dark:from-gray-600 to-transparent hidden sm:block" />
-                  <div className="absolute bottom-0 -right-10 h-px w-10 bg-gradient-to-r from-gray-300 dark:from-gray-600 to-transparent hidden sm:block" />
-                  <h2 className="font-sora font-bold text-base sm:text-xl text-gray-900 dark:text-white mb-4 sm:mb-5">Featured Stories</h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 border border-gray-200 dark:border-gray-700">
-                    {featured.map((story, idx) => {
-                      const N = featured.length;
-                      const borderClass = [
-                        idx < N - 1 ? 'border-b border-gray-200 dark:border-gray-700' : '',
-                        idx >= N - (N % 2 === 0 ? 2 : 1) ? 'sm:border-b-0' : '',
-                        idx % 2 === 0 ? 'sm:border-r border-gray-200 dark:border-gray-700' : '',
-                      ].filter(Boolean).join(' ');
-                      return (
-                        <Link key={story.slug} href={`/stories/${story.slug}`} className="group h-full">
-                          <div className={`bg-gray-50 dark:bg-gray-900 relative hover:bg-white dark:hover:bg-gray-800 transition-all duration-300 ${borderClass} hover:border-l-4 hover:border-l-red-500 h-full flex flex-col`}>
-                            {(story.thumbnailImage || story.coverImage) && (
-                              <div className="relative aspect-[16/9] overflow-hidden">
-                                <Image
-                                  src={story.thumbnailImage || story.coverImage}
-                                  alt={story.title}
-                                  fill
-                                  sizes="(max-width: 640px) 100vw, 50vw"
-                                  className="object-cover group-hover:scale-105 transition-transform duration-500"
-                                />
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
-                              </div>
-                            )}
-                            <div className="p-3 sm:p-5 flex flex-col flex-1">
-                              <div className="mb-1.5 sm:mb-2 flex items-center gap-1.5 sm:gap-2">
-                                <span className="inline-block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-red-500">Featured</span>
-                                <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 font-jakarta">{story.category?.name || 'Founder Story'}</span>
-                              </div>
-                              <p className="font-sora font-bold text-[15px] leading-snug sm:text-lg sm:leading-tight mb-1.5 sm:mb-2 text-gray-900 dark:text-white group-hover:text-gray-700 dark:group-hover:text-gray-200 transition-colors line-clamp-2">
-                                {story.title}
-                              </p>
-                              {story.excerpt && (
-                                <p className="text-gray-600 dark:text-gray-400 font-jakarta text-xs sm:text-sm leading-relaxed mb-2 sm:mb-3 line-clamp-2 flex-1">
-                                  {story.excerpt}
-                                </p>
-                              )}
-                              <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-gray-400 font-jakarta mt-auto">
-                                {story.author?.name && <><span>{story.author.name}</span><span>·</span></>}
-                                <span>{formatDate(story.publishedAt)}</span>
-                                {story.readTimeMinutes && <><span>·</span><span>{story.readTimeMinutes} min</span></>}
-                              </div>
-                            </div>
-                          </div>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </StoriesListClient>
+            <Suspense fallback={<div className="h-40" aria-hidden />}>
+              <StoriesListClient stories={articles} leadSlug={leadSlug} />
+            </Suspense>
           )}
         </div>
 
-        {/* ── Sidebar ── */}
-        <aside className="w-full lg:w-72 xl:w-80 shrink-0 space-y-6">
-          {/* Newsletter CTA */}
-          <div className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-5">
-            <div className="text-xs font-bold uppercase tracking-wider text-brand mb-2">Free Weekly</div>
-            <h3 className="font-sora font-bold text-base text-navy dark:text-white leading-snug mb-1">
-              India AI Digest
-            </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta mb-4 leading-relaxed">
-              Join 5,000+ founders and investors getting the week's top AI stories every Friday.
+        <aside className="w-full lg:w-72 xl:w-80 shrink-0 space-y-4 lg:pt-1">
+          {/* For founders: write your own */}
+          <div className="relative overflow-hidden rounded-[14px] bg-[linear-gradient(135deg,#17171a_0%,#0b0b0c_55%,#000_100%)] p-5 text-white">
+            <span aria-hidden className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 rounded-full bg-brand/40 blur-3xl" />
+            <p className="relative inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.16em] text-white/60 font-jakarta">
+              <PenLine className="h-3.5 w-3.5" aria-hidden /> For founders
             </p>
-            <SubscribeForm source="sidebar" buttonText="Subscribe Free" />
-          </div>
-
-          {/* About */}
-          <div className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-5">
-            <h3 className="font-sora font-bold text-sm text-navy dark:text-white mb-3">About Founder Stories</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta leading-relaxed">
-              In-depth profiles of the builders, investors, and operators shaping India's AI ecosystem. Every story is independently reported — no PR, no fluff.
+            <h2 className="relative mt-2 font-sora text-lg font-bold leading-snug">Tell your startup&apos;s story</h2>
+            <p className="relative mt-1 text-sm text-white/70 font-jakarta leading-relaxed">
+              Write it in your own words. It appears here with your name and a link to your startup.
             </p>
+            <Link href="/founder/content" className="relative mt-4 inline-flex min-h-[44px] items-center gap-1.5 rounded-[10px] bg-white px-4 text-sm font-semibold text-gray-900 hover:bg-gray-100">
+              Write a story <ArrowRight className="h-4 w-4" aria-hidden />
+            </Link>
           </div>
 
-          {/* Topics */}
-          <div className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-5">
-            <h3 className="font-sora font-bold text-sm text-navy dark:text-white mb-4">Story Themes</h3>
-            <div className="flex flex-wrap gap-2">
-              {['Origin Story', 'Fundraising', 'Product', 'Team Building', 'Failure', 'Vision', 'India Stack', 'Global Expansion'].map((tag) => (
-                <span key={tag} className="text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-brand/10 hover:text-brand cursor-pointer transition-colors font-jakarta">
-                  {tag}
-                </span>
-              ))}
-            </div>
+          {/* What's here, accurately */}
+          <div className="rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
+            <h2 className="font-sora font-bold text-[15px] text-navy dark:text-white mb-2">About these stories</h2>
+            <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400 font-jakarta leading-relaxed">
+              <li><span className="font-semibold text-gray-800 dark:text-gray-200">Editorial</span> stories are written by the Udyaibase team.</li>
+              <li><span className="font-semibold text-gray-800 dark:text-gray-200">By the founder</span> stories are written by the founder and checked by our team before they go live.</li>
+            </ul>
           </div>
 
-          {/* Recent stories quick list */}
-          {articles.slice(0, 5).length > 0 && (
-            <div className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-5">
-              <h3 className="font-sora font-bold text-sm text-navy dark:text-white mb-4">Recent Stories</h3>
-              <ol className="space-y-3">
-                {articles.slice(0, 5).map((s: any, i: number) => (
-                  <li key={s.slug}>
-                    <Link href={`/stories/${s.slug}`} className="group flex gap-3 items-start">
-                      <span aria-hidden="true" className="font-sora font-extrabold text-xl text-gray-300 dark:text-gray-600 leading-none shrink-0 w-6 text-right tabular-nums">
-                        {i + 1}
-                      </span>
-                      <span className="text-xs font-semibold text-navy dark:text-white group-hover:text-brand transition-colors leading-snug line-clamp-2 font-jakarta">
-                        {s.title}
-                      </span>
-                    </Link>
-                  </li>
+          {topics.length > 1 && (
+            <nav aria-label="Topics" className="hidden lg:block rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
+              <h2 className="font-sora font-bold text-[15px] text-navy dark:text-white mb-3">Topics</h2>
+              <div className="flex flex-wrap gap-2">
+                {topics.map(([name, n]) => (
+                  <Link key={name} href={`/stories?topic=${encodeURIComponent(name)}`}
+                    className="inline-flex min-h-[40px] items-center gap-1 rounded-full bg-gray-100 dark:bg-gray-800 px-3 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-brand/10 hover:text-brand font-jakarta">
+                    {name} <span className="tabular-nums text-gray-400">{n}</span>
+                  </Link>
                 ))}
-              </ol>
-            </div>
+              </div>
+            </nav>
           )}
+
+          <div className="rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
+            <p className="text-xs font-bold uppercase tracking-wider text-brand mb-1.5 font-jakarta">Free every Friday</p>
+            <h2 className="font-sora font-bold text-[15px] text-navy dark:text-white leading-snug mb-1">India AI Digest</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 font-jakarta mb-4 leading-relaxed">
+              The week&apos;s top AI stories for founders and investors.
+            </p>
+            <SubscribeForm source="sidebar" buttonText="Subscribe free" />
+          </div>
         </aside>
       </div>
     </div>

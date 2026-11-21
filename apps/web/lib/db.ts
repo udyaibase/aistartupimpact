@@ -41,7 +41,13 @@ export async function getArticleBySlugDirect(slug: string) {
         c.name AS "categoryName", c.slug AS "categorySlug",
         a."toolId", a."startupId",
         -- The founder who wrote it, unless they've chosen not to be shown on their startup's public pages.
-        CASE WHEN COALESCE((SELECT public_profile FROM founder_settings WHERE user_id = fu.id), true) THEN fu.name END AS "founderAuthorName"
+        CASE WHEN COALESCE((SELECT public_profile FROM founder_settings WHERE user_id = fu.id), true) THEN fu.name END AS "founderAuthorName",
+        (a."founderAuthorId" IS NOT NULL) AS "founderWritten",
+        CASE WHEN COALESCE((SELECT public_profile FROM founder_settings WHERE user_id = fu.id), true) THEN fu.avatar END AS "founderAvatar",
+        CASE WHEN COALESCE((SELECT public_profile FROM founder_settings WHERE user_id = fu.id), true) THEN fu.role END AS "founderRole",
+        CASE WHEN COALESCE((SELECT public_profile FROM founder_settings WHERE user_id = fu.id), true) THEN fu.bio END AS "founderBio",
+        CASE WHEN COALESCE((SELECT public_profile FROM founder_settings WHERE user_id = fu.id), true) THEN fu.linkedin END AS "founderLinkedin",
+        u.avatar AS "authorAvatar", u.bio AS "authorBio"
       FROM "Article" a
       LEFT JOIN "User" u ON u.id = a."authorId"
       LEFT JOIN "Category" c ON c.id = a."categoryId"
@@ -68,7 +74,7 @@ export async function getArticleBySlugDirect(slug: string) {
     let linkedStartup = null;
     if (a.startupId) {
       const startupRows = await sql`
-        SELECT name, slug, founders
+        SELECT name, slug, founders, tagline, "logoUrl", "isVerified", stage::text AS stage, "foundedYear"
         FROM "Startup"
         WHERE id = ${a.startupId} AND "deletedAt" IS NULL
         LIMIT 1
@@ -78,18 +84,25 @@ export async function getArticleBySlugDirect(slug: string) {
         linkedStartup = {
           name: startup.name,
           slug: startup.slug,
-          founders: startup.founders || []
+          founders: startup.founders || [],
+          tagline: startup.tagline || null,
+          logoUrl: startup.logoUrl || null,
+          isVerified: !!startup.isVerified,
+          stage: startup.stage || null,
+          foundedYear: startup.foundedYear || null,
         };
       }
     }
 
     // Founder-written posts are stored under one shared system author. Show who really wrote it: the founder, or
-    // the startup when the founder prefers not to be named.
-    const byline = a.type === 'FOUNDER_STORY' || a.type === 'STARTUP_UPDATE' ? (a.founderAuthorName || linkedStartup?.name || null) : null;
+    // the startup when the founder prefers not to be named. Stories our team posts keep their real author.
+    const byline = a.founderWritten || a.type === 'STARTUP_UPDATE' ? (a.founderAuthorName || linkedStartup?.name || null) : null;
 
     return {
       ...a,
-      author: byline ? { name: byline, slug: null } : { name: a.authorName, slug: a.authorSlug },
+      author: byline
+        ? { name: byline, slug: null, avatar: a.founderAuthorName ? a.founderAvatar : linkedStartup?.logoUrl ?? null, role: a.founderAuthorName ? a.founderRole : null, bio: a.founderAuthorName ? a.founderBio : null, linkedin: a.founderAuthorName ? a.founderLinkedin : null }
+        : { name: a.authorName, slug: a.authorSlug, avatar: a.authorAvatar, role: null, bio: a.authorBio, linkedin: null },
       category: { name: a.categoryName, slug: a.categorySlug },
       linkedTool,
       linkedStartup
@@ -1061,6 +1074,8 @@ export async function getRelatedArticlesDirect(articleId: string, types: string[
       )
       SELECT a.id, a.title, a.slug, a.type, a."readTimeMinutes", a."coverImage", a."thumbnailImage",
              a."publishedAt"::text AS "publishedAt", c.name AS "categoryName",
+             (a."founderAuthorId" IS NOT NULL) AS "founderWritten",
+             rst.name AS "startupName", rst."logoUrl" AS "startupLogo", ru.name AS "authorName",
              (
                CASE WHEN a."primaryTagId" IS NOT NULL
                      AND (a."primaryTagId" = cur."primaryTagId" OR a."primaryTagId" IN (SELECT "tagId" FROM curtags)) THEN 3 ELSE 0 END
@@ -1073,12 +1088,19 @@ export async function getRelatedArticlesDirect(articleId: string, types: string[
       FROM "Article" a
       CROSS JOIN cur
       LEFT JOIN "Category" c ON c.id = a."categoryId"
+      LEFT JOIN "Startup" rst ON rst.id = a."startupId"
+      LEFT JOIN "User" ru ON ru.id = a."authorId"
       WHERE a.status = 'PUBLISHED' AND a."deletedAt" IS NULL AND a.id <> cur.id
         AND a.type::text = ANY(${types}::text[])
       ORDER BY score DESC, a."publishedAt" DESC NULLS LAST
       LIMIT ${limit}
     `;
-    return rows.map((a: any) => ({ ...a, category: { name: a.categoryName } }));
+    // Founder stories sit under one shared system author, so they're credited to the startup here.
+    return rows.map((a: any) => ({
+      ...a,
+      category: { name: a.categoryName },
+      author: { name: a.founderWritten ? a.startupName : a.authorName },
+    }));
   } catch (e) {
     console.error('getRelatedArticlesDirect error:', e);
     return [];
@@ -1127,7 +1149,12 @@ export async function getArticlesDirect(params: { type?: string; limit?: number;
           COALESCE(CASE WHEN a."founderAuthorId" IS NOT NULL THEN COALESCE(
             CASE WHEN COALESCE((SELECT public_profile FROM founder_settings WHERE user_id = fu.id), true) THEN fu.name END, st.name) END,
             u.name) AS "authorName",
-          c.name AS "categoryName"
+          c.name AS "categoryName",
+          (a."founderAuthorId" IS NOT NULL) AS "founderWritten",
+          CASE WHEN a."founderAuthorId" IS NOT NULL
+            THEN CASE WHEN COALESCE((SELECT public_profile FROM founder_settings WHERE user_id = fu.id), true) THEN fu.avatar END
+            ELSE u.avatar END AS "authorAvatar",
+          st.name AS "startupName", st.slug AS "startupSlug", st."logoUrl" AS "startupLogo"
         FROM "Article" a
         LEFT JOIN "User" u ON u.id = a."authorId"
         LEFT JOIN "FounderUser" fu ON fu.id = a."founderAuthorId" AND fu."deletedAt" IS NULL
@@ -1139,7 +1166,7 @@ export async function getArticlesDirect(params: { type?: string; limit?: number;
       `;
       return rows.map((a: any) => ({
         ...a,
-        author: { name: a.authorName },
+        author: { name: a.authorName, avatar: a.authorAvatar || null },
         category: { name: a.categoryName },
       }));
     } else if (params.isFeatured !== undefined) {

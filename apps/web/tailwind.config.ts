@@ -1,6 +1,9 @@
 import type { Config } from 'tailwindcss';
 import typography from '@tailwindcss/typography';
 
+/** The brand colour (a CSS variable), with Tailwind's opacity suffix (<alpha-value>) applied through color-mix. */
+const brandWithOpacity = 'color-mix(in srgb, var(--brand-color, #FF3131) calc(<alpha-value> * 100%), transparent)';
+
 const config: Config = {
   content: [
     './app/**/*.{js,ts,jsx,tsx,mdx}',
@@ -13,13 +16,15 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          DEFAULT: 'var(--brand-color, #FF3131)',
+          // A CSS variable can't take Tailwind's /opacity suffix on its own, so bg-brand/10, ring-brand/20 etc. rendered
+          // nothing. Mixing the variable with transparent makes every opacity step work (and follows each portal's red).
+          DEFAULT: brandWithOpacity,
           50: '#FFF0F0',
           100: '#FFE0E0',
           200: '#FFC2C2',
           300: '#FF9494',
           400: '#FF5E5E',
-          500: 'var(--brand-color, #FF3131)',
+          500: brandWithOpacity,
           600: '#E51A1A',
           700: '#C01010',
           800: '#9C1010',

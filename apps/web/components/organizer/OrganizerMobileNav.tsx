@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { canOpen, OWNER_ACCESS, type NavAccess } from "@/lib/organizer-auth/nav";
-import { CreditCard, LayoutDashboard, CalendarDays, Users, BarChart3, Settings, QrCode, Send, CodeXml, HelpCircle, MoreHorizontal, X, Building2, UserCog, Plus, History } from "lucide-react";
+import { CreditCard, LayoutDashboard, CalendarDays, Users, BarChart3, Settings, QrCode, Send, CodeXml, HelpCircle, MoreHorizontal, X, Building2, UserCog, Plus, History, Repeat, IdCard } from "lucide-react";
 
 const TABS = [
   { href: "/organizer", icon: LayoutDashboard, label: "Home", exact: true },
@@ -14,6 +14,8 @@ const TABS = [
 ];
 
 const MORE = [
+  { href: "/organizer/series", icon: Repeat, label: "Series", desc: "Recurring events under one page" },
+  { href: "/organizer/on-site", icon: IdCard, label: "On-site tools", desc: "Badges, kiosk and door tools" },
   { href: "/organizer/analytics", icon: BarChart3, label: "Analytics", desc: "Traffic and registrations" },
   { href: "/organizer/promote", icon: Send, label: "Promote", desc: "Email your event to nearby subscribers" },
   { href: "/organizer/embed", icon: CodeXml, label: "Website widget", desc: "Show events on your website" },

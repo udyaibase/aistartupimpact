@@ -111,25 +111,25 @@ export default function ListingCard({ id, slug, name, tagline, logoUrl, status, 
             {canEdit && (
               <Link
                 href={`/founder/${type === 'startup' ? 'startups' : 'tools'}/${slug}`}
-                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+                className="inline-flex items-center gap-1.5 min-h-[40px] px-3 text-[13px] font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-[8px] transition-colors"
               >
-                <Edit className="w-3 h-3" />
+                <Edit className="w-3.5 h-3.5" aria-hidden />
                 Edit
               </Link>
             )}
             {type === 'tool' && (
               <Link
                 href={`/founder/tools/${slug}/analytics`}
-                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+                className="inline-flex items-center gap-1.5 min-h-[40px] px-3 text-[13px] font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-[8px] transition-colors"
               >
-                <BarChart className="w-3 h-3" />
+                <BarChart className="w-3.5 h-3.5" aria-hidden />
                 Analytics
               </Link>
             )}
             {isOwner && !isVerified && type === 'startup' && status !== 'REJECTED' && (
               <Link
                 href={`/founder/claim/${id}`}
-                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+                className="inline-flex items-center gap-1.5 min-h-[40px] px-3 text-[13px] font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-[8px] transition-colors"
               >
                 <Shield className="w-3 h-3" />
                 Verify

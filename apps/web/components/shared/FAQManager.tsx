@@ -102,9 +102,10 @@ export function FAQManager({ faqs, onChange, maxFaqs = 10, readonly = false }: F
         </div>
         {!readonly && (
           <button
+            type="button"
             onClick={addFAQ}
             disabled={faqs.length >= maxFaqs}
-            className="btn-brand text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-brand text-sm flex items-center gap-2 shrink-0 whitespace-nowrap !min-h-[40px] !py-0 px-4 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus className="w-4 h-4" /> Add FAQ
           </button>
@@ -164,16 +165,16 @@ export function FAQManager({ faqs, onChange, maxFaqs = 10, readonly = false }: F
                   </div>
 
                   <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-                    <button
+                    <button type="button"
                       onClick={cancelEdit}
-                      className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+                      className="min-h-[40px] px-4 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
                     >
                       Cancel
                     </button>
-                    <button
+                    <button type="button"
                       onClick={saveEdit}
                       disabled={!editingFAQ.question.trim() || !editingFAQ.answer.trim()}
-                      className="btn-brand text-sm flex items-center gap-1.5 disabled:opacity-50"
+                      className="btn-brand text-sm flex items-center gap-1.5 !min-h-[40px] !py-0 px-4 disabled:opacity-50"
                     >
                       <Save className="w-3.5 h-3.5" /> Save
                     </button>
@@ -186,7 +187,7 @@ export function FAQManager({ faqs, onChange, maxFaqs = 10, readonly = false }: F
                     {/* Reorder Handle */}
                     {!readonly && (
                       <div className="flex flex-col gap-1 pt-1">
-                        <button
+                        <button type="button"
                           onClick={() => moveUp(index)}
                           disabled={index === 0}
                           className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded disabled:opacity-30"
@@ -195,7 +196,7 @@ export function FAQManager({ faqs, onChange, maxFaqs = 10, readonly = false }: F
                           <ChevronUp className="w-3.5 h-3.5 text-gray-400" />
                         </button>
                         <GripVertical className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600" />
-                        <button
+                        <button type="button"
                           onClick={() => moveDown(index)}
                           disabled={index === faqs.length - 1}
                           className="p-0.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded disabled:opacity-30"
@@ -221,14 +222,14 @@ export function FAQManager({ faqs, onChange, maxFaqs = 10, readonly = false }: F
                         {/* Actions */}
                         {!readonly && (
                           <div className="flex items-center gap-1 shrink-0">
-                            <button
+                            <button type="button"
                               onClick={() => startEdit(index)}
                               className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
                               title="Edit"
                             >
                               <Edit3 className="w-3.5 h-3.5 text-gray-400" />
                             </button>
-                            <button
+                            <button type="button"
                               onClick={() => deleteFAQ(index)}
                               className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
                               title="Delete"

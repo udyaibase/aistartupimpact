@@ -271,25 +271,25 @@ export default function FounderTeamPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="portal-title">Team</h1>
           <p className="portal-subtitle">Invite people to help manage your startup</p>
         </div>
-        {canManage && <button onClick={() => setShowInvite(true)} className="inline-flex items-center gap-1.5 px-3 py-2 bg-brand hover:bg-brand-600 text-white text-xs font-bold font-jakarta rounded-lg">
-          <Plus className="w-3.5 h-3.5"/> Invite a teammate
+        {canManage && <button onClick={() => setShowInvite(true)} className="shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 min-h-[40px] px-3.5 bg-brand hover:bg-brand-600 text-white text-sm font-semibold font-jakarta rounded-lg">
+          <Plus className="w-4 h-4" aria-hidden /> Invite
         </button>}
       </div>
 
       {msg && <p className={`text-xs font-jakarta px-3 py-2 rounded-lg ${msg.includes("sent") || msg.includes("Invite") || msg.includes("updated") || msg.includes("revoked") || msg.includes("removed for") ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400"}`}>{msg}</p>}
 
       {canManage && showInvite && (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-5 space-y-4">
+        <div className="portal-edge bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-5 sm:p-5 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-navy dark:text-white font-sora">Invite Team Member</h2>
-            <button onClick={() => setShowInvite(false)}><X className="w-4 h-4 text-gray-400"/></button>
+            <button type="button" onClick={() => setShowInvite(false)} aria-label="Close invite form" className="w-10 h-10 -mr-2 -my-2 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"><X className="w-5 h-5 text-gray-400" aria-hidden /></button>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-gray-400 uppercase mb-1 font-jakarta">Email *</label>
               <input type="email" value={invEmail} onChange={e => setInvEmail(e.target.value)} placeholder="teammate@company.com" className="w-full px-3.5 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-jakarta text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand/20"/>
@@ -301,26 +301,26 @@ export default function FounderTeamPage() {
           </div>
           <div>
             <label className="block text-xs font-bold text-gray-400 uppercase mb-1 font-jakarta">Role</label>
-            <div className="grid grid-cols-3 gap-2">{ROLES.map(r => (
-              <button key={r.value} type="button" onClick={() => setInvRole(r.value)} className={`p-2.5 rounded-lg border text-left transition-all ${invRole === r.value ? "border-brand bg-brand/5" : "border-gray-200 dark:border-gray-700"}`}>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">{ROLES.map(r => (
+              <button key={r.value} type="button" onClick={() => setInvRole(r.value)} className={`min-h-[44px] p-3 sm:p-2.5 rounded-lg border text-left transition-all ${invRole === r.value ? "border-brand bg-brand/5" : "border-gray-200 dark:border-gray-700"}`}>
                 <p className={`text-xs font-semibold font-jakarta ${invRole === r.value ? "text-brand" : "text-gray-700 dark:text-gray-200"}`}>{r.label}</p>
                 <p className="text-xs text-gray-400 font-jakarta">{r.desc}</p>
               </button>
             ))}</div>
           </div>
-          <button onClick={handleInvite} disabled={inviting || !invEmail} className="w-full py-2.5 bg-brand hover:bg-brand-600 text-white font-bold text-sm font-jakarta rounded-lg disabled:opacity-40 flex items-center justify-center gap-2">
+          <button onClick={handleInvite} disabled={inviting || !invEmail} className="w-full min-h-[44px] py-2.5 bg-brand hover:bg-brand-600 text-white font-bold text-sm font-jakarta rounded-lg disabled:opacity-40 flex items-center justify-center gap-2">
             {inviting ? <Loader2 className="w-4 h-4 animate-spin"/> : <Mail className="w-4 h-4"/>} Send Invite
           </button>
         </div>
       )}
 
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+      <div className="portal-edge bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
         {members.length === 0 ? (
           <div className="text-center py-12 px-4">
             <Users className="w-8 h-8 text-gray-400 mx-auto mb-2" aria-hidden />
             <p className="text-[15px] font-semibold text-gray-900 dark:text-white font-jakarta">It’s just you for now</p>
             <p className="text-sm text-gray-600 dark:text-gray-400 font-jakarta mt-1 max-w-md mx-auto">Invite a co-founder or teammate to help manage your listing, stories and updates. You choose what each person can do.</p>
-            {canManage && <button onClick={() => setShowInvite(true)} className="mt-4 inline-flex items-center gap-1.5 px-3 py-2 bg-brand hover:bg-brand-600 text-white text-sm font-semibold font-jakarta rounded-lg"><Plus className="w-3.5 h-3.5" aria-hidden /> Invite a teammate</button>}
+            {canManage && <button onClick={() => setShowInvite(true)} className="mt-4 inline-flex items-center gap-1.5 min-h-[44px] px-4 bg-brand hover:bg-brand-600 text-white text-sm font-semibold font-jakarta rounded-lg"><Plus className="w-3.5 h-3.5" aria-hidden /> Invite a teammate</button>}
           </div>
         ) : (
           <>

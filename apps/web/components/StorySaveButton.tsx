@@ -83,12 +83,13 @@ export default function StorySaveButton({ slug }: { slug: string }) {
       <button
         onClick={handleClick}
         disabled={busy}
-        className="p-2.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+        type="button"
+        className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-60"
         aria-label={saved ? 'Unsave story' : 'Save story'}
         aria-pressed={saved}
         title={saved ? 'Saved to your profile' : 'Save'}
       >
-        <Bookmark className={`w-4 h-4 transition-colors ${saved ? 'fill-blue-500 text-blue-500' : 'text-gray-400'}`} />
+        <Bookmark className={`w-5 h-5 transition-colors ${saved ? 'fill-blue-500 text-blue-500' : 'text-gray-500'}`} aria-hidden />
       </button>
       <SignInModal
         isOpen={showSignIn}

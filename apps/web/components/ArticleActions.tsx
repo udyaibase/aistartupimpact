@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Heart, MessageCircle, Share2, Check, ChevronDown, ChevronUp, Send, Loader2 } from 'lucide-react';
+import { Heart, MessageCircle, Check, ChevronDown, ChevronUp, Send, Loader2 } from 'lucide-react';
 import { useUser } from './UserProvider';
 import SignInModal from '@/components/auth/SignInModal';
+import ShareButton from '@/components/ShareButton';
 
 const COMMENT_MAX_LENGTH = 500;
 
@@ -25,7 +26,7 @@ export default function ArticleActions({ slug, initialLikes, title }: Props) {
   const { user } = useUser();
   const [likes, setLikes] = useState(initialLikes);
   const [liked, setLiked] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [likeBusy, setLikeBusy] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState<Comment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
@@ -37,27 +38,30 @@ export default function ArticleActions({ slug, initialLikes, title }: Props) {
 
   // Persist liked state in localStorage
   useEffect(() => {
-    const key = `liked-${slug}`;
-    if (localStorage.getItem(key)) setLiked(true);
+    try { if (localStorage.getItem(`liked-${slug}`)) setLiked(true); } catch {}
   }, [slug]);
 
+  // Tap again to take a like back. The count updates straight away and is put back if the server says no.
   const handleLike = async () => {
-    if (liked) return;
+    if (likeBusy) return;
     const key = `liked-${slug}`;
-    localStorage.setItem(key, '1');
-    setLiked(true);
-    setLikes(l => l + 1);
-    await fetch(`/api/articles/${slug}/like`, { method: 'POST' });
-  };
-
-  const handleShare = async () => {
-    const url = window.location.href;
-    if (navigator.share) {
-      try { await navigator.share({ title, url }); return; } catch {}
+    const was = liked;
+    setLiked(!was);
+    setLikes((l) => Math.max(0, l + (was ? -1 : 1)));
+    try { if (was) localStorage.removeItem(key); else localStorage.setItem(key, '1'); } catch {}
+    setLikeBusy(true);
+    try {
+      const res = await fetch(`/api/articles/${slug}/like`, { method: was ? 'DELETE' : 'POST' });
+      if (!res.ok) throw new Error();
+      const data = await res.json().catch(() => null);
+      if (typeof data?.likeCount === 'number') setLikes(data.likeCount);
+    } catch {
+      setLiked(was);
+      setLikes((l) => Math.max(0, l + (was ? 1 : -1)));
+      try { if (was) localStorage.setItem(key, '1'); else localStorage.removeItem(key); } catch {}
+    } finally {
+      setLikeBusy(false);
     }
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   const loadComments = async () => {
@@ -108,40 +112,36 @@ export default function ArticleActions({ slug, initialLikes, title }: Props) {
   };
 
   return (
-    <div className="mt-8 border-t border-gray-100 dark:border-gray-800 pt-6">
+    <div className="mt-8 border-t border-gray-100 dark:border-gray-800 pt-5 sm:pt-6">
       {/* Action bar */}
-      <div className="flex items-center gap-3">
-        {/* Like */}
+      <div className="flex flex-wrap items-center gap-2">
         <button
+          type="button"
           onClick={handleLike}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-jakarta font-semibold text-sm transition-all ${
+          aria-pressed={liked}
+          aria-label={liked ? `Liked, ${likes} likes. Tap to undo` : `Like, ${likes} likes`}
+          className={`inline-flex min-h-[44px] items-center gap-2 rounded-full px-4 font-jakarta text-sm font-semibold transition-colors ${
             liked
-              ? 'bg-red-50 dark:bg-red-900/20 text-red-500'
-              : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500'
+              ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+              : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600'
           }`}
         >
-          <Heart className={`w-4 h-4 ${liked ? 'fill-red-500' : ''}`} />
-          <span>{likes}</span>
+          <Heart className={`h-[18px] w-[18px] transition-transform ${liked ? 'fill-current scale-110' : ''}`} aria-hidden />
+          <span className="tabular-nums">{likes}</span>
         </button>
 
-        {/* Comment toggle */}
         <button
+          type="button"
           onClick={handleCommentClick}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl font-jakarta font-semibold text-sm bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-brand/10 hover:text-brand transition-all"
+          aria-expanded={showComments}
+          className="inline-flex min-h-[44px] items-center gap-2 rounded-full bg-gray-100 dark:bg-gray-800 px-4 font-jakarta text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
         >
-          <MessageCircle className="w-4 h-4" />
-          <span>Comment</span>
-          {showComments ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          <MessageCircle className="h-[18px] w-[18px]" aria-hidden />
+          <span>Comments</span>
+          {showComments ? <ChevronUp className="h-4 w-4" aria-hidden /> : <ChevronDown className="h-4 w-4" aria-hidden />}
         </button>
 
-        {/* Share */}
-        <button
-          onClick={handleShare}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl font-jakarta font-semibold text-sm bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-brand/10 hover:text-brand transition-all"
-        >
-          {copied ? <Check className="w-4 h-4 text-green-500" /> : <Share2 className="w-4 h-4" />}
-          <span>{copied ? 'Copied!' : 'Share'}</span>
-        </button>
+        <ShareButton title={title} pill />
       </div>
 
       {/* Comments section */}
@@ -163,20 +163,20 @@ export default function ArticleActions({ slug, initialLikes, title }: Props) {
                       {c.name.charAt(0).toUpperCase()}
                     </div>
                   )}
-                  <div className="flex-1 bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3">
+                  <div className="min-w-0 flex-1 bg-gray-50 dark:bg-gray-800/50 rounded-[14px] px-3.5 py-3">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-sora font-bold text-sm text-navy dark:text-white">{c.name}</span>
-                      <span className="text-xs text-gray-400 font-jakarta">
+                      <span className="text-[13px] sm:text-xs text-gray-500 font-jakarta">
                         {new Date(c.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-300 font-jakarta leading-relaxed">{c.body}</p>
+                    <p className="text-[15px] sm:text-sm text-gray-700 dark:text-gray-300 font-jakarta leading-relaxed break-words">{c.body}</p>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-gray-400 font-jakarta">No comments yet. Be the first!</p>
+            <p className="text-[15px] sm:text-sm text-gray-500 font-jakarta">No comments yet. Be the first to share your thoughts.</p>
           )}
 
           {/* Comment form */}
@@ -202,14 +202,14 @@ export default function ArticleActions({ slug, initialLikes, title }: Props) {
                   <textarea
                     placeholder="Share your thoughts..." value={body} rows={3} maxLength={COMMENT_MAX_LENGTH}
                     onChange={e => { if (e.target.value.length <= COMMENT_MAX_LENGTH) setBody(e.target.value); }}
-                    className="input-field text-sm w-full resize-none"
+                    className="input-field !text-base sm:!text-sm w-full resize-none"
                   />
                   <div className="flex items-center justify-between">
                     <span className={`text-xs font-jakarta ${body.length >= COMMENT_MAX_LENGTH ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
                       {body.length}/{COMMENT_MAX_LENGTH}
                     </span>
                     <button type="submit" disabled={submitting || body.length > COMMENT_MAX_LENGTH}
-                      className="btn-brand text-sm flex items-center gap-2 disabled:opacity-50">
+                      className="btn-brand text-sm min-h-[44px] flex items-center gap-2 disabled:opacity-50">
                       {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                       {submitting ? 'Submitting...' : 'Post Comment'}
                     </button>

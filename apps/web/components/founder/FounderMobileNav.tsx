@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Rocket, Wrench, Plus, MoreHorizontal, X, Briefcase, BarChart3, Users, User, Settings, History, HelpCircle, CalendarDays, Megaphone } from 'lucide-react';
+import { LayoutDashboard, Rocket, Wrench, Plus, MoreHorizontal, X, Briefcase, BarChart3, Users, User, Settings, History, HelpCircle, CalendarDays } from 'lucide-react';
 import type { FounderShell } from '@/lib/founder/portal';
-import { WorkspaceAvatar, VerificationLine } from './FounderSidebar';
+import { WorkspaceAvatar, VerificationLine, PromoteCard } from './FounderSidebar';
 
 const TABS: { href: string; icon: typeof Rocket; label: string; exact?: boolean; highlight?: boolean }[] = [
   { href: '/founder/dashboard', icon: LayoutDashboard, label: 'Home', exact: true },
@@ -23,7 +23,6 @@ const MORE: { href: string; icon: typeof Rocket; label: string; desc: string }[]
   { href: '/founder/settings', icon: Settings, label: 'Settings', desc: 'Notifications, privacy and security' },
   { href: '/founder/activity', icon: History, label: 'Activity log', desc: 'Sign-ins and changes on your account' },
   { href: '/founder/support', icon: HelpCircle, label: 'Support', desc: 'Get help from our team' },
-  { href: '/advertise', icon: Megaphone, label: 'Promote your startup or tool', desc: 'Homepage, newsletter and featured spots' },
 ];
 
 /** Phone navigation: same tabs-and-More pattern as the employer and host portals. */
@@ -140,6 +139,8 @@ export default function FounderMobileNav({ shell }: { shell: FounderShell }) {
                 );
               })}
             </ul>
+            {/* The promote offer as its own card at the end, not another menu row. */}
+            <div className="px-4 pt-3 pb-2"><PromoteCard size="lg" /></div>
           </div>
         </div>
       )}

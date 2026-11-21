@@ -69,7 +69,8 @@ export default async function AnalyticsPage() {
 
   const totalSourceViews = trafficSources.direct + trafficSources.search + trafficSources.social + trafficSources.email + trafficSources.referral;
   const analyticsMap = new Map(perEventAnalytics.map((a: any) => [a.eventId, a]));
-  const conversionRate = totalViews > 0 ? ((totalRegs / totalViews) * 100).toFixed(1) : '—';
+  // Registrations can come from places views aren't counted (direct links, imports), so a rate over 100% means nothing: show a dash.
+  const conversionRate = totalViews > 0 && totalRegs <= totalViews ? ((totalRegs / totalViews) * 100).toFixed(1) : '—';
 
   const statCards = [
     { label: 'Events', value: events.length, icon: CalendarDays, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
@@ -131,7 +132,7 @@ export default async function AnalyticsPage() {
                     <span className="text-xs font-bold font-jakarta text-navy dark:text-white">{s.value} <span className="text-gray-400 font-normal">({s.pct}%)</span></span>
                   </div>
                   <div className="h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                    <div className={`h-full ${s.color} rounded-full transition-all`} style={{ width: `${s.pct}%` }} />
+                    <div className={`h-full ${s.color} rounded-full transition-all`} style={{ width: `${Math.min(100, Math.max(0, s.pct))}%` }} />
                   </div>
                 </div>
               ))}
@@ -151,10 +152,10 @@ export default async function AnalyticsPage() {
               <div key={step.label}>
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-jakarta text-gray-700 dark:text-gray-300">{step.label}</span>
-                  <span className="text-xs font-bold font-jakarta text-navy dark:text-white">{step.value} <span className="text-gray-400 font-normal">({step.pct}%)</span></span>
+                  <span className="text-xs font-bold font-jakarta text-navy dark:text-white">{step.value} {step.pct <= 100 && <span className="text-gray-400 font-normal">({step.pct}%)</span>}</span>
                 </div>
                 <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                  <div className={`h-full ${step.color} rounded-full transition-all`} style={{ width: `${step.pct}%` }} />
+                  <div className={`h-full ${step.color} rounded-full transition-all`} style={{ width: `${Math.min(100, Math.max(0, step.pct))}%` }} />
                 </div>
               </div>
             ))}
@@ -172,7 +173,7 @@ export default async function AnalyticsPage() {
           <ul className="md:hidden -mx-1 divide-y divide-gray-100 dark:divide-gray-800">
             {events.map((e) => {
               const a = analyticsMap.get(e.id) || { views: 0, shares: 0, socialViews: 0, searchViews: 0 };
-              const conv = a.views > 0 ? ((e.registrationCount / a.views) * 100).toFixed(1) + '%' : '—';
+              const conv = a.views > 0 && e.registrationCount <= a.views ? ((e.registrationCount / a.views) * 100).toFixed(1) + '%' : '—';
               return (
                 <li key={e.id} className="px-1 py-3">
                   <div className="flex items-baseline justify-between gap-3">
@@ -217,7 +218,7 @@ export default async function AnalyticsPage() {
               <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                 {events.map((e) => {
                   const a = analyticsMap.get(e.id) || { views: 0, shares: 0, socialViews: 0, searchViews: 0 };
-                  const conv = a.views > 0 ? ((e.registrationCount / a.views) * 100).toFixed(1) + '%' : '—';
+                  const conv = a.views > 0 && e.registrationCount <= a.views ? ((e.registrationCount / a.views) * 100).toFixed(1) + '%' : '—';
                   return (
                     <tr key={e.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
                       <td className="py-2.5 pr-4 text-gray-700 dark:text-gray-300 truncate max-w-[200px] font-medium">{e.title}</td>

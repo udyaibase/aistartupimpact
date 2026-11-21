@@ -231,7 +231,7 @@ export default function SavedItems() {
                   role="tab"
                   aria-selected={active}
                   onClick={() => setActiveTab(t.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium text-xs whitespace-nowrap transition-all duration-200 ${
+                  className={`flex items-center gap-1.5 min-h-[36px] px-3 rounded-md font-medium text-[13px] sm:text-xs whitespace-nowrap transition-all duration-200 ${
                     active
                       ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                       : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
@@ -506,7 +506,7 @@ function EmptyState({
       </p>
       <Link
         href={href}
-        className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors"
+        className="inline-flex items-center gap-1.5 min-h-[40px] px-4 text-[13px] font-semibold bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors"
       >
         {linkText}
         <ExternalLink className="w-3 h-3" />

@@ -47,7 +47,7 @@ function NewContentInner() {
   return (
     <div>
       <div>
-        <button onClick={() => router.push("/founder/content")} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-jakarta mb-4">
+        <button onClick={() => router.push("/founder/content")} className="flex items-center gap-1.5 min-h-[40px] -ml-1 px-1 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-jakarta mb-2">
           <ArrowLeft className="w-4 h-4" /> Back to Content
         </button>
 
@@ -60,7 +60,7 @@ function NewContentInner() {
           </p>
         </div>
 
-        <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-6">
+        <div className="bg-white dark:bg-gray-900 -mx-4 sm:mx-0 border-y sm:border border-gray-100 dark:border-gray-800 rounded-none sm:rounded-xl px-4 py-5 sm:p-6">
           <ContentSubmissionForm
             contentType={contentType as "STARTUP_UPDATE" | "FOUNDER_STORY"}
             startups={startups}

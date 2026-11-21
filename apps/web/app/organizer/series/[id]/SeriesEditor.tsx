@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Check, Copy, ExternalLink, Loader2, Trash2 } from 'lucide-react';
+import ConfirmSheet from '@/components/ui/ConfirmSheet';
 
 type Rule = { freq: 'WEEKLY' | 'MONTHLY'; interval: number; monthWeek: number | null; createAheadDays: number; templateEventId: string };
 type Ev = { id: string; title: string; startAt: string; timezone: string; status: string; inSeries: boolean; inOtherSeries: boolean };
@@ -57,12 +58,15 @@ export default function SeriesEditor({ id }: { id: string }) {
     load();
   }
 
-  async function remove() {
-    if (!confirm('Delete this series? Its events stay as they are, and its followers are removed.')) return;
+  // Asked in the app's own sheet; on success it stays busy until the list has opened.
+  const [askDelete, setAskDelete] = useState(false);
+  async function remove(): Promise<string | void> {
     setBusy('delete');
-    const r = await fetch(`/api/organizer/series/${id}`, { method: 'DELETE' });
-    setBusy('');
-    if (r.ok) router.push('/organizer/series'); else setNote('Couldn’t delete.');
+    try {
+      const r = await fetch(`/api/organizer/series/${id}`, { method: 'DELETE' });
+      if (!r.ok) { setBusy(''); return 'Couldn’t delete the series. Try again.'; }
+      router.push('/organizer/series');
+    } catch { setBusy(''); return 'You seem to be offline. Try again.'; }
   }
 
   if (!data) return <div className="p-6 flex items-center gap-2 text-sm text-gray-500"><Loader2 className="w-4 h-4 animate-spin" aria-hidden /> {note || 'Loading…'}</div>;
@@ -173,10 +177,18 @@ export default function SeriesEditor({ id }: { id: string }) {
         <button onClick={save} disabled={busy === 'save'} className="inline-flex items-center gap-2 min-h-[44px] px-5 rounded-[10px] bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-semibold disabled:opacity-50">
           {busy === 'save' && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} Save
         </button>
-        <button onClick={remove} disabled={busy === 'delete'} className="ml-auto inline-flex items-center gap-2 min-h-[44px] px-4 rounded-[10px] text-sm font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
+        <button onClick={() => setAskDelete(true)} disabled={busy === 'delete'} className="ml-auto inline-flex items-center gap-2 min-h-[44px] px-4 rounded-[10px] text-sm font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
           <Trash2 className="w-4 h-4" aria-hidden /> Delete series
         </button>
       </div>
+      <ConfirmSheet
+        open={askDelete}
+        title="Delete this series?"
+        message={<>Its events stay as they are. Its public page and its followers are removed.</>}
+        confirmLabel="Delete series"
+        onConfirm={remove}
+        onClose={() => setAskDelete(false)}
+      />
     </div>
   );
 }

@@ -108,8 +108,16 @@ export default async function OrganizerHome() {
   ]);
 
   const viewsLast30 = totalViews._sum.views ?? 0;
-  const conversionRate = viewsLast30 > 0 ? ((regsLast30 / viewsLast30) * 100).toFixed(1) : null;
+  // Registrations can come from places views aren't counted, so a rate over 100% means nothing: show a dash.
+  const conversionRate = viewsLast30 > 0 && regsLast30 <= viewsLast30 ? ((regsLast30 / viewsLast30) * 100).toFixed(1) : null;
   const regsChange = regsPrev30 > 0 ? Math.round(((regsLast30 - regsPrev30) / regsPrev30) * 100) : null;
+  // A percentage against a tiny month reads as nonsense (12 → 303 is "+2425%"): show the difference in people instead.
+  const regsDiff = regsLast30 - regsPrev30;
+  const regsChangeText = regsChange === null
+    ? (regsLast30 > 0 ? `+${regsLast30}` : "—")
+    : regsPrev30 < 10 || Math.abs(regsChange) > 500
+      ? `${regsDiff > 0 ? "+" : ""}${regsDiff}`
+      : `${regsChange > 0 ? "+" : ""}${regsChange}%`;
 
   // Per-event waitlist counts
   const eventIds = upcomingEvents.map(e => e.id);
@@ -184,11 +192,11 @@ export default async function OrganizerHome() {
             {draftEvents.length > 0 ? ` · ${draftEvents.length} draft${draftEvents.length !== 1 ? "s" : ""} waiting to be finished` : ""}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
           {ok("/organizer/events/create") && <Link
             href="/organizer/events/create"
             data-tour="create-event"
-            className="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 bg-brand hover:bg-brand-600 active:bg-brand-700 text-white text-sm font-bold font-jakarta rounded-md transition-colors"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 min-h-[44px] px-5 bg-brand hover:bg-brand-600 active:bg-brand-700 text-white text-sm font-bold font-jakarta rounded-md transition-colors"
           >
             <Plus className="w-4 h-4" /> Create event
           </Link>}
@@ -229,8 +237,8 @@ export default async function OrganizerHome() {
         <StatCard
           label="Registrations"
           value={totalRegs.toLocaleString("en-IN")}
-          change={regsChange !== null ? `${regsChange > 0 ? "+" : ""}${regsChange}%` : "—"}
-          positive={regsChange !== null && regsChange >= 0}
+          change={regsChangeText}
+          positive={regsDiff >= 0}
         />
         <StatCard
           label="Page views → registered"
@@ -258,7 +266,7 @@ export default async function OrganizerHome() {
         <div data-tour="upcoming" className="min-w-0 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md">
           <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
             <h2 className="portal-section-title">Upcoming events</h2>
-            <Link href="/organizer/events" className="text-xs text-brand font-semibold font-jakarta hover:underline flex items-center gap-0.5">
+            <Link href="/organizer/events" className="min-h-[40px] -my-2 -mr-2 px-2 text-[13px] sm:text-xs text-brand font-semibold font-jakarta hover:underline flex items-center gap-0.5 rounded-[8px] active:bg-gray-100 dark:active:bg-gray-800">
               All events <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
@@ -355,7 +363,7 @@ export default async function OrganizerHome() {
         <div className="min-w-0 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md">
           <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
             <h2 className="portal-section-title">Latest registrations</h2>
-            <Link href="/organizer/attendees" className="text-xs text-brand font-semibold font-jakarta hover:underline flex items-center gap-0.5">
+            <Link href="/organizer/attendees" className="min-h-[40px] -my-2 -mr-2 px-2 text-[13px] sm:text-xs text-brand font-semibold font-jakarta hover:underline flex items-center gap-0.5 rounded-[8px] active:bg-gray-100 dark:active:bg-gray-800">
               All attendees <ArrowRight className="w-3 h-3" />
             </Link>
           </div>

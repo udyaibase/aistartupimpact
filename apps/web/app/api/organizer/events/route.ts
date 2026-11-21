@@ -31,7 +31,11 @@ export async function POST(request: NextRequest) {
   const session = result;
 
   try {
-    const cleaned = cleanEventInput(await request.json().catch(() => null));
+    const body = await request.json().catch(() => null);
+    // "Save draft" on a new event: kept private, nothing goes live, and it doesn't count toward the plan yet.
+    // Publishing it later goes through the event's update route (review, plan limit, featuring all apply there).
+    const asDraft = !!body && typeof body === "object" && (body as { asDraft?: unknown }).asDraft === true;
+    const cleaned = cleanEventInput(body);
     if (!cleaned.ok) return NextResponse.json({ success: false, field: cleaned.field, error: cleaned.error }, { status: 400 });
     const data = cleaned.data;
     // Only a meeting this workspace just created can be attached (see lib/integrations/meeting-proof.ts).
@@ -57,11 +61,11 @@ export async function POST(request: NextRequest) {
       }
     }
     // New independent organizers' first events wait for review; verified organizers and startups publish at once.
-    const decision = await publishDecision(session.organizerId, { taggedStartup: !!startupId });
+    const decision = asDraft ? "DRAFT" : await publishDecision(session.organizerId, { taggedStartup: !!startupId });
     const published = decision === "PUBLISHED";
 
     if (!title || !startAt || !endAt) {
-      return NextResponse.json({ success: false, error: "Title, start date, and end date are required." }, { status: 400 });
+      return NextResponse.json({ success: false, error: asDraft ? "Add a name and a date to save a draft." : "Title, start date, and end date are required." }, { status: 400 });
     }
     // Paid tickets need an activated payout account (same rule as editing).
     if (hasPaidTickets(data.ticketTiers) && !(await canSellTickets(session.organizerId))) {
@@ -72,7 +76,7 @@ export async function POST(request: NextRequest) {
     if ("error" in agendaPlan) return NextResponse.json({ success: false, field: "agenda", error: agendaPlan.error }, { status: 400 });
 
     // New events publish immediately, so the plan's upcoming-events limit applies here.
-    if (new Date(endAt) > new Date()) {
+    if (!asDraft && new Date(endAt) > new Date()) {
       const limit = await upcomingLimitProblem(session.organizerId);
       if (limit) return NextResponse.json({ success: false, code: "plan_limit", error: limit }, { status: 403 });
     }
@@ -140,7 +144,7 @@ export async function POST(request: NextRequest) {
         coverImageUrl: coverImageUrl || null,
         visibility: "PUBLIC",
         publishedAt: published ? new Date() : null,
-        reviewNote: published ? null : "First event from a new organizer",
+        reviewNote: decision === "PENDING_REVIEW" ? "First event from a new organizer" : null,
         approvalRequired: data.approvalRequired === true,
         metaTitle: typeof data.seoTitle === "string" && data.seoTitle.trim() ? data.seoTitle.trim().slice(0, 120) : null,
         metaDescription: typeof data.seoDescription === "string" && data.seoDescription.trim() ? data.seoDescription.trim().slice(0, 300) : null,
@@ -158,7 +162,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: { id: event.id, slug: event.slug, shortCode: event.shortCode, status: decision },
-      ...(published ? {} : { message: "Your event is saved and waiting for a quick review by our team (usually within a day). We'll email you when it's live." }),
+      ...(decision === "PENDING_REVIEW" ? { message: "Your event is saved and waiting for a quick review by our team (usually within a day). We'll email you when it's live." } : {}),
     });
   } catch (error: any) {
     console.error("Organizer create event error:", error);

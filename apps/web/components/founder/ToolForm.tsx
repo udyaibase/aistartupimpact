@@ -339,7 +339,7 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
 
   return (
     // noValidate: instead of the browser's one-field-at-a-time bubble, every problem is listed at the top (FormProblems).
-    <form noValidate onSubmit={(e) => { if (!formProblems.check(e.currentTarget)) { e.preventDefault(); return; } handleSubmit(e); }} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 space-y-6">
+    <form noValidate onSubmit={(e) => { if (!formProblems.check(e.currentTarget)) { e.preventDefault(); return; } handleSubmit(e); }} className="bg-white dark:bg-gray-900 -mx-4 sm:mx-0 rounded-none sm:rounded-2xl border-y sm:border border-gray-200 dark:border-gray-800 px-4 py-5 sm:p-6 space-y-6">
       {saved && (
         <StatusNote tone={saved.pending.length ? 'waiting' : 'success'} title={saved.pending.length ? 'Saved. Some changes are waiting for our team.' : 'Saved'}>
           {saved.published.length > 0 && `Live now: ${saved.published.join(', ')}. `}
@@ -588,7 +588,7 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
             <button
               type="button"
               onClick={() => setSocialLinks(prev => [...prev, { platform: 'instagram', url: '' }])}
-              className="flex items-center gap-1.5 text-xs font-semibold text-brand hover:text-brand-600 transition-colors"
+              className="inline-flex items-center gap-1.5 min-h-[40px] -ml-1 px-1 text-[13px] font-semibold text-brand hover:text-brand-600 transition-colors"
             >
               <Plus className="w-3.5 h-3.5" /> Add Social Link
             </button>
@@ -826,18 +826,19 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
       </div>
 
       {/* Submit Button */}
-      <div className="flex items-center justify-end gap-4 pt-4 border-t border-gray-200 dark:border-gray-800">
+      {/* Phones: full-width buttons, the main one on top; bigger screens: side by side on the right. */}
+      <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 sm:gap-4 pt-4 border-t border-gray-200 dark:border-gray-800">
         <button
           type="button"
           onClick={() => router.back()}
-          className="px-6 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          className="w-full sm:w-auto min-h-[44px] justify-center px-6 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={loading}
-          className="px-6 py-2 bg-brand hover:bg-brand/90 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          className="w-full sm:w-auto min-h-[44px] justify-center px-6 py-2 bg-brand hover:bg-brand/90 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
           {loading && <Loader2 className="w-4 h-4 animate-spin" />}
           {loading ? (isNew ? 'Submitting...' : 'Saving...') : isNew ? 'Submit for review' : 'Save changes'}
