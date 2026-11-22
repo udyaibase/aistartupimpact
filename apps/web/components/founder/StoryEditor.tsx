@@ -44,11 +44,12 @@ const TIPS: { title: string; text: string }[] = [
 ];
 
 /** Uploads one picture through our media upload and returns its address. */
-async function uploadImage(file: File): Promise<string> {
+async function uploadImage(file: File, folder: "stories" | "covers" = "stories"): Promise<string> {
   if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) throw new Error("Use a JPEG, PNG or WebP image.");
   if (file.size > 5 * 1024 * 1024) throw new Error("The image must be under 5 MB.");
   const form = new FormData();
   form.append("file", file);
+  form.append("folder", folder);
   const res = await fetch("/api/media/upload", { method: "POST", body: form });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.url) throw new Error(data.error || "Couldn’t upload the image.");
@@ -237,7 +238,7 @@ export default function StoryEditor({ startups, existing }: { startups: Startup[
     setCoverError("");
     setUploading(true);
     try {
-      setCover(await uploadImage(file));
+      setCover(await uploadImage(file, "covers"));
       changed();
     } catch (e) {
       setCoverError(e instanceof Error ? e.message : "Couldn’t upload the image.");

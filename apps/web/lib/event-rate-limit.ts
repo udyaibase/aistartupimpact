@@ -24,11 +24,15 @@ try {
  * High limit: Indian campus Wi-Fi, corporate NAT, and carrier-grade NAT
  * share one IP across hundreds of users. Turnstile is the primary bot defense.
  */
+// analytics stays off on every limiter: @upstash/ratelimit's analytics writes an
+// hourly "<prefix>:events:<bucket>" sorted set per limiter with no TTL, so those
+// keys piled up in Redis forever. Nothing here reads them.
+
 export const registrationRateLimit = redis
   ? new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(100, "15 m"),
-      analytics: true,
+      analytics: false,
       prefix: "ratelimit:event:registration",
     })
   : null;
@@ -41,7 +45,7 @@ export const eventSearchRateLimit = redis
   ? new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(60, "1 m"),
-      analytics: true,
+      analytics: false,
       prefix: "ratelimit:event:search",
     })
   : null;
@@ -54,7 +58,7 @@ export const newsletterSubscribeRateLimit = redis
   ? new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(5, "1 h"),
-      analytics: true,
+      analytics: false,
       prefix: "ratelimit:event:newsletter",
     })
   : null;
@@ -67,7 +71,7 @@ export const eventCreationRateLimit = redis
   ? new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(10, "1 h"),
-      analytics: true,
+      analytics: false,
       prefix: "ratelimit:event:create",
     })
   : null;
@@ -79,7 +83,7 @@ export const campaignSendRateLimit = redis
   ? new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(5, "24 h"),
-      analytics: true,
+      analytics: false,
       prefix: "ratelimit:event:campaign",
     })
   : null;
@@ -92,7 +96,7 @@ export const embedEventsRateLimit = redis
   ? new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(120, "1 m"),
-      analytics: true,
+      analytics: false,
       prefix: "ratelimit:embed:events",
     })
   : null;
@@ -105,7 +109,7 @@ export const embedRegistrationRateLimit = redis
   ? new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(1000, "1 h"),
-      analytics: true,
+      analytics: false,
       prefix: "ratelimit:embed:registration",
     })
   : null;
@@ -114,7 +118,7 @@ export const embedSendInstructionsRateLimit = redis
   ? new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(10, "1 h"),
-      analytics: true,
+      analytics: false,
       prefix: "ratelimit:embed:send-instructions",
     })
   : null;
@@ -123,7 +127,7 @@ export const embedTrackRateLimit = redis
   ? new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(300, "1 m"),
-      analytics: true,
+      analytics: false,
       prefix: "ratelimit:embed:track",
     })
   : null;
@@ -132,7 +136,7 @@ export const embedVerifyRateLimit = redis
   ? new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(30, "1 h"),
-      analytics: true,
+      analytics: false,
       prefix: "ratelimit:embed:verify",
     })
   : null;
@@ -142,7 +146,7 @@ export const resumeUploadRateLimit = redis
   ? new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(10, "1 h"),
-      analytics: true,
+      analytics: false,
       prefix: "ratelimit:jobs:resume-upload",
     })
   : null;
@@ -152,7 +156,7 @@ export const resumeParseRateLimit = redis
   ? new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(10, "1 h"),
-      analytics: true,
+      analytics: false,
       prefix: "ratelimit:jobs:resume-parse",
     })
   : null;
@@ -162,7 +166,7 @@ export const jobApplyRateLimit = redis
   ? new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(20, "1 h"),
-      analytics: true,
+      analytics: false,
       prefix: "ratelimit:jobs:apply",
     })
   : null;
@@ -172,7 +176,7 @@ export const applicationStatusRateLimit = redis
   ? new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(60, "10 m"),
-      analytics: true,
+      analytics: false,
       prefix: "ratelimit:jobs:status",
     })
   : null;

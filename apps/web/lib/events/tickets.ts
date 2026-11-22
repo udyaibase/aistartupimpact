@@ -315,10 +315,25 @@ export async function refundTicket(registrationId: string, reason: 'host' | 'eve
     select: { id: true, paymentStatus: true, razorpayPaymentId: true, amountPaise: true, guestEmail: true, guestName: true, ticketTierId: true, event: { select: { title: true } } },
   });
   if (!reg || reg.paymentStatus !== 'PAID' || !reg.razorpayPaymentId || !reg.amountPaise) return { ok: false, error: 'Only paid tickets can be refunded.' };
+  // Claim it first (PAY-04): only one request can move it from PAID, so two clicks can't refund twice.
+  const claimed = await prisma.eventRegistration.updateMany({ where: { id: reg.id, paymentStatus: 'PAID' }, data: { paymentStatus: 'REFUND_PENDING' } });
+  if (claimed.count === 0) return { ok: false, error: 'This ticket is already being refunded.' };
+  let refund: { id: string };
   try {
-    const refund = await razorpayApi<{ id: string }>('POST', `/v1/payments/${reg.razorpayPaymentId}/refund`, {
+    refund = await razorpayApi<{ id: string }>('POST', `/v1/payments/${encodeURIComponent(reg.razorpayPaymentId)}/refund`, {
       amount: reg.amountPaise, reverse_all: 1, speed: 'normal', notes: { registrationId: reg.id, reason },
     });
+  } catch (err) {
+    console.error('[ticket refund]', err instanceof Error ? err.message : err);
+    // Razorpay said no: nothing was refunded, so the ticket is paid again. No answer (timeout, network): the refund
+    // may have happened, so it stays "refund pending" for someone to check rather than risk a second refund.
+    if (err instanceof RazorpayApiError) {
+      await prisma.eventRegistration.updateMany({ where: { id: reg.id, paymentStatus: 'REFUND_PENDING' }, data: { paymentStatus: 'PAID' } });
+      return { ok: false, error: err.message };
+    }
+    return { ok: false, error: 'No answer from the payment provider. The refund may still go through; contact support before trying again.' };
+  }
+  try {
     await prisma.eventRegistration.update({
       where: { id: reg.id },
       data: { status: 'CANCELLED', cancelledAt: new Date(), paymentStatus: 'REFUNDED', refundId: refund.id, refundedAt: new Date() },
@@ -337,8 +352,9 @@ export async function refundTicket(registrationId: string, reason: 'host' | 'eve
     }
     return { ok: true };
   } catch (err) {
-    console.error('[ticket refund]', err instanceof Error ? err.message : err);
-    return { ok: false, error: err instanceof RazorpayApiError ? err.message : 'Refund failed. Try again.' };
+    // The money went back; only our record or the email failed. Never report this as a failed refund.
+    console.error('[ticket refund] refunded but not recorded', reg.id, refund.id, err instanceof Error ? err.message : err);
+    return { ok: true };
   }
 }
 

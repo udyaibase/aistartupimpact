@@ -1,3 +1,4 @@
+import { connection } from 'next/server';
 import { getEmployerSession } from '@/lib/employer-auth';
 import { getEmployerShell } from '@/lib/employer/portal';
 import EmployerSidebar from '@/components/employer/EmployerSidebar';
@@ -20,6 +21,8 @@ export default async function EmployerLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Per-request rendering: the portal's CSP carries a fresh nonce on every page (lib/csp.ts, middleware.ts).
+  await connection();
   const session = await getEmployerSession();
 
   // If no session, render children without dashboard wrapper

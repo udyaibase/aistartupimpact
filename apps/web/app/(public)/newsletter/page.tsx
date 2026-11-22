@@ -83,6 +83,8 @@ export default function NewsletterPage() {
   const [isValid, setIsValid] = useState(false);
   const turnstileToken = useRef('');
   const modalTurnstileToken = useRef('');
+  // A check works once: bump this after each attempt so the widgets start a fresh one.
+  const [checkRound, setCheckRound] = useState(0);
 
   const validateEmail = (val: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -177,6 +179,7 @@ export default function NewsletterPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, source: 'newsletter_page', turnstileToken: turnstileToken.current })
       });
+      turnstileToken.current = ''; setCheckRound((r) => r + 1);
 
       const data = await res.json();
 
@@ -220,6 +223,7 @@ export default function NewsletterPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: modalEmail, source: 'highlight_modal', turnstileToken: modalTurnstileToken.current })
       });
+      modalTurnstileToken.current = ''; setCheckRound((r) => r + 1);
 
       const data = await res.json();
 
@@ -335,6 +339,7 @@ export default function NewsletterPage() {
               </div>
 
               <TurnstileWidget
+                key={checkRound}
                 onSuccess={(token) => { turnstileToken.current = token; }}
                 onExpire={() => { turnstileToken.current = ''; }}
                 className="flex justify-center"
@@ -500,6 +505,7 @@ export default function NewsletterPage() {
                         />
                       </div>
                       <TurnstileWidget
+                key={checkRound}
                         onSuccess={(token) => { turnstileToken.current = token; }}
                         onExpire={() => { turnstileToken.current = ''; }}
                       />
@@ -717,6 +723,7 @@ export default function NewsletterPage() {
                 />
               </div>
               <TurnstileWidget
+                key={checkRound}
                 onSuccess={(token) => { modalTurnstileToken.current = token; }}
                 onExpire={() => { modalTurnstileToken.current = ''; }}
               />
@@ -887,6 +894,7 @@ export default function NewsletterPage() {
               </button>
             </div>
             <TurnstileWidget
+                key={checkRound}
               onSuccess={(token) => { turnstileToken.current = token; }}
               onExpire={() => { turnstileToken.current = ''; }}
               className="flex justify-center"

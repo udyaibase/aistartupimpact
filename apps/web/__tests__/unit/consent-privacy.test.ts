@@ -38,7 +38,8 @@ describe('Consent & Privacy — GDPR/GPC compliance', () => {
 
   it('GA consent mode defaults to denied', async () => {
     const src = await import('fs').then(fs =>
-      fs.readFileSync('app/layout.tsx', 'utf8')
+      // The consent defaults script lives in lib/csp.ts (the portal CSP allows it by hash); the layout renders it.
+      fs.readFileSync('lib/csp.ts', 'utf8') + fs.readFileSync('app/layout.tsx', 'utf8')
     );
     expect(src).toContain("analytics_storage:'denied'");
     expect(src).toContain("ad_storage:'denied'");

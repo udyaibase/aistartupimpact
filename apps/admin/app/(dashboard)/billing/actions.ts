@@ -143,7 +143,8 @@ async function listPayments(): Promise<BillingPayment[]> {
   return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 100);
 }
 
-async function razorpayRefund(paymentId: string, amountPaise: number, notes: Record<string, string>): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+/** `unknown`: the request didn't get an answer (timeout, network), so the refund may or may not have happened. */
+async function razorpayRefund(paymentId: string, amountPaise: number, notes: Record<string, string>): Promise<{ ok: true; id: string } | { ok: false; error: string; unknown?: boolean }> {
   const keyId = process.env.RAZORPAY_KEY_ID, secret = process.env.RAZORPAY_KEY_SECRET;
   if (!keyId || !secret) return { ok: false, error: 'Razorpay keys aren’t set on the admin app (RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET).' };
   try {
@@ -157,7 +158,7 @@ async function razorpayRefund(paymentId: string, amountPaise: number, notes: Rec
     if (!res.ok || !d.id) return { ok: false, error: d?.error?.description || `Razorpay returned HTTP ${res.status}` };
     return { ok: true, id: String(d.id) };
   } catch (e) {
-    return { ok: false, error: `Couldn’t reach Razorpay: ${(e as Error).message}` };
+    return { ok: false, unknown: true, error: `No answer from Razorpay (${(e as Error).message}). The refund may still have gone through: check this payment in the Razorpay dashboard before trying again. It stays marked as refunding until then.` };
   }
 }
 
@@ -187,18 +188,29 @@ export async function refundPaymentAction(input: { source: 'EMPLOYER' | 'HOST' |
   }
 
   const online = !p.razorpayOrderId.startsWith('manual_');
+  if (online && !p.razorpayPaymentId) return { success: false as const, error: 'No Razorpay payment id on this record, so it can’t be refunded online.' };
+
+  // Claim the refund before asking Razorpay (PAY-04). Only one request can turn refundedAt from empty to set, so a
+  // double click, or two admins at once, can't refund the same payment twice. Undone below if Razorpay says no.
+  const adminEmail = session?.user?.email ?? 'admin';
+  const claim = { refundedAt: new Date(), refundId: null, refundAmountPaise: amountPaise, refundReason: reason, refundedByEmail: adminEmail };
+  const claimed = input.source === 'EMPLOYER'
+    ? await prisma.jobBoardPayment.updateMany({ where: { id: p.id, refundedAt: null }, data: claim })
+    : await prisma.organizerPayment.updateMany({ where: { id: p.id, refundedAt: null }, data: claim });
+  if (claimed.count === 0) return { success: false as const, error: 'This payment was already refunded, or a refund is in progress.' };
+  const release = () => input.source === 'EMPLOYER'
+    ? prisma.jobBoardPayment.updateMany({ where: { id: p.id, refundId: null }, data: { refundedAt: null, refundAmountPaise: null, refundReason: null, refundedByEmail: null } })
+    : prisma.organizerPayment.updateMany({ where: { id: p.id, refundId: null }, data: { refundedAt: null, refundAmountPaise: null, refundReason: null, refundedByEmail: null } });
+
   let refundId: string | null = null;
   if (online) {
-    if (!p.razorpayPaymentId) return { success: false as const, error: 'No Razorpay payment id on this record, so it can’t be refunded online.' };
-    const r = await razorpayRefund(p.razorpayPaymentId, amountPaise, { purpose: 'ADMIN_REFUND', paymentRecord: p.id });
-    if (!r.ok) return { success: false as const, error: r.error };
+    const r = await razorpayRefund(p.razorpayPaymentId!, amountPaise, { purpose: 'ADMIN_REFUND', paymentRecord: p.id });
+    // A clear "no" from Razorpay: nothing was refunded, so the claim is let go. No answer at all: keep it.
+    if (!r.ok) { if (!r.unknown) await release(); return { success: false as const, error: r.error }; }
     refundId = r.id;
+    if (input.source === 'EMPLOYER') await prisma.jobBoardPayment.update({ where: { id: p.id }, data: { refundId } });
+    else await prisma.organizerPayment.update({ where: { id: p.id }, data: { refundId } });
   }
-
-  const adminEmail = session?.user?.email ?? 'admin';
-  const data = { refundedAt: new Date(), refundId, refundAmountPaise: amountPaise, refundReason: reason, refundedByEmail: adminEmail };
-  if (input.source === 'EMPLOYER') await prisma.jobBoardPayment.update({ where: { id: p.id }, data });
-  else await prisma.organizerPayment.update({ where: { id: p.id }, data });
 
   const accountId = 'Employer' in p ? p.Employer.id : p.organizer.id;
   const kind = 'kind' in p ? p.kind : 'PLAN';
@@ -252,13 +264,19 @@ async function refundFundingPurchase(input: { id: string; amountRupees: number }
     return { success: false as const, error: `Enter an amount between ₹1 and ${rupees(p.totalPaise)}.` };
   }
   if (!p.razorpayPaymentId) return { success: false as const, error: 'No Razorpay payment id on this record, so it can’t be refunded online.' };
-  const r = await razorpayRefund(p.razorpayPaymentId, amountPaise, { purpose: 'ADMIN_REFUND', paymentRecord: p.id });
-  if (!r.ok) return { success: false as const, error: r.error };
-
-  await prisma.fundingDataPurchase.update({
-    where: { id: p.id },
-    data: { refundedAt: new Date(), refundId: r.id, refundAmountPaise: amountPaise, refundReason: reason, refundedByEmail: adminEmail },
+  // Claim first so the same purchase can't be refunded twice (PAY-04); undone if Razorpay says no.
+  const claimed = await prisma.fundingDataPurchase.updateMany({
+    where: { id: p.id, refundedAt: null },
+    data: { refundedAt: new Date(), refundId: null, refundAmountPaise: amountPaise, refundReason: reason, refundedByEmail: adminEmail },
   });
+  if (claimed.count === 0) return { success: false as const, error: 'This payment was already refunded, or a refund is in progress.' };
+  const r = await razorpayRefund(p.razorpayPaymentId, amountPaise, { purpose: 'ADMIN_REFUND', paymentRecord: p.id });
+  if (!r.ok) {
+    if (r.unknown) return { success: false as const, error: r.error };
+    await prisma.fundingDataPurchase.updateMany({ where: { id: p.id, refundId: null }, data: { refundedAt: null, refundAmountPaise: null, refundReason: null, refundedByEmail: null } });
+    return { success: false as const, error: r.error };
+  }
+  await prisma.fundingDataPurchase.update({ where: { id: p.id }, data: { refundId: r.id } });
   await requestCreditNote('funding', p.id);
   await logAuditEvent({
     action: 'UPDATE', resourceType: 'BILLING_PAYMENT', resourceId: p.id, resourceName: 'FUNDING refund',

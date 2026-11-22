@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     }
 
     // The time is part of the token itself; the hash lookup above proves it wasn't altered.
-    const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000;
+    const RESET_TOKEN_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
     const tokenTimestamp = parseInt(token.split(".").pop() || "", 10);
     if (!tokenTimestamp || Date.now() - tokenTimestamp > RESET_TOKEN_EXPIRY_MS) {
       await prisma.eventOrganizer.update({

@@ -40,12 +40,16 @@ const nextConfig = {
     ];
   },
   async headers() {
+    // Fallback policy: pages the middleware doesn't run on (sign-in). Every other page also gets a stricter
+    // per-request policy with a nonce from middleware.ts (lib/csp.ts). No database host here: only server code talks
+    // to the database. 'unsafe-eval' only in development (React's dev tooling needs it).
+    const isDev = process.env.NODE_ENV !== 'production';
     const csp = [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
-      "connect-src 'self' https://media.udyaibase.com https://ep-restless-shadow-a1jxwm0a.ap-southeast-1.aws.neon.tech",
+      "connect-src 'self' https://media.udyaibase.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

@@ -4,6 +4,8 @@ import ThemeProvider from '@/components/ThemeProvider';
 import { NextAuthProvider } from '@/components/NextAuthProvider';
 import { ToastProvider } from '@/components/Toast';
 import './globals.css';
+import { connection } from 'next/server';
+import { THEME_SCRIPT } from '@/lib/csp';
 
 const sora = Sora({
   subsets: ['latin'],
@@ -44,11 +46,13 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Every admin page renders per request, so each carries the nonce of its CSP (middleware.ts, lib/csp.ts).
+  await connection();
   return (
     <html
       lang="en"
@@ -59,7 +63,8 @@ export default function RootLayout({
         {/* Prevent FOUC — set dark class before paint */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('ub-theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme:dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})()`,
+            // Fixed text: the CSP allows it by hash (lib/csp.ts).
+            __html: THEME_SCRIPT,
           }}
         />
       </head>

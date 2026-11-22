@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { humanCheckFailed } from '@/lib/turnstile';
 import { prisma } from '@udyaibase/database';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
 import { JOB_REPORT_REASONS, reportListing, reporterHash } from '@/lib/jobs/moderation';
@@ -13,6 +14,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
   if (!success) return NextResponse.json({ error: 'Too many reports. Please try again later.' }, { status: 429 });
 
   const body = await request.json().catch(() => ({}));
+  const notHuman = await humanCheckFailed(body?.turnstileToken);
+  if (notHuman) return notHuman;
   const reason = String(body.reason ?? '');
   if (!JOB_REPORT_REASONS.some((r) => r.value === reason)) return NextResponse.json({ error: 'Choose a reason.', field: 'reason' }, { status: 400 });
   const details = typeof body.details === 'string' ? body.details.trim().slice(0, 1000) : '';

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { humanCheckFailed } from '@/lib/turnstile';
 import { prisma } from "@udyaibase/database";
 import { checkRateLimit, getClientIdentifier } from "@/lib/rate-limit";
 import { strictRateLimit } from "@/lib/rate-limit";
@@ -16,7 +17,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { entityType, entityId, entityName, entitySlug, reportType, description, reporterEmail } = await request.json();
+    const { entityType, entityId, entityName, entitySlug, reportType, description, reporterEmail, turnstileToken } = await request.json();
+    const notHuman = await humanCheckFailed(turnstileToken);
+    if (notHuman) return notHuman;
 
     if (!entityType || !entityId || !reportType || !description) {
       return NextResponse.json({ success: false, error: "Missing required fields." }, { status: 400 });

@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     const employer = employers[0] as any;
 
     const resetToken = crypto.randomBytes(32).toString('hex');
-    const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
+    const resetTokenExpiry = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
 
     await sql`
       UPDATE "JobBoardEmployer"

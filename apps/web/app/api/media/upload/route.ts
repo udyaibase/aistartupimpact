@@ -3,7 +3,9 @@ import { looksLikeImage } from '@/lib/media/image-signature';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getFounderSession } from '@/lib/founder-auth';
 import { getUserSession } from '@/lib/user-session';
-import { apiRateLimit, getClientIdentifier, checkRateLimit } from '@/lib/rate-limit';
+import { getEmployerSession } from '@/lib/employer-auth';
+import { getOrganizerSession } from '@/lib/organizer-auth';
+import { apiRateLimit, mediaUploadRateLimit, getClientIdentifier, checkRateLimit, rateLimitMessage, retryAfterHeaders } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,12 +36,25 @@ const getS3Client = () => {
 
 export async function POST(request: NextRequest) {
   try {
-    const [founderSession, userSession] = await Promise.all([
+    // Founders, employers and hosts upload logos, covers and story pictures; the main-site sign-in is accepted too
+    // (onboarding can run on it). Each account has its own hourly limit on top of the per-IP one.
+    const [founderSession, userSession, employerSession, organizerSession] = await Promise.all([
       getFounderSession(),
       getUserSession(),
+      getEmployerSession().catch(() => null),
+      getOrganizerSession().catch(() => null),
     ]);
-    if (!founderSession && !userSession) {
+    const account = founderSession ? `founder:${founderSession.userId}`
+      : employerSession ? `employer:${employerSession.id}`
+      : organizerSession ? `organizer:${organizerSession.id}`
+      : userSession ? `user:${userSession.id}`
+      : null;
+    if (!account) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    }
+    const perAccount = await checkRateLimit(mediaUploadRateLimit, account);
+    if (!perAccount.success) {
+      return NextResponse.json({ error: rateLimitMessage(perAccount.reset).replace('Too many attempts', 'Too many uploads') }, { status: 429, headers: retryAfterHeaders(perAccount.reset) });
     }
 
     // Rate limit uploads
@@ -76,7 +91,11 @@ export async function POST(request: NextRequest) {
     const timestamp = Date.now();
     const randomString = Math.random().toString(36).substring(2, 15);
     const extension = ALLOWED_MIME[file.type];
-    const filename = `logos/${timestamp}-${randomString}.${extension}`;
+    // A folder per use, from a fixed list (anything else goes to logos/, as before).
+    const FOLDERS = ['logos', 'covers', 'stories', 'screenshots', 'avatars'] as const;
+    const asked = String(formData.get('folder') ?? '');
+    const folder = (FOLDERS as readonly string[]).includes(asked) ? asked : 'logos';
+    const filename = `${folder}/${timestamp}-${randomString}.${extension}`;
 
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);

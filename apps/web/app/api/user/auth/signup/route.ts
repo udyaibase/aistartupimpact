@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { passwordProblem } from "@/lib/password-rules";
 import { consumeVerifiedOtp } from '@/lib/otp';
-import { verifyTurnstileToken } from '@/lib/turnstile';
 import { sql } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
@@ -40,13 +39,8 @@ export async function POST(request: NextRequest) {
 
     // Input validation
     const body = await request.json();
-    if (!body.turnstileToken) {
-      return NextResponse.json({ error: 'CAPTCHA verification required. Please complete the challenge.' }, { status: 403 });
-    }
-    const isHuman = await verifyTurnstileToken(body.turnstileToken);
-    if (!isHuman) {
-      return NextResponse.json({ error: 'Human verification failed. Please try again.' }, { status: 403 });
-    }
+    // No bot check here: the sign-up code (required below, consumeVerifiedOtp) can only be requested after passing
+    // one (/api/auth/otp/send). A Turnstile token works once, so checking the same token again here failed sign-up.
     const validation = validateInput(signupSchema, body);
     
     if (!validation.success) {

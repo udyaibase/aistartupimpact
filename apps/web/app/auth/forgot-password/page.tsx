@@ -54,7 +54,7 @@ export default function ForgotPasswordPage() {
               If an account exists for <span className="font-semibold text-gray-900 dark:text-white">{email}</span>, we've sent a password reset link.
             </p>
             <p className="text-sm text-gray-500 dark:text-gray-500 mb-6">
-              The link will expire in 1 hour. Check your spam folder if you don't see it.
+              The link will expire in 30 minutes. Check your spam folder if you don't see it.
             </p>
             <Link
               href="/auth/login"

@@ -9,7 +9,9 @@ async function getConfiguredHeaders(): Promise<Array<{ key: string; value: strin
   const resolved = typeof config === 'function' ? await config : config;
   if (resolved?.headers) {
     const result = await resolved.headers();
-    return result[0]?.headers || [];
+    // The site-wide rules (everything but /embed); the public CSP is its own rule because it leaves out the signed-in
+    // portals, which get a per-request nonce policy from middleware.ts instead.
+    return result.filter((r: { source: string }) => r.source.startsWith('/((?!embed')).flatMap((r: { headers: Array<{ key: string; value: string }> }) => r.headers);
   }
   throw new Error('Could not find headers function in next.config');
 }
@@ -70,6 +72,14 @@ describe('Security headers — next.config.mjs', () => {
     expect(h!.value).toContain("frame-ancestors 'none'");
     expect(h!.value).toContain("base-uri 'self'");
     expect(h!.value).toContain("form-action 'self'");
+  });
+
+  it('the public CSP leaves out the portals (they get the nonce policy) but not public pages like /founder-team', async () => {
+    const resolved = typeof config === 'function' ? await config : config;
+    const rule = (await resolved.headers()).find((r: { headers: Array<{ key: string }> }) => r.headers.some((h) => h.key === 'Content-Security-Policy'));
+    const re = new RegExp(`^${rule.source.replace(/^\//, '\\/')}$`);
+    for (const p of ['/founder', '/founder/dashboard', '/employer/login', '/organizer/check-in', '/embed/abc']) expect(re.test(p)).toBe(false);
+    for (const p of ['/', '/founder-team', '/events', '/stories/x']) expect(re.test(p)).toBe(true);
   });
 
   it('CSP blocks inline scripts except self and trusted origins', () => {

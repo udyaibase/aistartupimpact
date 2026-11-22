@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { CheckCircle, Flag, Loader2, X } from 'lucide-react';
+import { useHumanCheck } from '@/components/shared/useHumanCheck';
 
 /** "Report this …" link and dialog, shared by public job and event pages. */
 export default function ReportButton({ endpoint, title, noun, reasons, note }: {
@@ -20,6 +21,7 @@ export default function ReportButton({ endpoint, title, noun, reasons, note }: {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
+  const human = useHumanCheck();
   const firstRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -33,12 +35,14 @@ export default function ReportButton({ endpoint, title, noun, reasons, note }: {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!reason) { setError('Choose a reason.'); return; }
+    if (!human.ready) { setError('Complete the quick security check, then send.'); return; }
     setBusy(true);
     setError('');
     try {
       const res = await fetch(endpoint, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason, details, email }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason, details, email, turnstileToken: human.token }),
       });
+      human.reset(); // a check works once
       const d = await res.json().catch(() => ({}));
       if (res.ok) setDone(true);
       else setError(d.error || 'Couldn’t send the report. Try again.');
@@ -93,6 +97,7 @@ export default function ReportButton({ endpoint, title, noun, reasons, note }: {
                   <label htmlFor="rep-email" className="block text-sm font-semibold text-gray-900 dark:text-white mb-1.5">Your email <span className="font-normal text-gray-500">(optional, if we need to ask more)</span></label>
                   <input id="rep-email" type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className={input} />
                 </div>
+                {human.widget}
                 {error && <p role="alert" className="text-sm text-red-700 dark:text-red-400">{error}</p>}
                 <button type="submit" disabled={busy} className="w-full min-h-[44px] rounded-[10px] bg-red-700 hover:bg-red-800 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-50">
                   {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Flag className="w-4 h-4" aria-hidden />} Send report

@@ -257,7 +257,7 @@ export function passwordResetHtml(name: string, resetUrl: string): string {
     <a href="${resetUrl}" style="background: #6366f1; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Reset Password</a>
   </div>
   <p style="color: #6b7280; font-size: 14px;">Or copy this link: ${resetUrl}</p>
-  <p style="color: #6b7280; font-size: 14px;">This link will expire in 1 hour.</p>
+  <p style="color: #6b7280; font-size: 14px;">This link will expire in 30 minutes.</p>
   <p style="color: #6b7280; font-size: 14px;">If you didn't request this, please ignore this email.</p>`);
 }
 
@@ -351,7 +351,7 @@ export function organizerPasswordResetHtml(name: string, resetUrl: string): stri
     ${primaryButton(resetUrl, 'Reset Password')}
   </div>
   <p style="color: #6b7280; font-size: 13px;">Or copy this link: <a href="${resetUrl}" style="color: #FF3131;">${resetUrl}</a></p>
-  <p style="color: #6b7280; font-size: 13px;">This link expires in 1 hour. If you didn't request this, ignore this email.</p>`);
+  <p style="color: #6b7280; font-size: 13px;">This link expires in 30 minutes. If you didn't request this, ignore this email.</p>`);
 }
 
 // ── Organizer: Team Invitation ───────────────────────────────────────────
@@ -634,7 +634,7 @@ export function employerPasswordResetHtml(companyName: string, resetUrl: string)
     ${primaryButton(resetUrl, 'Reset Password')}
   </div>
   <p style="color: #6b7280; font-size: 13px;">Or copy this link: <a href="${resetUrl}" style="color: #6366f1;">${resetUrl}</a></p>
-  <p style="color: #6b7280; font-size: 13px;">This link expires in 1 hour. If you didn't request this, ignore this email.</p>`);
+  <p style="color: #6b7280; font-size: 13px;">This link expires in 30 minutes. If you didn't request this, ignore this email.</p>`);
 }
 
 // ── Employer: Security Alert ─────────────────────────────────────────────

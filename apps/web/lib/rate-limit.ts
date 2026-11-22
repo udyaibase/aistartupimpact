@@ -22,45 +22,49 @@ try {
 }
 
 // Rate limiters for different endpoints (only if Redis is available)
+// analytics stays off on every limiter: @upstash/ratelimit's analytics writes an
+// hourly "<prefix>:events:<bucket>" sorted set per limiter with no TTL, so those
+// keys piled up in Redis forever. Nothing here reads them.
+
 export const authRateLimit = redis ? new Ratelimit({
   redis,
   limiter: Ratelimit.slidingWindow(5, "15 m"), // 5 requests per 15 minutes
-  analytics: true,
+  analytics: false,
   prefix: "ratelimit:auth",
 }) : null;
 
 export const apiRateLimit = redis ? new Ratelimit({
   redis,
   limiter: Ratelimit.slidingWindow(100, "1 m"), // 100 requests per minute
-  analytics: true,
+  analytics: false,
   prefix: "ratelimit:api",
 }) : null;
 
 export const strictRateLimit = redis ? new Ratelimit({
   redis,
   limiter: Ratelimit.slidingWindow(3, "1 h"), // 3 requests per hour (for sensitive operations)
-  analytics: true,
+  analytics: false,
   prefix: "ratelimit:strict",
 }) : null;
 
 export const twoFactorRateLimit = redis ? new Ratelimit({
   redis,
   limiter: Ratelimit.slidingWindow(5, "30 m"), // 5 attempts per 30 minutes per account
-  analytics: true,
+  analytics: false,
   prefix: "ratelimit:2fa",
 }) : null;
 
 export const jdParseRateLimit = redis ? new Ratelimit({
   redis,
   limiter: Ratelimit.slidingWindow(20, "1 h"), // AI job-description parsing, per employer
-  analytics: true,
+  analytics: false,
   prefix: "ratelimit:jdparse",
 }) : null;
 
 export const gstinLookupRateLimit = redis ? new Ratelimit({
   redis,
   limiter: Ratelimit.slidingWindow(20, "1 h"), // GSTIN register lookups (paid API), per account
-  analytics: true,
+  analytics: false,
   prefix: "ratelimit:gstin",
 }) : null;
 
@@ -68,7 +72,7 @@ export const gstinLookupRateLimit = redis ? new Ratelimit({
 export const companyCreateRateLimit = redis ? new Ratelimit({
   redis,
   limiter: Ratelimit.slidingWindow(1, "24 h"),
-  analytics: true,
+  analytics: false,
   prefix: "ratelimit:newcompany",
 }) : null;
 
@@ -76,7 +80,7 @@ export const companyCreateRateLimit = redis ? new Ratelimit({
 export const emailCodeRateLimit = redis ? new Ratelimit({
   redis,
   limiter: Ratelimit.slidingWindow(3, "15 m"), // per email address and purpose
-  analytics: true,
+  analytics: false,
   prefix: "ratelimit:emailcode",
 }) : null;
 
@@ -94,6 +98,14 @@ export const founderWriteRateLimit = redis ? new Ratelimit({
   limiter: Ratelimit.slidingWindow(60, "1 m"),
   analytics: false,
   prefix: "ratelimit:founderwrite",
+}) : null;
+
+/** Image uploads to the public media bucket, per signed-in account (the per-IP API limit alone let one account fill it). */
+export const mediaUploadRateLimit = redis ? new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(30, "1 h"),
+  analytics: false,
+  prefix: "ratelimit:mediaupload",
 }) : null;
 
 /** Host portal writes that had no limit of their own (events, series, widgets, team, profile, billing details), per person. */

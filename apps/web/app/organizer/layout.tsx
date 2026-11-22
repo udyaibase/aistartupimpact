@@ -1,3 +1,4 @@
+import { connection } from 'next/server';
 import { redirect } from "next/navigation";
 import { sql } from '@/lib/db';
 import { getOrganizerSession } from "@/lib/organizer-auth";
@@ -23,6 +24,8 @@ export default async function OrganizerWorkspaceLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Per-request rendering: the portal's CSP carries a fresh nonce on every page (lib/csp.ts, middleware.ts).
+  await connection();
   // The same resolver every organizer API route uses, so a page never shows one account while its buttons act
   // as another (and deactivated or suspended accounts are refused in one place).
   const session = await getOrganizerSession();

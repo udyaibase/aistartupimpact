@@ -35,6 +35,7 @@ export default function ContactForm() {
   const [ticketNumber, setTicketNumber] = useState('');
   const [serverError, setServerError] = useState('');
   const turnstileToken = useRef('');
+  const [checkRound, setCheckRound] = useState(0); // a check works once: remount the widget after each send
 
   function validate(): boolean {
     const newErrors: FormErrors = {};
@@ -67,6 +68,7 @@ export default function ContactForm() {
           turnstileToken: turnstileToken.current,
         }),
       });
+      turnstileToken.current = ''; setCheckRound((r) => r + 1);
 
       const data = await res.json();
 
@@ -218,6 +220,7 @@ export default function ContactForm() {
         </div>
 
         <TurnstileWidget
+          key={checkRound}
           onSuccess={(token) => { turnstileToken.current = token; }}
           onExpire={() => { turnstileToken.current = ''; }}
         />

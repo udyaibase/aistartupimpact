@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Loader2, CheckCircle, CheckCircle2, Mail, ArrowRight } from 'lucide-react';
+import { useHumanCheck } from '@/components/shared/useHumanCheck';
 
 
 type AllowedSource = 'footer' | 'sidebar' | 'newsletter' | 'website' | 'jobs-alert' | 'jobs-bottom' | 'events-alert';
@@ -43,6 +44,8 @@ export default function SubscribeForm({ buttonText = 'Subscribe', source = 'webs
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  // Bot check, loaded only once someone starts filling in the field (this form is on most pages).
+  const human = useHumanCheck({ lazy: true, className: 'mt-3 flex justify-center sm:justify-start' });
 
   // Sanitize source — only allow known values
   const safeSource: AllowedSource = ALLOWED_SOURCES.includes(source) ? source : 'website';
@@ -57,14 +60,22 @@ export default function SubscribeForm({ buttonText = 'Subscribe', source = 'webs
       return;
     }
 
+    if (!human.ready) {
+      human.arm();
+      setStatus('error');
+      setMessage('Complete the quick security check below, then subscribe.');
+      return;
+    }
+
     setLoading(true);
     setStatus('idle');
     try {
       const res = await fetch(SUBSCRIBE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), source: safeSource }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), source: safeSource, turnstileToken: human.token }),
       });
+      human.reset(); // a check works once
 
       const data = await res.json();
 
@@ -131,7 +142,8 @@ export default function SubscribeForm({ buttonText = 'Subscribe', source = 'webs
           aria-label="Email address"
           placeholder="your@email.com"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => { setEmail(e.target.value); human.arm(); }}
+          onFocus={human.arm}
           required
           disabled={loading}
           className={`flex-1 px-4 rounded-lg font-jakarta text-sm disabled:opacity-50 focus:outline-none ${onDark ? 'min-w-0 px-1 py-2.5 bg-transparent border-0 text-white placeholder:text-white/40' : source === 'jobs-alert' || source === 'events-alert' ? 'py-2.5 bg-gray-800 dark:bg-gray-800 border border-gray-700 text-white placeholder:text-gray-400 focus:border-gray-500' :'py-3 min-h-[44px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-navy dark:text-white placeholder:text-gray-400 focus:border-brand'}`}
@@ -153,6 +165,7 @@ export default function SubscribeForm({ buttonText = 'Subscribe', source = 'webs
           )}
         </button>
       </div>
+      {human.widget}
       {source !== 'jobs-alert' && source !== 'events-alert' && (
         <p className={`text-xs mt-2.5 font-jakarta text-center sm:text-left leading-relaxed ${onDark ? 'text-gray-500' : 'text-gray-500 dark:text-gray-400'}`}>
           By subscribing, you agree to receive the Udyaibase newsletter. You can{' '}

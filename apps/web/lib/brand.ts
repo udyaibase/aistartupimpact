@@ -1,5 +1,6 @@
 import { prisma } from "@udyaibase/database";
 import { cache } from "react";
+import { safeBrandColor, safeFontName, safeFontUrl } from "@udyaibase/utils/brand-safe";
 
 export interface BrandConfig {
   logoLight: string | null;
@@ -44,16 +45,17 @@ export const getBrandConfig = cache(async (): Promise<BrandConfig> => {
       logoDark: map.brand_logoDark || null,
       favicon: map.brand_favicon || null,
       ogImage: map.brand_ogImage || null,
-      brandColor: (map.brandColor as string) || "#FF3131",
-      brandSecondary: (map.brandSecondary as string) || "#1B3A5C",
-      brandTertiary: (map.brandTertiary as string) || "#F59E0B",
+      // Checked again here: these go into a <style> tag on every page (see brand-safe).
+      brandColor: safeBrandColor(map.brandColor, "#FF3131"),
+      brandSecondary: safeBrandColor(map.brandSecondary, "#1B3A5C"),
+      brandTertiary: safeBrandColor(map.brandTertiary, "#F59E0B"),
       darkDefault: map.darkDefault === true,
-      displayFont: (map.brand_displayFont as string) || null,
-      bodyFont: (map.brand_bodyFont as string) || null,
-      customDisplayFontUrl: (map.brand_customDisplayFontUrl as string) || null,
-      customBodyFontUrl: (map.brand_customBodyFontUrl as string) || null,
-      customDisplayFontName: (map.brand_customDisplayFontName as string) || null,
-      customBodyFontName: (map.brand_customBodyFontName as string) || null,
+      displayFont: safeFontName(map.brand_displayFont),
+      bodyFont: safeFontName(map.brand_bodyFont),
+      customDisplayFontUrl: safeFontUrl(map.brand_customDisplayFontUrl),
+      customBodyFontUrl: safeFontUrl(map.brand_customBodyFontUrl),
+      customDisplayFontName: safeFontName(map.brand_customDisplayFontName),
+      customBodyFontName: safeFontName(map.brand_customBodyFontName),
     };
   } catch (e) {
     console.error('[brand.ts] getBrandConfig error:', e);

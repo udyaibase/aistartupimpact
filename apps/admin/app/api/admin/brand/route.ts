@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { safeBrandColor, safeFontName } from "@udyaibase/utils/brand-safe";
 import { getPublicUrl } from "@/lib/media";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -52,6 +53,10 @@ async function postHandler(request: NextRequest) {
       if (action === "saveColors") {
         try {
           const { brandColor, brandSecondary, brandTertiary } = body;
+          // Colours go into a <style> tag on every page of the site: hex only.
+          for (const c of [brandColor, brandSecondary, brandTertiary]) {
+            if (c && safeBrandColor(c, "") === "") return NextResponse.json({ error: "Colours must be hex values like #FF3131." }, { status: 400 });
+          }
           const colorEntries: [string, string][] = [];
           if (brandColor) colorEntries.push(["brandColor", brandColor]);
           if (brandSecondary) colorEntries.push(["brandSecondary", brandSecondary]);
@@ -77,6 +82,9 @@ async function postHandler(request: NextRequest) {
       if (action === "saveFonts") {
         try {
           const { displayFont, bodyFont } = body;
+          for (const f of [displayFont, bodyFont]) {
+            if (f && !safeFontName(f)) return NextResponse.json({ error: "Font names can only use letters, numbers, spaces and - _ ." }, { status: 400 });
+          }
           const fontEntries: [string, string | null][] = [
             ["brand_displayFont", displayFont || null],
             ["brand_bodyFont", bodyFont || null],
@@ -168,7 +176,8 @@ async function postHandler(request: NextRequest) {
     const url = getPublicUrl(key);
 
     if (isCustomFont) {
-      const fontName = formData.get("fontName") as string || file.name.replace(/\.woff2$/i, "");
+      const fontName = safeFontName(formData.get("fontName") as string || file.name.replace(/\.woff2$/i, ""));
+      if (!fontName) return NextResponse.json({ error: "Font names can only use letters, numbers, spaces and - _ ." }, { status: 400 });
       const urlKey = `brand_${assetType}Url`;
       const nameKey = `brand_${assetType}Name`;
       const urlJson = JSON.stringify(url);

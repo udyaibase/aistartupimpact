@@ -1,3 +1,4 @@
+import { connection } from 'next/server';
 import { redirect } from 'next/navigation';
 import { getFounderSession } from '@/lib/founder-auth';
 import { founderFromCookies } from '@/lib/founder/account';
@@ -16,6 +17,8 @@ export default async function FounderLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Per-request rendering: the portal's CSP carries a fresh nonce on every page (lib/csp.ts, middleware.ts).
+  await connection();
   const founderSession = await getFounderSession();
   if (!founderSession) {
     // Signed in, but the account can't use the portal right now: say why. Otherwise, sign in.

@@ -6,6 +6,7 @@ import { jwtVerify } from 'jose';
 import { neon } from '@neondatabase/serverless';
 import { Redis } from '@upstash/redis';
 import { canonicalCompareSlug } from '@/lib/tools/compare-slug';
+import { buildPortalCsp, isPortalPath, newNonce } from '@/lib/csp';
 
 const JWT_SECRET = jwtSecret(process.env.FOUNDER_JWT_SECRET, 'FOUNDER_JWT_SECRET');
 
@@ -216,8 +217,7 @@ export async function middleware(request: NextRequest) {
 
   // 3. Onboarding enforcement for WebUsers
   if (!pathname.startsWith('/onboarding') && !pathname.startsWith('/api/') &&
-      !pathname.startsWith('/auth/') && !pathname.startsWith('/founder/') &&
-      !pathname.startsWith('/employer/') && !pathname.startsWith('/organizer/')) {
+      !pathname.startsWith('/auth/') && !isPortalPath(pathname)) {
     const userToken = request.cookies.get('user-token')?.value;
     if (userToken) {
       try {
@@ -233,6 +233,17 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // 4. Signed-in portals: a strict CSP with a fresh nonce per request (lib/csp.ts). Next.js reads the nonce from the
+  //    request header and puts it on its own scripts; the response header is what the browser enforces.
+  if (isPortalPath(pathname)) {
+    const csp = buildPortalCsp(newNonce());
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set('Content-Security-Policy', csp);
+    const response = NextResponse.next({ request: { headers: requestHeaders } });
+    response.headers.set('Content-Security-Policy', csp);
+    return response;
+  }
+
   return NextResponse.next();
 }
 
@@ -246,6 +257,8 @@ export const config = {
     '/jobs/:path*',
     '/events/:path*',
     '/founder/:path*',
+    '/employer/:path*',
+    '/organizer/:path*',
     '/onboarding',
     '/api/:path*',
     '/embed/:path*',

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { humanCheckFailed } from '@/lib/turnstile';
 import { otpEmailHtml } from '@udyaibase/utils';
 import { createOtp } from '@/lib/otp';
 import { sendEmail } from '@/lib/email/send';
@@ -13,6 +14,9 @@ export async function POST(request: NextRequest) {
   if (!success) return NextResponse.json({ error: 'Too many requests. Try again in a few minutes.' }, { status: 429 });
 
   const body = await request.json().catch(() => ({}));
+  // Each request emails a code to the address given.
+  const notHuman = await humanCheckFailed(body?.turnstileToken);
+  if (notHuman) return notHuman;
   const email = normaliseEmail(body.email);
   if (!EMAIL_RE.test(email) || email.length > 254) return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 });
   if (!(await emailCodeAllowed(email, OTP_PURPOSE))) {

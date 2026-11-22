@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { clientIp } from '@/lib/client-ip';
 import { sql } from '@/lib/db';
+import { toPrefixTsQuery } from '@/lib/search/ts-query';
+import { apiRateLimit, checkRateLimit, getClientIdentifier, rateLimitMessage, retryAfterHeaders } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 // Normalize search query for analytics
@@ -16,12 +18,16 @@ function getSessionId(request: NextRequest): string {
 }
 
 export async function GET(request: NextRequest) {
+  // Each search runs several full-text queries: limit how often one visitor can ask.
+  const { success: allowed, reset } = await checkRateLimit(apiRateLimit, `search:${getClientIdentifier(request)}`);
+  if (!allowed) return NextResponse.json({ error: rateLimitMessage(reset) }, { status: 429, headers: retryAfterHeaders(reset) });
   try {
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get('q');
     const type = searchParams.get('type'); // 'all', 'articles', 'tools', 'startups'
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    // Bounded: ?limit=100000 used to ask every content type for that many rows.
+    const page = Math.min(50, Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1));
+    const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '20', 10) || 20));
     const offset = (page - 1) * limit;
 
     if (!query || query.trim().length < 2) {
@@ -34,16 +40,13 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const searchTerm = query.trim();
+    const searchTerm = query.trim().slice(0, 200);
     const normalizedQuery = normalizeQuery(searchTerm);
     const sessionId = getSessionId(request);
 
     // Convert search term to tsquery format (handle multi-word searches)
-    const tsQuery = searchTerm
-      .split(/\s+/)
-      .filter(word => word.length > 0)
-      .map(word => `${word}:*`)
-      .join(' & ');
+    const tsQuery = toPrefixTsQuery(searchTerm);
+    if (!tsQuery) return NextResponse.json({ results: [], total: 0, page, limit, hasMore: false });
 
     // Parallel search across all content types with full-text search and ranking
     const searchPromises: Promise<any>[] = [];

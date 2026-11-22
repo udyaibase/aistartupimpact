@@ -35,7 +35,7 @@ export default function ForgotPasswordPage() {
           <CheckCircle2 className="w-14 h-14 text-green-500 mx-auto mb-4" />
           <h1 className="font-sora font-extrabold text-xl sm:text-2xl leading-tight text-navy dark:text-white mb-2">Check your email</h1>
           <p className="text-sm text-gray-500 font-jakarta mb-6">
-            If an account exists for <strong>{email}</strong>, we&apos;ve sent a password reset link. It expires in 1 hour.
+            If an account exists for <strong>{email}</strong>, we&apos;ve sent a password reset link. It expires in 30 minutes.
           </p>
           <Link href="/employer/login" className="text-brand text-sm font-semibold font-jakarta hover:underline">
             ← Back to Sign In
