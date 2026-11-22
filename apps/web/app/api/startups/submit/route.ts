@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { humanCheckFailed } from '@/lib/turnstile';
 import { sql } from '@/lib/db';
 import { detectCategory } from '@/lib/categories';
 import { checkLocation } from '@/lib/locations';
@@ -15,6 +16,8 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
+    const notHuman = await humanCheckFailed(body?.turnstileToken);
+    if (notHuman) return notHuman;
     const {
       name, websiteUrl, linkedinUrl, logoUrl,
       tagline, description, stage,

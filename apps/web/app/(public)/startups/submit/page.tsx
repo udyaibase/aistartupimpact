@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useHumanCheck } from '@/components/shared/useHumanCheck';
 import Link from 'next/link';
 import { Building2, ChevronRight, CheckCircle2, Loader2, Plus, X } from 'lucide-react';
 import { STARTUP_CATEGORIES, USE_CASES } from '@/lib/categories';
@@ -59,12 +60,15 @@ export default function SubmitStartupPage() {
     );
   };
 
+  const human = useHumanCheck({ className: 'flex justify-center' });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.websiteUrl || !form.tagline || !form.founderEmail) {
       setError('Please fill in all required fields.');
       return;
     }
+    if (!human.ready) { setError('Complete the quick security check above the button, then submit.'); return; }
     setSubmitting(true);
     setError('');
     try {
@@ -72,11 +76,13 @@ export default function SubmitStartupPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          ...form, 
+          ...form,
+          turnstileToken: human.token, 
           founders: founders.filter(f => f.name.trim()),
           useCases: useCases,
         }),
       });
+      human.reset(); // a check works once
       if (res.ok) { setDone(true); }
       else { const d = await res.json(); setError(d.error || 'Submission failed.'); }
     } catch { setError('Network error. Please try again.'); }
@@ -283,6 +289,7 @@ export default function SubmitStartupPage() {
           </div>
         </section>
 
+        {human.widget}
         <button type="submit" disabled={submitting}
           className="btn-brand w-full flex items-center justify-center gap-2 disabled:opacity-50 py-3">
           {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : 'Submit for Review'}

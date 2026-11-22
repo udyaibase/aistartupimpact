@@ -11,6 +11,10 @@ on:
 jobs:
   analyze:
     name: Analyze
+    # CodeQL is free for public repositories only. On a private one, uploading results needs GitHub Advanced Security,
+    # so the job failed after the full analysis. Skipped while the repository is private; Semgrep (ci.yml, "SAST")
+    # still scans every pull request. Enable Advanced Security and remove this line to bring CodeQL back.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     permissions:
       security-events: write

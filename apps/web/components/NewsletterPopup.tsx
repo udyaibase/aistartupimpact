@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useHumanCheck } from '@/components/shared/useHumanCheck';
 import { X, Mail, Sparkles, CheckCircle2, TrendingUp, Users, Zap } from 'lucide-react';
 
 export default function NewsletterPopup() {
@@ -9,6 +10,7 @@ export default function NewsletterPopup() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState('');
+  const human = useHumanCheck({ lazy: true, className: 'flex justify-center' });
   const [isTouched, setIsTouched] = useState(false);
   const [isValid, setIsValid] = useState(false);
 
@@ -99,6 +101,7 @@ export default function NewsletterPopup() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!human.ready) { human.arm(); setError('Complete the quick security check, then join.'); return; }
     setIsSubmitting(true);
     setError('');
 
@@ -106,8 +109,9 @@ export default function NewsletterPopup() {
       const res = await fetch('/api/newsletter/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, source: 'popup' }),
+        body: JSON.stringify({ email, source: 'popup', turnstileToken: human.token }),
       });
+      human.reset(); // a check works once
 
       const data = await res.json();
 
@@ -188,7 +192,8 @@ export default function NewsletterPopup() {
                         id="popup-email"
                         type="email"
                         value={email}
-                        onChange={(e) => handleEmailChange(e.target.value)}
+                        onChange={(e) => { handleEmailChange(e.target.value); human.arm(); }}
+                        onFocus={human.arm}
                         placeholder="you@company.com"
                         required
                         disabled={isSubmitting}
@@ -202,6 +207,7 @@ export default function NewsletterPopup() {
                     </div>
                   </div>
 
+                  {human.widget}
                   {error && (
                     <p className="text-xs sm:text-sm text-red-600 dark:text-red-400">
                       {error}

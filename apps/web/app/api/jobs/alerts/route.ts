@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { humanCheckFailed } from '@/lib/turnstile';
 import { checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 import { careersSubscribeRateLimit } from '@/lib/event-rate-limit';
 import { normalizeEmail } from '@/lib/jobs/careers-subscribers';
@@ -11,6 +12,8 @@ export async function POST(request: NextRequest) {
   const { success } = await checkRateLimit(careersSubscribeRateLimit, `job-alert:${getClientIdentifier(request)}`);
   if (!success) return NextResponse.json({ error: 'Too many sign-ups from this network. Please try again later.' }, { status: 429 });
   const b = await request.json().catch(() => ({}));
+  const notHuman = await humanCheckFailed(b?.turnstileToken);
+  if (notHuman) return notHuman;
   if (typeof b.website === 'string' && b.website) return NextResponse.json({ success: true }); // honeypot
   const email = normalizeEmail(b.email);
   if (!email) return NextResponse.json({ error: 'Enter a valid email address.', field: 'email' }, { status: 400 });

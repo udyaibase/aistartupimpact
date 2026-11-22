@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiRateLimit, checkRateLimit, getClientIdentifier, rateLimitMessage, retryAfterHeaders } from '@/lib/rate-limit';
 import { sql } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -15,9 +16,12 @@ const POPULAR_SUGGESTIONS = [
 ];
 
 export async function GET(request: NextRequest) {
+  // Called as people type, so the limit is per visitor per minute, same as other API reads.
+  const { success: allowed, reset } = await checkRateLimit(apiRateLimit, `search-suggest:${getClientIdentifier(request)}`);
+  if (!allowed) return NextResponse.json({ error: rateLimitMessage(reset) }, { status: 429, headers: retryAfterHeaders(reset) });
   try {
     const searchParams = request.nextUrl.searchParams;
-    const query = searchParams.get('q');
+    const query = searchParams.get('q')?.slice(0, 100) ?? null;
 
     if (!query || query.trim().length < 2) {
       // Return popular searches when no query

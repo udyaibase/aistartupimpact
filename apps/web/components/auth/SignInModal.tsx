@@ -46,6 +46,8 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
   const [resendingVerification, setResendingVerification] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
   const turnstileToken = useRef('');
+  // A check works once: remount the widget after each code request so a resend gets a fresh one.
+  const [checkRound, setCheckRound] = useState(0);
 
   // 2FA state
   const [requires2FA, setRequires2FA] = useState(false);
@@ -137,6 +139,7 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: formData.email, purpose: 'signup', turnstileToken: turnstileToken.current }),
           });
+          turnstileToken.current = ''; setCheckRound((r) => r + 1);
           const otpData = await otpRes.json();
           if (!otpRes.ok) throw new Error(otpData.error || 'Failed to send code');
           setOtpStep(true);
@@ -168,7 +171,7 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
         const signupRes = await fetch('/api/user/auth/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: formData.name, email: formData.email, password: formData.password, agreeToTerms: formData.agreeToTerms, subscribeNewsletter: formData.subscribeNewsletter, turnstileToken: turnstileToken.current, returnTo: effectiveReturnTo }),
+          body: JSON.stringify({ name: formData.name, email: formData.email, password: formData.password, agreeToTerms: formData.agreeToTerms, subscribeNewsletter: formData.subscribeNewsletter, returnTo: effectiveReturnTo }),
         });
         const signupData = await signupRes.json();
         if (!signupRes.ok) throw new Error(signupData.error || 'Signup failed');
@@ -225,14 +228,16 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
   };
 
   const handleResendOtp = async () => {
+    if (!turnstileToken.current) { setError('Complete the quick security check, then resend the code.'); return; }
     setOtpSending(true);
     setError('');
     try {
       const res = await fetch('/api/auth/otp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: formData.email, purpose: 'signup' }),
+        body: JSON.stringify({ email: formData.email, purpose: 'signup', turnstileToken: turnstileToken.current }),
       });
+      turnstileToken.current = ''; setCheckRound((r) => r + 1);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to resend');
       setOtpCountdown(60);
@@ -567,8 +572,10 @@ export default function SignInModal({ isOpen, onClose, defaultMode = 'signin', d
                   </div>
                 )}
 
-                {!otpStep && (
+                {/* Before the first code, and again for a resend once the countdown ends (each code needs a fresh check). */}
+                {(!otpStep || (signupCodeStep && otpCountdown === 0)) && (
                   <TurnstileWidget
+                    key={checkRound}
                     onSuccess={(token) => { turnstileToken.current = token; }}
                     onExpire={() => { turnstileToken.current = ''; }}
                   />

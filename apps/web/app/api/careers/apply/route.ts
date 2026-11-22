@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { humanCheckFailed } from '@/lib/turnstile';
 import { sql } from '@/lib/db';
 import { jobApplicationHtml } from '@udyaibase/utils';
 import { sendEmailFireAndForget } from '@/lib/email/send';
@@ -15,6 +16,8 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
+    const notHuman = await humanCheckFailed(body?.turnstileToken);
+    if (notHuman) return notHuman;
     const {
       type, role, fullName, email, phone,
       resumeLink, resumeUrl, resumeFileName, resumeSizeBytes,

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useHumanCheck } from '@/components/shared/useHumanCheck';
 import { Mail, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface NewsletterCaptureProps {
@@ -12,6 +13,7 @@ export default function NewsletterCapture({ source, className = '' }: Newsletter
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const human = useHumanCheck({ lazy: true, className: 'mt-3 flex justify-center' });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,6 +21,13 @@ export default function NewsletterCapture({ source, className = '' }: Newsletter
     if (!email || !email.includes('@')) {
       setStatus('error');
       setMessage('Please enter a valid email address');
+      return;
+    }
+
+    if (!human.ready) {
+      human.arm();
+      setStatus('error');
+      setMessage('Complete the quick security check below, then subscribe.');
       return;
     }
 
@@ -34,8 +43,10 @@ export default function NewsletterCapture({ source, className = '' }: Newsletter
           email,
           source,
           tags: ['india-ai', 'ecosystem'],
+          turnstileToken: human.token,
         }),
       });
+      human.reset(); // a check works once
 
       const data = await response.json();
 
@@ -75,7 +86,8 @@ export default function NewsletterCapture({ source, className = '' }: Newsletter
           <input
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => { setEmail(e.target.value); human.arm(); }}
+            onFocus={human.arm}
             placeholder="Enter your email"
             disabled={status === 'loading' || status === 'success'}
             className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
@@ -90,6 +102,7 @@ export default function NewsletterCapture({ source, className = '' }: Newsletter
           {status === 'loading' ? 'Subscribing...' : status === 'success' ? 'Subscribed!' : 'Subscribe'}
         </button>
       </form>
+      {human.widget}
 
       {/* Status Messages */}
       {message && (

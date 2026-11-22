@@ -17,6 +17,7 @@ import SignupSuccessPopup from '@/components/auth/SignupSuccessPopup';
 import SiteChrome from '@/components/SiteChrome';
 import { generateWebSiteSchema, generateOrganizationSchema } from '@/lib/seo';
 import { getBrandConfig } from '@/lib/brand';
+import { THEME_SCRIPT, GA_CONSENT_SCRIPT } from '@/lib/csp';
 import { getSeoConfig } from '@/lib/seo-config';
 import { buildGoogleFontsUrl } from '@/lib/font-registry';
 import './globals.css';
@@ -153,14 +154,15 @@ export default async function RootLayout({
         {/* Prevent FOUC — set dark class before paint */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('ub-theme');if(t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})()`,
+            // Fixed text: the portals' CSP allows it by hash (lib/csp.ts), so don't add anything that changes per page.
+            __html: THEME_SCRIPT,
           }}
         />
         {/* GA Consent Mode v2 defaults — must run before GA library loads */}
         {gaId && gaId !== 'G-XXXXXXXXXX' && (
           <script
             dangerouslySetInnerHTML={{
-              __html: `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}window.gtag=gtag;gtag('consent','default',{analytics_storage:'denied',ad_storage:'denied',ad_user_data:'denied',ad_personalization:'denied',wait_for_update:500});gtag('js',new Date());`,
+              __html: GA_CONSENT_SCRIPT,
             }}
           />
         )}

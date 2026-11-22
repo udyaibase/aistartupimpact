@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { humanCheckFailed } from '@/lib/turnstile';
 import { checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 import { careersSubscribeRateLimit } from '@/lib/event-rate-limit';
 import { getCareersCompany } from '@/lib/jobs/careers';
@@ -12,6 +13,8 @@ export async function POST(request: NextRequest) {
   if (!success) return NextResponse.json({ error: 'Too many sign-ups from this network. Please try again later.' }, { status: 429 });
 
   const b = await request.json().catch(() => ({}));
+  const notHuman = await humanCheckFailed(b?.turnstileToken);
+  if (notHuman) return notHuman;
   // Hidden field people never fill in.
   if (typeof b.website === 'string' && b.website) return NextResponse.json({ success: true });
   const email = normalizeEmail(b.email);

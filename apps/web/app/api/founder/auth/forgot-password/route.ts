@@ -48,9 +48,9 @@ export async function POST(request: NextRequest) {
 
     // An account that signs in with Google can set a password this way too: the emailed link proves the inbox is theirs.
 
-    // Generate reset token (expires in 1 hour)
+    // Generate reset token (expires in 30 minutes: a short window if the email is ever read by someone else)
     const resetToken = randomBytes(32).toString('hex');
-    const resetExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    const resetExpiry = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
 
     // Save token to user record
     await prisma.founderUser.update({

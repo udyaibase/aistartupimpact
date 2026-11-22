@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { humanCheckFailed } from '@/lib/turnstile';
 import { sql } from '@/lib/db';
 import { apiRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 import { newsletterSchema, validateInput } from '@/lib/validation';
@@ -55,20 +56,9 @@ export async function POST(request: Request) {
 
     const body = await request.json();
 
-    if (body.turnstileToken && process.env.TURNSTILE_SECRET_KEY) {
-      const verifyRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          secret: process.env.TURNSTILE_SECRET_KEY,
-          response: body.turnstileToken,
-        }),
-      });
-      const verifyData = await verifyRes.json();
-      if (!verifyData.success) {
-        return NextResponse.json({ success: false, error: 'Human verification failed.' }, { status: 403 });
-      }
-    }
+    // Required (it was only checked when a token was sent): each sign-up emails a confirmation to the address given.
+    const notHuman = await humanCheckFailed(body.turnstileToken);
+    if (notHuman) return notHuman;
 
     const validation = validateInput(newsletterSchema, body);
 

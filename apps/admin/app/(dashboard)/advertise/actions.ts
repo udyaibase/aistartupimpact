@@ -152,16 +152,28 @@ export async function updateSocialPostAction(postId: string, data: { status?: st
     `;
     if (!post.length) return { success: false, error: "Social post not found" };
 
-    const updates: string[] = [];
-    if (data.status) updates.push(`status = '${data.status}'`);
-    if (data.publishedUrl !== undefined) updates.push(`"publishedUrl" = '${data.publishedUrl}'`);
-    if (data.status === "PUBLISHED") updates.push(`"publishedAt" = NOW()`);
-    updates.push(`"updatedAt" = NOW()`);
+    // Values go to the database as parameters, never pasted into the SQL text: a link containing a quote could
+    // otherwise rewrite the statement.
+    const STATUSES = ["PENDING_PAYMENT", "PAID", "SCHEDULED", "PUBLISHED", "CANCELLED"] as const;
+    const status = data.status === undefined ? undefined : data.status.trim().toUpperCase();
+    if (status !== undefined && !(STATUSES as readonly string[]).includes(status)) {
+      return { success: false, error: "Unknown status." };
+    }
+    let publishedUrl: string | null | undefined;
+    if (data.publishedUrl !== undefined) {
+      const url = data.publishedUrl.trim();
+      if (url && !/^https:\/\/[^\s"'<>]+$/i.test(url)) return { success: false, error: "The post link must start with https://" };
+      publishedUrl = url ? url.slice(0, 500) : null;
+    }
 
-    await prisma.$executeRawUnsafe(
-      `UPDATE "AdvSocialPostOrder" SET ${updates.join(", ")} WHERE id = $1`,
-      postId
-    );
+    await prisma.$executeRaw`
+      UPDATE "AdvSocialPostOrder" SET
+        status = COALESCE(${status ?? null}::"AdvSocialPostStatus", status),
+        "publishedUrl" = CASE WHEN ${publishedUrl !== undefined} THEN ${publishedUrl ?? null} ELSE "publishedUrl" END,
+        "publishedAt" = CASE WHEN ${status === "PUBLISHED"} THEN NOW() ELSE "publishedAt" END,
+        "updatedAt" = NOW()
+      WHERE id = ${postId}
+    `;
 
     await logAuditEvent({
       action: "UPDATE",

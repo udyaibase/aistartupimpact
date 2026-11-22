@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { humanCheckFailed } from '@/lib/turnstile';
 import { createOtp } from "@/lib/otp";
 import { checkRateLimit, getClientIdentifier, authRateLimit } from "@/lib/rate-limit";
 import { otpEmailHtml } from "@udyaibase/utils";
@@ -13,7 +14,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: "Too many requests. Please wait." }, { status: 429 });
   }
 
-  const { email, purpose } = await request.json();
+  const { email, purpose, turnstileToken } = await request.json();
+  // Each request emails a code to the address given: bots must not be able to use it to flood an inbox.
+  const notHuman = await humanCheckFailed(turnstileToken);
+  if (notHuman) return notHuman;
   if (!email || typeof email !== 'string' || email.length > 255 || !email.includes('@') || !email.split('@')[1]?.includes('.')) {
     return NextResponse.json({ success: false, error: "Valid email required." }, { status: 400 });
   }

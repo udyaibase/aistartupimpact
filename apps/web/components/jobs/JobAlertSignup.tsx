@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { BellRing, Loader2 } from 'lucide-react';
+import { useHumanCheck } from '@/components/shared/useHumanCheck';
 import { alertTitle, JOB_ALERT_CONSENT } from '@/lib/jobs/job-alert-text';
 
 /** "Get these jobs by email": a weekly alert for the role and city the visitor is looking at. */
@@ -16,16 +17,20 @@ export default function JobAlertSignup({ category, city, remote, initialEmail = 
   const [website, setWebsite] = useState('');
   const [state, setState] = useState<'idle' | 'busy' | 'done'>('idle');
   const [error, setError] = useState('');
+  // Bot check, loaded once someone starts filling the form in (it can sit open on the jobs list).
+  const human = useHumanCheck({ lazy: true, className: 'mt-3' });
   const title = alertTitle({ category, city, remoteOnly: remote });
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!human.ready) { human.arm(); setError('Complete the quick security check, then create the alert.'); return; }
     setState('busy'); setError('');
     try {
       const res = await fetch('/api/jobs/alerts', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, consent, website, category, city, remoteOnly: remote }),
+        body: JSON.stringify({ email, consent, website, category, city, remoteOnly: remote, turnstileToken: human.token }),
       });
+      human.reset(); // a check works once
       const d = await res.json().catch(() => ({}));
       if (res.ok) setState('done'); else { setState('idle'); setError(d.error || 'Something went wrong.'); }
     } catch { setState('idle'); setError('You seem to be offline.'); }
@@ -54,7 +59,7 @@ export default function JobAlertSignup({ category, city, remote, initialEmail = 
           <p className="text-sm font-semibold text-navy dark:text-white">Weekly alert: {title}</p>
           <div className="flex flex-col sm:flex-row gap-2">
             <label htmlFor="ja-email" className="sr-only">Email</label>
-            <input id="ja-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email"
+            <input id="ja-email" type="email" required value={email} onChange={(e) => { setEmail(e.target.value); human.arm(); }} onFocus={human.arm} placeholder="you@example.com" autoComplete="email"
               className="flex-1 min-h-[44px] px-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-base sm:text-sm text-gray-900 dark:text-white" />
             <button type="submit" disabled={state === 'busy' || !consent} className="btn-brand gap-2 justify-center min-h-[44px] disabled:opacity-60">
               {state === 'busy' && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} Create alert
@@ -66,6 +71,7 @@ export default function JobAlertSignup({ category, city, remote, initialEmail = 
             {JOB_ALERT_CONSENT}
           </label>
           {error && <p role="alert" className="text-xs text-red-700">{error}</p>}
+          {human.widget}
         </form>
       )}
     </div>

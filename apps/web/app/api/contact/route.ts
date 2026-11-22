@@ -4,7 +4,7 @@ import { createTicket } from '@/lib/support-tickets';
 import { checkRateLimit, getClientIdentifier, strictRateLimit } from '@/lib/rate-limit';
 import { validateInput, sanitizeText } from '@/lib/validation';
 import { sendEmailFireAndForget } from '@/lib/email/send';
-import { verifyTurnstileToken } from '@/lib/turnstile';
+import { humanCheckFailed } from '@/lib/turnstile';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,12 +26,9 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
-    if (body.turnstileToken) {
-      const isHuman = await verifyTurnstileToken(body.turnstileToken);
-      if (!isHuman) {
-        return NextResponse.json({ error: 'Human verification failed. Please try again.' }, { status: 403 });
-      }
-    }
+    // The bot check is required: checking it only when a token was sent let bots leave it out.
+    const notHuman = await humanCheckFailed(body.turnstileToken);
+    if (notHuman) return notHuman;
 
     const validation = validateInput(contactSchema, body);
     if (!validation.success) {

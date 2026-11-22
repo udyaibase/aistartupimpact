@@ -2,6 +2,7 @@
 
 import { useId, useState } from 'react';
 import { notifyConsentText } from '@/lib/jobs/careers-notify-text';
+import { useHumanCheck } from '@/components/shared/useHumanCheck';
 
 /**
  * "Get notified when {company} is hiring". Double opt-in: the server emails a confirmation link.
@@ -22,6 +23,7 @@ export default function NotifyForm({ companySlug, companyName, source, preview =
   const [website, setWebsite] = useState('');
   const [state, setState] = useState<'idle' | 'sending' | 'done'>('idle');
   const [error, setError] = useState('');
+  const human = useHumanCheck({ lazy: true, className: 'mt-3' });
   const [field, setField] = useState<'' | 'email' | 'consent'>('');
 
   async function submit(e: React.FormEvent) {
@@ -30,13 +32,15 @@ export default function NotifyForm({ companySlug, companyName, source, preview =
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) { setField('email'); setError('Enter a valid email address.'); return; }
     if (!consent) { setField('consent'); setError('Tick the box to agree to these emails.'); return; }
     if (preview) { setState('done'); return; }
+    if (!human.ready) { human.arm(); setError('Complete the quick security check, then send.'); return; }
     setState('sending');
     try {
       const res = await fetch('/api/jobs/notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company: companySlug, email: email.trim(), consent, website, source }),
+        body: JSON.stringify({ company: companySlug, email: email.trim(), consent, website, source, turnstileToken: human.token }),
       });
+      human.reset(); // a check works once
       const d = await res.json().catch(() => ({}));
       if (!res.ok) { setState('idle'); setField(d.field ?? ''); setError(d.error || 'Something went wrong. Please try again.'); return; }
       setState('done');
@@ -69,7 +73,7 @@ export default function NotifyForm({ companySlug, companyName, source, preview =
       {!compact && <p className="mt-1 text-sm" style={{ color: 'var(--w-muted)' }}>Leave your email and we’ll tell you when a new role opens. No other emails.</p>}
       <div className="mt-3 flex flex-col sm:flex-row gap-2">
         <label htmlFor={`${uid}-email`} className="sr-only">Email address</label>
-        <input id={`${uid}-email`} type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)}
+        <input id={`${uid}-email`} type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => { setEmail(e.target.value); if (!preview) human.arm(); }} onFocus={() => { if (!preview) human.arm(); }}
           placeholder="you@example.com" aria-invalid={field === 'email'} aria-describedby={error ? `${uid}-err` : undefined}
           className="embed-focus flex-1 min-w-0 min-h-[44px] px-3 border text-[0.9375rem] focus:outline-none focus:ring-2 focus:ring-[color:var(--embed-accent)]/30" style={input} />
         <button type="submit" disabled={state === 'sending'}
@@ -86,6 +90,7 @@ export default function NotifyForm({ companySlug, companyName, source, preview =
         <span>{notifyConsentText(companyName)}</span>
       </label>
       {error && <p id={`${uid}-err`} role="alert" className="mt-2 text-sm text-red-600">{error}</p>}
+      {human.widget}
     </form>
   );
 }

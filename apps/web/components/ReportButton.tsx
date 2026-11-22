@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Flag, X, Loader2, CheckCircle } from 'lucide-react';
+import { useHumanCheck } from '@/components/shared/useHumanCheck';
 
 const REPORT_TYPES = [
   { value: 'incorrect_info', label: 'Incorrect information' },
@@ -28,17 +29,20 @@ export default function ReportButton({ entityType, entityId, entityName, entityS
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
+  const human = useHumanCheck();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reportType || !description) { setError('Please select a type and describe the issue.'); return; }
+    if (!human.ready) { setError('Complete the quick security check, then send.'); return; }
     setLoading(true); setError('');
     try {
       const res = await fetch('/api/reports', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entityType, entityId, entityName, entitySlug, reportType, description, reporterEmail: email || null }),
+        body: JSON.stringify({ entityType, entityId, entityName, entitySlug, reportType, description, reporterEmail: email || null, turnstileToken: human.token }),
       });
+      human.reset(); // a check works once
       const d = await res.json();
       if (d.success) { setDone(true); }
       else { setError(d.error || 'Failed to submit report.'); }
@@ -93,6 +97,7 @@ export default function ReportButton({ entityType, entityId, entityName, entityS
                   <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@company.com" className="w-full px-3.5 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-jakarta focus:outline-none focus:ring-2 focus:ring-brand/20"/>
                 </div>
 
+                {human.widget}
                 {error && <p className="text-xs text-red-500 font-jakarta">{error}</p>}
 
                 <button type="submit" disabled={loading} className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-sm rounded-lg font-jakarta disabled:opacity-50 flex items-center justify-center gap-2">

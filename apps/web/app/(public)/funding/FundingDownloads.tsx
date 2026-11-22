@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useHumanCheck } from '@/components/shared/useHumanCheck';
 import { Check, Download, FileSpreadsheet, FileText, Loader2, Lock, Mail, Search } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import { payWithRazorpay } from '@/lib/billing/checkout-client';
@@ -54,6 +55,8 @@ function EmailStep({ onVerified }: { onVerified: (pass: string, email: string) =
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [cooldown, setCooldown] = useState(0);
+  // Each code is an email to the address given: a fresh bot check before every send (a check works once).
+  const human = useHumanCheck({ className: 'flex justify-center' });
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -62,8 +65,10 @@ function EmailStep({ onVerified }: { onVerified: (pass: string, email: string) =
   }, [cooldown]);
 
   const send = async () => {
+    if (!human.ready) return setError('Complete the quick security check, then send the code.');
     setBusy(true); setError('');
-    const r = await post('/api/funding-data/send-code', { email });
+    const r = await post('/api/funding-data/send-code', { email, turnstileToken: human.token });
+    human.reset();
     setBusy(false);
     if (!r.ok) return setError(r.data.error || 'Couldn’t send the code.');
     setSent(true); setCooldown(r.data.cooldown ?? 60);
@@ -99,6 +104,8 @@ function EmailStep({ onVerified }: { onVerified: (pass: string, email: string) =
           <CodeInput autoFocus value={code} onChange={setCode} />
         </>
       )}
+      {/* Before the first code, and again for a resend once the countdown ends. */}
+      {(!sent || cooldown === 0) && human.widget}
       {error && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       <button type="submit" disabled={busy || (sent && code.length !== 6)} className={CONTROL_PRIMARY_BRAND}>
         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}

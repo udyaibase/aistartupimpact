@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { clientIp } from '@/lib/client-ip';
 import { createHash } from 'crypto';
 import { sql } from '@/lib/db';
+import { apiRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 import { ConsentLogPayload } from '@/types/consent';
 
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,9 @@ function getClientIp(request: NextRequest): string | null {
 }
 
 export async function POST(request: NextRequest) {
+  // Anyone can post here (the cookie banner): limit per visitor so the log can't be flooded with junk rows.
+  const { success: allowed } = await checkRateLimit(apiRateLimit, `consent-log:${getClientIdentifier(request)}`);
+  if (!allowed) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
   try {
     const payload: ConsentLogPayload = await request.json();
 

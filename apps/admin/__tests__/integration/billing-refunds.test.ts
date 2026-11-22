@@ -11,9 +11,9 @@ vi.mock('@/lib/email-send', () => ({ sendEmailFireAndForget: (o: any) => sendEma
 const db = {
   jobBoardEmployer: { update: vi.fn((a: any) => a) },
   jobBoardListing: { updateMany: vi.fn((a: any) => a) },
-  jobBoardPayment: { findUnique: vi.fn(), update: vi.fn() },
+  jobBoardPayment: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   eventOrganizer: { update: vi.fn((a: any) => a) },
-  organizerPayment: { findUnique: vi.fn(), update: vi.fn() },
+  organizerPayment: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   event: { update: vi.fn(), updateMany: vi.fn((a: any) => a) },
   $transaction: vi.fn(async (ops: any[]) => ops),
 };
@@ -32,6 +32,9 @@ beforeEach(() => {
   process.env.RAZORPAY_KEY_ID = 'rzp_test_x';
   process.env.RAZORPAY_KEY_SECRET = 'secret_x';
   db.$transaction.mockImplementation(async (ops: any[]) => ops);
+  // The refund is claimed (refundedAt set while still empty) before Razorpay is called: one claim succeeds.
+  db.jobBoardPayment.updateMany.mockResolvedValue({ count: 1 });
+  db.organizerPayment.updateMany.mockResolvedValue({ count: 1 });
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -56,6 +59,7 @@ describe('Admin refunds', () => {
     expect((await refundPaymentAction({ source: 'EMPLOYER', id: 'p1', amountRupees: 6000, reason: 'charged twice', endAccess: false })).success).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(db.jobBoardPayment.update).not.toHaveBeenCalled();
+    expect(db.jobBoardPayment.updateMany).not.toHaveBeenCalled();
   });
 
   it('refunds online payments through Razorpay, records it, ends the plan and emails the payer', async () => {
@@ -68,7 +72,13 @@ describe('Admin refunds', () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('https://api.razorpay.com/v1/payments/pay_1/refund');
     expect(JSON.parse(init.body).amount).toBe(590000);
-    expect(db.jobBoardPayment.update.mock.calls[0][0].data).toMatchObject({ refundId: 'rfnd_1', refundAmountPaise: 590000, refundedByEmail: 'ops@udyaibase.com' });
+    // Claimed first (only while not yet refunded), then the Razorpay refund id is stored.
+    expect(db.jobBoardPayment.updateMany.mock.calls[0][0]).toMatchObject({
+      where: { id: 'p1', refundedAt: null },
+      data: { refundAmountPaise: 590000, refundedByEmail: 'ops@udyaibase.com', refundId: null },
+    });
+    expect(db.jobBoardPayment.updateMany.mock.invocationCallOrder[0]).toBeLessThan(fetchMock.mock.invocationCallOrder[0]);
+    expect(db.jobBoardPayment.update.mock.calls[0][0].data).toEqual({ refundId: 'rfnd_1' });
     expect(db.jobBoardEmployer.update.mock.calls[0][0].data.plan).toBe('FREE');
     expect(sendEmail.mock.calls[0][0].to).toBe('cfo@acme.in');
     expect(audit).toHaveBeenCalledWith(expect.objectContaining({ resourceType: 'BILLING_PAYMENT' }));
@@ -83,6 +93,32 @@ describe('Admin refunds', () => {
     expect(r).toEqual({ success: false, error: 'The refund amount exceeds the captured amount' });
     expect(db.jobBoardPayment.update).not.toHaveBeenCalled();
     expect(db.jobBoardEmployer.update).not.toHaveBeenCalled();
+    // The claim is let go, so the record ends as it started (not refunded).
+    expect(db.jobBoardPayment.updateMany).toHaveBeenLastCalledWith({
+      where: { id: 'p1', refundId: null },
+      data: { refundedAt: null, refundAmountPaise: null, refundReason: null, refundedByEmail: null },
+    });
+  });
+
+  it('a second refund at the same time finds the payment already claimed and never calls Razorpay (PAY-04)', async () => {
+    const { refundPaymentAction } = await import('@/app/(dashboard)/billing/actions');
+    asRole('SUPER_ADMIN');
+    db.jobBoardPayment.findUnique.mockResolvedValue(empPayment());
+    db.jobBoardPayment.updateMany.mockResolvedValue({ count: 0 });
+    const r = await refundPaymentAction({ source: 'EMPLOYER', id: 'p1', amountRupees: 100, reason: 'double click', endAccess: false });
+    expect(r.success).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('no answer from Razorpay keeps the payment marked as refunding, so a retry cannot refund twice', async () => {
+    const { refundPaymentAction } = await import('@/app/(dashboard)/billing/actions');
+    asRole('SUPER_ADMIN');
+    db.jobBoardPayment.findUnique.mockResolvedValue(empPayment());
+    fetchMock.mockRejectedValue(new Error('The operation was aborted due to timeout'));
+    const r = await refundPaymentAction({ source: 'EMPLOYER', id: 'p1', amountRupees: 100, reason: 'partial', endAccess: false });
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/Razorpay dashboard/);
+    expect(db.jobBoardPayment.updateMany).toHaveBeenCalledTimes(1); // the claim only, never released
   });
 
   it('manual payments are recorded without calling Razorpay; a refunded Boost ends only that event’s boost', async () => {

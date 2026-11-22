@@ -18,6 +18,10 @@ vi.mock('@/lib/user-session', () => ({
   getUserSession: vi.fn(() => Promise.resolve(null)),
 }));
 
+vi.mock('@/lib/employer-auth', () => ({
+  getEmployerSession: vi.fn(() => Promise.resolve(null)),
+}));
+
 vi.mock('@/lib/organizer-auth', () => ({
   getOrganizerSession: vi.fn(() => Promise.resolve({ id: 'org-1' })),
 }));
@@ -26,6 +30,9 @@ vi.mock('@/lib/rate-limit', () => ({
   checkRateLimit: vi.fn(() => Promise.resolve({ success: true })),
   getClientIdentifier: vi.fn(() => 'test-ip'),
   apiRateLimit: {},
+  mediaUploadRateLimit: { name: 'media-upload' },
+  rateLimitMessage: vi.fn(() => 'Too many attempts. Please try again in 20 minutes.'),
+  retryAfterHeaders: vi.fn(() => ({})),
   strictRateLimit: {},
   organizerUploadDailyLimit: {},
 }));
@@ -173,14 +180,30 @@ describe('Upload security — /api/media/upload auth', () => {
   it('rejects unauthenticated upload', async () => {
     const founderAuth = await import('@/lib/founder-auth');
     const userSession = await import('@/lib/user-session');
+    const orgAuth = await import('@/lib/organizer-auth');
     vi.mocked(founderAuth.getFounderSession).mockResolvedValueOnce(null);
     vi.mocked(userSession.getUserSession).mockResolvedValueOnce(null);
+    vi.mocked(orgAuth.getOrganizerSession).mockResolvedValueOnce(null);
 
     const { POST } = await import('@/app/api/media/upload/route');
     const res = await POST(createFileRequest(
       '/api/media/upload', 'photo.jpg', Buffer.from([0xFF, 0xD8]), 'image/jpeg'
     ));
     expect(res.status).toBe(401);
+  });
+
+  it('limits uploads per account, not only per IP', async () => {
+    const rl = await import('@/lib/rate-limit');
+    vi.mocked(rl.checkRateLimit).mockImplementation(async (limiter: any, id: string) =>
+      ({ success: !(limiter?.name === 'media-upload' && id === 'founder:founder-1'), limit: 30, remaining: 0, reset: Date.now() + 60_000 }) as any);
+
+    const { POST } = await import('@/app/api/media/upload/route');
+    const res = await POST(createFileRequest(
+      '/api/media/upload', 'photo.jpg', Buffer.from([0xFF, 0xD8, 0xFF, 0xE0, 0, 0x10]), 'image/jpeg'
+    ));
+    expect(res.status).toBe(429);
+    expect((await res.json()).error).toMatch(/^Too many uploads/);
+    vi.mocked(rl.checkRateLimit).mockImplementation(async () => ({ success: true }) as any);
   });
 });
 

@@ -61,9 +61,15 @@ const nextConfig = {
           { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), bluetooth=()' },
-          { key: 'Content-Security-Policy', value: csp },
           { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
         ],
+      },
+      {
+        // The cacheable policy for public pages. The signed-in portals (/founder, /employer, /organizer) get a stricter
+        // per-request one with a nonce from middleware.ts (lib/csp.ts) instead, so they're left out here. "founder/"
+        // or a bare "founder" only: public pages such as /founder-team keep this policy.
+        source: '/((?!embed|founder/|founder$|employer/|employer$|organizer/|organizer$).*)',
+        headers: [{ key: 'Content-Security-Policy', value: csp }],
       },
       {
         // Pages that frame the events widget or Razorpay checkout (billing, paid event tickets, funding data packs) can't
