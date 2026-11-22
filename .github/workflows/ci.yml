@@ -153,10 +153,34 @@ jobs:
         with:
           fetch-depth: 0
 
+      # The gitleaks CLI is free; the gitleaks-action needs a paid licence for organisation repositories, so the
+      # job failed in seconds without scanning anything. Same tool and rules (.gitleaks.toml), run directly, on the
+      # commits this push or pull request adds (old history holds keys that were already rotated).
       - name: Gitleaks
-        uses: gitleaks/gitleaks-action@v2
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: "8.21.2"
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          file="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$file" "$base/$file"
+          curl -sSfL -o checksums.txt "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          grep " $file\$" checksums.txt | sha256sum -c -
+          tar -xzf "$file" gitleaks
+          if [ "$EVENT" = "pull_request" ]; then
+            range="$PR_BASE..$PR_HEAD"
+          elif [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            range="$PUSH_BEFORE..$SHA"
+          else
+            range="-1 $SHA"
+          fi
+          echo "Scanning commits: $range"
+          ./gitleaks git --config .gitleaks.toml --redact --verbose --exit-code 1 --log-opts="$range" .
 
   build:
     name: Build

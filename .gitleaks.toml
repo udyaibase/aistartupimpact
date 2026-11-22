@@ -6,6 +6,7 @@ description = "Allow CI placeholder values and test secrets"
 paths = [
   '''\.github/workflows/ci\.yml''',
   '''apps/web/__tests__/''',
+  '''apps/admin/__tests__/''',
   '''apps/web/vitest\.config\.mts''',
 ]
 
