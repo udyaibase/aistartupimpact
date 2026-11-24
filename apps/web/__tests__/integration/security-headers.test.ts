@@ -110,6 +110,22 @@ describe('Security headers — next.config.mjs', () => {
     }
   });
 
+  it('allows the camera on the whole organizer portal (check-in is reached by in-app navigation), billing keeps its own policy', async () => {
+    const resolved = typeof config === 'function' ? await config : config;
+    const blocks: Array<{ source: string; headers: Array<{ key: string; value: string }> }> = await resolved.headers();
+    const pp = (b: { headers: Array<{ key: string; value: string }> }) => b.headers.find((h) => h.key === 'Permissions-Policy')?.value;
+    const organizer = blocks.findIndex((b) => b.source === '/organizer/:path*');
+    expect(organizer).toBeGreaterThan(-1);
+    expect(pp(blocks[organizer])).toContain('camera=(self)');
+    // Next.js applies the last matching rule for a header key: the site-wide block (camera=()) must come before, and
+    // the billing rule (Razorpay payment) after, so the portal gets the camera and billing keeps payment.
+    const siteWide = blocks.findIndex((b) => b.source === '/((?!embed).*)');
+    const billing = blocks.findIndex((b) => b.source.includes('organizer/billing') && pp(b)?.includes('payment=(self'));
+    expect(siteWide).toBeLessThan(organizer);
+    expect(billing).toBeGreaterThan(organizer);
+    expect(pp(blocks[siteWide])).toContain('camera=()');
+  });
+
   it('disables X-Powered-By header', () => {
     const rawConfig = (nextConfigModule as any).default;
     const unwrapped = rawConfig?.__esModule ? rawConfig.default : rawConfig;

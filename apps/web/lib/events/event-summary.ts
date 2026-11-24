@@ -1,5 +1,6 @@
 import { prisma } from '@udyaibase/database';
 import { sendEmail } from '@/lib/email/send';
+import { notifyOrganizer } from '@/lib/organizer-notify';
 
 /**
  * Post-event summary: registered, attended, attendance rate, where registrations came from, feedback and
@@ -75,7 +76,7 @@ export async function runEventSummaries(now = new Date()): Promise<{ sent: numbe
       deletedAt: null, sourceUrl: null, summarySentAt: null, status: { in: ['PUBLISHED', 'COMPLETED'] }, registrationCount: { gt: 0 },
       endAt: { lte: new Date(now.getTime() - 18 * 3_600_000), gte: new Date(now.getTime() - 7 * 86_400_000) },
     },
-    select: { id: true, title: true, organizer: { select: { email: true, name: true } } },
+    select: { id: true, title: true, organizerId: true, organizer: { select: { email: true, name: true } } },
     take: 100,
   });
   let sent = 0;
@@ -85,6 +86,7 @@ export async function runEventSummaries(now = new Date()): Promise<{ sent: numbe
     if (!claimed.count || !e.organizer?.email || /@udyaibase\.com$/i.test(e.organizer.email)) continue;
     const s = await eventSummary(e.id);
     if (s.registered === 0) continue;
+    await notifyOrganizer(e.organizerId, { type: 'event_summary', title: `How ${e.title} went`, message: `${s.attended} of ${s.registered} registered people attended. See the full summary and follow up with attendees.`, link: `/organizer/events/${e.id}/after` });
     const r = await sendEmail({ to: e.organizer.email, type: 'event_summary', subject: `How ${e.title} went: ${s.attended} attended`, html: summaryEmailHtml(e, s, e.organizer.name) });
     if (r.success) sent++;
   }

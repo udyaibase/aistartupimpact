@@ -7,6 +7,7 @@ import { Pagination } from '@/components/Pagination';
 import { TableEmptyState } from '@/components/EmptyState';
 import Link from 'next/link';
 import CompanyChecks from './CompanyChecks';
+import NetworkPilot from './NetworkPilot';
 
 const PAGE_SIZE = 20;
 
@@ -89,6 +90,7 @@ export default function AdminEmployersPage() {
       </div>
 
       <CompanyChecks />
+      <NetworkPilot />
 
       {/* Search */}
       <div className="relative">

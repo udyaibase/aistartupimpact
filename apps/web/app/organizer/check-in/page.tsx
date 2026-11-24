@@ -142,6 +142,21 @@ export default function CheckInPage() {
     setCamState(s => (s === "on" || s === "starting" ? "idle" : s));
   }, []);
 
+  // The camera rule (Permissions-Policy) comes from the page that was first loaded, and in-app navigation keeps it. Arrived
+  // here from a page that blocks the camera (e.g. the public home page)? Load this page fully once so its own rule
+  // applies; otherwise the phone refuses the camera without ever asking.
+  useEffect(() => {
+    const fp = (document as any).permissionsPolicy || (document as any).featurePolicy;
+    if (!fp?.allowsFeature || fp.allowsFeature("camera")) return;
+    const KEY = "checkin-camera-reload";
+    try {
+      const last = Number(sessionStorage.getItem(KEY) || 0);
+      if (Date.now() - last < 15000) return; // already tried just now: don't loop
+      sessionStorage.setItem(KEY, String(Date.now()));
+    } catch { return; }
+    window.location.reload();
+  }, []);
+
   const startCamera = async () => {
     if (streamRef.current) return;
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {

@@ -5,6 +5,7 @@ import { embedTrackRateLimit } from "@/lib/event-rate-limit";
 import { getEmbedRedis, isLocalHost } from "@/lib/embed/widgets";
 import { sendWidgetLiveEmail } from "@/lib/embed/emails";
 import { jobsViewsKey } from "@/lib/jobs/careers";
+import { notifyOrganizer } from '@/lib/organizer-notify';
 
 export const dynamic = "force-dynamic";
 
@@ -94,9 +95,12 @@ export async function POST(request: NextRequest) {
       if (first === 1) {
         const widget = await prisma.embedWidget.findUnique({
           where: { id: widgetId },
-          select: { organizer: { select: { email: true, name: true } } },
+          select: { organizerId: true, organizer: { select: { email: true, name: true } } },
         });
-        if (widget) sendWidgetLiveEmail({ to: widget.organizer.email, name: widget.organizer.name, host, widgetId });
+        if (widget) {
+          await notifyOrganizer(widget.organizerId, { type: 'widget_live', title: 'Your events widget is live', message: `It’s showing your events on ${host}.`, link: '/organizer/embed' });
+          sendWidgetLiveEmail({ to: widget.organizer.email, name: widget.organizer.name, host, widgetId });
+        }
       }
     }
   } catch (e) {

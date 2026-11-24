@@ -39,6 +39,18 @@ export async function monitoringAction() {
     prisma.opsAlert.findMany({ orderBy: { lastSentAt: 'desc' }, take: 10 }),
   ]);
 
+  // AI reviews per company this month. Calls aren't tagged with a company, so each company's cost is its share of
+  // this month's review spend (reviews + the resume profiles they build), by number of reviews.
+  const [reviewsBy, reviewSpend] = await Promise.all([
+    prisma.jobBoardAiScreening.groupBy({ by: ['employerId'], where: { createdAt: { gte: month }, status: 'DONE' }, _count: { _all: true }, orderBy: { _count: { employerId: 'desc' } }, take: 15 }),
+    prisma.opsAiCall.aggregate({ where: { createdAt: { gte: month }, feature: { in: ['ai_screening', 'resume_profile'] } }, _sum: { costMicroUsd: true } }),
+  ]);
+  const totalReviews = await prisma.jobBoardAiScreening.count({ where: { createdAt: { gte: month }, status: 'DONE' } });
+  const names = new Map((await prisma.jobBoardEmployer.findMany({ where: { id: { in: reviewsBy.map((r) => r.employerId) } }, select: { id: true, companyName: true, plan: true } })).map((e) => [e.id, e]));
+  const perReviewUsd = totalReviews ? (reviewSpend._sum.costMicroUsd ?? 0) / 1e6 / totalReviews : 0;
+  const daysIn = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate();
+  const dayOfMonth = now.getUTCDate() - 1 + now.getUTCHours() / 24;
+
   return {
     success: true as const,
     jobs,
@@ -46,6 +58,12 @@ export async function monitoringAction() {
     ai: {
       ...spend, budgets: aiBudgets(), hardStop: process.env.OPENAI_HARD_STOP === 'true',
       calls24h: ai24, failed24h: aiFailed24,
+      // Straight-line forecast from the month so far (not shown in the first day: too little to go on).
+      forecastMonthUsd: dayOfMonth >= 1 ? (spend.month / dayOfMonth) * daysIn : null,
+      reviews: {
+        total: totalReviews, perReviewUsd,
+        byCompany: reviewsBy.map((r) => ({ id: r.employerId, name: names.get(r.employerId)?.companyName ?? 'Deleted company', plan: names.get(r.employerId)?.plan ?? '', reviews: r._count._all, usd: r._count._all * perReviewUsd })),
+      },
       byFeature: byFeature.map((f) => ({ feature: f.feature, calls: f._count._all, usd: (f._sum.costMicroUsd ?? 0) / 1e6 })),
       recentFailures: recentFailures.map((f) => ({ ...f, createdAt: f.createdAt.toISOString() })),
     },

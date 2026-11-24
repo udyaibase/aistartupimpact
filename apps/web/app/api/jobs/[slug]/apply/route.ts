@@ -1,5 +1,8 @@
+import { ensureSkillOverrides } from '@/lib/jobs/skill-overrides';
+import { numberAnswer } from '@/lib/jobs/knockouts';
 import { referrerFor } from '@/lib/employer/referrals';
 import { markStep } from '@/lib/employer/onboarding';
+import { isAcceptedIntro, linkIntroApplication } from '@/lib/network/profile';
 import { NextRequest, NextResponse, after } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@udyaibase/database';
@@ -18,10 +21,10 @@ import { parseApplyFormConfig, requiredFieldErrors, withoutHiddenFields } from '
 
 export const dynamic = 'force-dynamic';
 
-type Source = 'JOBS_PAGE' | 'STARTUP_PROFILE' | 'GOOGLE' | 'WIDGET' | 'CAREERS_PAGE' | 'REFERRAL' | 'DIRECT' | 'OTHER';
+type Source = 'JOBS_PAGE' | 'STARTUP_PROFILE' | 'GOOGLE' | 'WIDGET' | 'CAREERS_PAGE' | 'REFERRAL' | 'DIRECT' | 'OTHER' | 'NETWORK';
 const SOURCE_LABEL: Record<Source, string> = {
   JOBS_PAGE: 'Udyaibase AI Jobs', STARTUP_PROFILE: 'your startup profile', GOOGLE: 'Google', WIDGET: 'your website', CAREERS_PAGE: 'your Udyaibase careers page',
-  REFERRAL: 'a referral', DIRECT: 'a direct link', OTHER: 'another site',
+  REFERRAL: 'a referral', DIRECT: 'a direct link', OTHER: 'another site', NETWORK: 'your Open to opportunities request',
 };
 
 const clip = (v: unknown, n: number) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
@@ -88,6 +91,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
     let answer = given.get(q.id) ?? '';
     if (q.type === 'yesno' && answer && answer !== 'yes' && answer !== 'no') answer = '';
     if (q.type === 'choice' && answer && !cleanOptions(q.options).includes(answer)) answer = '';
+    if (q.type === 'number' && answer && numberAnswer(answer) == null) answer = '';
     if (q.required && !answer) errors[`q_${q.id}`] = 'Please answer this question.';
     return { id: q.id, question: q.question, type: q.type, answer };
   });
@@ -99,6 +103,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
   // ── Skills: candidate ticks from the job's own list; match is a plain comparison
   const confirmedSkills = (Array.isArray(b.confirmedSkills) ? b.confirmedSkills : [])
     .map(String).filter((s: string) => listing.skills.includes(s)).slice(0, 30);
+  await ensureSkillOverrides();
   const matchedSkills = matchSkills(listing.skills, confirmedSkills);
 
   // ── Attribution
@@ -119,6 +124,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
   const statusToken = crypto.randomBytes(24).toString('base64url');
   // Applying while signed in puts it in their "My applications" straight away (their own session, so no email check).
   const candidate = await getCandidate().catch(() => null);
+  // Applying after accepting a company's "Open to opportunities" request (their own request, for this job).
+  const fromIntro = await isAcceptedIntro(att.intro, candidate?.id, listing.id);
+  if (fromIntro) source = 'NETWORK';
 
   let applicationId: string;
   try {
@@ -174,6 +182,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
     return NextResponse.json({ error: 'We couldn’t submit your application. Please try again.' }, { status: 500 });
   }
 
+  if (fromIntro) await linkIntroApplication({ introId: att.intro, userId: candidate?.id, listingId: listing.id, applicationId }).catch(() => false);
   sendApplicationReceived({ to: email, name: fullName, jobTitle: listing.title, company, statusToken });
   // Admin-managed placeholder accounts have no inbox of their own.
   if (listing.Employer.passwordHash !== '') {

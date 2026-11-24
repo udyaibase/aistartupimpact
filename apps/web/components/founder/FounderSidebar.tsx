@@ -115,8 +115,29 @@ const PROMO_BG_SMALL = promoBg(true);
  * The "promote" card: a dark, premium card (black gradient, brand colour in the corners and a faint grid) so it reads as an
  * offer rather than another red button. Same look in light and dark themes. Shared with the phone "More" sheet.
  */
+/** Paused for a few days: the card shows "Coming soon" and doesn't link anywhere. Set to true to turn it back on. */
+export const PROMOTE_OPEN = false;
+
 export function PromoteCard({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
   const lg = size === 'lg';
+  if (!PROMOTE_OPEN) {
+    return (
+      <div
+        aria-disabled="true"
+        style={lg ? PROMO_BG : PROMO_BG_SMALL}
+        className={`relative flex items-center gap-2.5 overflow-hidden rounded-[12px] border border-white/10 text-white cursor-default select-none ${lg ? 'p-4' : 'p-2.5'}`}
+      >
+        <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-white/10 ring-1 ring-inset ring-white/15 opacity-70">
+          <Megaphone className="h-4 w-4" aria-hidden />
+        </span>
+        <span className="relative min-w-0 flex-1">
+          <span className={`block font-sora font-semibold leading-tight text-white/80 ${lg ? 'text-[14px]' : 'text-[12px]'}`}>Promote your startup or tool</span>
+          <span className={`block text-white/55 font-jakarta leading-tight mt-0.5 ${lg ? 'text-[12px]' : 'text-[10.5px]'}`}>Opening soon</span>
+        </span>
+        <span className="relative shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/75">Soon</span>
+      </div>
+    );
+  }
   // Sidebar: one compact row, so it doesn't crowd the menu above it.
   if (!lg) {
     return (
@@ -164,6 +185,14 @@ export function PromoteCard({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
 }
 
 function PromoteIcon() {
+  if (!PROMOTE_OPEN) {
+    return (
+      <span title="Promote your startup or tool: opening soon" aria-label="Promote your startup or tool: opening soon" role="img" style={PROMO_BG_SMALL}
+        className="relative w-10 h-10 overflow-hidden rounded-xl border border-white/10 flex items-center justify-center opacity-70 cursor-default">
+        <Megaphone className="relative w-[18px] h-[18px] text-white" aria-hidden />
+      </span>
+    );
+  }
   return (
     <Link href="/advertise" title="Promote your startup or tool" aria-label="Promote your startup or tool" style={PROMO_BG_SMALL}
       className="relative w-10 h-10 overflow-hidden rounded-xl border border-white/10 flex items-center justify-center hover:border-white/25 transition-colors">

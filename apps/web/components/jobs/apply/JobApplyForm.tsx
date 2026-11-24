@@ -17,7 +17,7 @@ export interface ApplyJob {
   title: string;
   company: string;
   skills: string[];
-  screeningQuestions: { id: string; question: string; type: 'text' | 'yesno' | 'choice'; required: boolean; options?: string[] }[];
+  screeningQuestions: { id: string; question: string; type: 'text' | 'yesno' | 'choice' | 'number'; required: boolean; options?: string[] }[];
   consentText: string;
   /** The employer's choice of fields and wording; defaults apply when absent. */
   form?: ApplyFormConfig;
@@ -46,6 +46,8 @@ export interface ApplyAttribution {
   utm_campaign?: string;
   /** A teammate's referral code (?rc=). */
   rc?: string;
+  /** An accepted "Open to opportunities" request (?intro=). */
+  intro?: string;
 }
 
 interface Details {
@@ -500,6 +502,14 @@ export default function JobApplyForm({
                             <option value="">Select…</option>
                             {(q.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
                           </select>
+                        </>
+                      ) : q.type === 'number' ? (
+                        <>
+                          <label htmlFor={id(`q_${q.id}`)} className={label}>{q.question}{!q.required && <span className="font-normal" style={{ color: 'var(--af-muted)' }}> (optional)</span>}</label>
+                          <input id={id(`q_${q.id}`)} type="text" inputMode="decimal" pattern="[0-9]*[.]?[0-9]*" maxLength={12} value={answers[q.id] ?? ''}
+                            onChange={(e) => { setAnswers((a) => ({ ...a, [q.id]: e.target.value.replace(/[^0-9.]/g, '') })); setErrors((x) => ({ ...x, [`q_${q.id}`]: '' })); }}
+                            aria-invalid={!!errors[`q_${q.id}`] || undefined}
+                            className={`${field} max-w-[10rem]`} style={fieldStyle} placeholder="e.g. 3" />
                         </>
                       ) : (
                         <>

@@ -35,6 +35,7 @@ import {
   CreditCard,
   ClipboardList,
   ShieldCheck,
+  BookOpen,
 } from 'lucide-react';
 
 const SidebarContext = createContext<{
@@ -103,6 +104,7 @@ const sidebarItems = [
   { type: 'divider' as const, label: 'Job Board', roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
   { label: 'Job Listings', href: '/jobs-board', icon: Briefcase, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
   { label: 'Employers', href: '/employers', icon: Building2, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
+  { label: 'Skills Dictionary', href: '/skills', icon: BookOpen, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
   { label: 'Billing', href: '/billing', icon: Receipt, roles: ['SUPER_ADMIN'] },
   { label: 'Monitoring', href: '/monitoring', icon: Activity, roles: ['SUPER_ADMIN'] },
   { label: 'Plans', href: '/plans', icon: CreditCard, roles: ['SUPER_ADMIN'] },

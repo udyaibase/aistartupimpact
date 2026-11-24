@@ -1,3 +1,4 @@
+import { furthestStage as stageFor } from '@/lib/employer/pool-stage';
 import { prisma } from '@udyaibase/database';
 import { publicListingWhere } from '@/lib/jobs/public';
 import { POOL_REMINDER_DAYS } from '@/lib/jobs/talent-pool';
@@ -34,10 +35,6 @@ export interface TalentPoolData {
 /** The most pool rows one page loads (newest first). */
 export const POOL_LIMIT = 3000;
 const DAY = 864e5;
-
-// Furthest stage reached, in the board's order (Assessment and Final decision included).
-const RANK: Record<string, number> = { APPLIED: 0, REVIEWED: 0, SHORTLISTED: 1, ASSESSMENT: 2, INTERVIEW: 3, DECISION: 4, OFFER: 5 };
-const LABEL = ['Applied', 'Screened', 'Took the assessment', 'Interviewed', 'Reached the final decision', 'Got an offer'];
 
 /**
  * Candidates who opted in to hear about other roles. One entry per person, however many roles they applied to.
@@ -89,15 +86,10 @@ export async function loadTalentPool(employerId: string, now = new Date()): Prom
     if (hiredEmails.has(key)) { hiredHidden++; continue; }
     const latest = mine[0];
     const ids = new Set(mine.map((m) => m.id));
-    let rank = -1;
-    let rejected = false;
-    for (const m of mine) {
-      if (m.status === 'REJECTED') rejected = true;
-      rank = Math.max(rank, RANK[m.status] ?? -1);
-    }
-    for (const e of events) if (ids.has(e.applicationId)) rank = Math.max(rank, RANK[e.toStatus] ?? -1);
-    const anyActive = mine.some((m) => m.status !== 'REJECTED');
-    const furthestStage = rank < 0 ? 'Not selected' : !anyActive && rejected ? `${LABEL[rank]}, not selected` : LABEL[rank];
+    const { rank, label: furthestStage } = stageFor(
+      mine.map((m) => m.status),
+      events.filter((e) => ids.has(e.applicationId)).map((e) => e.toStatus),
+    );
     const myNotes = notes.filter((n) => ids.has(n.applicationId));
     const until = mine.reduce((d, m) => (m.talentPoolUntil! > d ? m.talentPoolUntil! : d), latest.talentPoolUntil!);
     people.push({

@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { CalendarDays, User, Building2, Phone, Globe, Linkedin, ArrowRight, CheckCircle, Upload } from 'lucide-react';
+import { ArrowLeft, Building2, Loader2 } from 'lucide-react';
 import { completeOrganizerOnboarding } from './actions';
 
 interface OrganizerUser {
@@ -19,256 +19,225 @@ interface OrganizerUser {
   onboardingStep: number;
 }
 
+type Form = { name: string; company: string; avatar: string; bio: string; website: string; linkedin: string; phone: string };
+type Errors = Partial<Record<keyof Form | 'form', string>>;
+
+const DRAFT_KEY = 'organizer_onboarding_draft_v2';
+const BIO_MAX = 800;
+
+const input = 'w-full min-h-[44px] px-3.5 rounded-[10px] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-[15px] text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/15 dark:focus:ring-white/20 focus:border-gray-900 dark:focus:border-gray-300';
+const label = 'block text-sm font-medium text-gray-900 dark:text-gray-100';
+const hint = 'text-[13px] text-gray-600 dark:text-gray-400';
+const optional = <span className="ml-1.5 text-[12px] font-normal text-gray-500 dark:text-gray-400">Optional</span>;
+const primaryBtn = 'inline-flex items-center justify-center gap-2 min-h-[44px] px-5 rounded-[10px] bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900 text-sm font-semibold disabled:opacity-60 w-full sm:w-auto';
+
+/** "lu.ma/x" → "https://lu.ma/x"; blank stays blank. */
+const withScheme = (v: string) => { const t = v.trim(); return !t ? '' : /^https?:\/\//i.test(t) ? t : `https://${t}`; };
+
 export default function OnboardingClient({ user, returnTo }: { user: OrganizerUser; returnTo?: string }) {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [step, setStep] = useState<1 | 2>(1);
+  const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
-
-  const [formData, setFormData] = useState({
-    name: user.name || '',
-    company: user.company || '',
-    bio: user.bio || '',
-    avatar: user.avatar || '',
-    phone: user.phone || '',
-    website: user.website || '',
-    linkedin: user.linkedin || '',
+  const [errors, setErrors] = useState<Errors>({});
+  const [form, setForm] = useState<Form>({
+    name: user.name || '', company: user.company || '', avatar: user.avatar || '', bio: user.bio || '',
+    website: user.website || '', linkedin: user.linkedin || '', phone: user.phone || '',
   });
+  const loaded = useRef(false);
+  const headingRef = useRef<HTMLHeadingElement>(null);
 
-  const [draftLoaded, setDraftLoaded] = useState(false);
-
+  // Keep an unfinished setup across reloads (this browser only).
   useEffect(() => {
-    const saved = localStorage.getItem('organizer_onboarding_draft');
-    if (saved) {
-      try {
-        setFormData(prev => ({ ...prev, ...JSON.parse(saved) }));
-      } catch {}
-    }
-    setDraftLoaded(true);
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY);
+      if (saved) setForm((f) => ({ ...f, ...JSON.parse(saved) }));
+    } catch { /* storage unavailable */ }
+    loaded.current = true;
   }, []);
-
   useEffect(() => {
-    if (draftLoaded) {
-      localStorage.setItem('organizer_onboarding_draft', JSON.stringify(formData));
-    }
-  }, [formData, draftLoaded]);
+    if (!loaded.current) return;
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify(form)); } catch { /* storage unavailable */ }
+  }, [form]);
+  useEffect(() => { headingRef.current?.focus(); window.scrollTo({ top: 0 }); }, [step]);
 
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const set = <K extends keyof Form>(k: K, v: Form[K]) => { setForm((f) => ({ ...f, [k]: v })); setErrors((e) => ({ ...e, [k]: undefined, form: undefined })); };
+
+  async function uploadLogo(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-    if (!file.type.startsWith('image/')) { alert('Please select a JPG or PNG image file'); return; }
-    if (file.size > 5 * 1024 * 1024) { alert('Image must be less than 5MB'); return; }
-
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { setErrors((x) => ({ ...x, avatar: 'Use a JPG, PNG or WebP image.' })); return; }
+    if (file.size > 5 * 1024 * 1024) { setErrors((x) => ({ ...x, avatar: 'Use an image under 5 MB.' })); return; }
     setUploading(true);
     try {
       const data = new FormData();
       data.append('file', file);
       const res = await fetch('/api/media/upload', { method: 'POST', body: data });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || 'Upload failed');
-      setFormData(prev => ({ ...prev, avatar: result.url }));
-    } catch (err: any) {
-      alert('Upload failed: ' + (err.message || 'Please try again'));
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok || !result.url) throw new Error(result.error || '');
+      set('avatar', result.url);
+    } catch (err) {
+      setErrors((x) => ({ ...x, avatar: err instanceof Error && err.message ? err.message : 'Couldn’t upload that image. Try again.' }));
     } finally {
       setUploading(false);
     }
-  };
+  }
 
-  const isFormValid = () =>
-    formData.avatar.trim() !== '' &&
-    formData.name.trim() !== '' &&
-    formData.company.trim() !== '' &&
-    formData.bio.trim() !== '';
+  function checkStep1(): boolean {
+    const e: Errors = {};
+    if (form.company.trim().length < 2) e.company = 'Enter the name attendees will see as the host.';
+    if (form.name.trim().length < 2) e.name = 'Enter your full name.';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-
-    if (!isFormValid()) {
-      setError('Profile photo, full name, organization name, and bio are required');
+  async function finish(includeDetails: boolean) {
+    if (!checkStep1()) { setStep(1); return; }
+    setSaving(true);
+    const result = await completeOrganizerOnboarding({
+      name: form.name.trim(), company: form.company.trim(), avatar: form.avatar,
+      // "Skip for now" leaves these out so anything saved earlier stays.
+      ...(includeDetails ? { bio: form.bio.trim(), website: withScheme(form.website), linkedin: withScheme(form.linkedin), phone: form.phone.trim() } : {}),
+    }).catch(() => ({ success: false as const, error: 'You seem to be offline. Try again.' }));
+    if (!result.success) {
+      const msg = result.error || 'Couldn’t save your workspace. Try again.';
+      // Link problems belong to step 2's fields.
+      if (/website/i.test(msg)) { setErrors({ website: msg }); setStep(2); }
+      else if (/linkedin/i.test(msg)) { setErrors({ linkedin: msg }); setStep(2); }
+      else setErrors({ form: msg });
+      setSaving(false);
       return;
     }
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* storage unavailable */ }
+    router.push(returnTo || '/organizer');
+    router.refresh();
+  }
 
-    setLoading(true);
-    try {
-      const result = await completeOrganizerOnboarding(formData);
-      if (!result.success) {
-        setError(result.error || 'Failed to complete onboarding');
-        setLoading(false);
-        return;
-      }
-      localStorage.removeItem('organizer_onboarding_draft');
-      router.push(returnTo || '/organizer?welcome=true');
-    } catch {
-      setError('An error occurred. Please try again.');
-      setLoading(false);
-    }
-  };
+  const field = (k: keyof Form) => ({ 'aria-invalid': !!errors[k] || undefined, 'aria-describedby': errors[k] ? `oo-${k}-error` : undefined });
+  const err = (k: keyof Form) => errors[k] && <p id={`oo-${k}-error`} className="text-[13px] text-red-700 dark:text-red-400">{errors[k]}</p>;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-950 dark:to-gray-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-brand/10 mb-4">
-            <CalendarDays className="w-8 h-8 text-brand" />
+    <div className="min-h-[100dvh] bg-[#F7F7F8] dark:bg-gray-950 font-jakarta">
+      {/* Back · progress · signed-in account */}
+      <div className="sticky top-0 z-10 bg-[#F7F7F8]/90 dark:bg-gray-950/90 backdrop-blur pt-[env(safe-area-inset-top)]">
+        <div className="mx-auto max-w-[640px] px-2 sm:px-4 h-14 flex items-center gap-2 sm:gap-3">
+          <button type="button" onClick={() => setStep(1)} aria-label="Back" className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-full text-gray-700 dark:text-gray-300 hover:bg-gray-200/70 dark:hover:bg-gray-800 ${step === 1 ? 'invisible' : ''}`}>
+            <ArrowLeft className="w-5 h-5" aria-hidden />
+          </button>
+          <div className="flex-1 flex gap-1.5" role="progressbar" aria-label={`Step ${step} of 2`} aria-valuemin={1} aria-valuemax={2} aria-valuenow={step}>
+            {[1, 2].map((i) => (
+              <span key={i} className="h-1.5 flex-1 rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden">
+                <span className={`block h-full rounded-full bg-gray-900 dark:bg-white transition-[width] duration-300 ${i <= step ? 'w-full' : 'w-0'}`} />
+              </span>
+            ))}
           </div>
-          <h1 className="font-sora font-bold text-3xl text-gray-900 dark:text-white mb-2">
-            Set Up Your Organizer Profile
-          </h1>
-          <p className="text-gray-500 dark:text-gray-400 font-jakarta">
-            Complete your profile to start creating and managing events
-          </p>
+          <span className="shrink-0 max-w-[40%] truncate px-2 text-[13px] text-gray-500 dark:text-gray-400" title={user.email}>{user.email}</span>
         </div>
-
-        {/* Progress Steps */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="flex items-center gap-2">
-            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-green-500 text-white text-sm font-bold">
-              <CheckCircle className="w-5 h-5" />
-            </div>
-            <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Workspace</span>
-          </div>
-          <div className="w-12 h-0.5 bg-brand" />
-          <div className="flex items-center gap-2">
-            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-brand text-white text-sm font-bold">
-              2
-            </div>
-            <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Profile</span>
-          </div>
-          <div className="w-12 h-0.5 bg-gray-200 dark:bg-gray-700" />
-          <div className="flex items-center gap-2">
-            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 text-sm font-bold">
-              3
-            </div>
-            <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Dashboard</span>
-          </div>
-        </div>
-
-        {/* Form Card */}
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4">
-                <p className="text-sm text-red-600 dark:text-red-400 font-jakarta">{error}</p>
-              </div>
-            )}
-
-            {/* Avatar Upload */}
-            <div className="flex flex-col items-center gap-4 border-b border-gray-100 dark:border-gray-800 pb-6">
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 font-jakarta self-start">
-                Profile Picture <span className="text-red-500">*</span>
-              </label>
-              <div className="flex items-center gap-6 w-full">
-                <div className="relative w-20 h-20 rounded-full overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex items-center justify-center">
-                  {formData.avatar ? (
-                    <Image src={formData.avatar} alt="Avatar preview" width={80} height={80} unoptimized className="w-full h-full object-cover" />
-                  ) : (
-                    <User className="w-10 h-10 text-gray-400" />
-                  )}
-                  {uploading && (
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1 space-y-1">
-                  <input type="file" id="avatar-upload" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
-                  <label htmlFor="avatar-upload" className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-brand bg-brand/10 hover:bg-brand/20 rounded-lg cursor-pointer transition-colors">
-                    <Upload className="w-3.5 h-3.5" /> Upload Photo
-                  </label>
-                  <p className="text-xs text-gray-400 font-jakarta">JPG, PNG up to 5MB</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Email (read-only) */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 font-jakarta">Email Address</label>
-              <div className="relative">
-                <input type="email" value={user.email} disabled className="w-full px-4 py-3 pl-11 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-400 font-jakarta" />
-                <User className="absolute left-3.5 top-3.5 w-5 h-5 text-gray-400" />
-                <div className="absolute right-3 top-3">
-                  <span className="inline-flex items-center gap-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold px-2 py-1 rounded-full">
-                    <CheckCircle className="w-3 h-3" /> Verified
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Full Name */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 font-jakarta">
-                Full Name <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="Your full name" required className="w-full px-4 py-3 pl-11 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-brand focus:border-transparent font-jakarta" />
-                <User className="absolute left-3.5 top-3.5 w-5 h-5 text-gray-400" />
-              </div>
-            </div>
-
-            {/* Organization Name */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 font-jakarta">
-                Organization / Company Name <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <input type="text" value={formData.company} onChange={(e) => setFormData({ ...formData, company: e.target.value })} placeholder="Your organization or company" required className="w-full px-4 py-3 pl-11 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-brand focus:border-transparent font-jakarta" />
-                <Building2 className="absolute left-3.5 top-3.5 w-5 h-5 text-gray-400" />
-              </div>
-            </div>
-
-            {/* Bio */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 font-jakarta flex justify-between items-center">
-                <span>About You / Organization <span className="text-red-500">*</span></span>
-                <span className="text-xs font-normal text-gray-400 font-jakarta">{formData.bio.length}/800 characters</span>
-              </label>
-              <textarea value={formData.bio} onChange={(e) => setFormData({ ...formData, bio: e.target.value })} placeholder="Tell us about yourself and your organization..." required maxLength={800} rows={3} className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-brand focus:border-transparent font-jakarta resize-none" />
-            </div>
-
-            {/* Phone */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 font-jakarta">Phone Number</label>
-              <div className="relative">
-                <input type="tel" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="+91 98765 43210" className="w-full px-4 py-3 pl-11 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-brand focus:border-transparent font-jakarta" />
-                <Phone className="absolute left-3.5 top-3.5 w-5 h-5 text-gray-400" />
-              </div>
-            </div>
-
-            {/* Social Links */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 font-jakarta">Website</label>
-                <div className="relative">
-                  <input type="url" value={formData.website} onChange={(e) => setFormData({ ...formData, website: e.target.value })} placeholder="https://yourorg.com" className="w-full px-4 py-3 pl-11 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-brand focus:border-transparent font-jakarta" />
-                  <Globe className="absolute left-3.5 top-3.5 w-5 h-5 text-gray-400" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 font-jakarta">LinkedIn</label>
-                <div className="relative">
-                  <input type="url" value={formData.linkedin} onChange={(e) => setFormData({ ...formData, linkedin: e.target.value })} placeholder="https://linkedin.com/in/..." className="w-full px-4 py-3 pl-11 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-brand focus:border-transparent font-jakarta" />
-                  <Linkedin className="absolute left-3.5 top-3.5 w-5 h-5 text-gray-400" />
-                </div>
-              </div>
-            </div>
-
-            {/* Submit */}
-            <button type="submit" disabled={loading || !isFormValid()} className="w-full bg-brand hover:bg-brand-600 text-white font-semibold py-4 rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-jakarta">
-              {loading ? (
-                <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Completing Setup...</>
-              ) : (
-                <>Complete Setup & Continue <ArrowRight className="w-5 h-5" /></>
-              )}
-            </button>
-          </form>
-        </div>
-
-        <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-6 font-jakarta">
-          You can update these details anytime from your profile settings
-        </p>
       </div>
+
+      <main className="mx-auto max-w-[640px] px-4 pt-4 sm:pt-8 pb-[calc(2.5rem+env(safe-area-inset-bottom))]">
+        <p className="mb-1.5 text-[13px] font-medium text-gray-500 dark:text-gray-400">Step {step} of 2 · Organizer workspace</p>
+        <h1 ref={headingRef} tabIndex={-1} className="font-sora font-bold text-[22px] sm:text-[28px] leading-tight text-gray-900 dark:text-white focus:outline-none">
+          {step === 1 ? 'Set up your organizer profile' : 'Tell attendees about you'}
+        </h1>
+        <p className="mt-1.5 mb-5 sm:mb-7 text-[14px] sm:text-[15px] text-gray-600 dark:text-gray-400 max-w-[54ch]">
+          {step === 1
+            ? 'This is the host name and logo shown on your event pages and tickets. You can change it later in Settings.'
+            : 'A short description and a link help people trust your events. You can skip this and add it later.'}
+        </p>
+
+        <form
+          noValidate
+          onSubmit={(e) => { e.preventDefault(); if (step === 1) { if (checkStep1()) setStep(2); } else void finish(true); }}
+          className="rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 sm:p-7 space-y-5"
+        >
+          {errors.form && <p role="alert" className="rounded-[10px] border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/30 px-3.5 py-2.5 text-[14px] text-red-800 dark:text-red-300">{errors.form}</p>}
+
+          {step === 1 ? (
+            <>
+              <div className="flex items-center gap-4">
+                <div className="relative w-16 h-16 shrink-0 rounded-[12px] overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                  {form.avatar
+                    ? <Image src={form.avatar} alt="Your logo" width={64} height={64} unoptimized className="w-full h-full object-cover" />
+                    : <Building2 className="w-7 h-7 text-gray-400" aria-hidden />}
+                  {uploading && <span className="absolute inset-0 bg-black/40 flex items-center justify-center"><Loader2 className="w-5 h-5 text-white animate-spin" aria-label="Uploading" /></span>}
+                </div>
+                <div className="space-y-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label htmlFor="oo-logo" className="inline-flex items-center min-h-[36px] px-3 rounded-[8px] border border-gray-300 dark:border-gray-700 text-[13px] font-semibold text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer focus-within:ring-2 focus-within:ring-gray-900/15">
+                      {form.avatar ? 'Change logo' : 'Upload logo'}
+                      <input id="oo-logo" type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadLogo} className="sr-only" />
+                    </label>
+                    {form.avatar && <button type="button" onClick={() => set('avatar', '')} className="min-h-[36px] px-2 text-[13px] font-semibold text-gray-600 dark:text-gray-400 hover:underline">Remove</button>}
+                  </div>
+                  <p className={hint}>Optional. Your logo or a photo, square works best, up to 5 MB.</p>
+                  {err('avatar')}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="oo-company" className={label}>Organization or community name</label>
+                <input id="oo-company" value={form.company} onChange={(e) => set('company', e.target.value)} autoComplete="organization" maxLength={100} placeholder="e.g. Bengaluru AI Meetup" className={input} {...field('company')} />
+                <p className={hint}>Shown as the host on your events. Hosting on your own? Use your name.</p>
+                {err('company')}
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="oo-name" className={label}>Your full name</label>
+                <input id="oo-name" value={form.name} onChange={(e) => set('name', e.target.value)} autoComplete="name" maxLength={100} placeholder="e.g. Priya Sharma" className={input} {...field('name')} />
+                {err('name')}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <label htmlFor="oo-bio" className={label}>About{optional}</label>
+                  <span className="text-[12px] tabular-nums text-gray-500 dark:text-gray-400">{form.bio.length}/{BIO_MAX}</span>
+                </div>
+                <textarea id="oo-bio" value={form.bio} onChange={(e) => set('bio', e.target.value.slice(0, BIO_MAX))} rows={4} maxLength={BIO_MAX}
+                  placeholder="e.g. A monthly meetup for people building with AI in Bengaluru. Talks, demos and hiring."
+                  className={`${input} py-2.5 resize-y`} />
+                <p className={hint}>One or two sentences: who you are and what your events are about.</p>
+              </div>
+
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label htmlFor="oo-website" className={label}>Website{optional}</label>
+                  <input id="oo-website" value={form.website} onChange={(e) => set('website', e.target.value)} inputMode="url" autoComplete="url" maxLength={300} placeholder="yourcommunity.org" className={input} {...field('website')} />
+                  {err('website')}
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="oo-linkedin" className={label}>LinkedIn{optional}</label>
+                  <input id="oo-linkedin" value={form.linkedin} onChange={(e) => set('linkedin', e.target.value)} inputMode="url" maxLength={300} placeholder="linkedin.com/company/…" className={input} {...field('linkedin')} />
+                  {err('linkedin')}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="oo-phone" className={label}>Phone{optional}</label>
+                <input id="oo-phone" type="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} autoComplete="tel" maxLength={20} placeholder="+91 98765 43210" className={input} />
+                <p className={hint}>Not shown publicly. Only used by the Udyaibase team about your events.</p>
+              </div>
+            </>
+          )}
+
+          <div className="pt-1 flex flex-col sm:flex-row sm:items-center gap-3">
+            {step === 2 && (
+              <button type="button" disabled={saving} onClick={() => finish(false)} className="order-2 sm:order-1 min-h-[44px] px-4 rounded-[10px] text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50">
+                Skip for now
+              </button>
+            )}
+            <button type="submit" disabled={saving || uploading} className={`order-1 sm:order-2 sm:ml-auto ${primaryBtn}`}>
+              {saving && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />}
+              {step === 1 ? 'Continue' : saving ? 'Saving…' : 'Finish setup'}
+            </button>
+          </div>
+        </form>
+
+        <p className="mt-5 text-[13px] text-gray-600 dark:text-gray-400">Next, you can create your first event.</p>
+      </main>
     </div>
   );
 }

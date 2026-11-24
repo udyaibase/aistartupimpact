@@ -9,6 +9,7 @@ import ProfileDropdown from '@/components/ProfileDropdown';
 import ThemeToggle from '@/components/ThemeToggle';
 import CommandPalette, { type SearchResult } from '@/components/organizer/CommandPalette';
 import type { FounderShell } from '@/lib/founder/portal';
+import { PROMOTE_OPEN } from './FounderSidebar';
 
 interface Props {
   session: { userId: string; email: string; name: string; avatar?: string };
@@ -32,7 +33,7 @@ const PAGES: SearchResult[] = [
 const ACTIONS: SearchResult[] = [
   { id: 'create', label: 'Create', description: 'Share a story, update or milestone', href: '/founder/content', icon: <FileText className="w-4 h-4" />, category: 'action' },
   { id: 'new-startup', label: 'Submit a startup', description: 'List your startup in the directory', href: '/founder/startups/new', icon: <Plus className="w-4 h-4" />, category: 'action' },
-  { id: 'promote', label: 'Promote your startup or tool', description: 'Homepage, newsletter and featured spots', href: '/advertise', icon: <Megaphone className="w-4 h-4" />, category: 'action' },
+  ...(PROMOTE_OPEN ? [{ id: 'promote', label: 'Promote your startup or tool', description: 'Homepage, newsletter and featured spots', href: '/advertise', icon: <Megaphone className="w-4 h-4" />, category: 'action' as const }] : []),
   { id: 'new-tool', label: 'Submit an AI tool', description: 'List your tool in the directory', href: '/founder/tools/new', icon: <Plus className="w-4 h-4" />, category: 'action' },
 ];
 

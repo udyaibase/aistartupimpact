@@ -5,6 +5,7 @@ import { requireActionAuth } from "@/lib/api-auth";
 import { logAuditEvent } from "@/lib/audit-log";
 import { refreshPublic, requestEventApproved, requestOrganizerSuspended } from "@/lib/refresh-public";
 import { sendEmailFireAndForget } from "@/lib/email-send";
+import { notifyOrganizer } from "@/lib/organizer-notify";
 import { SUSPENSION_NOTE } from "@udyaibase/utils/event-moderation";
 
 /**
@@ -69,6 +70,7 @@ export async function approveEventAction(eventId: string) {
     ...(ev.organizer.verifiedAt ? [] : [prisma.eventOrganizer.update({ where: { id: ev.organizerId }, data: { verifiedAt: now } })]),
     prisma.contentReport.updateMany({ where: { entityType: "EVENT", entityId: ev.id, status: { in: ["PENDING", "REVIEWING"] } }, data: { status: "DISMISSED", resolvedAt: now, resolvedBy: session?.user?.email ?? "admin" } }),
   ]);
+  await notifyOrganizer(ev.organizerId, { type: 'event_approved', title: `${ev.title} is live`, message: `It passed our review and is now public.${ev.organizer.verifiedAt ? '' : ' You’re now a verified organizer, so your next events publish straight away.'}`, link: `/organizer/events/${ev.id}` });
   sendEmailFireAndForget({
     to: ev.organizer.email,
     subject: `${ev.title} is live on Udyaibase`,
@@ -87,13 +89,14 @@ export async function declineEventAction(eventId: string, note: string) {
   if (error) return { success: false as const, error };
   const reason = String(note ?? "").trim().slice(0, 1000);
   if (reason.length < 5) return { success: false as const, error: "Tell the organizer why, so they can fix it." };
-  const ev = await prisma.event.findFirst({ where: { id: eventId, status: "PENDING_REVIEW", deletedAt: null }, select: { id: true, title: true, organizer: { select: { email: true } } } });
+  const ev = await prisma.event.findFirst({ where: { id: eventId, status: "PENDING_REVIEW", deletedAt: null }, select: { id: true, title: true, organizerId: true, organizer: { select: { email: true } } } });
   if (!ev) return { success: false as const, error: "That event isn't waiting for review." };
   const now = new Date();
   await prisma.$transaction([
     prisma.event.update({ where: { id: ev.id }, data: { status: "DRAFT", reviewedAt: now, reviewNote: `Declined: ${reason}` } }),
     prisma.contentReport.updateMany({ where: { entityType: "EVENT", entityId: ev.id, status: { in: ["PENDING", "REVIEWING"] } }, data: { status: "RESOLVED", resolvedAt: now, resolvedBy: session?.user?.email ?? "admin" } }),
   ]);
+  await notifyOrganizer(ev.organizerId, { type: 'event_declined', title: `Changes needed: ${ev.title}`, message: `Our team’s note: ${reason}`, link: `/organizer/events/${ev.id}` });
   sendEmailFireAndForget({
     to: ev.organizer.email,
     subject: `Changes needed: ${ev.title}`,

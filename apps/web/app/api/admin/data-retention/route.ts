@@ -5,6 +5,8 @@ import { notifyClosedJob } from '@/lib/employer/closing';
 import { deleteResume } from '@/lib/jobs/resume-storage';
 import { runPlanMaintenance } from '@/lib/employer/billing';
 import { runHiringMaintenance } from '@/lib/employer/lifecycle';
+import { runNetworkMaintenance } from '@/lib/network/intros';
+import { rescoreReviews } from '@/lib/jobs/skill-rescore';
 import { runHostPlanMaintenance } from '@/lib/events/billing';
 import { finishRecentlyApprovedEvents, processSuspendedEvents } from '@/lib/events/trust';
 import { expireTicketHolds } from '@/lib/events/tickets';
@@ -170,6 +172,10 @@ async function runCleanup(request: NextRequest) {
     Object.assign(results, await runPlanMaintenance(now));
     // Hiring nudges and candidate data retention (DPDP).
     Object.assign(results, await runHiringMaintenance(now));
+    // "Open to opportunities": expire unanswered requests, renewal reminders, delete ended profiles.
+    Object.assign(results, await runNetworkMaintenance(now));
+    // Skills dictionary changed (approved in admin): recompute stored AI review scores by code. No AI calls.
+    results.reviewsRescored = (await rescoreReviews({ now }).catch(() => ({ rescored: 0 }))).rescored;
     // Event host plans: reminders and lapses.
     Object.assign(results, await runHostPlanMaintenance(now));
     // Events an admin approved: featured placement and the first-event free Boost (safe to repeat).

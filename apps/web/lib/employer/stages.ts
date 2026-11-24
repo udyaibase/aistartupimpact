@@ -101,5 +101,5 @@ export function channelOf(source: string, utmSource: string | null | undefined):
 }
 export const CHANNEL_LABEL: Record<string, string> = {
   JOBS_PAGE: 'Udyaibase AI Jobs', STARTUP_PROFILE: 'Startup profile', GOOGLE: 'Google', WIDGET: 'Your website', CAREERS_PAGE: 'Careers page',
-  REFERRAL: 'Referral', DIRECT: 'Direct link', OTHER: 'Other', IMPORTED: 'Imported', SOURCED: 'Sourced', TALENT_POOL: 'Talent pool',
+  REFERRAL: 'Referral', DIRECT: 'Direct link', OTHER: 'Other', IMPORTED: 'Imported', SOURCED: 'Sourced', NETWORK: 'Open to opportunities', TALENT_POOL: 'Talent pool',
 };

@@ -553,7 +553,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
               </button>
             </div>
           ) : (
-            <label className="w-20 h-20 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg flex items-center justify-center cursor-pointer hover:border-brand transition-colors">
+            <label className="w-20 h-20 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg flex items-center justify-center cursor-pointer hover:border-gray-500 transition-colors">
               <Upload className="w-6 h-6 text-gray-400" />
               <input
                 type="file"
@@ -585,7 +585,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
           value={formData.name}
           onChange={handleChange}
           required
-          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
+          className="w-full min-h-[44px] px-3.5 py-2 border border-gray-300 dark:border-gray-700 rounded-[10px] bg-white dark:bg-gray-950 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/15 dark:focus:ring-white/20 focus:border-gray-900 dark:focus:border-gray-300"
           placeholder="e.g. OpenAI"
         />
       </div>
@@ -609,7 +609,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
           onChange={handleChange}
           required
           maxLength={taglineCharLimit}
-          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
+          className="w-full min-h-[44px] px-3.5 py-2 border border-gray-300 dark:border-gray-700 rounded-[10px] bg-white dark:bg-gray-950 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/15 dark:focus:ring-white/20 focus:border-gray-900 dark:focus:border-gray-300"
           placeholder="A short, catchy description"
         />
         <div className="flex justify-between items-center mt-1">
@@ -643,7 +643,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
           required
           rows={6}
           maxLength={descriptionCharLimit}
-          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent resize-none"
+          className="w-full min-h-[44px] px-3.5 py-2 border border-gray-300 dark:border-gray-700 rounded-[10px] bg-white dark:bg-gray-950 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/15 dark:focus:ring-white/20 focus:border-gray-900 dark:focus:border-gray-300 resize-none"
           placeholder="Describe your startup, what problem it solves, and what makes it unique..."
         />
         <div className="flex justify-between items-center mt-1">
@@ -672,7 +672,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
           value={formData.category}
           onChange={handleChange}
           required
-          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
+          className="w-full min-h-[44px] px-3.5 py-2 border border-gray-300 dark:border-gray-700 rounded-[10px] bg-white dark:bg-gray-950 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/15 dark:focus:ring-white/20 focus:border-gray-900 dark:focus:border-gray-300"
         >
           <option value="">Select a category</option>
           {withCurrent(startupCategories, formData.category).map(category => (
@@ -700,7 +700,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
           value={formData.businessType}
           onChange={handleChange}
           required
-          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
+          className="w-full min-h-[44px] px-3.5 py-2 border border-gray-300 dark:border-gray-700 rounded-[10px] bg-white dark:bg-gray-950 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/15 dark:focus:ring-white/20 focus:border-gray-900 dark:focus:border-gray-300"
         >
           <option value="">Select business model</option>
           {withCurrent(businessTypesOptions, formData.businessType).map(type => (
@@ -729,7 +729,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
           value={formData.websiteUrl}
           onChange={handleChange}
           required
-          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
+          className="w-full min-h-[44px] px-3.5 py-2 border border-gray-300 dark:border-gray-700 rounded-[10px] bg-white dark:bg-gray-950 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/15 dark:focus:ring-white/20 focus:border-gray-900 dark:focus:border-gray-300"
           placeholder="https://yourcompany.com"
         />
         {startup.isVerified && hostOf(formData.websiteUrl) !== hostOf(startup.websiteUrl) && (
@@ -755,7 +755,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
             name="linkedinUrl"
             value={formData.linkedinUrl}
             onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
+            className="w-full min-h-[44px] px-3.5 py-2 border border-gray-300 dark:border-gray-700 rounded-[10px] bg-white dark:bg-gray-950 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/15 dark:focus:ring-white/20 focus:border-gray-900 dark:focus:border-gray-300"
             placeholder="https://linkedin.com/company/..."
           />
         </div>
@@ -770,7 +770,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
             name="twitterUrl"
             value={formData.twitterUrl}
             onChange={handleChange}
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
+            className="w-full min-h-[44px] px-3.5 py-2 border border-gray-300 dark:border-gray-700 rounded-[10px] bg-white dark:bg-gray-950 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/15 dark:focus:ring-white/20 focus:border-gray-900 dark:focus:border-gray-300"
             placeholder="https://twitter.com/..."
           />
         </div>
@@ -798,7 +798,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
             min="1900"
             max={new Date().getFullYear()}
             required
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
+            className="w-full min-h-[44px] px-3.5 py-2 border border-gray-300 dark:border-gray-700 rounded-[10px] bg-white dark:bg-gray-950 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/15 dark:focus:ring-white/20 focus:border-gray-900 dark:focus:border-gray-300"
           />
         </div>
 
@@ -812,7 +812,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
             value={formData.stage ?? ''}
             onChange={handleChange}
             required
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
+            className="w-full min-h-[44px] px-3.5 py-2 border border-gray-300 dark:border-gray-700 rounded-[10px] bg-white dark:bg-gray-950 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/15 dark:focus:ring-white/20 focus:border-gray-900 dark:focus:border-gray-300"
           >
             {STARTUP_STAGES.map(stage => (
               <option key={stage} value={stage}>
@@ -832,7 +832,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
             value={formData.status}
             onChange={handleChange}
             required
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
+            className="w-full min-h-[44px] px-3.5 py-2 border border-gray-300 dark:border-gray-700 rounded-[10px] bg-white dark:bg-gray-950 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/15 dark:focus:ring-white/20 focus:border-gray-900 dark:focus:border-gray-300"
           >
             <option value="ACTIVE">Active</option>
             <option value="PUBLIC">Public</option>
@@ -853,7 +853,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
             onChange={handleChange}
             min="1"
             required
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
+            className="w-full min-h-[44px] px-3.5 py-2 border border-gray-300 dark:border-gray-700 rounded-[10px] bg-white dark:bg-gray-950 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/15 dark:focus:ring-white/20 focus:border-gray-900 dark:focus:border-gray-300"
             placeholder="e.g. 10"
           />
         </div>
@@ -959,7 +959,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
           // Only while saving. It used to stay greyed out, with no reason given, until every required field was filled;
           // now a tap lists what's missing.
           disabled={loading}
-          className="w-full sm:w-auto min-h-[44px] justify-center px-6 py-2 bg-brand hover:bg-brand/90 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          className="w-full sm:w-auto min-h-[44px] justify-center px-6 py-2 bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900 font-semibold rounded-[10px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
           {loading && <Loader2 className="w-4 h-4 animate-spin" />}
           {loading ? (isNew ? 'Submitting...' : 'Saving...') : isNew ? 'Submit Startup' : 'Save changes'}
@@ -980,9 +980,9 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
             <p className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-400 mb-1">Submitted · one last step</p>
             <h2 className="text-xl sm:text-2xl font-bold font-sora text-gray-900 dark:text-white">Verify you own {createdInfo.name}</h2>
             <ul className="mt-3 mb-5 space-y-2 text-sm text-gray-700 dark:text-gray-300">
-              <li className="flex gap-2"><BadgeCheck className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" aria-hidden /> A blue verified tick on your listing</li>
-              <li className="flex gap-2"><Clock className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" aria-hidden /> Verified startups are reviewed first</li>
-              <li className="flex gap-2"><ShieldCheck className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" aria-hidden /> Nobody else can claim or edit it</li>
+              <li className="flex gap-2"><BadgeCheck className="w-4 h-4 mt-0.5 shrink-0 text-gray-500" aria-hidden /> A blue verified tick on your listing</li>
+              <li className="flex gap-2"><Clock className="w-4 h-4 mt-0.5 shrink-0 text-gray-500" aria-hidden /> Verified startups are reviewed first</li>
+              <li className="flex gap-2"><ShieldCheck className="w-4 h-4 mt-0.5 shrink-0 text-gray-500" aria-hidden /> Nobody else can claim or edit it</li>
             </ul>
             <StartupDomainVerify
               startupId={createdInfo.startupId}
@@ -1017,7 +1017,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
               {!verified && (
                 <button type="button" onClick={() => { setPhase('verify'); scrollTop(); }} className="btn-brand h-11 px-6">Verify now</button>
               )}
-              <button type="button" onClick={() => router.push('/founder/startups')} className={`h-11 px-6 rounded-lg font-semibold text-sm ${verified ? 'bg-brand text-white hover:bg-brand/90' : 'border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+              <button type="button" onClick={() => router.push('/founder/startups')} className={`h-11 px-6 rounded-lg font-semibold text-sm ${verified ? 'bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900' : 'border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
                 Go to My startups
               </button>
             </div>
@@ -1045,12 +1045,13 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
 
   return (
     <div ref={topRef} className="scroll-mt-24">
+      <div className="max-w-3xl mx-auto">
       <PhaseBar phase="form" step={step} onStep={(n) => { if (n < step) goTo(n); }} />
 
-      <div className="mt-4 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4 sm:p-6 space-y-6">
+      <div className="mt-5 bg-white dark:bg-gray-900 rounded-[14px] border border-gray-200 dark:border-gray-800 p-5 sm:p-8 space-y-6">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand">Step {step} of {STEPS.length}</p>
-          <h2 className="text-xl sm:text-2xl font-bold font-sora text-gray-900 dark:text-white">{STEPS[step - 1].title}</h2>
+          <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400">Step {step} of {STEPS.length}</p>
+          <h2 className="mt-0.5 text-xl sm:text-[22px] font-bold font-sora text-gray-900 dark:text-white">{STEPS[step - 1].title}</h2>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{STEPS[step - 1].hint}</p>
         </div>
 
@@ -1094,7 +1095,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
               <div key={r.label} className="grid grid-cols-[7rem_1fr_auto] sm:grid-cols-[9rem_1fr_auto] gap-2 items-start p-3 text-sm">
                 <dt className="text-gray-500 dark:text-gray-400">{r.label}</dt>
                 <dd className="text-gray-900 dark:text-white min-w-0 break-words">{r.value}</dd>
-                <button type="button" onClick={() => goTo(r.step)} className="inline-flex items-center gap-1 text-xs font-semibold text-brand" aria-label={`Edit ${r.label}`}>
+                <button type="button" onClick={() => goTo(r.step)} className="inline-flex items-center gap-1 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:underline" aria-label={`Edit ${r.label}`}>
                   <Pencil className="w-3 h-3" aria-hidden /> Edit
                 </button>
               </div>
@@ -1103,9 +1104,8 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
         )}
       </div>
 
-      {/* Back / Continue: an ordinary row at the end of the step on phones (nothing floating over the fields);
-          kept in view on bigger screens. */}
-      <div className="mt-4 py-3 md:sticky md:bottom-0 md:z-10 md:bg-white/95 md:dark:bg-gray-950/95 md:backdrop-blur border-t border-gray-200 dark:border-gray-800">
+      {/* Back / Continue: an ordinary row at the end of the step, so people see every field before moving on. */}
+      <div className="mt-5 mb-2">
         <div className="flex items-center gap-2">
           {step > 1 ? (
             <button type="button" onClick={() => goTo(step - 1)} disabled={loading} className="h-11 px-4 inline-flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
@@ -1119,16 +1119,17 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
             <button type="button" onClick={() => goTo(5)} className="h-11 px-3 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">Skip</button>
           )}
           {step < STEPS.length ? (
-            <button type="button" onClick={goNext} disabled={domainState.status === 'checking' && step === 1} className="h-11 px-5 inline-flex items-center gap-1.5 rounded-lg bg-brand hover:bg-brand/90 text-white text-sm font-semibold disabled:opacity-60">
+            <button type="button" onClick={goNext} disabled={domainState.status === 'checking' && step === 1} className="h-11 px-5 inline-flex items-center gap-1.5 rounded-[10px] bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900 text-sm font-semibold disabled:opacity-60">
               Continue <ArrowRight className="w-4 h-4" aria-hidden />
             </button>
           ) : (
-            <button type="button" onClick={submitNew} disabled={loading} aria-busy={loading} className="h-11 px-5 inline-flex items-center gap-1.5 rounded-lg bg-brand hover:bg-brand/90 text-white text-sm font-semibold disabled:opacity-60">
+            <button type="button" onClick={submitNew} disabled={loading} aria-busy={loading} className="h-11 px-5 inline-flex items-center gap-1.5 rounded-[10px] bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900 text-sm font-semibold disabled:opacity-60">
               {loading ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Check className="w-4 h-4" aria-hidden />}
               {loading ? 'Submitting…' : 'Submit & verify'}
             </button>
           )}
         </div>
+      </div>
       </div>
     </div>
   );
@@ -1140,7 +1141,7 @@ function PhaseBar({ phase, step = 1, onStep }: { phase: 'form' | 'verify' | 'don
   return (
     <nav aria-label="Progress" className="flex items-center gap-3">
       <div className="flex-1 min-w-0">
-        <p className={`text-xs font-semibold mb-1.5 ${formDone ? 'text-green-700 dark:text-green-400' : 'text-gray-900 dark:text-white'}`}>
+        <p className={`text-xs font-semibold mb-1.5 text-gray-900 dark:text-white`}>
           {formDone ? 'Startup added' : `Add startup · ${STEPS[step - 1].title}`}
         </p>
         <ol className="flex gap-1">
@@ -1156,7 +1157,7 @@ function PhaseBar({ phase, step = 1, onStep }: { phase: 'form' | 'verify' | 'don
                   disabled={formDone || n >= step}
                   aria-current={current ? 'step' : undefined}
                   aria-label={`Step ${n}: ${s.title}${done ? ' (done)' : ''}`}
-                  className={`block w-full h-1.5 rounded-full transition-colors ${done ? 'bg-green-500' : current ? 'bg-brand' : 'bg-gray-200 dark:bg-gray-700'} disabled:cursor-default`}
+                  className={`block w-full h-1.5 rounded-full transition-colors ${done || current ? 'bg-gray-900 dark:bg-white' : 'bg-gray-200 dark:bg-gray-700'} disabled:cursor-default`}
                 />
               </li>
             );
@@ -1165,8 +1166,8 @@ function PhaseBar({ phase, step = 1, onStep }: { phase: 'form' | 'verify' | 'don
       </div>
       <span aria-hidden className="text-gray-300 dark:text-gray-600">→</span>
       <div className="w-20 sm:w-28 shrink-0">
-        <p className={`text-xs font-semibold mb-1.5 ${phase === 'form' ? 'text-gray-400' : phase === 'verify' ? 'text-gray-900 dark:text-white' : 'text-green-700 dark:text-green-400'}`}>Verify</p>
-        <div className={`h-1.5 rounded-full ${phase === 'verify' ? 'bg-brand' : phase === 'done' ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700'}`} />
+        <p className={`text-xs font-semibold mb-1.5 ${phase === 'form' ? 'text-gray-400' : 'text-gray-900 dark:text-white'}`}>Verify</p>
+        <div className={`h-1.5 rounded-full ${phase === 'form' ? 'bg-gray-200 dark:bg-gray-700' : 'bg-gray-900 dark:bg-white'}`} />
       </div>
     </nav>
   );

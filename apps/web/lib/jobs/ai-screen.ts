@@ -1,3 +1,4 @@
+import { AI_MODELS } from '@/lib/ops/ai-models';
 import crypto from 'crypto';
 import { prisma } from '@udyaibase/database';
 import { planStatus } from '@/lib/employer/billing';
@@ -6,6 +7,10 @@ import { resumeText, sniffResume } from '@/lib/jobs/resume-text';
 import { EXPERIENCE_BANDS } from '@/lib/jobs/composer';
 import { openaiChat } from '@/lib/ops/ai';
 import { recordAiRerun } from '@/lib/employer/ai-usage';
+import { getResumeProfile } from '@/lib/jobs/resume-profile';
+import { ensureSkillOverrides } from '@/lib/jobs/skill-overrides';
+import { computeMatch } from '@/lib/jobs/match';
+import { SCREEN_V3_PROMPT, reviewModelFor, screenFromProfile, type ScreenV3Result } from '@/lib/jobs/ai-screen-v3';
 
 /**
  * AI screening (every plan has a monthly quota, including Free). Reads a candidate's resume and answers against the job and writes a
@@ -18,13 +23,24 @@ import { recordAiRerun } from '@/lib/employer/ai-usage';
  * - The output is a suggestion only: nothing moves or rejects a candidate automatically, and candidates never see it.
  */
 
-export const AI_MODEL = 'gpt-4o-mini';
+export const AI_MODEL = AI_MODELS.reviewLegacy;
+
+/**
+ * Which review runs. RESUME_ENGINE=v3 (structured profile, evidence lines, code-computed score) or v2 (the original).
+ * Unset: v3 everywhere except production, which stays on v2 until the switch is flipped after the comparison run.
+ */
+export function resumeEngine(): 'v2' | 'v3' {
+  const v = process.env.RESUME_ENGINE;
+  if (v === 'v2' || v === 'v3') return v;
+  return process.env.VERCEL_ENV === 'production' ? 'v2' : 'v3';
+}
 export const PROMPT_VERSION = 'screen-v2';
 const RESUME_CHARS = 12_000;
 
 export type AiRecommendation = 'shortlist' | 'consider' | 'weak';
 
-export interface AiScreenResult {
+/** Result of the original (form + flat resume text) review, still used when there's no readable profile. */
+export interface AiScreenResultV2 {
   summary: string;
   strengths: { point: string; evidence: string }[];
   gaps: string[];
@@ -35,7 +51,11 @@ export interface AiScreenResult {
   resumeRead: boolean;
 }
 
-const SCHEMA = {
+/** A stored review: the profile-based one (v: 3) or the original. Both carry summary, strengths, gaps and skills. */
+export type AiScreenResult = AiScreenResultV2 | ScreenV3Result;
+
+/** The original (v2) review format and instructions; exported for the before/after benchmark only. */
+export const SCHEMA = {
   name: 'candidate_screen',
   strict: true,
   schema: {
@@ -71,7 +91,7 @@ const SCHEMA = {
   },
 };
 
-const SYSTEM = `You help a startup's hiring team review one job application.
+export const SYSTEM = `You help a startup's hiring team review one job application.
 Compare the candidate's evidence with the job's requirements and write a short, factual review.
 
 Rules:
@@ -85,7 +105,7 @@ Rules:
 - Be specific and brief. Plain English, no hype.`;
 
 const strip = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
-const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}+#.]+/gu, ' ').trim();
+export const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}+#.]+/gu, ' ').trim();
 
 /** Remove identity and contact details so the model judges the work, not the person. */
 export function redact(text: string, fullName: string): string {
@@ -113,11 +133,12 @@ export function jobHashOf(l: ListingForAi): string {
 const LISTING_SELECT = {
   id: true, employerId: true, title: true, description: true, skills: true, mustHaveSkills: true, experienceBand: true,
   experienceMin: true, experienceMax: true, workType: true, city: true, screeningQuestions: true,
+  salaryMax: true, salaryCurrency: true, maxNoticeDays: true,
 } as const;
 
 export type ScreenOutcome =
   | { ok: true; status: 'done' | 'cached' }
-  | { ok: false; code: 'not_found' | 'plan' | 'quota' | 'withdrawn' | 'not_configured' | 'failed' | 'disabled'; message: string };
+  | { ok: false; code: 'not_found' | 'plan' | 'quota' | 'withdrawn' | 'not_configured' | 'failed' | 'disabled' | 'skipped'; message: string };
 
 /**
  * Screen one application. Re-uses an existing result unless the job requirements changed or
@@ -140,10 +161,22 @@ export async function screenApplication(applicationId: string, employerId: strin
   if (!status || status.plan.aiScreensPerPeriod === 0) return { ok: false, code: 'plan', message: 'AI screening isn’t included in this plan.' };
   if (status.phase === 'grace') return { ok: false, code: 'quota', message: 'AI screening is paused until you renew your plan.' };
   if (opts.auto && !status.aiAutoScreen) return { ok: false, code: 'disabled', message: 'Auto-screening is off.' };
-  if (status.ai.left <= 0) return { ok: false, code: 'quota', message: `You've used all ${status.ai.limit} AI screenings for this ${status.plan.key === 'FREE' ? 'month' : 'period'}. Upgrade for more.` };
+  if (status.ai.left <= 0) return { ok: false, code: 'quota', message: `AI review paused: you’ve used all ${status.ai.limit} AI reviews for this ${status.plan.key === 'FREE' ? 'month' : 'period'}. Upgrade for more, or review candidates yourself.` };
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return { ok: false, code: 'not_configured', message: 'AI screening isn’t available right now.' };
+
+  // Automatic reviews skip candidates who didn't meet a knockout question, and scanned resumes AI can't read: no cost,
+  // nothing counted. The team can still run a review by hand.
+  if (opts.auto && computeMatch(app.Listing, app).knockedOut) {
+    return { ok: false, code: 'skipped', message: 'Not reviewed automatically: didn’t meet a must-answer question.' };
+  }
+  // Step 2 profile: complete, ordered, identity-redacted lines and experience worked out from the role dates.
+  // If it can't be built, the resume is read the old way below.
+  const prof = resumeEngine() === 'v3' ? await getResumeProfile(applicationId).catch(() => null) : null;
+  if (opts.auto && prof?.profile && !prof.profile.quality.readable) {
+    return { ok: false, code: 'skipped', message: 'Not reviewed automatically: the resume is scanned, so its text can’t be read.' };
+  }
 
   // A re-run replaces the old row. If that row was a completed review from this period, deleting it would hand its
   // place in the allowance to the new one and the re-run would cost nothing, so it is counted separately first.
@@ -160,7 +193,27 @@ export async function screenApplication(applicationId: string, employerId: strin
 
   try {
     let resume = '';
-    if (app.resumeKey) {
+    const profile = prof?.profile ?? null;
+
+    // Step 3: a readable profile is reviewed line by line and scored by code.
+    if (profile?.quality.readable) {
+      // The plan decides the model: Free gets the standard one, paid plans and the trial the advanced one.
+      const tier = status.plan.aiReviewTier;
+      const model = reviewModelFor(tier);
+      const dictVersion = await ensureSkillOverrides();
+      const v3 = await screenFromProfile(app.Listing, app, profile, new Date(), model);
+      v3.result.tier = tier;
+      (v3.result as typeof v3.result & { dictVersion?: number }).dictVersion = dictVersion;
+      await prisma.jobBoardAiScreening.update({
+        where: { id: row.id },
+        data: { status: 'DONE', model, promptVersion: SCREEN_V3_PROMPT, fitScore: v3.fitScore, recommendation: v3.recommendation, result: v3.result as object, completedAt: new Date() },
+      });
+      return { ok: true, status: 'done' };
+    }
+
+    if (profile) {
+      resume = profile.quality.readable ? profile.lines.join('\n').slice(0, RESUME_CHARS) : '';
+    } else if (app.resumeKey) {
       try {
         const bytes = await readResume(app.resumeKey);
         const kind = sniffResume(bytes);
@@ -182,6 +235,9 @@ export async function screenApplication(applicationId: string, employerId: strin
     const candidateFacts = [
       app.currentTitle && `Current role: ${app.currentTitle}${app.currentCompany ? ` at ${app.currentCompany}` : ''}`,
       app.experienceYears != null && `Years of experience (self-reported): ${app.experienceYears}`,
+      // Gaps are deliberately not included: they never affect the review.
+      profile?.quality.readable && profile.experience.datedRoles > 0
+        && `Work experience from the resume's dates: ${profile.experience.years} years across ${profile.experience.datedRoles} dated role${profile.experience.datedRoles === 1 ? '' : 's'}${profile.experience.internMonths ? ` (plus ${profile.experience.internMonths} months of internships)` : ''}`,
       app.city && `City: ${app.city}`,
       app.noticePeriodDays != null && `Notice period: ${app.noticePeriodDays} days`,
       app.confirmedSkills.length && `Skills they ticked: ${app.confirmedSkills.join(', ')}`,
@@ -265,7 +321,7 @@ export function wordsAppearInOrder(quote: string[], text: string[]): boolean {
 }
 
 /** Keep only well-formed output, and only quotes that really appear in what the candidate wrote. */
-export function validate(raw: any, ctx: { source: string; mustList: string[]; otherList: string[]; confirmed: string[]; resumeRead: boolean }): AiScreenResult {
+export function validate(raw: any, ctx: { source: string; mustList: string[]; otherList: string[]; confirmed: string[]; resumeRead: boolean }): AiScreenResultV2 {
   const sourceWords = quoteWords(ctx.source);
   const quoted = (q: string) => {
     const n = norm(q);
@@ -312,7 +368,7 @@ export function validate(raw: any, ctx: { source: string; mustList: string[]; ot
 /** Below this much extracted text a resume counts as unreadable. */
 export const MIN_RESUME_CHARS = 50;
 
-export function scoreOf(r: AiScreenResult): { fitScore: number; recommendation: AiRecommendation } {
+export function scoreOf(r: AiScreenResultV2): { fitScore: number; recommendation: AiRecommendation } {
   const credit = (st: string) => (st === 'evidenced' ? 1 : st === 'claimed' ? 0.3 : 0);
   const avg = (xs: { status: string }[]) => (xs.length ? xs.reduce((n, x) => n + credit(x.status), 0) / xs.length : null);
   const must = avg(r.mustHaves);

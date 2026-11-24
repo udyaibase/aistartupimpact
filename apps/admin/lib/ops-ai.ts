@@ -9,10 +9,10 @@ import { aiCostMicroUsd } from '@udyaibase/utils/ai-cost';
  */
 export function monitoredOpenAI(feature: string, opts: { timeoutMs?: number; maxRetries?: number } = {}) {
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: opts.timeoutMs, maxRetries: opts.maxRetries });
-  const record = (model: string, ok: boolean, usage?: { prompt_tokens?: number; completion_tokens?: number } | null, error?: string) => {
+  const record = (model: string, ok: boolean, usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } } | null, error?: string) => {
     const promptTokens = usage?.prompt_tokens ?? 0, completionTokens = usage?.completion_tokens ?? 0;
     return prisma.opsAiCall.create({
-      data: { feature, model, promptTokens, completionTokens, costMicroUsd: aiCostMicroUsd(model, promptTokens, completionTokens), ok, error: error?.slice(0, 300) },
+      data: { feature, model, promptTokens, completionTokens, costMicroUsd: aiCostMicroUsd(model, promptTokens, completionTokens, usage?.prompt_tokens_details?.cached_tokens ?? 0), ok, error: error?.slice(0, 300) },
     }).catch(() => {});
   };
   return {

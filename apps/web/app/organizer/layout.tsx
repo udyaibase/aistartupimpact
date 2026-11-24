@@ -1,5 +1,7 @@
 import { connection } from 'next/server';
 import { redirect } from "next/navigation";
+import { cookies, headers } from "next/headers";
+import { safeReturnPath } from "@/lib/safe-return";
 import { sql } from '@/lib/db';
 import { getOrganizerSession } from "@/lib/organizer-auth";
 import OrganizerSidebar from "@/components/organizer/OrganizerSidebar";
@@ -30,7 +32,18 @@ export default async function OrganizerWorkspaceLayout({
   // as another (and deactivated or suspended accounts are refused in one place).
   const session = await getOrganizerSession();
 
-  if (!session) redirect("/organizer/login");
+  if (!session) {
+    // Signed in to Udyaibase but no organizer workspace yet: create it and continue, instead of a sign-in page
+    // they've already passed.
+    const store = await cookies();
+    if (store.has('unified_session') || store.has('user-token')) {
+      const wanted = safeReturnPath((await headers()).get('x-portal-path'), '/organizer');
+      redirect(`/account/workspace-setup?workspace=organizer&returnTo=${encodeURIComponent(wanted)}`);
+    }
+    redirect("/organizer/login");
+  }
+  // Workspace setup is shown on its own: the sidebar, tab bar and reminders point at pages that aren't ready yet.
+  if (((await headers()).get('x-portal-path') ?? '').startsWith('/organizer/onboarding')) return <>{children}</>;
   // People who are also on another host's team choose which workspace they are working in.
   const { active, memberships } = await activeMembership(session.id, session.email).catch(() => ({ active: null, memberships: [] }));
   const workspaces = memberships.length

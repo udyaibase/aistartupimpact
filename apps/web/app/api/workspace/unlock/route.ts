@@ -39,11 +39,15 @@ async function getAuthenticatedUnifiedUserId(): Promise<string | null> {
     // sign-up requires the emailed code and Google sign-in requires a Google-verified address.
     const webUser = await prisma.webUser.findUnique({ where: { id: userId }, select: { email: true, name: true, avatar: true, isActive: true } });
     if (!webUser || !webUser.isActive || webUser.email.toLowerCase() !== email) return null;
+    // Two requests at once (e.g. setup page plus another tab) can both try to create it: the loser reads the winner's row.
     const created = await prisma.unifiedUser.upsert({
       where: { email },
       update: {},
       create: { email, name: webUser.name || email.split('@')[0], avatar: webUser.avatar, emailVerified: true },
       select: { id: true },
+    }).catch(async (e: unknown) => {
+      if ((e as { code?: string })?.code !== 'P2002') throw e;
+      return prisma.unifiedUser.findUniqueOrThrow({ where: { email }, select: { id: true } });
     });
     return created.id;
   } catch (err) {

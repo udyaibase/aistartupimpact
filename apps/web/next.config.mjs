@@ -79,6 +79,19 @@ const nextConfig = {
         headers: [{ key: 'Cross-Origin-Embedder-Policy', value: 'credentialless' }],
       },
       {
+        // Organizer portal: check-in scans tickets with the phone's camera. The policy belongs to the page that was first
+        // loaded, not the one on screen: the portal (and the installed app) moves between pages without reloading, so
+        // allowing the camera on /organizer/check-in alone wasn't enough. Opened from the dashboard or the bottom bar,
+        // check-in kept the dashboard's camera=() and phones refused the camera without asking, so it never appeared in
+        // the app's permissions (only "Sound" did). Allowed on the whole portal; the check-in page also reloads itself
+        // if it was reached from a page that still blocks it (e.g. the home page the installed app starts on).
+        // Declared after the site-wide block and before the billing rule, so billing keeps its own policy.
+        source: '/organizer/:path*',
+        headers: [
+          { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=(), payment=(), usb=(), bluetooth=()' },
+        ],
+      },
+      {
         // Pages that open Razorpay Checkout (lib/billing/checkout-client.ts and the ticket modal). Razorpay opens popups
         // for netbanking and 3-D Secure that report back to this window, so the opener must survive
         // (same-origin-allow-popups, not same-origin), and its frames may use the Payment Request API (Google Pay).
@@ -87,15 +100,6 @@ const nextConfig = {
         headers: [
           { key: 'Cross-Origin-Opener-Policy', value: 'same-origin-allow-popups' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(self "https://api.razorpay.com" "https://checkout.razorpay.com"), usb=(), bluetooth=()' },
-        ],
-      },
-      {
-        // Organizer check-in scans tickets with the phone's camera. Every other page keeps camera=() (blocked); with that
-        // header here too, browsers and the installed app refuse the camera without even asking ("permission denied").
-        // Declared after the site-wide block so this value replaces it on this path only.
-        source: '/organizer/check-in/:path*',
-        headers: [
-          { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=(), payment=(), usb=(), bluetooth=()' },
         ],
       },
       {

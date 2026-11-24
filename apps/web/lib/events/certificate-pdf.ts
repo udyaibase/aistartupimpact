@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage, type RGB } from 'pdf-lib';
+import { drawable } from './pdf-text';
 import QRCode from 'qrcode';
 import type { CertificateTemplate } from './after-event';
 import { isOwnMediaUrl } from './urls';
@@ -147,39 +148,38 @@ const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 
 export { isOwnMediaUrl };
 
-async function loadImage(doc: PDFDocument, url: string | null): Promise<PDFImage | null> {
+/**
+ * An image from our own media host as PNG bytes (any upload format becomes PNG). `maxPx` caps the longest side;
+ * `cover` crops it to that exact width × height (for backgrounds). Null when it isn't ours or can't be loaded.
+ */
+export async function loadImagePng(url: string | null, maxPx = 600, cover?: { width: number; height: number }): Promise<Buffer | null> {
   if (!isOwnMediaUrl(url)) return null;
+  // Backgrounds are full-page artwork (uploads allow 5 MB); logos and signatures stay small.
+  const limit = cover ? 6 * 1024 * 1024 : MAX_IMAGE_BYTES;
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(4000), redirect: 'error' });
     if (!res.ok) return null;
     const len = Number(res.headers.get('content-length') || 0);
-    if (len > MAX_IMAGE_BYTES) return null;
+    if (len > limit) return null;
     const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length > MAX_IMAGE_BYTES) return null;
+    if (buf.length > limit) return null;
     // Any format we accept for uploads (WebP, etc.) becomes a PNG pdf-lib can embed.
     const sharp = (await import('sharp')).default;
-    const png = await sharp(buf).resize({ width: 600, height: 600, fit: 'inside', withoutEnlargement: true }).png().toBuffer();
-    return await doc.embedPng(png);
+    return cover
+      ? await sharp(buf, { limitInputPixels: 40_000_000 }).resize({ width: cover.width, height: cover.height, fit: 'cover' }).png().timeout({ seconds: 10 }).toBuffer()
+      : await sharp(buf).resize({ width: maxPx, height: maxPx, fit: 'inside', withoutEnlargement: true }).png().toBuffer();
   } catch {
     return null;
   }
 }
 
-const SWAPS: Record<string, string> = { '‘': "'", '’': "'", '“': '"', '”': '"', '–': '-', '—': '-', '…': '...', '₹': 'Rs ', ' ': ' ' };
-
-/** Text the font can draw: known swaps, then anything the font can't encode is dropped. */
-export function drawable(font: PDFFont, text: string): string {
-  let out = '';
-  for (const ch of text.normalize('NFC')) {
-    const c = SWAPS[ch] ?? ch;
-    try { font.encodeText(c); out += c; } catch {
-      // Accented Latin letters fall back to the plain letter (é -> e).
-      const base = c.normalize('NFD').replace(/[̀-ͯ]/g, '');
-      try { if (base) { font.encodeText(base); out += base; } } catch { /* not drawable: skip */ }
-    }
-  }
-  return out.replace(/\s+/g, ' ').trim();
+/** loadImagePng, embedded in `doc`. */
+export async function loadImage(doc: PDFDocument, url: string | null, maxPx = 600, cover?: { width: number; height: number }): Promise<PDFImage | null> {
+  const png = await loadImagePng(url, maxPx, cover);
+  try { return png ? await doc.embedPng(png) : null; } catch { return null; }
 }
+
+export { drawable };
 
 /** Largest size (down to min) at which text fits the width. */
 function fit(font: PDFFont, text: string, size: number, maxWidth: number, min = 10): number {

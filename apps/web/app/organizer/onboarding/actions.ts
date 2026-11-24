@@ -9,47 +9,49 @@ import { cleanLink } from '@/lib/events/event-input';
 export async function completeOrganizerOnboarding(data: {
   name: string;
   company: string;
-  bio: string;
-  avatar: string;
+  avatar?: string;
+  /** Step 2 fields: left out by "Skip for now", so anything saved earlier stays. */
+  bio?: string;
   phone?: string;
   website?: string;
   linkedin?: string;
-}) {
+}): Promise<{ success: true } | { success: false; error: string }> {
   try {
     const session = await getOrganizerSession();
-    if (!session) {
-      return { success: false, error: 'Not authenticated' };
-    }
+    if (!session) return { success: false, error: 'Your session has expired. Please sign in again.' };
 
-    if (!data || typeof data.name !== 'string' || !data.name.trim()) {
-      return { success: false, error: 'Name is required' };
-    }
-    // Logos come from our own upload, never an outside link; website and LinkedIn must be real http(s) links.
-    if (data.avatar && !isOwnMediaUrl(data.avatar)) {
-      return { success: false, error: 'Upload the logo here instead of pasting a link.' };
-    }
-    const website = cleanLink(data.website);
-    const linkedin = cleanLink(data.linkedin);
-    if (website === undefined) return { success: false, error: 'Enter your website as a full link, like https://example.com' };
-    if (linkedin === undefined) return { success: false, error: 'Enter your LinkedIn as a full link.' };
+    const name = typeof data?.name === 'string' ? data.name.trim() : '';
+    const company = typeof data?.company === 'string' ? data.company.trim() : '';
+    if (company.length < 2) return { success: false, error: 'Enter the name attendees will see as the host.' };
+    if (name.length < 2) return { success: false, error: 'Enter your full name.' };
+    if (name.length > 100 || company.length > 100) return { success: false, error: 'Names must be 100 characters or less.' };
+    // Logos come from our own upload, never an outside link.
+    if (data.avatar && !isOwnMediaUrl(data.avatar)) return { success: false, error: 'Upload the logo here instead of pasting a link.' };
 
-    if (data.bio && data.bio.length > 1000) {
-      return { success: false, error: 'Bio must be 1000 characters or less' };
+    const details: { bio?: string; phone?: string | null; website?: string | null; linkedin?: string | null } = {};
+    if (data.bio !== undefined) {
+      if (String(data.bio).length > 1000) return { success: false, error: 'About must be 1000 characters or less.' };
+      details.bio = String(data.bio).trim();
     }
-    if (data.name.length > 100) {
-      return { success: false, error: 'Name must be 100 characters or less' };
+    if (data.phone !== undefined) details.phone = String(data.phone).trim().slice(0, 20) || null;
+    if (data.website !== undefined) {
+      const website = cleanLink(data.website);
+      if (website === undefined) return { success: false, error: 'That website doesn’t look like a link. Try something like yourcommunity.org' };
+      details.website = website;
+    }
+    if (data.linkedin !== undefined) {
+      const linkedin = cleanLink(data.linkedin);
+      if (linkedin === undefined) return { success: false, error: 'That LinkedIn doesn’t look like a link. Try linkedin.com/company/your-page' };
+      details.linkedin = linkedin;
     }
 
     await prisma.eventOrganizer.update({
       where: { id: session.id },
       data: {
-        name: data.name.slice(0, 100),
-        company: String(data.company ?? '').slice(0, 100),
-        bio: String(data.bio ?? '').slice(0, 1000),
+        name,
+        company,
         avatar: data.avatar || null,
-        phone: typeof data.phone === 'string' ? data.phone.slice(0, 20) || null : null,
-        website,
-        linkedin,
+        ...details,
         onboardingCompleted: true,
         onboardingStep: 2,
         updatedAt: new Date(),
@@ -58,10 +60,9 @@ export async function completeOrganizerOnboarding(data: {
 
     revalidatePath('/organizer');
     revalidatePath('/organizer/onboarding');
-
     return { success: true };
-  } catch (error: any) {
+  } catch (error) {
     console.error('[organizer onboarding]', error instanceof Error ? error.message : error);
-    return { success: false, error: 'Failed to complete onboarding' };
+    return { success: false, error: 'Couldn’t save your workspace. Try again.' };
   }
 }

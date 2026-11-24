@@ -65,7 +65,7 @@ export interface CareersJob {
   expiresAt: string | null;
   applicationType: 'INTERNAL' | 'EXTERNAL';
   applicationUrl: string | null;
-  screeningQuestions: { id: string; question: string; type: 'text' | 'yesno' | 'choice'; required: boolean; options?: string[] }[];
+  screeningQuestions: { id: string; question: string; type: 'text' | 'yesno' | 'choice' | 'number'; required: boolean; options?: string[] }[];
 }
 
 export const DEFAULT_BRAND = '#111827';

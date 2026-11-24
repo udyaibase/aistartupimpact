@@ -1,3 +1,4 @@
+import { AI_MODELS } from '@/lib/ops/ai-models';
 import { openaiChat } from '@/lib/ops/ai';
 import { matchSkills } from '@/lib/jobs/skills';
 
@@ -61,7 +62,7 @@ export async function aiResumeFields(text: string, jobSkills: string[]): Promise
   if (!process.env.OPENAI_API_KEY || text.length < 50) return null;
   try {
     const data = await openaiChat('resume_prefill', {
-      model: 'gpt-4o-mini', temperature: 0,
+      model: AI_MODELS.resumePrefill, temperature: 0,
       response_format: { type: 'json_schema', json_schema: RESUME_FIELDS_SCHEMA },
       messages: [{ role: 'system', content: RESUME_FIELDS_SYSTEM }, { role: 'user', content: `<resume>\n${text.slice(0, 30000)}\n</resume>` }],
     }, 20_000);

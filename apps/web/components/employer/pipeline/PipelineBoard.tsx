@@ -24,10 +24,15 @@ const REJECTED = ENDED_STAGE;
 const ON_HOLD = ON_HOLD_STAGE;
 /** The sourcing lane: people the team added who aren't in the pipeline yet. Not a drop target. */
 const SOURCING = { key: 'sourcing', label: 'Sourcing', statuses: [] as string[], target: '' } as const;
+/**
+ * New applicants who didn't meet a knockout question, grouped beside New. Only a view: their status doesn't change,
+ * nobody is emailed, and the team still decides (move them on or not).
+ */
+const UNMET = { key: 'unmet', label: 'Didn’t meet must-haves', statuses: [] as string[], target: '' } as const;
 
 const SOURCE: Record<string, string> = {
   JOBS_PAGE: 'AI Jobs', STARTUP_PROFILE: 'Profile', GOOGLE: 'Google', WIDGET: 'Website', CAREERS_PAGE: 'Careers page',
-  REFERRAL: 'Referral', DIRECT: 'Direct', OTHER: 'Other', IMPORTED: 'Imported', SOURCED: 'Sourced', TALENT_POOL: 'Talent pool',
+  REFERRAL: 'Referral', DIRECT: 'Direct', OTHER: 'Other', IMPORTED: 'Imported', SOURCED: 'Sourced', NETWORK: 'Open to opportunities', TALENT_POOL: 'Talent pool',
 };
 const NOTICE = [{ v: '', l: 'Any notice' }, { v: '0', l: 'Immediate' }, { v: '30', l: '≤ 30 days' }, { v: '60', l: '≤ 60 days' }, { v: '90', l: '≤ 90 days' }];
 
@@ -148,7 +153,11 @@ export default function PipelineBoard({
 
   const inCol = (statuses: readonly string[]) => filtered.filter((c) => !isSourcedPending(c.sourcedState) && statuses.includes(c.status));
   const sourcing = filtered.filter((c) => isSourcedPending(c.sourcedState));
-  const ordered = useMemo(() => [...sourcing, ...ALL_COLUMNS.flatMap((col) => inCol(col.statuses))], [filtered, showAssessment]); // eslint-disable-line react-hooks/exhaustive-deps
+  const isUnmet = (c: BoardCard) => !c.withdrawn && c.match.knockedOut && (c.status === 'APPLIED' || c.status === 'REVIEWED');
+  const unmet = filtered.filter((c) => !isSourcedPending(c.sourcedState) && isUnmet(c));
+  const colList = (col: { key: string; statuses: readonly string[] }) =>
+    col.key === 'sourcing' ? sourcing : col.key === 'unmet' ? unmet : col.key === 'new' ? inCol(col.statuses).filter((c) => !isUnmet(c)) : inCol(col.statuses);
+  const ordered = useMemo(() => [...sourcing, ...ALL_COLUMNS.flatMap((col) => (col.key === 'new' ? [...colList(col), ...unmet] : colList(col)))], [filtered, showAssessment]); // eslint-disable-line react-hooks/exhaustive-deps
   const openIndex = ordered.findIndex((c) => c.id === openId);
 
   // ── New applicants: best first, the strongest marked "Top pick", and a one-at-a-time review ──
@@ -370,15 +379,16 @@ export default function PipelineBoard({
   );
 
   const renderColumn = (col: { key: string; label: string; statuses: readonly string[]; target: string }, collapsed?: boolean) => {
-    const list = col.key === 'sourcing' ? sourcing : inCol(col.statuses);
+    const list = colList(col);
+    const noDrop = col.key === 'sourcing' || col.key === 'unmet';
     // Empty stages take less room, so the stages with people in them fit on screen.
     const narrow = list.length === 0 && dragOver !== col.key;
     return (
       <section key={col.key} aria-label={`${col.label}, ${list.length}`}
-        onDragOver={(e) => { if (col.key === 'sourcing') return; e.preventDefault(); setDragOver(col.key); }}
+        onDragOver={(e) => { if (noDrop) return; e.preventDefault(); setDragOver(col.key); }}
         onDragLeave={() => setDragOver((k) => (k === col.key ? null : k))}
-        onDrop={(e) => { e.preventDefault(); setDragOver(null); if (col.key === 'sourcing') return; const id = e.dataTransfer.getData('text/plain'); if (id) requestMove([id], col.target, cards.find((c) => c.id === id)?.fullName); }}
-        className={`snap-start shrink-0 ${narrow ? 'w-[60vw] sm:w-[176px]' : 'w-[82vw] sm:w-[280px]'} transition-[width] duration-200 flex flex-col rounded-[14px] ${dragOver === col.key ? 'bg-[#A50F15]/5 ring-2 ring-[#A50F15]/40' : col.key === 'sourcing' ? 'bg-violet-50/70 dark:bg-violet-950/20 border border-dashed border-violet-200 dark:border-violet-900/50' : 'bg-gray-100/70 dark:bg-gray-900/60'}`}>
+        onDrop={(e) => { e.preventDefault(); setDragOver(null); if (noDrop) return; const id = e.dataTransfer.getData('text/plain'); if (id) requestMove([id], col.target, cards.find((c) => c.id === id)?.fullName); }}
+        className={`snap-start shrink-0 ${narrow ? 'w-[60vw] sm:w-[176px]' : 'w-[82vw] sm:w-[280px]'} transition-[width] duration-200 flex flex-col rounded-[14px] ${dragOver === col.key ? 'bg-[#A50F15]/5 ring-2 ring-[#A50F15]/40' : col.key === 'sourcing' ? 'bg-violet-50/70 dark:bg-violet-950/20 border border-dashed border-violet-200 dark:border-violet-900/50' : col.key === 'unmet' ? 'bg-amber-50/80 dark:bg-amber-950/20 border border-dashed border-amber-300 dark:border-amber-900/60' : 'bg-gray-100/70 dark:bg-gray-900/60'}`}>
         <header className="flex items-center gap-2 px-3 pt-3 pb-2">
           <h2 className="text-[13px] font-bold text-gray-800 dark:text-gray-200">{col.label}</h2>
           <span className="text-xs font-semibold text-gray-500 tabular-nums">{list.length}</span>
@@ -393,6 +403,7 @@ export default function PipelineBoard({
           )}
           {collapsed && <button onClick={() => (col.key === 'onhold' ? setShowOnHold(false) : setShowRejected(false))} className="ml-auto text-xs font-semibold text-gray-600 hover:underline">Hide</button>}
         </header>
+        {col.key === 'unmet' && <p className="px-3 -mt-1 pb-2 text-[11px] leading-snug text-amber-900 dark:text-amber-300">Grouped here, not rejected. Their stage hasn’t changed and nobody was emailed.</p>}
         <div className="flex-1 px-2 pb-2 space-y-2 min-h-[120px] overflow-y-auto max-h-[calc(100dvh-300px)]">
           {list.length === 0 ? (
             <p className="px-2 py-6 text-center text-xs text-gray-500">{col.key === 'new' ? 'No new candidates' : col.key === 'sourcing' ? 'People you add to this job wait here until they’re interested.' : 'Drag candidates here'}</p>
@@ -597,7 +608,7 @@ export default function PipelineBoard({
       ) : view === 'board' ? (
         <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-4 -mx-4 px-4 md:mx-0 md:px-0">
           {(sourcing.length > 0 || (currentJob && !currentJob.isGeneral && canMove)) && renderColumn(SOURCING)}
-          {COLUMNS.map((col) => renderColumn(col))}
+          {COLUMNS.flatMap((col) => (col.key === 'new' && unmet.length > 0 ? [renderColumn(col), renderColumn(UNMET)] : [renderColumn(col)]))}
           {showOnHold ? renderColumn(ON_HOLD, true) : sideColumn(ON_HOLD, onHoldCount, () => setShowOnHold(true), 'bg-sky-50 ring-2 ring-sky-300')}
           {showRejected ? renderColumn(REJECTED, true) : sideColumn(REJECTED, rejectedCount, () => setShowRejected(true), 'bg-red-50 ring-2 ring-red-300')}
         </div>
@@ -724,6 +735,7 @@ export default function PipelineBoard({
 
       {adding && currentJob && (
         <AddCandidates jobId={currentJob.id} jobTitle={currentJob.title} onClose={() => setAdding(false)}
+          onInvited={(m) => setToast(m)}
           onAdded={(n) => { setToast(`Added ${n} to the sourcing lane. Open one to contact them.`); router.refresh(); }} />
       )}
       {settings && currentJob && (

@@ -1,5 +1,6 @@
 "use client";
 
+import NotificationBell from '@/components/NotificationBell';
 import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -62,6 +63,7 @@ export default function OrganizerHeader({ organizer, access = OWNER_ACCESS }: Pr
             >
               <Search className="w-5 h-5" aria-hidden />
             </button>
+            <NotificationBell api="/api/organizer/notifications" />
             {hasGuide(pathname) && (
               <button
                 onClick={openGuide}

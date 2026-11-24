@@ -3,6 +3,8 @@
  * and templates. Used by the client form and the API so both apply the same rules.
  */
 
+import { blockedQuestion } from '@/lib/jobs/knockouts';
+
 export const JOB_CATEGORIES = [
   { value: 'AI_ENGINEER', label: 'AI Engineer', group: 'AI & ML' },
   { value: 'ML_ENGINEER', label: 'ML Engineer', group: 'AI & ML' },
@@ -97,7 +99,7 @@ export const CUSTOM_EXPERIENCE = 'custom';
 
 export const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'SGD', 'AED'] as const;
 
-export const MAX_SCREENING_QUESTIONS = 3;
+export const MAX_SCREENING_QUESTIONS = 5;
 export const MAX_SKILLS = 12;
 export const DEFAULT_OPEN_DAYS = 30;
 export const MAX_OPEN_DAYS = 90;
@@ -105,12 +107,17 @@ export const MAX_OPEN_DAYS = 90;
 export interface ScreeningQuestion {
   id: string;
   question: string;
-  type: 'text' | 'yesno' | 'choice';
+  type: 'text' | 'yesno' | 'choice' | 'number';
   required: boolean;
   /** Multiple choice only. */
   options?: string[];
   /** Yes/No only: the answer the role needs. A different answer flags the candidate (never auto-rejects). */
   knockoutAnswer?: 'yes' | 'no';
+  /** Multiple choice only: answers that meet the role (a knockout when set). */
+  acceptedOptions?: string[];
+  /** Number only: the answer must be at least / at most this (a knockout when set). */
+  minValue?: number | null;
+  maxValue?: number | null;
 }
 
 /** Form state. Salary is in display units: lakh for INR, thousands for other currencies. */
@@ -284,10 +291,20 @@ export function draftToData(input: Partial<JobDraft>) {
     .map((q) => ({
       id: clip(q?.id, 40) || Math.random().toString(36).slice(2, 10),
       question: clip(q?.question, 200),
-      type: q?.type === 'yesno' || q?.type === 'choice' ? q.type : 'text',
+      type: q?.type === 'yesno' || q?.type === 'choice' || q?.type === 'number' ? q.type : 'text',
       required: !!q?.required,
-      ...(q?.type === 'choice' ? { options: cleanOptions(q?.options) } : {}),
+      ...(q?.type === 'choice' ? (() => {
+        const options = cleanOptions(q?.options);
+        const accepted = cleanOptions(q?.acceptedOptions).filter((o) => options.includes(o));
+        return { options, ...(accepted.length && accepted.length < options.length ? { acceptedOptions: accepted } : {}) };
+      })() : {}),
       ...(q?.type === 'yesno' && (q?.knockoutAnswer === 'yes' || q?.knockoutAnswer === 'no') ? { knockoutAnswer: q.knockoutAnswer } : {}),
+      ...(q?.type === 'number' ? (() => {
+        const num = (v: unknown) => { const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN; return Number.isFinite(n) && n >= 0 && n <= 1_000_000 ? Math.round(n * 10) / 10 : null; };
+        let lo = num(q?.minValue); let hi = num(q?.maxValue);
+        if (lo != null && hi != null && hi < lo) [lo, hi] = [hi, lo];
+        return { ...(lo != null ? { minValue: lo } : {}), ...(hi != null ? { maxValue: hi } : {}) };
+      })() : {}),
     }))
     .filter((q) => q.question)
     .slice(0, MAX_SCREENING_QUESTIONS);
@@ -375,6 +392,8 @@ export function publishProblems(d: JobDraft): { field: keyof JobDraft; message: 
   }
   if (d.screeningQuestions.some((q) => !q.question.trim())) p.push({ field: 'screeningQuestions', message: 'Fill in or remove empty screening questions.' });
   if (d.screeningQuestions.some((q) => q.type === 'choice' && cleanOptions(q.options).length < 2)) p.push({ field: 'screeningQuestions', message: 'Multiple-choice questions need at least two options.' });
+  const blocked = d.screeningQuestions.map((q) => blockedQuestion(q.question ?? '')).find(Boolean);
+  if (blocked) p.push({ field: 'screeningQuestions', message: blocked });
   if (!d.showOnJobsPage && !d.showOnProfile && !d.showOnCareers) p.push({ field: 'showOnJobsPage', message: 'Choose at least one place for this job to appear.' });
   return p;
 }
@@ -396,7 +415,7 @@ export function listingStrength(d: JobDraft, opts: { companyHasPerks: boolean })
     { key: 'title', label: 'Clear job title', tip: 'Use a standard title like “Backend Engineer”, without hype words or all caps.', passed: t.length >= 5 && t.length <= 60 && !HYPE.test(t) && t !== t.toUpperCase() },
     { key: 'skills', label: 'At least 3 skills', tip: 'Skills power search and show candidates how well they match.', passed: d.skills.length >= 3 },
     { key: 'description', label: 'Detailed description', tip: 'Say what they will do in the first months and who they will work with.', passed: d.description.trim().length >= 600 },
-    { key: 'questions', label: '3 or fewer screening questions', tip: 'Every extra question loses applicants.', passed: d.screeningQuestions.length <= MAX_SCREENING_QUESTIONS },
+    { key: 'questions', label: `${MAX_SCREENING_QUESTIONS} or fewer screening questions`, tip: 'Every extra question loses applicants.', passed: d.screeningQuestions.length <= MAX_SCREENING_QUESTIONS },
     { key: 'perks', label: 'Company perks listed', tip: 'Add perks like health insurance or learning budget on your company profile.', passed: opts.companyHasPerks || d.hasEsops },
   ];
   const score = Math.round((checks.filter((c) => c.passed).length / checks.length) * 100);
@@ -516,12 +535,13 @@ export function cleanOptions(raw: unknown): string[] {
 }
 
 /** Questions as candidates may see them: never includes the required (knockout) answer. */
-export function publicQuestions(raw: unknown): { id: string; question: string; type: 'text' | 'yesno' | 'choice'; required: boolean; options?: string[] }[] {
+export function publicQuestions(raw: unknown): { id: string; question: string; type: 'text' | 'yesno' | 'choice' | 'number'; required: boolean; options?: string[] }[] {
+  // Never the pass rule (required answer, accepted choices, minimum or maximum).
   return (Array.isArray(raw) ? raw : [])
     .filter((q) => q && typeof q.id === 'string' && typeof q.question === 'string')
     .map((q) => ({
       id: q.id, question: q.question, required: !!q.required,
-      type: q.type === 'yesno' || q.type === 'choice' ? q.type : 'text',
+      type: q.type === 'yesno' || q.type === 'choice' || q.type === 'number' ? q.type : 'text',
       ...(q.type === 'choice' ? { options: cleanOptions(q.options) } : {}),
     }));
 }

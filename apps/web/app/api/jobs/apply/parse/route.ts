@@ -1,3 +1,4 @@
+import { AI_MODELS } from '@/lib/ops/ai-models';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
   let fields: Record<string, any>;
   try {
     const data = await openaiChat('resume_prefill', {
-      model: 'gpt-4o-mini',
+      model: AI_MODELS.resumePrefill,
       temperature: 0,
       response_format: { type: 'json_schema', json_schema: SCHEMA },
       messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: `<resume>\n${text}\n</resume>` }],

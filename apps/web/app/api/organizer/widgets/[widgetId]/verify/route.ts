@@ -6,6 +6,7 @@ import { embedVerifyRateLimit } from "@/lib/event-rate-limit";
 import { fetchPublicHtml } from "@/lib/embed/safe-fetch";
 import { isLocalHost, widgetStatus } from "@/lib/embed/widgets";
 import { sendWidgetLiveEmail } from "@/lib/embed/emails";
+import { notifyOrganizer } from '@/lib/organizer-notify';
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await prisma.$executeRaw`
       UPDATE "EmbedWidget" SET "lastSeenAt" = ${now}, "lastSeenHost" = ${host} WHERE id = ${widgetId}`;
     if (first === 1) {
+      await notifyOrganizer(widget.organizerId, { type: 'widget_live', title: 'Your events widget is live', message: `It’s showing your events on ${host}.`, link: '/organizer/embed' });
       sendWidgetLiveEmail({ to: widget.organizer.email, name: widget.organizer.name, host, widgetId });
     }
     return done("installed", host);

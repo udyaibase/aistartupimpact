@@ -1,3 +1,4 @@
+import { recordUnknownSkills } from '@/lib/jobs/skill-overrides';
 import { NextRequest, NextResponse, after } from 'next/server';
 import { notifyClosedJob } from '@/lib/employer/closing';
 import { prisma } from '@udyaibase/database';
@@ -87,6 +88,7 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
       refreshPaths([`/jobs/${job.slug}`]);
       // Drafts autosave constantly; only edits to a live job are worth a log entry.
       await logEmployerActivity(session.id, 'job_updated', { actor: employerActor(session), request, metadata: { title: data.title } });
+      after(() => recordUnknownSkills([...(data.skills ?? []), ...(data.mustHaveSkills ?? [])], 'job').then(() => undefined));
     }
     return NextResponse.json({ success: true, job: saved });
   } catch (error) {

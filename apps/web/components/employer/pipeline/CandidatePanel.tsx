@@ -4,7 +4,7 @@ import { yearsText } from '@/lib/jobs/format';
 import { useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft, ArrowRight, Check, ChevronDown, Copy, Download, ExternalLink, FileText, Globe, Loader2, Mail, Phone, Send, X, Minus, CircleHelp, Flag,
-  PauseCircle,
+  PauseCircle, Briefcase, CalendarDays, Sparkles, Target, UserCheck,
 } from 'lucide-react';
 import { GitHubIcon, LinkedInIcon, WhatsAppIcon } from '@/components/ui/BrandIcons';
 import { exitReasonLabel } from '@/lib/employer/exit-reasons';
@@ -19,9 +19,38 @@ import ResumeViewer from '@/components/employer/pipeline/ResumeViewer';
 
 const SOURCE: Record<string, string> = {
   JOBS_PAGE: 'Udyaibase AI Jobs', STARTUP_PROFILE: 'Startup profile', GOOGLE: 'Google', WIDGET: 'Your website',
-  CAREERS_PAGE: 'Careers page', REFERRAL: 'Referral', DIRECT: 'Direct link', OTHER: 'Other', IMPORTED: 'Imported', SOURCED: 'Sourced',
+  CAREERS_PAGE: 'Careers page', REFERRAL: 'Referral', DIRECT: 'Direct link', OTHER: 'Other', IMPORTED: 'Imported', SOURCED: 'Sourced', NETWORK: 'Open to opportunities',
 };
 const STATUS: Record<string, string> = STATUS_LABEL;
+/** One look for every section of the panel: a bordered card that stands out in light and dark mode. */
+const BOX = 'rounded-[12px] border border-gray-300 dark:border-gray-700/80 bg-white dark:bg-gray-900/60 p-3.5 shadow-sm dark:shadow-none';
+const BOX_TITLE = 'text-sm font-semibold text-gray-900 dark:text-white mb-2.5';
+/** Match tile colour by band. */
+const BAND_TILE: Record<string, string> = {
+  Strong: 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200',
+  Good: 'border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-900/30 dark:text-sky-200',
+  Fair: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200',
+  Low: 'border-gray-300 bg-gray-50 text-gray-800 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-200',
+};
+const AI_REC_LABEL: Record<string, string> = { shortlist: 'Suggests shortlist', consider: 'Worth a look', weak: 'Weak fit' };
+/** "today", "yesterday", "5 days ago", "3 weeks ago". */
+function ago(iso: string) {
+  const d = Math.floor((Date.now() - +new Date(iso)) / 864e5);
+  if (d <= 0) return 'today';
+  if (d === 1) return 'yesterday';
+  if (d < 14) return `${d} days ago`;
+  if (d < 60) return `${Math.floor(d / 7)} weeks ago`;
+  return `${Math.floor(d / 30)} months ago`;
+}
+
+/** Colour of an activity entry by where the candidate moved: hired green, rejected red, offer amber, the rest neutral. */
+function activityTone(to: string) {
+  if (to === 'HIRED') return { dot: 'bg-emerald-500', pill: 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' };
+  if (to === 'REJECTED' || to === 'WITHDRAWN') return { dot: 'bg-red-500', pill: 'border-red-300 bg-red-50 text-red-800 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-300' };
+  if (to === 'OFFER' || to === 'DECISION') return { dot: 'bg-amber-500', pill: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300' };
+  if (to === 'INTERVIEW' || to === 'ASSESSMENT' || to === 'SHORTLISTED') return { dot: 'bg-sky-500', pill: 'border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-900/30 dark:text-sky-300' };
+  return { dot: 'bg-gray-400', pill: 'border-gray-300 bg-white text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200' };
+}
 const REASON_STYLE: Record<string, string> = {
   pass: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
   partial: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
@@ -190,18 +219,67 @@ export default function CandidatePanel({
           {!data ? (
             <div className="p-6">{error ? <p role="alert" className="text-sm text-red-700">{error}</p> : <Loader2 className="w-6 h-6 animate-spin text-gray-400" aria-label="Loading" />}</div>
           ) : (
-            <div className="p-4 sm:p-5 space-y-5">
-              <div>
-                <h2 id="cand-title" className="font-sora font-bold text-xl text-gray-900 dark:text-white">{data.fullName}</h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {[data.currentTitle, data.currentCompany].filter(Boolean).join(' at ') || 'Applicant'} · for <span className="font-medium text-gray-800 dark:text-gray-200">{data.job.title}</span>
-                </p>
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">{statusText}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${data.referredBy ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 font-semibold' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`}>{data.referredBy ? `Referred by ${data.referredBy}` : `via ${CHANNEL_LABEL[data.channel] ?? data.channel}`}</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">{data.sourcedState ? 'Added' : 'Applied'} {fmtDate(data.appliedAt)}</span>
+            <div className="p-4 sm:p-5 pb-8 sm:pb-10 space-y-5">
+              <header className={`${BOX} p-4`}>
+                <div className="flex items-start gap-3">
+                  <span className="shrink-0 w-12 h-12 rounded-full bg-gradient-to-br from-[#A50F15] to-[#6E0A0E] text-white font-sora font-bold text-base inline-flex items-center justify-center shadow-sm" aria-hidden>
+                    {data.fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') || '?'}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <h2 id="cand-title" className="font-sora font-bold text-xl leading-tight text-gray-900 dark:text-white break-words">{data.fullName}</h2>
+                    <p className="mt-0.5 text-sm text-gray-700 dark:text-gray-300">
+                      {[data.currentTitle, data.currentCompany].filter(Boolean).join(' at ') || 'Applicant'}
+                      {data.city && <span className="text-gray-600 dark:text-gray-400"> · {data.city}</span>}
+                    </p>
+                  </div>
                 </div>
-              </div>
+
+                <p className="mt-3 flex items-center gap-2 rounded-[10px] bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700/70 px-3 py-2 text-sm">
+                  <Briefcase className="w-4 h-4 shrink-0 text-gray-600 dark:text-gray-400" aria-hidden />
+                  <span className="text-gray-600 dark:text-gray-400 shrink-0">{data.sourcedState ? 'Sourced for' : 'Applying for'}</span>
+                  <span className="font-semibold text-gray-900 dark:text-white truncate">{data.job.title}</span>
+                </p>
+
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full border text-xs font-semibold ${data.withdrawnAt ? activityTone('WITHDRAWN').pill : activityTone(outcome ? 'REJECTED' : data.status).pill}`}>{statusText}</span>
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs ${data.referredBy ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 font-semibold' : 'border-gray-300 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'}`}>
+                    {data.referredBy ? <UserCheck className="w-3.5 h-3.5" aria-hidden /> : <Globe className="w-3.5 h-3.5" aria-hidden />}
+                    {data.referredBy ? `Referred by ${data.referredBy}` : `via ${CHANNEL_LABEL[data.channel] ?? data.channel}`}
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-gray-300 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 text-xs" title={fmtDate(data.appliedAt)}>
+                    <CalendarDays className="w-3.5 h-3.5" aria-hidden /> {data.sourcedState ? 'Added' : 'Applied'} {fmtDate(data.appliedAt)} · {ago(data.appliedAt)}
+                  </span>
+                </div>
+
+                {(data.match.reasons.length > 0 || (data.ai?.status === 'DONE' && data.ai.fitScore != null)) && (
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {data.match.reasons.length > 0 && (
+                      <button type="button" onClick={() => document.getElementById('mt')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                        className={`text-left rounded-[10px] border px-3 py-2 hover:brightness-[0.98] ${BAND_TILE[data.match.band]}`}>
+                        <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide opacity-90"><Target className="w-3.5 h-3.5" aria-hidden /> Match</span>
+                        <span className="block font-sora text-lg font-bold tabular-nums leading-tight">{data.match.score}%</span>
+                        <span className="block text-xs">{data.match.band} · rules-based</span>
+                      </button>
+                    )}
+                    {data.ai?.status === 'DONE' && data.ai.fitScore != null && (
+                      <button type="button" onClick={() => document.getElementById('ai')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                        className="text-left rounded-[10px] border border-violet-300 bg-violet-50 text-violet-900 dark:border-violet-800/70 dark:bg-violet-950/40 dark:text-violet-200 px-3 py-2 hover:brightness-[0.98]">
+                        <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide opacity-90"><Sparkles className="w-3.5 h-3.5" aria-hidden /> AI fit</span>
+                        <span className="block font-sora text-lg font-bold tabular-nums leading-tight">{data.ai.fitScore}<span className="text-xs font-semibold opacity-80">/100</span></span>
+                        <span className="block text-xs">{AI_REC_LABEL[data.ai.recommendation ?? 'weak'] ?? 'Weak fit'}{data.ai.stale ? ' · job changed' : ''}</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </header>
+
+              {data.mismatches.length > 0 && (
+                <section aria-label="Answers to check" className="rounded-[12px] border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3.5">
+                  <p className="flex items-center gap-1.5 text-sm font-semibold text-amber-900 dark:text-amber-200"><Flag className="w-4 h-4" aria-hidden /> Answer doesn’t match the resume: check</p>
+                  <ul className="mt-1 space-y-0.5 text-[13px] text-amber-900 dark:text-amber-200">{data.mismatches.map((m, i) => <li key={i}>{m}</li>)}</ul>
+                  <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">Resumes often leave things out, so ask before deciding. This doesn’t change any score.</p>
+                </section>
+              )}
 
               {!data.withdrawnAt && (data.status === 'ON_HOLD' || (data.status === 'REJECTED' && (data.exitReason || data.exitNote || (outcome && outcome !== 'REJECTED')))) && (
                 <p className={`flex items-start gap-2 rounded-[10px] px-3 py-2 text-[13px] ${data.status === 'ON_HOLD' ? 'bg-sky-50 text-sky-900 dark:bg-sky-900/20 dark:text-sky-200' : 'bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-300'}`}>
@@ -382,7 +460,7 @@ export default function CandidatePanel({
                   ['Expected salary', data.expectedCtcLakh != null ? `₹${data.expectedCtcLakh} L` : '—'],
                   ['City', data.city || '—'],
                 ].map(([k, v]) => (
-                  <div key={k} className="rounded-[10px] bg-[#F7F7F9] dark:bg-gray-900 px-3 py-2">
+                  <div key={k} className="rounded-[10px] border border-gray-200 dark:border-gray-700/70 bg-gray-50 dark:bg-gray-800/60 px-3 py-2">
                     <dt className="text-xs text-gray-500">{k}</dt>
                     <dd className="text-sm font-semibold text-gray-900 dark:text-white">{v}</dd>
                   </div>
@@ -400,11 +478,14 @@ export default function CandidatePanel({
                 </>
               )}
 
-              {aiAccess && <AiReview id={id} ai={data.ai} access={aiAccess} onChanged={() => setReload((n) => n + 1)} />}
+              {aiAccess && <AiReview id={id} ai={data.ai} access={aiAccess} onChanged={() => setReload((n) => n + 1)}
+                skipReason={data.match.knockedOut ? 'knockout' : data.resumeProfile && !data.resumeProfile.readable ? 'scanned' : null} />}
+
+              {data.resumeProfile && <ResumeTimeline p={data.resumeProfile} />}
 
               {data.match.reasons.length > 0 && (
-                <section aria-labelledby="mt">
-                  <h3 id="mt" className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                <section aria-labelledby="mt" className={BOX}>
+                  <h3 id="mt" className={BOX_TITLE}>
                     Match <span className="font-normal text-gray-500">· {data.match.score}% · {data.match.band}</span>
                   </h3>
                   {data.match.knockedOut && (
@@ -431,11 +512,11 @@ export default function CandidatePanel({
               )}
 
               {skills.length > 0 && (
-                <section aria-labelledby="sk">
-                  <h3 id="sk" className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Skills <span className="font-normal text-gray-500">· has {matched.size} of {skills.length}</span></h3>
+                <section aria-labelledby="sk" className={BOX}>
+                  <h3 id="sk" className={BOX_TITLE}>Skills <span className="font-normal text-gray-500">· has {matched.size} of {skills.length}</span></h3>
                   <ul className="flex flex-wrap gap-1.5">
                     {skills.map((s) => (
-                      <li key={s} className={`inline-flex items-center gap-1 h-8 px-2.5 rounded-[8px] text-[13px] ${matched.has(s) ? 'bg-green-50 text-green-800 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'}`}>
+                      <li key={s} className={`inline-flex items-center gap-1 h-8 px-2.5 rounded-[8px] text-[13px] border ${matched.has(s) ? 'border-green-300 bg-green-50 text-green-900 dark:border-transparent dark:bg-green-900/30 dark:text-green-300' : 'border-gray-300 bg-gray-50 text-gray-600 dark:border-transparent dark:bg-gray-800 dark:text-gray-400'}`}>
                         {matched.has(s) ? <Check className="w-3.5 h-3.5" aria-hidden /> : <Minus className="w-3.5 h-3.5" aria-hidden />} {s}
                         <span className="sr-only">{matched.has(s) ? ' (has)' : ' (not ticked)'}</span>
                       </li>
@@ -446,13 +527,13 @@ export default function CandidatePanel({
               )}
 
               {data.screeningAnswers.length > 0 && (
-                <section aria-labelledby="qa">
-                  <h3 id="qa" className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Screening answers</h3>
-                  <dl className="space-y-2.5">
+                <section aria-labelledby="qa" className={BOX}>
+                  <h3 id="qa" className={BOX_TITLE}>Screening answers <span className="font-normal text-gray-500">· {data.screeningAnswers.length}</span></h3>
+                  <dl className="divide-y divide-gray-200 dark:divide-gray-800">
                     {data.screeningAnswers.map((q) => (
-                      <div key={q.id}>
+                      <div key={q.id} className="py-2 first:pt-0 last:pb-0">
                         <dt className="text-[13px] text-gray-600 dark:text-gray-400">{q.question}</dt>
-                        <dd className="text-sm text-gray-900 dark:text-white whitespace-pre-line">{q.type === 'yesno' ? (q.answer === 'yes' ? 'Yes' : q.answer === 'no' ? 'No' : '—') : q.answer || '—'}</dd>
+                        <dd className="mt-0.5 text-sm font-medium text-gray-900 dark:text-white whitespace-pre-line">{q.type === 'yesno' ? (q.answer === 'yes' ? 'Yes' : q.answer === 'no' ? 'No' : '—') : q.answer || '—'}</dd>
                       </div>
                     ))}
                   </dl>
@@ -460,14 +541,14 @@ export default function CandidatePanel({
               )}
 
               {data.coverLetter && (
-                <section aria-labelledby="cl">
-                  <h3 id="cl" className="text-sm font-semibold text-gray-900 dark:text-white mb-1.5">Note from the candidate</h3>
+                <section aria-labelledby="cl" className={BOX}>
+                  <h3 id="cl" className={BOX_TITLE}>Note from the candidate</h3>
                   <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-line">{data.coverLetter}</p>
                 </section>
               )}
 
-              <section aria-labelledby="notes">
-                <h3 id="notes" className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Team notes <span className="font-normal text-gray-500">· private, never shared with the candidate</span></h3>
+              <section aria-labelledby="notes" className={BOX}>
+                <h3 id="notes" className={BOX_TITLE}>Team notes <span className="font-normal text-gray-500">· private, never shared with the candidate</span></h3>
                 {data.notes.length > 0 && (
                   <ul className="space-y-2 mb-3">
                     {data.notes.map((n) => (
@@ -526,21 +607,41 @@ export default function CandidatePanel({
               </section>
 
               {data.events.length > 0 && (
-                <section aria-labelledby="act">
-                  <h3 id="act" className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Activity</h3>
-                  <ol className="space-y-2">
-                    {data.events.map((e) => (
-                      <li key={e.id} className="text-[13px] text-gray-700 dark:text-gray-300">
-                        <span className="font-medium">{e.fromStatus ? STATUS[e.fromStatus] : 'New'} → {STATUS[e.toStatus]}</span>
-                        {e.reasonCode && <span className="text-gray-500"> · {exitReasonLabel(e.reasonCode)}</span>}
-                        <span className="text-gray-500"> · {fmtTime(e.createdAt)}</span>
-                        {e.emailStatus && (
-                          <span className={`block text-xs ${e.emailStatus === 'FAILED' ? 'text-red-700' : 'text-gray-500'}`}>
-                            {e.emailStatus === 'SCHEDULED' && e.scheduledFor ? `Email scheduled for ${fmtTime(e.scheduledFor)}` : e.emailStatus === 'SENT' ? `Emailed: “${e.emailSubject}”` : e.emailStatus === 'FAILED' ? `“${e.emailSubject ?? 'This email'}” didn’t reach them. Check the address, or contact them another way.` : 'Email queued'}
-                          </span>
-                        )}
-                      </li>
-                    ))}
+                <section aria-labelledby="act" className={BOX}>
+                  <h3 id="act" className={BOX_TITLE}>
+                    Activity <span className="font-normal text-gray-500">· {data.events.length} {data.events.length === 1 ? 'update' : 'updates'}</span>
+                  </h3>
+                  <ol>
+                    {data.events.map((e, i) => {
+                      const last = i === data.events.length - 1;
+                      const tone = activityTone(e.toStatus);
+                      return (
+                        <li key={e.id} className="relative flex gap-3 pb-3 last:pb-0">
+                          {/* Timeline rail */}
+                          {!last && <span className="absolute left-[7px] top-5 bottom-0 w-px bg-gray-300 dark:bg-gray-700" aria-hidden />}
+                          <span className={`relative mt-1 shrink-0 w-[15px] h-[15px] rounded-full border-2 border-white dark:border-gray-900 ${tone.dot}`} aria-hidden />
+                          <div className="min-w-0 flex-1">
+                            <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px]">
+                              <span className="text-gray-600 dark:text-gray-400">{e.fromStatus ? STATUS[e.fromStatus] : 'New'}</span>
+                              <ArrowRight className="w-3.5 h-3.5 text-gray-500" aria-label="to" />
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs font-semibold ${tone.pill}`}>{STATUS[e.toStatus] ?? e.toStatus}</span>
+                            </p>
+                            {e.reasonCode && <p className="mt-0.5 text-[13px] text-gray-700 dark:text-gray-300">Reason: {exitReasonLabel(e.reasonCode)}</p>}
+                            <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
+                              {fmtTime(e.createdAt)}{e.actorEmail ? <> · by <span className="font-medium">{e.actorEmail.split('@')[0]}</span></> : null}
+                            </p>
+                            {e.emailStatus && (
+                              <p className={`mt-1.5 flex items-start gap-1.5 rounded-[8px] border px-2 py-1.5 text-xs ${e.emailStatus === 'FAILED' ? 'border-red-300 bg-red-50 text-red-800 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-300' : 'border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-700/70 dark:bg-gray-800/60 dark:text-gray-300'}`}>
+                                <Mail className="w-3.5 h-3.5 mt-px shrink-0" aria-hidden />
+                                <span className="min-w-0">
+                                  {e.emailStatus === 'SCHEDULED' && e.scheduledFor ? `Email scheduled for ${fmtTime(e.scheduledFor)}` : e.emailStatus === 'SENT' ? `Emailed: “${e.emailSubject}”` : e.emailStatus === 'FAILED' ? `“${e.emailSubject ?? 'This email'}” didn’t reach them. Check the address, or contact them another way.` : 'Email queued'}
+                                </span>
+                              </p>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ol>
                 </section>
               )}
@@ -586,3 +687,65 @@ function CopyRow({ icon, value, what }: { icon: React.ReactNode; value: string; 
     </div>
   );
 }
+
+/** "From the resume": roles, dates and education read from the resume, with experience worked out from the dates. */
+function ResumeTimeline({ p }: { p: NonNullable<import('@/lib/employer/applications').ApplicationDetail['resumeProfile']> }) {
+  const dur = (m: number | null) => (m == null ? '' : m < 12 ? `${m} mo` : `${Math.floor(m / 12)} yr${m >= 24 ? 's' : ''}${m % 12 ? ` ${m % 12} mo` : ''}`);
+  if (!p.readable) {
+    return (
+      <section aria-labelledby="rt" className={BOX}>
+        <h3 id="rt" className={BOX_TITLE}>From the resume</h3>
+        <p className="text-[13px] text-gray-700 dark:text-gray-300">This resume looks scanned (an image), so its text couldn’t be read. Open the resume to read it yourself.</p>
+      </section>
+    );
+  }
+  return (
+    <section aria-labelledby="rt" className={BOX}>
+      <h3 id="rt" className={BOX_TITLE}>
+        From the resume{' '}
+        <span className="font-normal text-gray-600 dark:text-gray-400">
+          · {p.datedRoles ? `${p.years} yrs from role dates` : 'no dated roles'}{p.internMonths ? ` + ${p.internMonths} mo internships` : ''}
+        </span>
+      </h3>
+      {p.roles.length > 0 ? (
+        <ol>
+          {p.roles.map((r, i) => (
+            <li key={i} className="relative flex gap-3 pb-3 last:pb-0">
+              {i < p.roles.length - 1 && <span className="absolute left-[5px] top-4 bottom-0 w-px bg-gray-300 dark:bg-gray-700" aria-hidden />}
+              <span className={`relative mt-1.5 shrink-0 w-[11px] h-[11px] rounded-full ${r.current ? 'bg-emerald-500' : r.internship ? 'bg-gray-300 dark:bg-gray-600' : 'bg-gray-500 dark:bg-gray-400'}`} aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                  {r.title || 'Role'}{r.company && <span className="font-normal text-gray-700 dark:text-gray-300"> · {r.company}</span>}
+                  {r.internship && <span className="ml-1.5 text-[11px] font-semibold px-1.5 py-0.5 rounded-full border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300">Internship</span>}
+                  {r.current && <span className="ml-1.5 text-[11px] font-semibold px-1.5 py-0.5 rounded-full border border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">Current</span>}
+                </p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">{r.dateText || 'Dates not given'}{r.months != null ? ` · ${dur(r.months)}` : ''}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      ) : <p className="text-[13px] text-gray-700 dark:text-gray-300">No jobs found on the resume.</p>}
+
+      {p.gaps.length > 0 && (
+        <p className="mt-2.5 text-xs text-gray-600 dark:text-gray-400">
+          Time between roles: {p.gaps.map((g) => `${g.label} (${dur(g.months)})`).join(', ')}. Shown for context only; it never affects any score.
+        </p>
+      )}
+
+      {(p.education.length > 0 || p.certifications.length > 0) && (
+        <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-800 space-y-1">
+          {p.education.map((e, i) => (
+            <p key={i} className="text-[13px] text-gray-800 dark:text-gray-200">
+              {e.degree || 'Education'}{e.institution && <span className="text-gray-600 dark:text-gray-400"> · {e.institution}</span>}{e.endYear && <span className="text-gray-600 dark:text-gray-400"> · {e.endYear}</span>}
+            </p>
+          ))}
+          {p.certifications.length > 0 && <p className="text-[13px] text-gray-700 dark:text-gray-300">Certifications: {p.certifications.join(', ')}</p>}
+        </div>
+      )}
+      <p className="mt-2.5 text-xs text-gray-600 dark:text-gray-400">
+        Read from the resume{p.pageCount > 1 ? ` (${p.pageCount} pages)` : ''}{p.scannedPages ? `; ${p.scannedPages} scanned page${p.scannedPages === 1 ? '' : 's'} couldn’t be read` : ''}. Names and dates are copied exactly; years are worked out from the dates, overlapping jobs counted once.
+      </p>
+    </section>
+  );
+}
+

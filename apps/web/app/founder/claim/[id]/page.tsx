@@ -11,7 +11,10 @@ interface PageProps {
   searchParams: Promise<{ method?: string }>;
 }
 
-export const metadata = { title: 'Claim your startup' };
+export const metadata = { title: 'Verify your startup' };
+
+/** Owners of a verified startup can renew from this many days before it ends. */
+const RENEW_WINDOW_DAYS = 30;
 
 export default async function ClaimStartupPage(props: PageProps) {
   const params = await props.params;
@@ -22,7 +25,7 @@ export default async function ClaimStartupPage(props: PageProps) {
   // Fetch startup using raw query
   const startups = await prisma.$queryRaw<any[]>`
     SELECT 
-      id, name, slug, tagline, "websiteUrl", "logoUrl", "claimStatus", "ownerId", "isVerified", "verificationMethod", "verifiedEmail"
+      id, name, slug, tagline, "websiteUrl", "logoUrl", "claimStatus", "ownerId", "isVerified", "verificationMethod", "verifiedEmail", "verificationExpiresAt"
     FROM "Startup"
     WHERE id = ${params.id} AND "deletedAt" IS NULL
     LIMIT 1
@@ -49,6 +52,11 @@ export default async function ClaimStartupPage(props: PageProps) {
   // This is needed for DNS verification after admin approval
 
   const isOwner = startup.ownerId === session.userId;
+  // Already verified by this founder: nothing to claim. Only a renewal (from a reminder email, or within the last
+  // 30 days of the verification) opens the page, and then as "Renew verification", not "Claim your startup".
+  const renewalDue = !!startup.verificationExpiresAt && new Date(startup.verificationExpiresAt).getTime() - Date.now() <= RENEW_WINDOW_DAYS * 86_400_000;
+  const renewing = isOwner && startup.isVerified;
+  if (renewing && !method && !renewalDue) redirect(`/founder/startups/${startup.slug}`);
   return (
     <ClaimStartupClient
       startup={startup}
@@ -56,6 +64,7 @@ export default async function ClaimStartupPage(props: PageProps) {
       takeover={takeover}
       initialMethod={method === 'email' || method === 'dns' ? method : undefined}
       workEmailHint={isOwner ? startup.verifiedEmail ?? null : null}
+      renewing={renewing}
     />
   );
 }

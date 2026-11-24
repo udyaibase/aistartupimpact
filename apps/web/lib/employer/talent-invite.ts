@@ -1,11 +1,26 @@
+import { ensureSkillOverrides } from '@/lib/jobs/skill-overrides';
 import { prisma } from '@udyaibase/database';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 import { button, esc, shell } from '@/lib/jobs/apply-emails';
 import { poolEmailHeaders, poolLink } from '@/lib/jobs/talent-pool';
 import { publicListingWhere } from '@/lib/jobs/public';
 import { computeMatch } from '@/lib/jobs/match';
+import { matchSkills, normalizeSkill } from '@/lib/jobs/skills';
+import { furthestStage } from '@/lib/employer/pool-stage';
 
 const SITE = (process.env.NEXT_PUBLIC_SITE_URL || 'https://udyaibase.com').replace(/\/$/, '');
+
+/**
+ * Most pool invites one company sends in a day, single, bulk and "Invite all" together. Invites go to people's
+ * inboxes in the company's name, so a cap keeps a mistake (or a stolen sign-in) from emailing the whole pool.
+ */
+export const DAILY_INVITE_CAP = 100;
+
+/** How many more pool invites this company can send in the next 24 hours. */
+export async function invitesLeftToday(employerId: string, now = new Date()): Promise<number> {
+  const sent = await prisma.jobBoardTalentInvite.count({ where: { Listing: { employerId }, createdAt: { gt: new Date(now.getTime() - 864e5) } } });
+  return Math.max(0, DAILY_INVITE_CAP - sent);
+}
 
 export type InviteOutcome = 'invited' | 'not_in_pool' | 'applied' | 'hired' | 'already_invited';
 
@@ -54,13 +69,22 @@ export async function inviteFromPool(opts: {
 /** A pool member is a match for a job from this match score up. */
 export const POOL_MATCH_MIN_SCORE = 60;
 
-export interface PoolMatch { id: string; fullName: string; currentTitle: string | null; appliedFor: string; score: number }
+export interface PoolMatch {
+  id: string; fullName: string; currentTitle: string | null; city: string | null; experienceYears: number | null; appliedFor: string; score: number;
+  /** When they applied (newest application), as ISO. */
+  appliedAt: string;
+  /** Furthest stage across all their applications, e.g. "Interviewed, not selected", and its rank for colour. */
+  stage: string; stageRank: number;
+  /** Their skills with the job's matching ones first, which of the job's skills match, and must-haves they lack. */
+  skills: string[]; matchedSkills: string[]; missingMustHaves: string[];
+}
 
 /**
  * "12 past applicants match this role": talent-pool members (opted in, not hired, not erased) who haven't applied
  * to or been invited to this job, scored against it by the same rules as the match badge. Best first.
  */
 export async function poolMatchesForJob(employerId: string, listingId: string, now = new Date()): Promise<PoolMatch[]> {
+  await ensureSkillOverrides();
   const job = await prisma.jobBoardListing.findFirst({
     where: { id: listingId, employerId, isGeneral: false, applicationType: { not: 'EXTERNAL' }, ...publicListingWhere(now) },
     select: { skills: true, mustHaveSkills: true, experienceMin: true, experienceMax: true, workType: true, city: true, salaryMax: true, salaryCurrency: true, maxNoticeDays: true, screeningQuestions: true },
@@ -72,7 +96,7 @@ export async function poolMatchesForJob(employerId: string, listingId: string, n
     take: 3000,
     select: {
       id: true, email: true, fullName: true, currentTitle: true, city: true, experienceYears: true, noticePeriodDays: true, expectedCtcLakh: true,
-      confirmedSkills: true, matchedSkills: true, Listing: { select: { title: true, isGeneral: true } },
+      confirmedSkills: true, matchedSkills: true, status: true, appliedAt: true, Listing: { select: { title: true, isGeneral: true } },
     },
   });
   if (!pool.length) return [];
@@ -83,8 +107,14 @@ export async function poolMatchesForJob(employerId: string, listingId: string, n
     prisma.jobBoardTalentInvite.findMany({ where: { listingId }, select: { Application: { select: { email: true } } } }),
   ]);
   const skip = new Set([...here.map((x) => x.email), ...hired.map((x) => x.email), ...invited.map((x) => x.Application.email)].map((e) => e.toLowerCase()));
+  // Every pool application per person, for the furthest stage they reached.
+  const statusesByEmail = new Map<string, { id: string; status: string }[]>();
+  for (const p of pool) {
+    const k = p.email.toLowerCase();
+    statusesByEmail.set(k, [...(statusesByEmail.get(k) ?? []), { id: p.id, status: p.status }]);
+  }
   const seen = new Set<string>();
-  const out: PoolMatch[] = [];
+  const out: (PoolMatch & { email: string })[] = [];
   for (const p of pool) {
     const key = p.email.toLowerCase();
     if (skip.has(key) || seen.has(key)) continue; // newest application per person only
@@ -92,7 +122,29 @@ export async function poolMatchesForJob(employerId: string, listingId: string, n
     // Their answers were to another job's questions, so screening questions don't count here.
     const m = computeMatch({ ...job, screeningQuestions: null }, { ...p, screeningAnswers: null });
     if (m.score < POOL_MATCH_MIN_SCORE) continue;
-    out.push({ id: p.id, fullName: p.fullName, currentTitle: p.currentTitle, appliedFor: p.Listing.isGeneral ? 'General application' : p.Listing.title, score: m.score });
+    const matched = matchSkills(job.skills, p.confirmedSkills);
+    const hit = new Set(matched.map(normalizeSkill));
+    const have = new Set(p.confirmedSkills.map(normalizeSkill));
+    out.push({
+      id: p.id, email: key, fullName: p.fullName, currentTitle: p.currentTitle, city: p.city, experienceYears: p.experienceYears,
+      appliedFor: p.Listing.isGeneral ? 'General application' : p.Listing.title, score: m.score, appliedAt: p.appliedAt.toISOString(),
+      stage: '', stageRank: -1,
+      skills: [...p.confirmedSkills].sort((a, b) => Number(hit.has(normalizeSkill(b))) - Number(hit.has(normalizeSkill(a)))),
+      matchedSkills: matched,
+      missingMustHaves: (job.mustHaveSkills ?? []).filter((s) => !have.has(normalizeSkill(s))),
+    });
   }
-  return out.sort((a, b) => b.score - a.score);
+  if (!out.length) return [];
+  // Stages they passed before a later rejection count too ("Interviewed, not selected").
+  const appIds = out.flatMap((o) => (statusesByEmail.get(o.email) ?? []).map((a) => a.id));
+  const events = await prisma.jobBoardApplicationEvent.findMany({
+    where: { applicationId: { in: appIds }, toStatus: { in: ['SHORTLISTED', 'INTERVIEW', 'OFFER'] } },
+    select: { applicationId: true, toStatus: true },
+  });
+  return out.map(({ email, ...o }) => {
+    const apps = statusesByEmail.get(email) ?? [];
+    const ids = new Set(apps.map((a) => a.id));
+    const st = furthestStage(apps.map((a) => a.status), events.filter((e) => ids.has(e.applicationId)).map((e) => e.toStatus));
+    return { ...o, stage: st.label, stageRank: st.rank };
+  }).sort((a, b) => b.score - a.score);
 }

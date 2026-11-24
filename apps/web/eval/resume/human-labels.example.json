@@ -1,0 +1,4 @@
+[
+  { "applicationId": "paste-an-application-id-here", "score": 80, "note": "Optional: why. A person reads the resume against the job and gives 0-100 before seeing any AI score." },
+  { "applicationId": "another-application-id", "score": 35, "note": "Aim for 30-50 applications across 3+ jobs, scored by two people where possible." }
+]

@@ -1,197 +1,215 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { updatePreferences } from './actions';
+import { useEffect, useRef, useState } from 'react';
+import { Check, Loader2, MapPin, X } from 'lucide-react';
+import { updatePreferences, clearActivity, type Preferences } from './actions';
 import {
-  Search, Rocket, Briefcase, Lightbulb, GraduationCap, TrendingUp,
-  MapPin, Loader2, X, Check
-} from 'lucide-react';
+  INTENTS, MAX_INTENTS, TOPICS, TOPIC_GROUPS, MAX_TOPICS, EXPERIENCE_LEVELS, WORK_MODES, MAX_JOB_ROLES,
+  type IntentValue,
+} from '@/lib/personalization/topics';
 
-const INTENTS = [
-  { value: 'exploring_tools', label: 'Explore AI Tools', icon: Search },
-  { value: 'following_startups', label: 'Follow Startups', icon: Rocket },
-  { value: 'looking_for_jobs', label: 'Find Jobs', icon: Briefcase },
-  { value: 'founder_builder', label: 'Build & Launch', icon: Lightbulb },
-  { value: 'learning_ai', label: 'Learn AI', icon: GraduationCap },
-  { value: 'investor_vc', label: 'Invest & Evaluate', icon: TrendingUp },
-] as const;
-
-type Category = { id: string; name: string; slug: string; icon: string | null };
 type CityResult = { id: string; name: string; state: string | null; country: string };
 
-export default function PreferencesClient({
-  categories,
-  initialPrefs,
-}: {
-  categories: Category[];
-  initialPrefs: { primaryIntent: string | null; categoryIds: string[]; cityId: string | null; cityName: string | null } | null;
-}) {
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [saveError, setSaveError] = useState('');
+const chip = (on: boolean) => `inline-flex items-center gap-1.5 min-h-[40px] px-3.5 rounded-full border text-sm font-medium transition-colors ${on ? 'border-gray-900 dark:border-white bg-gray-900 dark:bg-white text-white dark:text-gray-900' : 'border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 hover:border-gray-500'}`;
+const section = 'rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 sm:p-6';
+const h2 = 'text-[16px] font-semibold text-gray-900 dark:text-white';
+const sub = 'mt-1 mb-4 text-[13px] text-gray-600 dark:text-gray-400';
 
-  const [primaryIntent, setPrimaryIntent] = useState<string | null>(initialPrefs?.primaryIntent || null);
-  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(
-    new Set(initialPrefs?.categoryIds || [])
-  );
-  const [cityId, setCityId] = useState<string | null>(initialPrefs?.cityId || null);
-  const [cityName, setCityName] = useState(initialPrefs?.cityName || '');
+/** Settings → Preferences and Profile → Preferences: everything onboarding asked, editable, plus history controls. */
+export default function PreferencesClient({
+  initialPrefs,
+  jobRoles,
+}: {
+  initialPrefs: Preferences | null;
+  jobRoles: { value: string; label: string }[];
+}) {
+  const [intents, setIntents] = useState<string[]>(initialPrefs?.intents ?? []);
+  const [topics, setTopics] = useState<string[]>(initialPrefs?.topics ?? []);
+  const [roles, setRoles] = useState<string[]>(initialPrefs?.jobPrefs.roles ?? []);
+  const [experience, setExperience] = useState<string | null>(initialPrefs?.jobPrefs.experience ?? null);
+  const [workModes, setWorkModes] = useState<string[]>(initialPrefs?.jobPrefs.workModes ?? []);
+  const [cityId, setCityId] = useState<string | null>(initialPrefs?.cityId ?? null);
+  const [cityName, setCityName] = useState(initialPrefs?.cityName ?? '');
   const [cityQuery, setCityQuery] = useState('');
   const [cityResults, setCityResults] = useState<CityResult[]>([]);
   const [searchingCity, setSearchingCity] = useState(false);
+  const [status, setStatus] = useState<'' | 'saving' | 'saved' | 'clearing' | 'cleared'>('');
+  const [error, setError] = useState('');
+  const [dirty, setDirty] = useState(false);
+  const cityInputRef = useRef<HTMLInputElement>(null);
 
-  const toggleCategory = useCallback((id: string) => {
-    setSelectedCategories(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-    setSaved(false);
-  }, []);
+  const touch = () => { setDirty(true); setStatus(''); setError(''); };
+  const toggle = (list: string[], v: string, max: number) => (list.includes(v) ? list.filter((x) => x !== v) : list.length >= max ? list : [...list, v]);
+  const forJobs = intents.includes('looking_for_jobs');
 
   useEffect(() => {
-    if (cityQuery.length < 2) { setCityResults([]); return; }
-    const timeout = setTimeout(async () => {
+    if (cityQuery.trim().length < 2) { setCityResults([]); return; }
+    const controller = new AbortController();
+    const t = setTimeout(async () => {
       setSearchingCity(true);
       try {
-        const res = await fetch(`/api/cities/search?q=${encodeURIComponent(cityQuery)}`);
-        if (res.ok) setCityResults(await res.json());
-      } catch {}
+        const res = await fetch(`/api/cities/search?q=${encodeURIComponent(cityQuery)}`, { signal: controller.signal });
+        const data = res.ok ? await res.json() : [];
+        setCityResults(Array.isArray(data) ? data : []);
+      } catch { /* cancelled or offline */ }
       setSearchingCity(false);
-    }, 300);
-    return () => clearTimeout(timeout);
+    }, 250);
+    return () => { clearTimeout(t); controller.abort(); };
   }, [cityQuery]);
 
-  const handleSave = async () => {
-    setSaving(true);
-    setSaveError('');
-    const result = await updatePreferences({
-      primaryIntent,
-      categoryIds: Array.from(selectedCategories),
-      cityId,
-    }).catch(() => ({ success: false }));
-    setSaving(false);
-    if (!result.success) {
-      setSaveError('Couldn’t save your preferences. Please try again.');
-    } else {
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    }
-  };
+  async function save() {
+    setStatus('saving');
+    setError('');
+    const r = await updatePreferences({ intents, topics, jobPrefs: { roles, experience, workModes }, cityId }).catch(() => ({ error: 'Couldn’t reach the server. Try again.' }));
+    if ('error' in r) { setError(r.error); setStatus(''); return; }
+    setStatus('saved');
+    setDirty(false);
+  }
+
+  async function clearHistory() {
+    if (!window.confirm('Clear your viewing history? Suggestions will rely only on the interests you chose. This can’t be undone.')) return;
+    setStatus('clearing');
+    const r = await clearActivity().catch(() => ({ error: 'Couldn’t reach the server. Try again.' }));
+    if ('error' in r) { setError(r.error); setStatus(''); return; }
+    setStatus('cleared');
+  }
 
   return (
-    <div className="space-y-8">
-      {/* Intent */}
-      <section>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-3">What brings you here?</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {INTENTS.map(({ value, label, icon: Icon }) => (
-            <button
-              key={value}
-              onClick={() => { setPrimaryIntent(value); setSaved(false); }}
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all ${
-                primaryIntent === value
-                  ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300'
-                  : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-blue-400'
-              }`}
-            >
-              <Icon className="w-4 h-4 shrink-0" />
-              {label}
-            </button>
+    <div className="space-y-5">
+      <section className={section} aria-labelledby="pref-intents">
+        <h2 id="pref-intents" className={h2}>What you’re here for</h2>
+        <p className={sub}>Up to {MAX_INTENTS}. Your home page shows more of the first one.</p>
+        <div className="flex flex-wrap gap-2">
+          {INTENTS.map((i) => {
+            const on = intents.includes(i.value);
+            return (
+              <button key={i.value} type="button" aria-pressed={on} onClick={() => { setIntents((l) => toggle(l, i.value as IntentValue, MAX_INTENTS)); touch(); }} className={chip(on)}>
+                {on && <Check className="w-3.5 h-3.5" strokeWidth={3} aria-hidden />}{i.label}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className={section} aria-labelledby="pref-topics">
+        <h2 id="pref-topics" className={h2}>Topics you follow</h2>
+        <p className={sub}>Used for your news, startups, tools and jobs. Up to {MAX_TOPICS}.</p>
+        <div className="space-y-5">
+          {TOPIC_GROUPS.map((g) => (
+            <div key={g} role="group" aria-label={g}>
+              <h3 className="mb-2 text-[13px] font-semibold text-gray-500 dark:text-gray-400">{g}</h3>
+              <div className="flex flex-wrap gap-2">
+                {TOPICS.filter((t) => t.group === g).map((t) => {
+                  const on = topics.includes(t.id);
+                  return (
+                    <button key={t.id} type="button" aria-pressed={on} onClick={() => { setTopics((l) => toggle(l, t.id, MAX_TOPICS)); touch(); }} className={chip(on)}>
+                      {on && <Check className="w-3.5 h-3.5" strokeWidth={3} aria-hidden />}{t.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           ))}
         </div>
       </section>
 
-      {/* Interests */}
-      <section>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Interests</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">Pick topics to personalize your feed</p>
-        <div className="flex flex-wrap gap-2">
-          {categories.map(cat => (
-            <button
-              key={cat.id}
-              onClick={() => toggleCategory(cat.id)}
-              className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-all ${
-                selectedCategories.has(cat.id)
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              {cat.name}
+      {forJobs && (
+        <section className={section} aria-labelledby="pref-jobs">
+          <h2 id="pref-jobs" className={h2}>Jobs you’re looking for</h2>
+          <p className={sub}>Matching jobs appear first. Nothing is hidden.</p>
+          <div className="space-y-5">
+            <div role="group" aria-label="Roles">
+              <h3 className="mb-2 text-[13px] font-semibold text-gray-500 dark:text-gray-400">Roles (up to {MAX_JOB_ROLES})</h3>
+              <div className="flex flex-wrap gap-2">
+                {jobRoles.map((r) => {
+                  const on = roles.includes(r.value);
+                  return (
+                    <button key={r.value} type="button" aria-pressed={on} onClick={() => { setRoles((l) => toggle(l, r.value, MAX_JOB_ROLES)); touch(); }} className={chip(on)}>
+                      {on && <Check className="w-3.5 h-3.5" strokeWidth={3} aria-hidden />}{r.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div role="radiogroup" aria-label="Experience">
+              <h3 className="mb-2 text-[13px] font-semibold text-gray-500 dark:text-gray-400">Experience</h3>
+              <div className="flex flex-wrap gap-2">
+                {EXPERIENCE_LEVELS.map((e) => {
+                  const on = experience === e.value;
+                  return <button key={e.value} type="button" role="radio" aria-checked={on} onClick={() => { setExperience(on ? null : e.value); touch(); }} className={chip(on)}>{e.label}</button>;
+                })}
+              </div>
+            </div>
+            <div role="group" aria-label="Where you want to work">
+              <h3 className="mb-2 text-[13px] font-semibold text-gray-500 dark:text-gray-400">Where you want to work</h3>
+              <div className="flex flex-wrap gap-2">
+                {WORK_MODES.map((w) => {
+                  const on = workModes.includes(w.value);
+                  return (
+                    <button key={w.value} type="button" aria-pressed={on} onClick={() => { setWorkModes((l) => toggle(l, w.value, WORK_MODES.length)); touch(); }} className={chip(on)}>
+                      {on && <Check className="w-3.5 h-3.5" strokeWidth={3} aria-hidden />}{w.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section className={section} aria-labelledby="pref-city">
+        <h2 id="pref-city" className={h2}>Your city</h2>
+        <p className={sub}>For events and jobs near you. Only the city is saved, never your exact location.</p>
+        {cityName ? (
+          <div className="flex items-center gap-3 min-h-[48px] px-3.5 rounded-[10px] border border-gray-300 dark:border-gray-700">
+            <MapPin className="w-4 h-4 text-gray-500 shrink-0" aria-hidden />
+            <span className="flex-1 min-w-0 truncate text-[15px] text-gray-900 dark:text-white">{cityName}</span>
+            <button type="button" aria-label="Remove city" onClick={() => { setCityId(null); setCityName(''); touch(); setTimeout(() => cityInputRef.current?.focus(), 0); }}
+              className="w-9 h-9 -mr-2 flex items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800">
+              <X className="w-4 h-4" aria-hidden />
             </button>
-          ))}
-        </div>
-        {selectedCategories.size > 0 && (
-          <p className="text-xs text-slate-400 mt-2">{selectedCategories.size} selected</p>
+          </div>
+        ) : (
+          <div className="relative">
+            <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" aria-hidden />
+            <input ref={cityInputRef} aria-label="City" value={cityQuery} onChange={(e) => setCityQuery(e.target.value)} placeholder="Start typing your city" autoComplete="off"
+              className="w-full min-h-[48px] pl-10 pr-10 rounded-[10px] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-[15px] text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/15 dark:focus:ring-white/20 focus:border-gray-900 dark:focus:border-gray-300" />
+            {searchingCity && <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-gray-400" aria-label="Searching" />}
+            {cityResults.length > 0 && (
+              <ul role="listbox" className="absolute left-0 right-0 top-full mt-1.5 z-20 max-h-64 overflow-y-auto py-1 rounded-[12px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg">
+                {cityResults.map((c) => (
+                  <li key={c.id} role="option" aria-selected={false}
+                    onMouseDown={(e) => { e.preventDefault(); setCityId(c.id); setCityName(`${c.name}${c.state ? `, ${c.state}` : ''}, ${c.country}`); setCityQuery(''); setCityResults([]); touch(); }}
+                    className="px-3.5 py-2.5 min-h-[44px] flex items-center cursor-pointer text-[15px] text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800/60">
+                    {c.name}<span className="text-gray-500 dark:text-gray-400">{c.state ? `, ${c.state}` : ''}, {c.country}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
       </section>
 
-      {/* City */}
-      <section>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Location</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">For nearby events and jobs</p>
-        <div className="relative max-w-sm">
-          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          {cityName ? (
-            <div className="flex items-center justify-between pl-9 pr-3 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
-              <span className="text-sm text-slate-900 dark:text-white">{cityName}</span>
-              <button onClick={() => { setCityId(null); setCityName(''); setCityQuery(''); setSaved(false); }} className="text-slate-400 hover:text-slate-600">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
-            <input
-              type="text"
-              value={cityQuery}
-              onChange={e => { setCityQuery(e.target.value); setCityId(null); setSaved(false); }}
-              placeholder="Search your city..."
-              className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              autoComplete="off"
-            />
-          )}
-
-          {cityResults.length > 0 && !cityId && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
-              {cityResults.map(city => (
-                <button
-                  key={city.id}
-                  onClick={() => {
-                    setCityId(city.id);
-                    setCityName(`${city.name}${city.state ? `, ${city.state}` : ''}, ${city.country}`);
-                    setCityQuery('');
-                    setCityResults([]);
-                    setSaved(false);
-                  }}
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-900 dark:text-white"
-                >
-                  {city.name}
-                  {city.state && <span className="text-slate-400">, {city.state}</span>}
-                  <span className="text-slate-400">, {city.country}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {searchingCity && (
-            <div className="absolute right-3 top-1/2 -translate-y-1/2">
-              <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* Save */}
-      <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-        >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <><Check className="w-4 h-4" /> Saved</> : 'Save preferences'}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <button type="button" onClick={save} disabled={status === 'saving' || !dirty}
+          className="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 rounded-[10px] bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900 text-sm font-semibold disabled:opacity-50">
+          {status === 'saving' && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />}
+          {status === 'saving' ? 'Saving…' : 'Save preferences'}
         </button>
-        {saveError && <p role="alert" className="text-sm text-red-600 dark:text-red-400 mt-2">{saveError}</p>}
+        <p role="status" className="text-[13px] text-gray-600 dark:text-gray-400">
+          {status === 'saved' ? 'Saved. Your suggestions are updated.' : dirty ? 'You have unsaved changes.' : ''}
+        </p>
       </div>
+      {error && <p role="alert" className="text-sm text-red-700 dark:text-red-400">{error}</p>}
+
+      <section className={section} aria-labelledby="pref-history">
+        <h2 id="pref-history" className={h2}>Viewing history</h2>
+        <p className={sub}>What you open in the last 30 days also shapes your suggestions. Clearing it keeps only the interests above.</p>
+        <button type="button" onClick={clearHistory} disabled={status === 'clearing'}
+          className="min-h-[44px] px-4 rounded-[10px] border border-gray-300 dark:border-gray-700 text-sm font-semibold text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
+          {status === 'clearing' ? 'Clearing…' : status === 'cleared' ? 'History cleared' : 'Clear viewing history'}
+        </button>
+      </section>
     </div>
   );
 }

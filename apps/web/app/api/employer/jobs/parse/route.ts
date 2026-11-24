@@ -1,3 +1,4 @@
+import { AI_MODELS } from '@/lib/ops/ai-models';
 import { NextRequest, NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
 import { checkRateLimit, jdParseRateLimit } from '@/lib/rate-limit';
@@ -119,7 +120,7 @@ export async function POST(request: NextRequest) {
   let fields: any;
   try {
     const data = await openaiChat('job_parse', {
-      model: 'gpt-4o-mini',
+      model: AI_MODELS.jobParse,
       temperature: 0,
       response_format: { type: 'json_schema', json_schema: SCHEMA },
       messages: [
