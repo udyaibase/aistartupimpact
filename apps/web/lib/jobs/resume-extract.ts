@@ -237,7 +237,24 @@ export function docxLines(xml: string): string[] {
   }
   if (line) end();
   // A table row ends up as "a | b | " plus empty paragraph lines from each cell; tidy both.
-  return out.map((l) => l.replace(/(\s*\|\s*)+$/, '').replace(/^\s*\|\s*/, ''));
+  return out.map((l) => trimTrailingPipes(l).replace(/^\s*\|\s*/, ''));
+}
+
+/**
+ * Drop the trailing run of " | " cell separators (and the spaces around them) from a table line. A plain loop, not a
+ * regex like /(\s*\|\s*)+$/: that one backtracks exponentially on "| | | |…", and resumes are uploaded by strangers.
+ * Trailing spaces with no "|" in them are left alone, as before.
+ */
+export function trimTrailingPipes(line: string): string {
+  let end = line.length;
+  let sawPipe = false;
+  while (end > 0) {
+    const ch = line[end - 1]!;
+    if (ch === '|') sawPipe = true;
+    else if (!/\s/.test(ch)) break;
+    end--;
+  }
+  return sawPipe ? line.slice(0, end) : line;
 }
 
 function docxAllLines(bytes: Uint8Array): string[] {

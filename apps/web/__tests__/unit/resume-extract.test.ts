@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { zipSync, strToU8 } from 'fflate';
-import { docxLines, dropRunningLines, extractResume, findContacts, findGutter, layoutLines, numberLines, type TextPiece } from '@/lib/jobs/resume-extract';
+import { docxLines, dropRunningLines, trimTrailingPipes, extractResume, findContacts, findGutter, layoutLines, numberLines, type TextPiece } from '@/lib/jobs/resume-extract';
 import { resumeText } from '@/lib/jobs/resume-text';
 
 const PDF = { mime: 'application/pdf', ext: 'pdf' as const };
@@ -146,5 +146,22 @@ describe('numbered lines and the old reader', () => {
   it('resumeText now returns the same ordered lines, joined', async () => {
     const bytes = await makePdf([[{ text: 'Line one', x: 40, y: 780 }, { text: 'Line two', x: 40, y: 760 }]]);
     expect(await resumeText(bytes, PDF)).toBe('Line one\nLine two');
+  });
+});
+
+describe('table-row tidy (no regex backtracking)', () => {
+  it('drops trailing cell separators like the old pattern, and leaves other lines alone', () => {
+    expect(trimTrailingPipes('Python | 5 years | ')).toBe('Python | 5 years');
+    expect(trimTrailingPipes('a | b |  |   ')).toBe('a | b');
+    expect(trimTrailingPipes('no pipes here   ')).toBe('no pipes here   ');
+    expect(trimTrailingPipes('| | |')).toBe('');
+    expect(trimTrailingPipes('')).toBe('');
+  });
+  it('stays fast on a hostile "| | | …" line from an uploaded file', () => {
+    const evil = '|' + ' |'.repeat(50_000) + 'x';
+    const t = performance.now();
+    expect(trimTrailingPipes(evil)).toBe(evil);
+    expect(trimTrailingPipes(' |'.repeat(50_000))).toBe('');
+    expect(performance.now() - t).toBeLessThan(200);
   });
 });
