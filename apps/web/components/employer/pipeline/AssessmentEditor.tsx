@@ -42,7 +42,7 @@ export default function AssessmentEditor({ value, onChange }: { value: Assessmen
         <legend className={label}>Type</legend>
         <div className="grid sm:grid-cols-2 gap-2">
           {ASSESSMENT_KINDS.map((k) => (
-            <label key={k} className={`flex items-start gap-2 p-2.5 rounded-[10px] border cursor-pointer ${a.kind === k ? 'border-gray-900 dark:border-white' : 'border-gray-200 dark:border-gray-800'}`}>
+            <label key={k} className={`flex items-start gap-2 p-2.5 rounded-[10px] border cursor-pointer ${a.kind === k ? 'border-gray-900 dark:border-gray-500' : 'border-gray-200 dark:border-gray-800'}`}>
               <input type="radio" name="as-kind" checked={a.kind === k} className="mt-1 accent-[#A50F15]"
                 onChange={() => set({ kind: k as AssessmentKind, title: a.title === defaultTitle(a.kind) || !a.title ? defaultTitle(k as AssessmentKind) : a.title })} />
               <span className="text-[13px]"><span className="font-semibold text-gray-900 dark:text-white">{KIND_LABEL[k]}</span><span className="block text-xs text-gray-600 dark:text-gray-400">{KIND_HINT[k]}</span></span>

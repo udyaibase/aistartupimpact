@@ -26,7 +26,7 @@ export default async function NewStartupPage(props: { searchParams: Promise<{ cr
         startupId: s.id, slug: s.slug, name: s.name, websiteUrl: s.websiteUrl ?? '', verified: s.isVerified, workEmailHint,
       };
       return (
-        <div className="space-y-6 max-w-3xl">
+        <div className="space-y-6 max-w-3xl mx-auto pt-2 md:pt-4">
           <div>
             <h1 className="portal-title">Add your startup</h1>
           </div>
@@ -39,7 +39,7 @@ export default async function NewStartupPage(props: { searchParams: Promise<{ cr
   // Check the limit before any typing, not at Submit.
   if (await founderAtStartupLimit(session.userId)) {
     return (
-      <div className="space-y-6 max-w-3xl">
+      <div className="space-y-6 max-w-3xl mx-auto pt-2 md:pt-4">
         <h1 className="portal-title">Add your startup</h1>
         <div className="card p-6">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">You’ve already added a startup</h2>
@@ -78,8 +78,8 @@ export default async function NewStartupPage(props: { searchParams: Promise<{ cr
   } : undefined;
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div>
+    <div className="space-y-6 pt-2 md:pt-4">
+      <div className="max-w-3xl mx-auto">
         <h1 className="portal-title">Add your startup</h1>
         <p className="portal-subtitle">
           Five short steps, then verify your domain. Our team reviews new startups, usually within 2–3 business days.

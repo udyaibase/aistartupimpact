@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { getOrganizerSession } from '@/lib/organizer-auth';
 import { prisma } from '@udyaibase/database';
 import OnboardingClient from './OnboardingClient';
+import { safeReturnPath } from '@/lib/safe-return';
 
 export const metadata = { title: 'Set up your workspace' };
 
@@ -39,8 +40,8 @@ export default async function OrganizerOnboardingPage(
   }
 
   if (organizer.onboardingCompleted) {
-    redirect(searchParams.returnTo || '/organizer');
+    redirect(safeReturnPath(searchParams.returnTo, '/organizer'));
   }
 
-  return <OnboardingClient user={organizer} returnTo={searchParams.returnTo} />;
+  return <OnboardingClient user={organizer} returnTo={searchParams.returnTo ? safeReturnPath(searchParams.returnTo, '/organizer') : undefined} />;
 }

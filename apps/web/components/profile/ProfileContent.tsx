@@ -122,7 +122,7 @@ function PreferencesTab() {
   return (
     <div>
       <p className="text-sm text-gray-500 mb-6">Customize your feed and recommendations</p>
-      <PreferencesClient categories={form.categories} initialPrefs={form.prefs} />
+      <PreferencesClient initialPrefs={form.prefs} jobRoles={form.jobRoles} />
     </div>
   );
 }

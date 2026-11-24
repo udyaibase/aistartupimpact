@@ -25,9 +25,11 @@ interface ClaimStartupClientProps {
   initialMethod?: 'email' | 'dns';
   /** The work email used last time (owner re-verifying), offered first. */
   workEmailHint?: string | null;
+  /** The owner renewing a verification that is ending: the page says "Renew", never "Claim". */
+  renewing?: boolean;
 }
 
-export default function ClaimStartupClient({ startup, startupId, takeover = false, initialMethod, workEmailHint }: ClaimStartupClientProps) {
+export default function ClaimStartupClient({ startup, startupId, takeover = false, initialMethod, workEmailHint, renewing = false }: ClaimStartupClientProps) {
   const router = useRouter();
   // If startup is already claimed by this user, start at verify step
   const initialStep = startup.claimStatus === 'CLAIMED' || startup.claimStatus === 'VERIFIED' ? 'verify' : 'confirm';
@@ -66,8 +68,8 @@ export default function ClaimStartupClient({ startup, startupId, takeover = fals
         {step === 'confirm' && (
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8">
             <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full mb-4">
-                <Shield className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-brand/10 dark:bg-red-900/30 rounded-full mb-4">
+                <Shield className="w-8 h-8 text-brand dark:text-red-400" />
               </div>
               <h1 className="text-3xl font-bold mb-2 text-navy dark:text-white">Claim Your Startup</h1>
               <p className="text-gray-600 dark:text-gray-400">Verify ownership to get your verified badge</p>
@@ -127,7 +129,7 @@ export default function ClaimStartupClient({ startup, startupId, takeover = fals
             <button
               onClick={initiateClaim}
               disabled={loading}
-              className="w-full py-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold rounded-xl transition-colors inline-flex items-center justify-center gap-2"
+              className="btn-brand w-full min-h-[48px] gap-2 disabled:opacity-60"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />}
               Continue to Verification
@@ -139,12 +141,14 @@ export default function ClaimStartupClient({ startup, startupId, takeover = fals
         {step === 'verify' && (
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-5 sm:p-8">
             <div className="text-center mb-6">
-              <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-100 dark:bg-blue-900 rounded-full mb-3">
-                <Shield className="w-7 h-7 text-blue-600 dark:text-blue-400" />
+              <div className="inline-flex items-center justify-center w-14 h-14 bg-brand/10 dark:bg-red-900/30 rounded-full mb-3">
+                <Shield className="w-7 h-7 text-brand dark:text-red-400" />
               </div>
-              <h1 className="text-2xl sm:text-3xl font-bold mb-2 text-navy dark:text-white">Verify domain ownership</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold mb-2 text-navy dark:text-white">{renewing ? 'Renew verification' : 'Verify domain ownership'}</h1>
               <p className="text-gray-600 dark:text-gray-400">
-                Prove you control {domain || 'your startup’s domain'}, with a work email or a DNS record. You become the owner as soon as that’s done. Until then, nothing on the profile changes.
+                {renewing
+                  ? <>Confirm you still control {domain || 'your startup’s domain'}, with a work email or a DNS record, to keep the verified badge for another year.</>
+                  : <>Prove you control {domain || 'your startup’s domain'}, with a work email or a DNS record. You become the owner as soon as that’s done. Until then, nothing on the profile changes.</>}
               </p>
             </div>
             {takeover && (
@@ -208,7 +212,7 @@ export default function ClaimStartupClient({ startup, startupId, takeover = fals
               </button>
               <button
                 onClick={() => router.push('/founder/dashboard')}
-                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-colors"
+                className="btn-brand flex-1"
               >
                 Go to Dashboard
               </button>

@@ -52,6 +52,8 @@ export async function eraseApplication(applicationId: string) {
     prisma.jobBoardResumeUpload.deleteMany({ where: { applicationId } }),
     prisma.jobBoardApplicationNote.deleteMany({ where: { applicationId } }),
     prisma.jobBoardAiScreening.deleteMany({ where: { applicationId } }),
+    // The structured resume profile is resume text: it goes with the resume.
+    prisma.jobBoardResumeProfile.deleteMany({ where: { applicationId } }),
     // Opinions about them from shared shortlist links go too.
     prisma.jobBoardShortlistVote.deleteMany({ where: { applicationId } }),
     prisma.jobBoardApplication.update({

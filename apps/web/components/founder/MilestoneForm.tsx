@@ -175,7 +175,7 @@ export default function MilestoneForm({ milestoneId }: { milestoneId?: string })
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {MILESTONE_TYPES.map((t) => (
               <button key={t.value} type="button" aria-pressed={type === t.value} onClick={() => setType(t.value)}
-                className={`relative flex flex-row sm:flex-col items-center justify-start sm:justify-center gap-2 sm:gap-1.5 min-h-[44px] sm:min-h-[64px] px-3 py-2 sm:p-3 rounded-lg border text-left sm:text-center transition-colors ${type === t.value ? "border-gray-900 dark:border-white ring-1 ring-gray-900 dark:ring-white bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white" : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500"}`}>
+                className={`relative flex flex-row sm:flex-col items-center justify-start sm:justify-center gap-2 sm:gap-1.5 min-h-[44px] sm:min-h-[64px] px-3 py-2 sm:p-3 rounded-lg border text-left sm:text-center transition-colors ${type === t.value ? "border-gray-900 dark:border-gray-500 ring-1 ring-gray-900 dark:ring-gray-500/60 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white" : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500"}`}>
                 {type === t.value && <Check className="absolute top-1.5 right-1.5 w-3.5 h-3.5" aria-hidden />}
                 {/* The word below names the button; the icon is decoration here. */}
                 <span aria-hidden="true"><MilestoneIcon type={t.value} className="w-5 h-5" plain /></span>

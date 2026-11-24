@@ -48,8 +48,16 @@
       "schedule": "30 4 * * 1"
     },
     {
+      "path": "/api/admin/talent-alerts",
+      "schedule": "30 3 * * *"
+    },
+    {
       "path": "/api/admin/support-triage",
       "schedule": "30 4,10 * * 1-6"
+    },
+    {
+      "path": "/api/admin/skill-suggestions",
+      "schedule": "30 4 * * 1"
     }
   ]
 }

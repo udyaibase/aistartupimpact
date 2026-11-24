@@ -239,6 +239,8 @@ export async function middleware(request: NextRequest) {
     const csp = buildPortalCsp(newNonce());
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set('Content-Security-Policy', csp);
+    // The page asked for, so a portal layout that has to send someone elsewhere can bring them back here.
+    requestHeaders.set('x-portal-path', pathname + request.nextUrl.search);
     const response = NextResponse.next({ request: { headers: requestHeaders } });
     response.headers.set('Content-Security-Policy', csp);
     return response;

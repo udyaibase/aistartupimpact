@@ -1,4 +1,5 @@
 import { sql } from '@/lib/db';
+import { isPortalPath } from '@/lib/csp';
 
 /**
  * Whether the site's "what brings you here?" onboarding is done for this person, decided at sign-in.
@@ -20,4 +21,15 @@ export async function siteOnboarding(user: { id: string; email: string; onboardi
     return { onboardingCompleted: true, isFounder };
   }
   return { onboardingCompleted: false, isFounder };
+}
+
+/**
+ * Website onboarding ("what are you here for", topics…) is for people who use the website: news, tools, jobs, events.
+ * Someone who signs up to reach a portal (founder, organizer, employer) gets that portal's own setup instead, so the
+ * website one is marked done for them. Returns true when it did.
+ */
+export async function skipSiteOnboardingForPortal(userId: string, returnTo: string): Promise<boolean> {
+  if (!isPortalPath(returnTo.split(/[?#]/)[0])) return false;
+  await sql`UPDATE "WebUser" SET "onboardingCompleted" = true, "updatedAt" = NOW() WHERE id = ${userId} AND "onboardingCompleted" = false`;
+  return true;
 }

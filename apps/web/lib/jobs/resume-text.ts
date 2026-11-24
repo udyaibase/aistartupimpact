@@ -1,8 +1,7 @@
 import { unzipSync, strFromU8 } from 'fflate';
-import { getDocumentProxy } from 'unpdf';
+import { extractResume } from '@/lib/jobs/resume-extract';
 
 export const MAX_RESUME_BYTES = 5 * 1024 * 1024;
-const MAX_PAGES = 3;
 const MAX_CHARS = 12_000;
 /** Refuse DOCX parts that would inflate beyond this (zip-bomb guard). */
 const MAX_UNZIPPED = 8 * 1024 * 1024;
@@ -23,25 +22,13 @@ export function sniffResume(bytes: Uint8Array): ResumeKind | null {
   return null;
 }
 
-/** Plain text from the first pages of a resume, capped, for autofill only. */
+/**
+ * Plain text of a resume in reading order, capped (autofill and the current AI review). Built on the full extractor
+ * (all pages, two-column aware, headers/footers dropped); see lib/jobs/resume-extract.ts.
+ */
 export async function resumeText(bytes: Uint8Array, kind: ResumeKind): Promise<string> {
-  let text = '';
-  if (kind.ext === 'pdf') {
-    const pdf = await getDocumentProxy(bytes);
-    const pages = Math.min(pdf.numPages, MAX_PAGES);
-    const parts: string[] = [];
-    for (let i = 1; i <= pages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      parts.push(content.items.map((it) => ('str' in it ? it.str : '')).join(' '));
-    }
-    text = parts.join('\n');
-  } else {
-    const files = unzipSync(bytes, { filter: (f) => f.name === 'word/document.xml' && f.originalSize <= MAX_UNZIPPED });
-    const xml = files['word/document.xml'] ? strFromU8(files['word/document.xml']) : '';
-    text = docxText(xml);
-  }
-  return text.replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim().slice(0, MAX_CHARS);
+  const r = await extractResume(bytes, kind);
+  return r.lines.join('\n').slice(0, MAX_CHARS);
 }
 
 const XML_ENTITIES: Record<string, string> = { '&lt;': '<', '&gt;': '>', '&amp;': '&', '&quot;': '"', '&apos;': "'" };

@@ -25,9 +25,15 @@ describe('match score (rules-based)', () => {
     expect(computeMatch(job, ideal).reasons.find((r) => r.key === 'location')?.status).toBe('pass');
   });
 
-  it('flags (never rejects) a wrong must-answer, and an unanswered one', () => {
+  it('flags (never rejects) a wrong must-answer, and one left blank', () => {
     expect(computeMatch(job, { ...ideal, screeningAnswers: [{ id: 'q1', answer: 'no' }] }).knockedOut).toBe(true);
-    expect(computeMatch(job, { ...ideal, screeningAnswers: [] }).knockedOut).toBe(true);
+    expect(computeMatch(job, { ...ideal, screeningAnswers: [{ id: 'q1', answer: '' }] }).knockedOut).toBe(true);
+  });
+
+  it('a must-answer added after someone applied isn’t held against them (they were never asked)', () => {
+    const m = computeMatch(job, { ...ideal, screeningAnswers: [] });
+    expect(m.knockedOut).toBe(false);
+    expect(m.reasons.find((r) => r.key === 'knockout')?.detail).toBe('Asked after they applied');
   });
 
   it('gives half credit for blanks, so leaving fields empty never beats real answers', () => {

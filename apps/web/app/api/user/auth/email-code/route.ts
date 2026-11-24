@@ -1,3 +1,4 @@
+import { skipSiteOnboardingForPortal } from '@/lib/auth/site-onboarding';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
 import { sql } from '@/lib/db';
@@ -73,6 +74,7 @@ export async function POST(req: NextRequest) {
     await sql`UPDATE "WebUser" SET "onboardingCompleted" = true, "primaryIntent" = COALESCE("primaryIntent", 'looking_for_jobs') WHERE id = ${user.id}`;
     user.onboardingCompleted = true;
   }
+  if (!user.onboardingCompleted && await skipSiteOnboardingForPortal(user.id, back)) user.onboardingCompleted = true;
   // Accounts with two-step verification still enter their second code, as with Google.
   const challenge = await secondFactorChallenge(user.email);
   if (challenge) return NextResponse.json({ success: true, redirect: `/auth/login?returnTo=${encodeURIComponent(back)}#twofa=${challenge.challengeToken}&type=${challenge.userType}` });

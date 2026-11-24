@@ -280,7 +280,7 @@ export default function CareersPageEditor({ initial, page, pageUrl, isNew, canHi
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {SWATCHES.map((c) => (
                 <button key={c} type="button" onClick={() => setBrand(c)} aria-label={`Use ${c}`} aria-pressed={careers.brandColor === c}
-                  className={`w-8 h-8 rounded-full border-2 ${careers.brandColor === c ? "border-gray-900 dark:border-white" : "border-transparent"}`} style={{ background: c }} />
+                  className={`w-8 h-8 rounded-full border-2 ${careers.brandColor === c ? "border-gray-900 dark:border-gray-300" : "border-transparent"}`} style={{ background: c }} />
               ))}
               <label className="flex items-center gap-2 ml-1">
                 <span className="sr-only">Custom colour</span>

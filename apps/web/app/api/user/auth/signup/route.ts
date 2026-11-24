@@ -1,3 +1,4 @@
+import { skipSiteOnboardingForPortal } from '@/lib/auth/site-onboarding';
 import { NextRequest, NextResponse } from 'next/server';
 import { passwordProblem } from "@/lib/password-rules";
 import { consumeVerifiedOtp } from '@/lib/otp';
@@ -144,6 +145,7 @@ export async function POST(request: NextRequest) {
       await sql`UPDATE "WebUser" SET "onboardingCompleted" = true, "primaryIntent" = 'looking_for_jobs' WHERE id = ${userId}`;
       onboardingCompleted = true;
     }
+    if (!onboardingCompleted && typeof body.returnTo === 'string' && await skipSiteOnboardingForPortal(userId, safeReturnPath(body.returnTo, '/'))) onboardingCompleted = true;
 
     // Signed in straight away: they just proved the email and chose a password. (Logging in again here used to fail:
     // the security check token is single-use and sign-up had already spent it.)

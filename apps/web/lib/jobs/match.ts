@@ -1,3 +1,4 @@
+import { evaluateKnockouts } from '@/lib/jobs/knockouts';
 import { normalizeSkill } from '@/lib/jobs/skills';
 
 /**
@@ -142,22 +143,10 @@ export function computeMatch(job: MatchJob, app: MatchApplicant): MatchResult {
     else reasons.push({ key: 'salary', label: 'Salary', weight: W.salary, earned: 0, status: 'fail', detail: `Expects ₹${e} L · above ₹${maxL.toFixed(0)} L` });
   }
 
-  // Knockouts: Yes/No questions with a required answer.
-  const questions = (Array.isArray(job.screeningQuestions) ? job.screeningQuestions : []) as { id: string; question: string; type: string; knockoutAnswer?: string }[];
-  const answers = new Map(((Array.isArray(app.screeningAnswers) ? app.screeningAnswers : []) as { id: string; answer: string }[]).map((a) => [a.id, a.answer]));
-  let knockedOut = false;
-  for (const q of questions) {
-    if (q.type !== 'yesno' || (q.knockoutAnswer !== 'yes' && q.knockoutAnswer !== 'no')) continue;
-    const a = answers.get(q.id);
-    const ok = a === q.knockoutAnswer;
-    if (!ok) knockedOut = true;
-    reasons.push({
-      key: 'knockout', label: q.question, weight: 0, earned: 0,
-      status: ok ? 'pass' : a ? 'fail' : 'unknown',
-      detail: a ? `Answered ${a === 'yes' ? 'Yes' : 'No'} · required ${q.knockoutAnswer === 'yes' ? 'Yes' : 'No'}` : `Not answered · required ${q.knockoutAnswer === 'yes' ? 'Yes' : 'No'}`,
-    });
-  }
-  if (questions.some((q) => q.type === 'yesno' && q.knockoutAnswer) && reasons.some((r) => r.key === 'knockout' && r.status === 'unknown')) knockedOut = true;
+  // Knockouts: Yes/No with a required answer, choices with accepted answers, numbers with a minimum or maximum.
+  const ko = evaluateKnockouts(job.screeningQuestions, app.screeningAnswers);
+  for (const r of ko.results) reasons.push({ key: 'knockout', label: r.question, weight: 0, earned: 0, status: r.status, detail: r.detail });
+  const knockedOut = ko.knockedOut;
 
   const total = reasons.reduce((n, r) => n + r.weight, 0);
   const earned = reasons.reduce((n, r) => n + r.earned, 0);

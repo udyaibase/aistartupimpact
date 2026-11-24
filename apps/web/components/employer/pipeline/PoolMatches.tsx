@@ -44,13 +44,13 @@ export default function PoolMatches({ jobId, onDone }: { jobId: string; onDone: 
       </div>
       {open && (
         <ul className="mt-2 space-y-1">
-          {data.people.map((p) => (
+          {data.people.slice(0, 20).map((p) => (
             <li key={p.id} className="flex items-center justify-between gap-2 text-[13px]">
               <span className="min-w-0 truncate"><span className="font-semibold text-gray-900 dark:text-white">{p.fullName}</span> <span className="text-gray-500">· {p.currentTitle ?? 'Applicant'} · applied for {p.appliedFor}</span></span>
               <span className="shrink-0 text-xs font-semibold text-emerald-800 dark:text-emerald-300 tabular-nums">{p.score}% match</span>
             </li>
           ))}
-          {data.count > data.people.length && <li className="text-xs text-gray-500">and {data.count - data.people.length} more. <Link href="/employer/talent" className="underline">Open the talent pool</Link></li>}
+          {data.count > 20 && <li className="text-xs text-gray-500">and {data.count - 20} more. <Link href="/employer/talent" className="underline">Open the talent pool</Link></li>}
         </ul>
       )}
       <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">They agreed to hear about other roles. Each gets one email; nobody is invited twice.</p>

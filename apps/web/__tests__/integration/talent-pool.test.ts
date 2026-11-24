@@ -9,7 +9,7 @@ const db = vi.hoisted(() => ({
   jobBoardApplicationEvent: { findMany: vi.fn(async () => []) },
   jobBoardApplicationNote: { findMany: vi.fn(async () => []) },
   jobBoardListing: { findFirst: vi.fn(), findMany: vi.fn(async () => []), updateMany: vi.fn() },
-  jobBoardTalentInvite: { findFirst: vi.fn(async () => null), create: vi.fn() },
+  jobBoardTalentInvite: { findFirst: vi.fn(async () => null), create: vi.fn(), count: vi.fn(async () => 0) },
   jobBoardEmployer: { update: vi.fn() },
   jobBoardAiScreening: { findMany: vi.fn(async () => []) },
 }));

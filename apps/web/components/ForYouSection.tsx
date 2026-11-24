@@ -3,106 +3,80 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Sparkles, ArrowRight, Star, Briefcase, Rocket, Wrench } from 'lucide-react';
+import { ArrowRight, Star, Briefcase, Rocket, Wrench, Newspaper, CalendarDays } from 'lucide-react';
+import type { Rec, RecType } from '@/lib/personalization/recommend';
 
-type Item = {
-  id: string;
-  name: string;
-  slug: string;
-  logoUrl?: string;
-  shortDescription?: string;
-  tagline?: string;
-  avgRating?: number;
-  pricingModel?: string;
-  entityType: 'tool' | 'startup' | 'job';
+const TYPES: Record<RecType, { label: string; icon: typeof Wrench }> = {
+  article: { label: 'Article', icon: Newspaper },
+  tool: { label: 'Tool', icon: Wrench },
+  startup: { label: 'Startup', icon: Rocket },
+  job: { label: 'Job', icon: Briefcase },
+  event: { label: 'Event', icon: CalendarDays },
 };
 
-const TYPE_CONFIG = {
-  tool: { label: 'Tool', icon: Wrench, color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300', href: (slug: string) => `/tools/${slug}` },
-  startup: { label: 'Startup', icon: Rocket, color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300', href: (slug: string) => `/startups/${slug}` },
-  job: { label: 'Job', icon: Briefcase, color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300', href: (slug: string) => `/jobs/${slug}` },
-};
-
+/** Home page "For you": picked from what the person told us and what they've looked at; each card says why. */
 export default function ForYouSection() {
-  const [items, setItems] = useState<Item[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<Rec[] | null>(null);
 
   useEffect(() => {
     fetch('/api/user/recommendations')
-      .then(r => r.json())
-      .then(data => {
-        if (data.items?.length > 0) setItems(data.items);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      .then((r) => r.json())
+      .then((data) => setItems(Array.isArray(data.items) ? data.items : []))
+      .catch(() => setItems([]));
   }, []);
 
-  if (!loading && items.length === 0) return null;
-  if (loading) return null;
+  if (!items?.length) return null;
 
   return (
-    <section className="py-8 sm:py-12">
+    <section className="py-8 sm:py-12" aria-labelledby="for-you-title">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-amber-500" />
-            <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">For You</h2>
+        <div className="flex items-end justify-between gap-4 mb-5">
+          <div>
+            <h2 id="for-you-title" className="font-sora text-lg sm:text-xl font-bold text-gray-900 dark:text-white">For you</h2>
+            <p className="text-[13px] text-gray-600 dark:text-gray-400 mt-0.5">Based on your interests and what you’ve read.</p>
           </div>
-          <Link href="/settings/preferences" className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1">
-            Customize <ArrowRight className="w-3.5 h-3.5" />
+          <Link href="/settings/preferences" className="shrink-0 inline-flex items-center gap-1 min-h-[40px] text-sm font-semibold text-gray-700 dark:text-gray-300 hover:underline">
+            Edit interests <ArrowRight className="w-3.5 h-3.5" aria-hidden />
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {items.map(item => {
-            const config = TYPE_CONFIG[item.entityType] || TYPE_CONFIG.tool;
-            const Icon = config.icon;
+        <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+          {items.map((item) => {
+            const type = TYPES[item.type] ?? TYPES.tool;
+            const Icon = type.icon;
             return (
-              <Link
-                key={`${item.entityType}-${item.id}`}
-                href={config.href(item.slug)}
-                className="group flex gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:shadow-md hover:border-slate-300 dark:hover:border-slate-600 transition-all"
-              >
-                <div className="shrink-0">
-                  {item.logoUrl ? (
-                    <Image
-                      src={item.logoUrl}
-                      alt={item.name}
-                      width={40}
-                      height={40}
-                      className="rounded-lg object-cover"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
-                      <Icon className="w-5 h-5 text-slate-400" />
-                    </div>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="font-semibold text-sm text-slate-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                      {item.name}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
-                    {item.shortDescription || item.tagline || ''}
-                  </p>
-                  <div className="flex items-center gap-2 mt-1.5">
-                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${config.color}`}>
-                      {config.label}
-                    </span>
-                    {item.avgRating && item.avgRating > 0 && (
-                      <span className="flex items-center gap-0.5 text-xs text-amber-600">
-                        <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                        {Number(item.avgRating).toFixed(1)}
-                      </span>
+              <li key={`${item.type}-${item.id}`}>
+                <Link
+                  href={item.href}
+                  className="group h-full flex gap-3 p-4 rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-gray-400 dark:hover:border-gray-600 transition-colors"
+                >
+                  <div className="shrink-0">
+                    {item.imageUrl ? (
+                      <Image src={item.imageUrl} alt="" width={44} height={44} className="w-11 h-11 rounded-[10px] object-cover border border-gray-200 dark:border-gray-700" />
+                    ) : (
+                      <div className="w-11 h-11 rounded-[10px] border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 dark:text-gray-400">
+                        <Icon className="w-5 h-5" aria-hidden />
+                      </div>
                     )}
                   </div>
-                </div>
-              </Link>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{type.label}</p>
+                    <p className="mt-0.5 font-semibold text-[14px] leading-snug text-gray-900 dark:text-white line-clamp-2 group-hover:underline underline-offset-2">{item.title}</p>
+                    {item.subtitle && <p className="mt-0.5 text-[13px] text-gray-600 dark:text-gray-400 line-clamp-1">{item.subtitle}</p>}
+                    <div className="mt-2 flex items-center gap-2 text-[12px] text-gray-500 dark:text-gray-400">
+                      <span className="truncate">{item.reason}</span>
+                      {item.rating != null && Number(item.rating) > 0 && (
+                        <span className="shrink-0 inline-flex items-center gap-0.5">
+                          <Star className="w-3 h-3 fill-current" aria-hidden />{Number(item.rating).toFixed(1)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </Link>
+              </li>
             );
           })}
-        </div>
+        </ul>
       </div>
     </section>
   );

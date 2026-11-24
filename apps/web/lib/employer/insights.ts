@@ -9,7 +9,7 @@ export const FUNNEL = ['Applied', 'Screening', 'Interview', 'Offer', 'Hired'] as
 
 export const SOURCE_LABEL: Record<string, string> = {
   JOBS_PAGE: 'Udyaibase AI Jobs', STARTUP_PROFILE: 'Startup profile', GOOGLE: 'Google', WIDGET: 'Your website',
-  CAREERS_PAGE: 'Careers page', REFERRAL: 'Referral', DIRECT: 'Direct link', OTHER: 'Other', IMPORTED: 'Imported', SOURCED: 'Sourced',
+  CAREERS_PAGE: 'Careers page', REFERRAL: 'Referral', DIRECT: 'Direct link', OTHER: 'Other', IMPORTED: 'Imported', SOURCED: 'Sourced', NETWORK: 'Open to opportunities',
 };
 
 const median = (xs: number[]) => {

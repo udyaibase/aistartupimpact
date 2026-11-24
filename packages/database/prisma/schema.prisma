@@ -1668,6 +1668,15 @@ model WebUser {
 
   // Explicit preferences
   primaryIntent        String?
+  /// Up to 3 reasons they use the site (lib/personalization/topics.ts INTENTS); primaryIntent is the first.
+  intents              String[]  @default([])
+  /// Topic ids they follow (lib/personalization/topics.ts TOPICS).
+  topics               String[]  @default([])
+  /// { roles: JobBoardCategory[], experience, workModes } for "Jobs for you".
+  jobPrefs             Json?
+  /// "How did you hear about Udyaibase?" (REFERRAL_SOURCES), and their words when it's "Somewhere else".
+  referralSource       String?
+  referralDetail       String?   @db.VarChar(120)
   cityId               String?
   city                 City?     @relation(fields: [cityId], references: [id])
   preferencesUpdatedAt DateTime? @db.Timestamptz
@@ -1684,9 +1693,11 @@ model WebUser {
   interests       WebUserInterest[]
   interactions    WebUserInteraction[]
   JobApplications JobBoardApplication[]
+  OpenProfile     JobBoardOpenProfile?
 
   @@index([deactivatedAt])
   @@index([cityId])
+  @@index([referralSource])
 }
 
 model SavedTool {
@@ -2510,6 +2521,7 @@ model EventOrganizer {
 
   @@index([status])
   @@index([deactivatedAt])
+  notifications          OrganizerNotification[]
 }
 
 /// A workspace owner handing the workspace to one of its Admins. The Admin accepts from an emailed link; on accept
@@ -2963,6 +2975,9 @@ model Event {
   certificateSettings Json?
   /// Certificates bought for this one event (Free hosts; Pro hosts have them included).
   certificatesPaidAt  DateTime?
+  /// Badge design: { template, accent, showLogo } for every host; Pro adds { tierColors, fields, questionIds,
+  /// sponsorStrip, backgroundUrl, textPosition, textColor }. Read through lib/events/badge-settings.ts.
+  badgeSettings       Json?
   /// Follow-up emails: { auto, attendedSubject, attendedBody, missedSubject, missedBody, includeMissed }.
   followUpSettings    Json?
   /// When the automatic follow-up went out (so it's sent once).
@@ -3663,6 +3678,8 @@ enum JobBoardApplicationSource {
   IMPORTED
   /// Found by the team (resume, LinkedIn, referral, event) and added by hand; they didn't apply.
   SOURCED
+  /// Applied after accepting a company's intro request on the "Open to opportunities" network.
+  NETWORK
 }
 
 /// How a workspace proved it runs a startup: a work-email code, a DNS TXT record, an admin, or the founder portal.
@@ -3832,19 +3849,25 @@ model JobBoardEmployer {
   deactivatedAt DateTime?
   deletedAt     DateTime?
 
-  Listings           JobBoardListing[]
-  CareersWidgets     JobBoardCareersWidget[]
-  CareersSubscribers JobBoardCareersSubscriber[]
-  TeamMembers        JobBoardTeamMember[]
-  Payments           JobBoardPayment[]
-  AiScreenings       JobBoardAiScreening[]
-  Referrers          JobBoardReferrer[]
-  ShortlistShares    JobBoardShortlistShare[]
-  OnboardingSteps    JobBoardOnboardingStep[]
-  PipelineTemplates  JobBoardPipelineTemplate[]
-  Imports            JobBoardImport[]
-  Startup            Startup?                    @relation(fields: [startupId], references: [id], onDelete: SetNull)
-  FounderUser        FounderUser?                @relation(fields: [founderUserId], references: [id], onDelete: SetNull)
+  Listings            JobBoardListing[]
+  CareersWidgets      JobBoardCareersWidget[]
+  CareersSubscribers  JobBoardCareersSubscriber[]
+  TeamMembers         JobBoardTeamMember[]
+  Payments            JobBoardPayment[]
+  AiScreenings        JobBoardAiScreening[]
+  Referrers           JobBoardReferrer[]
+  ShortlistShares     JobBoardShortlistShare[]
+  OnboardingSteps     JobBoardOnboardingStep[]
+  PipelineTemplates   JobBoardPipelineTemplate[]
+  Imports             JobBoardImport[]
+  Startup             Startup?                    @relation(fields: [startupId], references: [id], onDelete: SetNull)
+  FounderUser         FounderUser?                @relation(fields: [founderUserId], references: [id], onDelete: SetNull)
+  SavedTalentSearches JobBoardSavedTalentSearch[]
+  /// "Open to opportunities" pilot: this company can search the network and request intros (set in admin).
+  networkPilot        Boolean                     @default(false)
+  /// Network access paused (e.g. after a candidate's report) until our team reviews it.
+  networkPausedAt     DateTime?
+  IntroRequests       JobBoardIntroRequest[]
 
   @@index([founderUserId])
   @@index([startupId])
@@ -3956,6 +3979,7 @@ model JobBoardListing {
   SavedBy       JobBoardSaved[]
 
   siteAnnouncements SiteAnnouncement[]
+  IntroRequests     JobBoardIntroRequest[]
 
   @@index([status, expiresAt])
   @@index([isActive, category])
@@ -4054,6 +4078,7 @@ model JobBoardApplication {
   Events         JobBoardApplicationEvent[]
   ResumeUploads  JobBoardResumeUpload[]
   AiScreening    JobBoardAiScreening?
+  ResumeProfile  JobBoardResumeProfile?
   TalentInvites  JobBoardTalentInvite[]
   Referrer       JobBoardReferrer?          @relation(fields: [referrerId], references: [id], onDelete: SetNull)
   ShortlistVotes JobBoardShortlistVote[]
@@ -4490,28 +4515,28 @@ enum JobBoardTeamStatus {
 
 /// Teammates of an employer hiring workspace. The workspace account itself is the original owner.
 model JobBoardTeamMember {
-  id              String             @id @default(cuid())
-  employerId      String
-  email           String
-  name            String?
-  role            JobBoardTeamRole   @default(RECRUITER)
+  id                 String             @id @default(cuid())
+  employerId         String
+  email              String
+  name               String?
+  role               JobBoardTeamRole   @default(RECRUITER)
   /// Monday hiring report email (owners and recruiters only).
-  weeklyReport    Boolean            @default(true)
+  weeklyReport       Boolean            @default(true)
   /// Interviewers only: jobs they can see. Empty = every job.
-  jobIds          String[]           @default([])
-  status          JobBoardTeamStatus @default(PENDING)
-  inviteTokenHash String?            @unique
-  inviteExpiresAt DateTime?
-  invitedByEmail  String
-  invitedAt       DateTime           @default(now())
-  acceptedAt      DateTime?
-  lastActiveAt    DateTime?
+  jobIds             String[]           @default([])
+  status             JobBoardTeamStatus @default(PENDING)
+  inviteTokenHash    String?            @unique
+  inviteExpiresAt    DateTime?
+  invitedByEmail     String
+  invitedAt          DateTime           @default(now())
+  acceptedAt         DateTime?
+  lastActiveAt       DateTime?
   /// "Sign out everywhere": this person's sessions issued before this moment no longer count.
   sessionsValidAfter DateTime?
   /// Sessions this person signed out of (their ids), so a copied cookie stops working. Newest last, capped.
-  revokedSessionIds  String[]        @default([])
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  revokedSessionIds  String[]           @default([])
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   Employer JobBoardEmployer @relation(fields: [employerId], references: [id], onDelete: Cascade)
 
@@ -4574,6 +4599,27 @@ enum JobBoardAiScreeningStatus {
 
 /// AI read of one application against its job (within the plan's monthly quota). A suggestion for the hiring team only;
 /// never shown to the candidate and never used to move anyone automatically.
+/// The structured form of one application's resume (resume engine step 2): numbered, identity-redacted lines plus
+/// roles, projects, education and dates that point at those lines, with experience worked out in code. Built once per
+/// file; another application with the same file (fileHash) reuses it. Deleted with the application.
+model JobBoardResumeProfile {
+  id            String   @id @default(cuid())
+  applicationId String   @unique
+  /// sha256 of the resume file, to reuse a profile built for the same file.
+  fileHash      String
+  /// The stored resume file this was built from; a different file on the application rebuilds it.
+  resumeKey     String?
+  /// Extractor + profile versions; a change rebuilds the profile.
+  version       String
+  model         String?
+  data          Json
+  createdAt     DateTime @default(now())
+
+  Application JobBoardApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([fileHash, version])
+}
+
 model JobBoardAiScreening {
   id             String                    @id @default(cuid())
   applicationId  String                    @unique
@@ -4599,6 +4645,25 @@ model JobBoardAiScreening {
 }
 
 /// One "invite to apply" email from the talent pool, so a candidate is never invited twice to one job.
+/// A talent pool search a hiring team saved (filters from lib/employer/talent-filters.ts). With `alert` on, the person
+/// who saved it gets a daily email when new pool members match (lib/employer/talent-alerts.ts).
+model JobBoardSavedTalentSearch {
+  id             String   @id @default(cuid())
+  employerId     String
+  name           String
+  filters        Json
+  alert          Boolean  @default(true)
+  createdByEmail String
+  /// Pool members who applied after this have not been sent yet (starts when the search is saved).
+  lastAlertAt    DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  Employer JobBoardEmployer @relation(fields: [employerId], references: [id], onDelete: Cascade)
+
+  @@index([employerId])
+  @@index([alert])
+}
+
 model JobBoardTalentInvite {
   id             String   @id @default(cuid())
   applicationId  String
@@ -5071,4 +5136,143 @@ model JobBoardPipelineTemplate {
   Employer JobBoardEmployer @relation(fields: [employerId], references: [id], onDelete: Cascade)
 
   @@index([employerId])
+}
+
+/// A job seeker who chose to let companies on Udyaibase invite them ("Open to opportunities"). Companies see this
+/// profile without the person's name or contact details; they're shared only when the person applies.
+model JobBoardOpenProfile {
+  id                 String    @id @default(cuid())
+  webUserId          String    @unique
+  headline           String
+  experienceYears    Int?
+  skills             String[]
+  city               String?
+  /// ANY | REMOTE | ONSITE | HYBRID
+  workMode           String    @default("ANY")
+  noticePeriodDays   Int?
+  currentCompany     String?
+  /// Show the current company to companies (hidden unless they choose).
+  showCompany        Boolean   @default(false)
+  /// Companies this person hid from (their current employer is hidden automatically).
+  blockedEmployerIds String[]  @default([])
+  visibleUntil       DateTime
+  pausedAt           DateTime?
+  renewReminderAt    DateTime?
+  consentAt          DateTime
+  consentText        String
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  WebUser  WebUser                @relation(fields: [webUserId], references: [id], onDelete: Cascade)
+  Requests JobBoardIntroRequest[]
+
+  @@index([visibleUntil])
+}
+
+/// A company asking an open profile to apply for one of its jobs. The person stays anonymous unless they apply.
+model JobBoardIntroRequest {
+  id            String    @id @default(cuid())
+  profileId     String
+  employerId    String
+  listingId     String
+  message       String
+  sentByEmail   String
+  /// PENDING | ACCEPTED | DECLINED | EXPIRED | REPORTED
+  status        String    @default("PENDING")
+  reportReason  String?
+  createdAt     DateTime  @default(now())
+  respondedAt   DateTime?
+  /// The application they sent after accepting.
+  applicationId String?   @unique
+
+  Profile  JobBoardOpenProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  Employer JobBoardEmployer    @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  Listing  JobBoardListing     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([employerId, createdAt])
+  @@index([profileId, status])
+  @@index([status, createdAt])
+}
+
+/// Skills dictionary additions approved in admin, layered over the base list in packages/utils/skill-dictionary.ts.
+/// A new canonical skill (one the base list doesn't have).
+model SkillDictionarySkill {
+  id        String   @id @default(cuid())
+  /// baseKey(name): what every comparison uses.
+  key       String   @unique
+  name      String
+  category  String
+  createdBy String
+  createdAt DateTime @default(now())
+}
+
+/// Another way to write a skill (base or added). Also how two skills are merged: one's key becomes an alias of the other.
+model SkillDictionaryAlias {
+  id        String   @id @default(cuid())
+  aliasKey  String   @unique
+  alias     String
+  skillKey  String
+  createdBy String
+  createdAt DateTime @default(now())
+
+  @@index([skillKey])
+}
+
+/// Rules on top of the base list: "implies" (fromKey implies toKey), "ambiguous" / "not_ambiguous" (fromKey only).
+model SkillDictionaryRule {
+  id        String   @id @default(cuid())
+  kind      String
+  fromKey   String
+  toKey     String   @default("")
+  createdBy String
+  createdAt DateTime @default(now())
+
+  @@unique([kind, fromKey, toKey])
+}
+
+/// Skill-like strings seen in job posts and resume skills lists that the dictionary doesn't know, for review in admin.
+/// Nothing here changes matching until a person maps, adds or ignores it.
+model SkillDictionaryUnknown {
+  id          String    @id @default(cuid())
+  key         String    @unique
+  /// One way it was written (a skill tag, never resume sentences).
+  sample      String
+  source      String
+  seenCount   Int       @default(1)
+  firstSeen   DateTime  @default(now())
+  lastSeen    DateTime  @default(now())
+  /// PENDING, MAPPED (made an alias), ADDED (made a skill), IGNORED.
+  status      String    @default("PENDING")
+  /// AI suggestion from the weekly job: { action: "alias" | "new" | "ignore", skill?, category?, reason? }.
+  suggestion  Json?
+  suggestedAt DateTime?
+  decidedBy   String?
+  decidedAt   DateTime?
+
+  @@index([status, seenCount])
+}
+
+/// One row (id "main"): goes up on every dictionary change; stored AI review scores are recomputed by code when it moves.
+model SkillDictionaryMeta {
+  id              String   @id
+  version         Int      @default(0)
+  rescoredVersion Int      @default(0)
+  updatedAt       DateTime @updatedAt
+}
+
+/// Organizer portal bell: updates about the workspace (event reviewed, plan limits, talk proposals…). Same notes as the
+/// emails, for whoever misses them. Shown to everyone in the workspace who can see events.
+model OrganizerNotification {
+  id          String         @id @default(dbgenerated("gen_random_uuid()"))
+  organizerId String
+  type        String
+  title       String
+  message     String
+  link        String?
+  read        Boolean        @default(false)
+  createdAt   DateTime       @default(now()) @db.Timestamptz
+  organizer   EventOrganizer @relation(fields: [organizerId], references: [id], onDelete: Cascade)
+
+  @@index([organizerId, createdAt])
+  @@index([organizerId, read])
 }

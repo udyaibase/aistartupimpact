@@ -11,6 +11,13 @@ export interface PlanDef {
   annualPricePaise: number;
   maxActiveJobs: number;
   aiScreensPerPeriod: number;
+  /**
+   * Which model reviews candidates (models are set in apps/web/lib/ops/ai-models.ts). Every plan uses the advanced one
+   * (decided 2026-11-23): candidates are judged the same whichever plan the employer is on. Plans differ in volume.
+   */
+  aiReviewTier: 'standard' | 'advanced';
+  /** "Open to opportunities" intro requests a month (pilot companies only). */
+  introRequestsPerPeriod: number;
   /** People in the workspace, owner included. Null = unlimited. */
   maxSeats: number | null;
   /** Featured badge and higher placement on every open job. */
@@ -29,7 +36,7 @@ export const ANNUAL_PERIOD_DAYS = 365;
 /** A paid plan keeps working this many days after it ends (renew without losing anything). Not after a trial. */
 export const GRACE_DAYS = 3;
 /** Free trial of TRIAL_PLAN for a new workspace, from its first published job. */
-export const TRIAL_DAYS = 7;
+export const TRIAL_DAYS = 14;
 export const TRIAL_PLAN: PlanKey = 'PRO';
 /** AI reviews included in the trial. */
 export const TRIAL_AI_SCREENS = 100;
@@ -43,22 +50,22 @@ const plan = (d: Omit<PlanDef, 'annualPricePaise'>): PlanDef => ({ ...d, annualP
 
 export const PLANS: Record<PlanKey, PlanDef> = {
   FREE: plan({
-    key: 'FREE', name: 'Free', pricePaise: 0, maxActiveJobs: 1, aiScreensPerPeriod: 25, maxSeats: 2,
+    key: 'FREE', name: 'Free', pricePaise: 0, maxActiveJobs: 1, aiScreensPerPeriod: 25, aiReviewTier: 'advanced', introRequestsPerPeriod: 5, maxSeats: 2,
     featured: false, newsletter: false, customBranding: false, support: 'Email',
     features: ['1 open job', 'AI screening for 25 candidates a month', '2 team seats', 'Pipeline, notes, bulk actions and CSV export', 'Careers page and website widget'],
   }),
   GROWTH: plan({
-    key: 'GROWTH', name: 'Growth', pricePaise: 249_900, maxActiveJobs: 5, aiScreensPerPeriod: 300, maxSeats: 3,
+    key: 'GROWTH', name: 'Growth', pricePaise: 249_900, maxActiveJobs: 5, aiScreensPerPeriod: 300, aiReviewTier: 'advanced', introRequestsPerPeriod: 25, maxSeats: 3,
     featured: false, newsletter: false, customBranding: true, support: 'Email',
     features: ['5 open jobs', 'AI screening for 300 candidates a month', '3 team seats', 'Widget with your branding only', 'Everything in Free'],
   }),
   PRO: plan({
-    key: 'PRO', name: 'Pro', pricePaise: 499_900, maxActiveJobs: 15, aiScreensPerPeriod: 1000, maxSeats: 10,
+    key: 'PRO', name: 'Pro', pricePaise: 499_900, maxActiveJobs: 15, aiScreensPerPeriod: 1000, aiReviewTier: 'advanced', introRequestsPerPeriod: 60, maxSeats: 10,
     featured: true, newsletter: false, customBranding: true, support: 'Email, reply within 1 working day',
     features: ['15 open jobs', 'AI screening for 1,000 candidates a month', '10 team seats', 'Featured badge and higher placement on every job', 'Everything in Growth'],
   }),
   SCALE: plan({
-    key: 'SCALE', name: 'Scale', pricePaise: 999_900, maxActiveJobs: 40, aiScreensPerPeriod: 3000, maxSeats: null,
+    key: 'SCALE', name: 'Scale', pricePaise: 999_900, maxActiveJobs: 40, aiScreensPerPeriod: 3000, aiReviewTier: 'advanced', introRequestsPerPeriod: 150, maxSeats: null,
     featured: true, newsletter: true, customBranding: true, support: 'Priority, reply within 4 hours',
     features: ['40 open jobs', 'AI screening for 3,000 candidates a month', 'Unlimited team seats', 'Every job shared in the Udyaibase newsletter and socials', 'Everything in Pro'],
   }),

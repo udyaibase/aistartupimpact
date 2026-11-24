@@ -13,10 +13,22 @@ export class AiUnavailableError extends Error {}
 
 export { aiSpendUsd } from '@udyaibase/database/ops';
 
-export async function recordAiCall(c: { feature: string; model: string; promptTokens?: number; completionTokens?: number; ok: boolean; error?: string }) {
+/** Listeners for every recorded call (the model comparison script uses this to add up tokens per model). */
+export const aiCallListeners: ((c: { feature: string; model: string; promptTokens: number; completionTokens: number; cachedTokens: number; ok: boolean }) => void)[] = [];
+
+/**
+ * Sampling settings per model family. Reasoning models (gpt-5, o-series) reject temperature 0 and take a reasoning
+ * effort instead; the rest run at temperature 0 so the same input gives the same answer.
+ */
+export function modelOptions(model: string): Record<string, unknown> {
+  return /^(gpt-5|o\d)/.test(model) ? { reasoning_effort: 'low' } : { temperature: 0 };
+}
+
+export async function recordAiCall(c: { feature: string; model: string; promptTokens?: number; completionTokens?: number; cachedTokens?: number; ok: boolean; error?: string }) {
   const promptTokens = c.promptTokens ?? 0, completionTokens = c.completionTokens ?? 0;
+  for (const l of aiCallListeners) { try { l({ feature: c.feature, model: c.model, promptTokens, completionTokens, cachedTokens: c.cachedTokens ?? 0, ok: c.ok }); } catch { /* listener errors never affect a call */ } }
   await prisma.opsAiCall.create({
-    data: { feature: c.feature, model: c.model, promptTokens, completionTokens, costMicroUsd: aiCostMicroUsd(c.model, promptTokens, completionTokens), ok: c.ok, error: c.error?.slice(0, 300) },
+    data: { feature: c.feature, model: c.model, promptTokens, completionTokens, costMicroUsd: aiCostMicroUsd(c.model, promptTokens, completionTokens, c.cachedTokens ?? 0), ok: c.ok, error: c.error?.slice(0, 300) },
   }).catch(() => {});
   if (c.ok) await checkAiBudget().catch(() => {});
 }
@@ -65,7 +77,7 @@ export async function openaiChat(feature: string, body: { model: string; [k: str
       throw new Error(`openai ${res.status}${detail?.error?.code ? ` ${detail.error.code}` : ''}`);
     }
     const data = await res.json();
-    await recordAiCall({ feature, model: body.model, promptTokens: data.usage?.prompt_tokens, completionTokens: data.usage?.completion_tokens, ok: true });
+    await recordAiCall({ feature, model: body.model, promptTokens: data.usage?.prompt_tokens, completionTokens: data.usage?.completion_tokens, cachedTokens: data.usage?.prompt_tokens_details?.cached_tokens, ok: true });
     return data;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

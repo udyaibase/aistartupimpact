@@ -3,7 +3,7 @@ import { prisma } from '@udyaibase/database';
 import { apiRateLimit, checkRateLimit } from '@/lib/rate-limit';
 import { publicListingWhere } from '@/lib/jobs/public';
 import { employerContext } from '@/lib/employer/applications';
-import { inviteFromPool } from '@/lib/employer/talent-invite';
+import { DAILY_INVITE_CAP, inviteFromPool, invitesLeftToday } from '@/lib/employer/talent-invite';
 import { employerApi } from '@/lib/employer/api-session';
 
 export const dynamic = 'force-dynamic';
@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
   });
   if (!listing) return NextResponse.json({ error: 'That job isn’t open.' }, { status: 400 });
 
+  if ((await invitesLeftToday(session.id)) < 1) return NextResponse.json({ error: `You’ve sent ${DAILY_INVITE_CAP} invites in the last 24 hours. Try again tomorrow.` }, { status: 429 });
   const { company } = await employerContext(session.id);
   const outcome = await inviteFromPool({ employerId: session.id, invitedByEmail: session.email, company, applicationId: String(body.applicationId ?? ''), listing });
   if (outcome !== 'invited') {

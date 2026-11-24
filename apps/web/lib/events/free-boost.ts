@@ -2,6 +2,7 @@ import { prisma } from '@udyaibase/database';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 import { button, esc, shell } from '@/lib/jobs/apply-emails';
 import { EVENT_BOOST, isPlatformOrganizer } from '@/lib/events/plans';
+import { notifyOrganizer } from '@/lib/organizer-notify';
 
 /**
  * A host's first published event gets a free Event Boost: featured until it ends, 1 promo email, and up to
@@ -20,6 +21,7 @@ export async function applyFirstEventBoost(organizerId: string, eventId: string)
   await prisma.event.update({ where: { id: eventId }, data: { boostedAt: new Date(), featuredUntil: until, promoCredits: { increment: EVENT_BOOST.promoEmails } } });
 
   const site = (process.env.NEXT_PUBLIC_SITE_URL || 'https://udyaibase.com').replace(/\/$/, '');
+  await notifyOrganizer(organizerId, { type: 'free_boost', title: `${ev.title} is boosted for free`, message: 'Your first event gets a free Event Boost: featured placement and promo emails. Send your promo email when you’re ready.', link: '/organizer/promote' });
   sendEmailFireAndForget({
     to: o.email,
     subject: `${ev.title} is live, and boosted for free`,

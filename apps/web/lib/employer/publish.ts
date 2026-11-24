@@ -1,3 +1,4 @@
+import { recordUnknownSkills } from '@/lib/jobs/skill-overrides';
 import { after } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { effectivePlan, PLANS } from '@/lib/employer/plans';
@@ -102,6 +103,11 @@ export async function publishNow(opts: {
   }
   // People who asked to hear when this company is hiring (only for a role's first publish, not a reopen).
   if (firstPublish && (listing.showOnCareers || listing.showOnProfile)) later(() => notifyCareersSubscribers(employerId, { title: listing.title, slug: listing.slug }));
+  // Skills the dictionary doesn't know yet go to the admin review queue (nothing changes until someone approves).
+  later(async () => {
+    const row = await prisma.jobBoardListing.findUnique({ where: { id: listing.id }, select: { skills: true, mustHaveSkills: true } });
+    if (row) await recordUnknownSkills([...row.skills, ...row.mustHaveSkills], 'job');
+  });
   refreshPublished(listing.slug, employer.Startup?.slug ?? null);
 }
 

@@ -6,6 +6,7 @@ import { promoteWaitlist, promoteWaitlistsForOrganizer } from '@/lib/events/wait
 import { emailInvoice } from '@/lib/billing/invoice';
 import { refundPayment } from '@/lib/billing/razorpay';
 import { logOrganizerActivity, paiseLabel } from '@/lib/workspace-activity';
+import { notifyOrganizer } from '@/lib/organizer-notify';
 
 /** Upcoming = published and not yet ended. */
 export const upcomingWhere = (organizerId: string, now = new Date()) => ({
@@ -132,6 +133,7 @@ async function refundVoidBoost(organizerPaymentId: string, razorpayPaymentId: st
   }
   const o = await prisma.eventOrganizer.findUnique({ where: { id: organizerId }, select: { email: true, name: true } });
   if (!o?.email) return;
+  await notifyOrganizer(organizerId, { type: 'boost_refunded', title: 'Your Boost payment was refunded', message: `The event was deleted or had ended before the payment completed, so the full ₹${(totalPaise / 100).toLocaleString('en-IN')} was refunded. Banks usually show it within 5–7 working days.`, link: '/organizer/billing' });
   sendEmailFireAndForget({
     to: o.email,
     subject: 'Your Event Boost payment has been refunded',
@@ -183,6 +185,7 @@ export async function runHostPlanMaintenance(now = new Date(), opts: { onlyOrgan
 <p style="margin:0 0 24px">${button(`${site}/organizer/billing`, 'Renew Pro')}</p>
 <p style="margin:0;font-size:13px;color:#6b7280">Plans never renew automatically, so nothing is charged unless you pay.</p>`),
     });
+    await notifyOrganizer(o.id, { type: 'plan_ending', title: `Your Pro plan ends on ${date}`, message: 'After that you move to Free and your events stop being featured. Plans never renew automatically.', link: '/organizer/billing' });
     await prisma.eventOrganizer.update({ where: { id: o.id }, data: { planReminderSentAt: now } });
   }
   // Day Pro ends: "renew within 3 days" (featured events and limits carry on; promo emails pause).
@@ -204,6 +207,7 @@ export async function runHostPlanMaintenance(now = new Date(), opts: { onlyOrgan
 <p style="margin:0 0 24px">${button(`${site}/organizer/billing`, 'Renew now')}</p>
 <p style="margin:0;font-size:13px;color:#6b7280">After that you move to Free. Everything you’ve published stays live.</p>`),
     });
+    await notifyOrganizer(o.id, { type: 'plan_grace', title: 'Your Pro plan has ended', message: `Your events stay featured and your limits stay the same until ${date}. Renew before then to carry on without any change.`, link: '/organizer/billing' });
     await prisma.eventOrganizer.update({ where: { id: o.id }, data: { planGraceNoticeAt: now } });
   }
   const lapseWhere = { plan: 'PRO' as const, planExpiresAt: { lte: new Date(now.getTime() - HOST_GRACE_DAYS * 864e5) }, ...only };

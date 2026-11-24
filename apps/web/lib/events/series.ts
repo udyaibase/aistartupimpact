@@ -3,6 +3,7 @@ import { sendEmail, sendEmailBatch } from '@/lib/email/send';
 import { seriesFollowToken } from './after-event';
 import { duplicateEvent } from './duplicate';
 import { utcToZoned } from './zoned-time';
+import { notifyOrganizer } from '@/lib/organizer-notify';
 
 /**
  * Event series ("Bengaluru AI Meetup"): one public page listing every edition, people can follow it (double opt-in)
@@ -203,6 +204,14 @@ export async function generateRecurringDrafts(now = new Date()) {
       await prisma.eventSeries.update({ where: { id: s.id }, data: { lastGeneratedFor: new Date(`${date}T12:00:00Z`) } });
     }
     created += made.length;
+    if (made.length) {
+      await notifyOrganizer(s.organizerId, {
+        type: 'series_draft_ready',
+        title: `${made.length === 1 ? 'Next' : `${made.length} new`} ${s.name} ${made.length === 1 ? 'event is' : 'events are'} ready to review`,
+        message: 'We copied your template to the next date as a draft. Check the details and publish when you’re ready.',
+        link: made.length === 1 ? `/organizer/events/${made[0].id}` : '/organizer/events',
+      });
+    }
     if (made.length && s.organizer.email) {
       const list = made.map((m) => `<li style="margin:0 0 6px"><a href="${SITE}/organizer/events/${m.id}" style="color:#111827;font-weight:600">${esc(m.title)}</a> · ${esc(new Date(`${m.date}T00:00:00Z`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }))}</li>`).join('');
       await sendEmail({

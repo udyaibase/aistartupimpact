@@ -4,6 +4,7 @@ import { cfpIsOpen, cfpSettings, cleanSubmission, sendSubmissionReceived } from 
 import { authRateLimit, checkRateLimit, getClientIdentifier, rateLimitMessage, retryAfterHeaders } from '@/lib/rate-limit';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 import { verifyTurnstileToken } from '@/lib/turnstile';
+import { notifyOrganizer } from '@/lib/organizer-notify';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
 
   const event = await prisma.event.findUnique({
     where: { slug },
-    select: { id: true, title: true, endAt: true, status: true, deletedAt: true, cfpSettings: true, agendaTracks: true, organizer: { select: { email: true } } },
+    select: { id: true, title: true, endAt: true, status: true, deletedAt: true, cfpSettings: true, agendaTracks: true, organizerId: true, organizer: { select: { email: true } } },
   });
   if (!event) return NextResponse.json({ success: false, error: 'Event not found.' }, { status: 404 });
   const settings = cfpSettings(event.cfpSettings);
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
   // the form can't be used to send mail to someone over and over.
   const toAddress = await checkRateLimit(authRateLimit, `cfp-received:${input.email.toLowerCase()}`);
   if (toAddress.success) sendSubmissionReceived(input.email, input.name.split(' ')[0], input.title, event.title).catch(() => {});
+  await notifyOrganizer(event.organizerId, { type: 'cfp_new', title: `New talk proposal for ${event.title}`, message: `${input.name} proposed “${input.title}”.`, link: `/organizer/events/${event.id}/speakers` });
   if (event.organizer?.email && !/@udyaibase\.com$/i.test(event.organizer.email)) {
     sendEmailFireAndForget({ to: event.organizer.email, type: 'cfp_new', subject: `New talk proposal for ${event.title}`, html: `<p>${input.name.replace(/[<>&]/g, '')} proposed “${input.title.replace(/[<>&]/g, '')}”. Review it in your organizer portal under Speakers.</p>` });
   }

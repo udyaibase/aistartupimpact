@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Check, Loader2, Plus, Trash2, Info, Eye, AlertTriangle, BadgeCheck } from 'lucide-react';
 import {
   APPLY_VIA, CURRENCIES, CUSTOM_EXPERIENCE, EMPLOYMENT_TYPES, EXPERIENCE_BANDS, MAX_EXPERIENCE_YEARS, MAX_OPEN_DAYS, MAX_POSITIONS, MAX_SCREENING_QUESTIONS, MAX_QUESTION_OPTIONS, MAX_SKILLS,
-  WORK_TYPES, publishProblems, salaryUnit, type ApplyVia, type JobDraft, type ScreeningQuestion,
+  WORK_TYPES, draftToData, publishProblems, salaryUnit, type ApplyVia, type JobDraft, type ScreeningQuestion,
 } from '@/lib/jobs/composer';
 import DescriptionEditor from './DescriptionEditor';
 import { CategorySelect, TeamSelect } from './CustomSelects';
@@ -19,6 +19,7 @@ import { JobPreview, ListingStrength, type ComposerCompany } from './JobPreview'
 import StartFaster from './StartFaster';
 import PublishedScreen from './PublishedScreen';
 import WaitingScreen from './WaitingScreen';
+import { blockedQuestion, isKnockout, suggestKnockouts } from '@/lib/jobs/knockouts';
 import type { Clearance } from '@/lib/employer/portal';
 
 type Status = 'NEW' | 'DRAFT' | 'OPEN' | 'PAUSED' | 'CLOSED';
@@ -259,13 +260,24 @@ export default function JobComposer({
     }
   }
 
-  async function saveLive() {
+  /** Questions as last saved, so a live job's knockout edits can be checked against its applicants first. */
+  const savedQuestions = useRef(JSON.stringify(initialDraft.screeningQuestions));
+  const [impact, setImpact] = useState<{ nowFail: number; nowPass: number } | null>(null);
+
+  async function saveLive(confirmed = false) {
     setActionError('');
     if (showProblems()) return;
+    const qs = JSON.stringify(draft.screeningQuestions);
+    if (!confirmed && id && qs !== savedQuestions.current) {
+      const res = await fetch(`/api/employer/jobs/${id}/knockout-impact`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ screeningQuestions: draft.screeningQuestions }) }).catch(() => null);
+      const d = res?.ok ? await res.json().catch(() => null) : null;
+      if (d && (d.nowFail > 0 || d.nowPass > 0)) { setImpact({ nowFail: d.nowFail, nowPass: d.nowPass }); return; }
+    }
+    setImpact(null);
     setPublishing(true);
     const ok = await save();
     setPublishing(false);
-    if (ok) setNotice(status === 'OPEN' ? 'Changes saved. They’re live now.' : 'Changes saved.');
+    if (ok) { savedQuestions.current = qs; setNotice(status === 'OPEN' ? 'Changes saved. They’re live now.' : 'Changes saved.'); }
   }
 
   async function duplicate(sourceId: string) {
@@ -306,6 +318,12 @@ export default function JobComposer({
     'aria-describedby': errors[k] ? `job-${k}-error` : hint ? `job-${k}-hint` : undefined,
   });
   const usedSuggestions = new Set(draft.screeningQuestions.map((q) => q.question));
+  // Knockouts suggested from what the job already says (experience, must-haves, office), then the general ones.
+  const derived = draftToData(draft);
+  const knockoutSuggestions: Omit<ScreeningQuestion, 'id'>[] = suggestKnockouts({
+    experienceMin: derived.experienceMin, mustHaveSkills: draft.mustHaveSkills, skills: draft.skills, workType: draft.workType, city: draft.city,
+  }).map((k) => ({ question: k.question, type: k.type, required: true, ...(k.knockoutAnswer ? { knockoutAnswer: k.knockoutAnswer } : {}), ...(k.minValue != null ? { minValue: k.minValue } : {}) }));
+  const hasKnockout = draft.screeningQuestions.some((q) => isKnockout(q));
 
   const saveLine = !isDraft
     ? saveState === 'saving' ? 'Saving…' : saveState === 'error' ? saveError : 'Edits to a live job apply when you save.'
@@ -534,11 +552,12 @@ export default function JobComposer({
                     <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
                       <label className="inline-flex items-center gap-2 text-[13px] text-gray-700 dark:text-gray-300">
                         Answer
-                        <select value={q.type} onChange={(e) => setQuestions(draft.screeningQuestions.map((x) => x.id === q.id ? { ...x, type: e.target.value as 'text' | 'yesno' | 'choice', ...(e.target.value === 'choice' && !x.options ? { options: [] } : {}) } : x))}
+                        <select value={q.type} onChange={(e) => setQuestions(draft.screeningQuestions.map((x) => x.id === q.id ? { ...x, type: e.target.value as 'text' | 'yesno' | 'choice' | 'number', ...(e.target.value === 'choice' && !x.options ? { options: [] } : {}) } : x))}
                           className="min-h-[36px] px-2 rounded-[8px] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-[13px]">
                           <option value="text">Short answer</option>
                           <option value="yesno">Yes / No</option>
                           <option value="choice">Multiple choice</option>
+                          <option value="number">Number</option>
                         </select>
                       </label>
                       <label className="inline-flex items-center gap-2 text-[13px] text-gray-700 dark:text-gray-300">
@@ -559,6 +578,23 @@ export default function JobComposer({
                         </label>
                       )}
                     </div>
+                    {blockedQuestion(q.question) && <p role="alert" className="text-[13px] text-red-700 dark:text-red-400">{blockedQuestion(q.question)}</p>}
+                    {q.type === 'number' && (
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-gray-700 dark:text-gray-300">
+                        <span>Flag if the answer is</span>
+                        <label className="inline-flex items-center gap-1.5">below
+                          <input type="number" min={0} step="0.5" value={q.minValue ?? ''} placeholder="—"
+                            onChange={(e) => setQuestions(draft.screeningQuestions.map((x) => x.id === q.id ? { ...x, minValue: e.target.value === '' ? null : Number(e.target.value) } : x))}
+                            className="w-20 min-h-[36px] px-2 rounded-[8px] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-[13px]" />
+                        </label>
+                        <label className="inline-flex items-center gap-1.5">or above
+                          <input type="number" min={0} step="0.5" value={q.maxValue ?? ''} placeholder="—"
+                            onChange={(e) => setQuestions(draft.screeningQuestions.map((x) => x.id === q.id ? { ...x, maxValue: e.target.value === '' ? null : Number(e.target.value) } : x))}
+                            className="w-20 min-h-[36px] px-2 rounded-[8px] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-[13px]" />
+                        </label>
+                        <span className="text-xs text-gray-500">e.g. years of Python below 3, or notice above 60 days</span>
+                      </div>
+                    )}
                     {q.type === 'choice' && (
                       <label className="block text-[13px] text-gray-700 dark:text-gray-300">
                         Options, one per line (2 to {MAX_QUESTION_OPTIONS})
@@ -568,21 +604,41 @@ export default function JobComposer({
                           className="mt-1 w-full px-3 py-2 rounded-[8px] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-base sm:text-sm" />
                       </label>
                     )}
-                    {q.type === 'yesno' && q.knockoutAnswer && (
-                      <p className="text-xs text-gray-500">Candidates who answer {q.knockoutAnswer === 'yes' ? 'No' : 'Yes'} are flagged on your board, never rejected automatically.</p>
+                    {q.type === 'choice' && (q.options ?? []).filter((o) => o.trim()).length >= 2 && (
+                      <fieldset className="text-[13px] text-gray-700 dark:text-gray-300">
+                        <legend className="mb-1">Answers that meet the role <span className="text-gray-500">(leave all unticked for no flag)</span></legend>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1">
+                          {(q.options ?? []).map((o) => o.trim()).filter(Boolean).map((o) => {
+                            const on = (q.acceptedOptions ?? []).includes(o);
+                            return (
+                              <label key={o} className="inline-flex items-center gap-1.5">
+                                <input type="checkbox" checked={on} className="w-4 h-4 rounded border-gray-300 text-brand"
+                                  onChange={() => setQuestions(draft.screeningQuestions.map((x) => x.id === q.id ? { ...x, acceptedOptions: on ? (x.acceptedOptions ?? []).filter((y) => y !== o) : [...(x.acceptedOptions ?? []), o] } : x))} />
+                                {o}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </fieldset>
+                    )}
+                    {isKnockout(q) && (
+                      <p className="text-xs text-gray-500">Candidates who don’t meet this are flagged and grouped under “Didn’t meet must-haves” on your board, never rejected automatically.</p>
                     )}
                   </li>
                 ))}
               </ol>
             )}
             {err('screeningQuestions') && <p className="text-[13px] text-red-700 dark:text-red-400">{err('screeningQuestions')}</p>}
+            {!hasKnockout && (
+              <p className="flex items-start gap-1.5 text-[13px] text-gray-700 dark:text-gray-300"><Info className="w-4 h-4 mt-0.5 shrink-0 text-gray-500" aria-hidden /> Jobs with a knockout question get reviewed faster: candidates who don’t meet it are grouped separately and skip the automatic AI review.</p>
+            )}
             {draft.screeningQuestions.length < MAX_SCREENING_QUESTIONS ? (
               <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={() => addQuestion({ question: '', type: 'text', required: false })}
                   className="inline-flex items-center gap-1.5 min-h-[40px] px-3 rounded-[10px] border border-gray-300 dark:border-gray-700 text-sm font-semibold text-gray-800 dark:text-gray-200 hover:border-gray-400">
                   <Plus className="w-4 h-4" aria-hidden /> Add a question
                 </button>
-                {QUESTION_SUGGESTIONS.filter((s) => !usedSuggestions.has(s.question)).map((s) => (
+                {[...knockoutSuggestions, ...QUESTION_SUGGESTIONS].filter((s) => !usedSuggestions.has(s.question)).slice(0, 6).map((s) => (
                   <button key={s.question} type="button" onClick={() => addQuestion(s)}
                     className="min-h-[40px] px-3 rounded-[10px] border border-dashed border-gray-300 dark:border-gray-700 text-[13px] text-gray-700 dark:text-gray-300 hover:border-brand hover:text-brand text-left">
                     + {s.question}
@@ -683,13 +739,27 @@ export default function JobComposer({
               </>
             ) : (
               <>
+                {impact && (
+                  <div role="alertdialog" aria-labelledby="ko-impact" className="w-full basis-full rounded-[12px] border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3 text-[13px] text-amber-900 dark:text-amber-200">
+                    <p id="ko-impact" className="font-semibold">Your question changes affect candidates who already applied</p>
+                    <p className="mt-0.5">
+                      {impact.nowFail > 0 && <>{impact.nowFail} {impact.nowFail === 1 ? 'candidate' : 'candidates'} will no longer meet the must-haves and move to “Didn’t meet must-haves”. </>}
+                      {impact.nowPass > 0 && <>{impact.nowPass} {impact.nowPass === 1 ? 'candidate' : 'candidates'} will now meet them and move back to New. </>}
+                      Nobody is emailed or rejected.
+                    </p>
+                    <div className="mt-2 flex gap-2">
+                      <button type="button" onClick={() => saveLive(true)} className="min-h-[36px] px-3 rounded-[8px] bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-[13px] font-semibold">Save anyway</button>
+                      <button type="button" onClick={() => setImpact(null)} className="min-h-[36px] px-3 rounded-[8px] border border-amber-400 dark:border-amber-700 text-[13px] font-semibold">Keep editing</button>
+                    </div>
+                  </div>
+                )}
                 {status !== 'OPEN' && (
                   <button type="button" onClick={publish} disabled={publishing}
                     className="flex-1 sm:flex-none min-h-[44px] px-4 rounded-[10px] border border-gray-300 dark:border-gray-700 text-sm font-semibold text-gray-800 dark:text-gray-200 hover:bg-gray-50 disabled:opacity-50">
                     Save and reopen
                   </button>
                 )}
-                <button type="button" onClick={saveLive} disabled={publishing} className="btn-brand flex-1 sm:flex-none gap-2 whitespace-nowrap px-4 disabled:opacity-60">
+                <button type="button" onClick={() => saveLive()} disabled={publishing} className="btn-brand flex-1 sm:flex-none gap-2 whitespace-nowrap px-4 disabled:opacity-60">
                   {publishing && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} Save changes
                 </button>
               </>

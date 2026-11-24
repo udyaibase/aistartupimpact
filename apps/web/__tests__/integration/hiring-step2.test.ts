@@ -7,9 +7,10 @@ const db = vi.hoisted(() => ({
   jobAlertSubscription: { findFirst: vi.fn(), count: vi.fn(async (..._a: any[]): Promise<any> => 0), create: vi.fn(), update: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(async (..._a: any[]): Promise<any> => []), updateMany: vi.fn(async (..._a: any[]): Promise<any> => ({ count: 1 })) },
   jobBoardListing: { findFirst: vi.fn(), findMany: vi.fn(async (..._a: any[]): Promise<any> => []) },
   jobBoardApplication: { findMany: vi.fn(async (..._a: any[]): Promise<any> => []), findFirst: vi.fn() },
-  jobBoardTalentInvite: { findMany: vi.fn(async (..._a: any[]): Promise<any> => []), findFirst: vi.fn(), create: vi.fn() },
+  jobBoardTalentInvite: { findMany: vi.fn(async (..._a: any[]): Promise<any> => []), findFirst: vi.fn(), create: vi.fn(), count: vi.fn(async () => 0) },
   jobBoardShortlistShare: { create: vi.fn(), findUnique: vi.fn(), count: vi.fn(async (..._a: any[]): Promise<any> => 0), update: vi.fn(async (..._a: any[]): Promise<any> => ({})), updateMany: vi.fn() },
   jobBoardShortlistVote: { upsert: vi.fn(), findMany: vi.fn(async (..._a: any[]): Promise<any> => []) },
+  jobBoardApplicationEvent: { findMany: vi.fn(async (..._a: any[]): Promise<any> => []) },
 }));
 const mail = vi.hoisted(() => ({ one: vi.fn(), batch: vi.fn(async (items: unknown[]) => items.map(() => ({ success: true }))) }));
 
@@ -92,7 +93,7 @@ describe('job alerts', () => {
 
 describe('past applicants who match a new job', () => {
   const job = { skills: ['Python', 'PyTorch'], mustHaveSkills: [], experienceMin: null, experienceMax: null, workType: 'REMOTE', city: null, salaryMax: null, salaryCurrency: 'INR', maxNoticeDays: null, screeningQuestions: null };
-  const person = (id: string, email: string, skills: string[]) => ({ id, email, fullName: id, currentTitle: null, city: null, experienceYears: 3, noticePeriodDays: 30, expectedCtcLakh: null, confirmedSkills: skills, matchedSkills: skills, Listing: { title: 'Old role', isGeneral: false } });
+  const person = (id: string, email: string, skills: string[]) => ({ id, email, fullName: id, currentTitle: null, city: null, experienceYears: 3, noticePeriodDays: 30, expectedCtcLakh: null, confirmedSkills: skills, matchedSkills: skills, status: 'REJECTED', appliedAt: new Date('2026-10-01'), Listing: { title: 'Old role', isGeneral: false } });
 
   it('leaves out people who applied, were hired or were already invited, and weak matches', async () => {
     db.jobBoardListing.findFirst.mockResolvedValueOnce(job);
@@ -103,6 +104,16 @@ describe('past applicants who match a new job', () => {
     db.jobBoardTalentInvite.findMany.mockResolvedValueOnce([]);
     const m = await poolMatchesForJob('emp1', 'job2');
     expect(m.map((x) => x.id)).toEqual(['good']);
+  });
+
+  it('says how far each match got with you and which skills fit the job', async () => {
+    db.jobBoardListing.findFirst.mockResolvedValueOnce({ ...job, mustHaveSkills: ['Kubernetes'] });
+    db.jobBoardApplication.findMany.mockResolvedValueOnce([{ ...person('good', 'g@x.co', ['Docker', 'Python', 'PyTorch']), id: 'a1' }]).mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    db.jobBoardTalentInvite.findMany.mockResolvedValueOnce([]);
+    db.jobBoardApplicationEvent.findMany.mockResolvedValueOnce([{ applicationId: 'a1', toStatus: 'INTERVIEW' }]);
+    const [m] = await poolMatchesForJob('emp1', 'job2');
+    expect(m).toMatchObject({ stage: 'Interviewed, not selected', stageRank: 3, matchedSkills: ['Python', 'PyTorch'], missingMustHaves: ['Kubernetes'] });
+    expect(m!.skills.slice(0, 2)).toEqual(['Python', 'PyTorch']);
   });
 
   it('never invites someone who already applied', async () => {

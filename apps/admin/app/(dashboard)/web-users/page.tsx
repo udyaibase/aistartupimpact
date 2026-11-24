@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { Users, Search, Mail, Calendar, CheckCircle, XCircle, Eye, Trash2, Shield, Download } from 'lucide-react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { Pagination } from '@/components/Pagination';
@@ -155,16 +156,21 @@ export default function WebUsersPage() {
   return (
     <div className="p-6">
       {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-1">
-          <Users className="w-6 h-6 text-brand" />
-          <h1 className="text-2xl font-sora font-bold text-navy dark:text-white">
-            Web Users
-          </h1>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Users className="w-6 h-6 text-brand" />
+            <h1 className="text-2xl font-sora font-bold text-navy dark:text-white">
+              Web Users
+            </h1>
+          </div>
+          <p className="text-xs text-gray-600 dark:text-gray-400">
+            Manage website users (separate from admin users and founders)
+          </p>
         </div>
-        <p className="text-xs text-gray-600 dark:text-gray-400">
-          Manage website users (separate from admin users and founders)
-        </p>
+        <Link href="/web-users/insights" className="inline-flex items-center h-9 px-3 rounded-lg border border-gray-300 dark:border-gray-700 text-sm font-semibold text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800">
+          Audience insights: how people found us
+        </Link>
       </div>
 
       {/* Stats */}

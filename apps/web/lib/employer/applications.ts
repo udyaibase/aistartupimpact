@@ -1,3 +1,5 @@
+import { ensureSkillOverrides } from '@/lib/jobs/skill-overrides';
+import { answerMismatches, profileSummary, type ResumeProfileData } from '@/lib/jobs/resume-profile-shared';
 import { prisma } from '@udyaibase/database';
 import { IN_PIPELINE } from '@/lib/employer/stages';
 import { isClaimVerified } from '@/lib/jobs/trust';
@@ -95,6 +97,7 @@ export const BOARD_LIMIT = 2000;
 
 /** `page` reads past the board limit (the list view's "Load more"); `q` searches every candidate on the server. */
 export async function loadBoard(employerId: string, listingId?: string, jobIds: string[] | null = null, page: { skip?: number; take?: number; q?: string } = {}): Promise<BoardCard[]> {
+  await ensureSkillOverrides();
   if (listingId && jobIds && !jobIds.includes(listingId)) return [];
   const q = page.q?.trim().slice(0, 80);
   const apps = await prisma.jobBoardApplication.findMany({
@@ -174,11 +177,13 @@ function nextInputs(a: {
 }
 
 export async function loadDetail(employerId: string, id: string, jobIds: string[] | null = null) {
+  await ensureSkillOverrides();
   const a = await prisma.jobBoardApplication.findFirst({
     where: { id, Listing: { employerId, ...(jobIds ? { id: { in: jobIds } } : {}) } },
     include: {
       Listing: { select: { id: true, title: true, slug: true, description: true, experienceBand: true, isGeneral: true, interviewRounds: true, assessment: true, decisionOwnerEmail: true, decisionDelegateEmail: true, ...MATCH_JOB } },
       AiScreening: true,
+      ResumeProfile: { select: { data: true } },
       Referrer: { select: { name: true } },
       Notes: { orderBy: { createdAt: 'asc' } },
       Events: { orderBy: { createdAt: 'desc' }, take: 50 },
@@ -259,6 +264,9 @@ export async function loadDetail(employerId: string, id: string, jobIds: string[
       status: o.status, withdrawn: !!o.withdrawnAt, appliedAt: o.appliedAt.toISOString(),
     })),
     match: computeMatch(a.Listing, a),
+    resumeProfile: a.ResumeProfile ? profileSummary(a.ResumeProfile.data as unknown as ResumeProfileData) : null,
+    /** Answers that don't match the resume's dates: shown to the team to check, never scored. */
+    mismatches: a.ResumeProfile ? answerMismatches(a.ResumeProfile.data as unknown as ResumeProfileData, a, a.Listing.screeningQuestions) : [],
     ai: a.AiScreening ? {
       status: a.AiScreening.status,
       fitScore: a.AiScreening.fitScore,
@@ -313,6 +321,7 @@ export interface TopCandidate {
  * question, withdrawn or erased are left out. `unscreened` says how many undecided candidates AI hasn't read yet.
  */
 export async function loadTopTen(employerId: string, listingId?: string, jobIds: string[] | null = null) {
+  await ensureSkillOverrides();
   if (listingId && jobIds && !jobIds.includes(listingId)) return { candidates: [] as TopCandidate[], unscreened: 0, undecided: 0 };
   const where = {
     status: { in: ['APPLIED', 'REVIEWED'] as ('APPLIED' | 'REVIEWED')[] },

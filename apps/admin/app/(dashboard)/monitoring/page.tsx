@@ -9,7 +9,7 @@ type Data = Extract<Awaited<ReturnType<typeof monitoringAction>>, { success: tru
 const card = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl';
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Never');
 const usd = (n: number) => `$${n.toFixed(2)}`;
-const FEATURE: Record<string, string> = { ai_screening: 'AI candidate review', job_parse: 'Job description import', resume_prefill: 'Resume autofill', careers_scraper: 'Careers page import (admin)' };
+const FEATURE: Record<string, string> = { ai_screening: 'AI candidate review', resume_profile: 'Resume reading (for AI review)', job_parse: 'Job description import', resume_prefill: 'Resume autofill', careers_scraper: 'Careers page import (admin)' };
 
 function Meter({ label, used, limit, fmt = String }: { label: string; used: number; limit: number; fmt?: (n: number) => string }) {
   const pct = Math.min(100, Math.round((used / Math.max(1, limit)) * 100));
@@ -86,11 +86,23 @@ export default function MonitoringPage() {
           <h2 id="ai-title" className="text-sm font-semibold text-gray-900 dark:text-white">OpenAI (estimated)</h2>
           <Meter label="Today" used={ai.today} limit={ai.budgets.dailyUsd} fmt={usd} />
           <Meter label="This month" used={ai.month} limit={ai.budgets.monthlyUsd} fmt={usd} />
+          {ai.forecastMonthUsd != null && (
+            <p className={`text-xs ${ai.forecastMonthUsd > ai.budgets.monthlyUsd ? 'text-amber-700 font-semibold' : 'text-gray-500'}`}>
+              At this rate the month ends near {usd(ai.forecastMonthUsd)}{ai.forecastMonthUsd > ai.budgets.monthlyUsd ? ': over the monthly budget. Raise OPENAI_MONTHLY_BUDGET_USD or expect alerts.' : '.'}
+            </p>
+          )}
           <p className={`text-xs ${ai.failed24h ? 'text-amber-700 font-semibold' : 'text-gray-500'}`}>{ai.calls24h} calls in 24 hours, {ai.failed24h} failed · Hard stop {ai.hardStop ? 'on (AI pauses at the budget)' : 'off'}</p>
           {ai.byFeature.length > 0 && (
             <table className="w-full text-xs">
               <thead className="text-gray-500 text-left"><tr><th className="font-semibold py-1">This month by feature</th><th className="font-semibold text-right">Calls</th><th className="font-semibold text-right">Cost</th></tr></thead>
               <tbody>{ai.byFeature.map((f) => <tr key={f.feature}><td className="py-0.5">{FEATURE[f.feature] ?? f.feature}</td><td className="text-right tabular-nums">{f.calls}</td><td className="text-right tabular-nums">{usd(f.usd)}</td></tr>)}</tbody>
+            </table>
+          )}
+          {ai.reviews.byCompany.length > 0 && (
+            <table className="w-full text-xs">
+              <thead className="text-gray-500 text-left"><tr><th className="font-semibold py-1">AI reviews this month by company</th><th className="font-semibold text-right">Reviews</th><th className="font-semibold text-right">Est. cost</th></tr></thead>
+              <tbody>{ai.reviews.byCompany.map((c) => <tr key={c.id}><td className="py-0.5">{c.name} <span className="text-gray-400">{c.plan}</span></td><td className="text-right tabular-nums">{c.reviews}</td><td className="text-right tabular-nums">{usd(c.usd)}</td></tr>)}</tbody>
+              <tfoot><tr><td colSpan={3} className="pt-1 text-gray-500">{ai.reviews.total} reviews in all, about {usd(ai.reviews.perReviewUsd)} each including resume reading. Shared out by number of reviews.</td></tr></tfoot>
             </table>
           )}
           {ai.recentFailures.length > 0 && (

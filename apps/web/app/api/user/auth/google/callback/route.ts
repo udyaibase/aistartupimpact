@@ -1,5 +1,5 @@
 import { jwtSecret } from '@/lib/jwt-secret';
-import { siteOnboarding } from '@/lib/auth/site-onboarding';
+import { siteOnboarding, skipSiteOnboardingForPortal } from '@/lib/auth/site-onboarding';
 import { NextRequest, NextResponse } from 'next/server';
 import { clearOAuthState, readOAuthState } from '@/lib/auth/oauth-state';
 import { logFounderSignIn } from '@/lib/founder/activity';
@@ -135,6 +135,7 @@ export async function GET(request: NextRequest) {
       await sql`UPDATE "WebUser" SET "onboardingCompleted" = true, "primaryIntent" = COALESCE("primaryIntent", 'looking_for_jobs') WHERE id = ${user.id}`;
       user.onboardingCompleted = true;
     }
+    if (!user.onboardingCompleted && await skipSiteOnboardingForPortal(user.id, safeReturnPath(state))) user.onboardingCompleted = true;
 
     // Google proves the first step only: anyone with 2FA on still enters their code. The token goes in the URL
     // fragment, so it never reaches server logs or another site's Referer.

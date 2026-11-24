@@ -46,16 +46,16 @@ export default function CompanyEmailBanner({ userType, alreadyVerified = false }
   const settingsPath = userType === 'founder' ? '/founder/settings' : '/organizer/settings';
 
   return (
-    <div role="note" className="mb-3 sm:mb-4 rounded-md border border-amber-200 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-950/30 pl-3 pr-1 sm:px-4 py-1 sm:py-3 flex items-center gap-2 sm:gap-3">
-      <ShieldAlert className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600 dark:text-amber-400 shrink-0" aria-hidden />
+    <div role="note" className="mb-3 sm:mb-4 rounded-md border border-amber-200 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-950/30 pl-3 pr-1 sm:pl-3.5 sm:pr-1.5 py-1 flex items-center gap-2 sm:gap-2.5">
+      <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" aria-hidden />
       {/* One line on a phone; the full sentence from tablet width up. */}
-      <p className="text-[13px] sm:text-sm leading-tight text-amber-800 dark:text-amber-200 flex-1 min-w-0 truncate sm:whitespace-normal">
+      <p className="text-[13px] leading-tight text-amber-800 dark:text-amber-200 flex-1 min-w-0 truncate sm:whitespace-normal">
         <span className="font-semibold"><span className="sm:hidden">Verify company email</span><span className="hidden sm:inline">Verify your company email</span></span>
         <span className="hidden sm:inline"> to earn a Verified badge on your profile and build trust with the community.</span>
       </p>
       <Link
         href={settingsPath}
-        className="inline-flex items-center gap-1 sm:gap-1.5 h-8 sm:h-9 px-2.5 sm:px-3 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold transition-colors shrink-0"
+        className="inline-flex items-center gap-1 h-8 px-3 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold transition-colors shrink-0"
       >
         Verify <span className="hidden sm:inline">now</span> <ArrowRight className="w-3.5 h-3.5" aria-hidden />
       </Link>
@@ -64,7 +64,7 @@ export default function CompanyEmailBanner({ userType, alreadyVerified = false }
           setVisible(false);
           try { localStorage.setItem(DISMISS_KEY_PREFIX + userType, Date.now().toString()); } catch {}
         }}
-        className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded hover:bg-amber-200/50 dark:hover:bg-amber-800/30 transition-colors shrink-0"
+        className="w-8 h-8 flex items-center justify-center rounded hover:bg-amber-200/50 dark:hover:bg-amber-800/30 transition-colors shrink-0"
         aria-label="Hide this reminder for 30 days"
       >
         <X className="w-4 h-4 text-amber-600 dark:text-amber-400" />

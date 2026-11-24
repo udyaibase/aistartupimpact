@@ -5,7 +5,7 @@ import { button, esc, shell } from '@/lib/jobs/apply-emails';
 import { PLANS, TRIAL_AI_SCREENS, TRIAL_DAYS, TRIAL_PLAN, planFeaturedUntil } from '@/lib/employer/plans';
 
 /**
- * Free 7-day trial of the Pro plan (TRIAL_PLAN), started automatically by a workspace's first published job. No card needed.
+ * Free 14-day trial of the Pro plan (TRIAL_PLAN), started automatically by a workspace's first published job. No card needed.
  * One per workspace, and one per verified startup and per verified company domain, so new accounts for the
  * same company don't get another. Udyaibase's own (admin-run) workspaces never get one.
  * Returns the trial end when one was started.

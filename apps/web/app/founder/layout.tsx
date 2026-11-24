@@ -1,5 +1,7 @@
 import { connection } from 'next/server';
 import { redirect } from 'next/navigation';
+import { cookies, headers } from 'next/headers';
+import { safeReturnPath } from '@/lib/safe-return';
 import { getFounderSession } from '@/lib/founder-auth';
 import { founderFromCookies } from '@/lib/founder/account';
 import { workspaceOwnerIds } from '@/lib/founder/access';
@@ -24,8 +26,18 @@ export default async function FounderLayout({
     // Signed in, but the account can't use the portal right now: say why. Otherwise, sign in.
     const account = await founderFromCookies();
     if (account && (account.status === 'SUSPENDED' || account.deactivatedAt)) redirect('/account/reactivate');
+    // Signed in to Udyaibase but no founder workspace yet (e.g. just signed up from "Submit your startup"):
+    // create it and continue, instead of a sign-in page they've already passed.
+    const store = await cookies();
+    if (!account && (store.has('unified_session') || store.has('user-token'))) {
+      const wanted = safeReturnPath((await headers()).get('x-portal-path'), '/founder/dashboard');
+      redirect(`/account/workspace-setup?workspace=founder&returnTo=${encodeURIComponent(wanted)}`);
+    }
     redirect('/auth/login');
   }
+  // Until the profile exists every portal page leads back to onboarding (middleware), so show it on its own,
+  // without the sidebar, header and reminders it can't use yet.
+  if (founderSession.onboardingCompleted === false) return <>{children}</>;
   // One round trip's worth of waiting instead of three in a row.
   const [profileRows, unverifiedStartups, shell] = await Promise.all([
     sql`SELECT avatar FROM "FounderUser" WHERE id = ${founderSession.userId} LIMIT 1`,

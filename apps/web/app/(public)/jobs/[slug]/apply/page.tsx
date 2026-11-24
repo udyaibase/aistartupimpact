@@ -134,7 +134,7 @@ export default async function ApplyPage({ params, searchParams }: Props) {
           job={job}
           attribution={{
             source: sp.source, widgetId: sp.w, ref: sp.ref,
-            utm_source: sp.utm_source, utm_medium: sp.utm_medium, utm_campaign: sp.utm_campaign, rc: sp.rc,
+            utm_source: sp.utm_source, utm_medium: sp.utm_medium, utm_campaign: sp.utm_campaign, rc: sp.rc, intro: sp.intro,
           }}
           afterApply={afterApply}
           prefill={prefill}

@@ -10,6 +10,7 @@ import { cleanRegistrationInput, RegistrationInputError } from "@/lib/events/reg
 import { emailBlocked, emailOverDailyLimit } from "@/lib/events/registration-trust";
 import { notMeToken } from "@/lib/events/after-event";
 import { checkRateLimit, repeatRegistrationEmailRateLimit } from "@/lib/rate-limit";
+import { notifyPendingApprovals } from '@/lib/organizer-notify';
 
 const CONSENT_TEXT =
   "Keep me updated about upcoming AI events, conferences, and opportunities in my area. You can unsubscribe anytime.";
@@ -62,6 +63,7 @@ export async function registerForEvent(
       id: true, status: true, capacity: true, registrationCount: true,
       registrationDeadline: true, startAt: true, endAt: true, approvalRequired: true, boostedAt: true,
       deletedAt: true, title: true, slug: true, tags: { select: { tagId: true } },
+      organizerId: true,
       organizer: { select: { plan: true, planExpiresAt: true, email: true } },
     },
   });
@@ -217,6 +219,7 @@ export async function registerForEvent(
   } else if (registration.status === "WAITLISTED" || registration.status === "PENDING_APPROVAL") {
     sendRegistrationStatusEmail({ to: email, name, eventTitle: event.title, slug: event.slug, status: registration.status, position: waitlistPosition, notMeUrl: notMeUrl(registration.id) });
   }
+  if (registration.status === "PENDING_APPROVAL") await notifyPendingApprovals(event.organizerId, eventId, event.title);
 
   return {
     registrationId: registration.id,

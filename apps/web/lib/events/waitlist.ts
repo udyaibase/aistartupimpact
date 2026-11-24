@@ -3,6 +3,7 @@ import { sendEmailFireAndForget } from '@/lib/email/send';
 import { effectiveHostPlan, registrationLimit, EVENT_BOOST, HOST_PLANS } from '@/lib/events/plans';
 import { sendConfirmationEmail } from '@/lib/events/register-event';
 import { refreshPaths } from '@/lib/revalidate';
+import { notifyOrganizer } from '@/lib/organizer-notify';
 
 /**
  * Waitlist follow-ups: telling a host once when their plan's registration cap starts turning people away,
@@ -81,12 +82,13 @@ export async function notifyHostPlanLimit(eventId: string): Promise<boolean> {
   if (!claimed.count) return false;
   const ev = await prisma.event.findUnique({
     where: { id: eventId },
-    select: { title: true, boostedAt: true, capacity: true, organizer: { select: { email: true, name: true, plan: true, planExpiresAt: true } } },
+    select: { title: true, boostedAt: true, capacity: true, organizerId: true, organizer: { select: { email: true, name: true, plan: true, planExpiresAt: true } } },
   });
   if (!ev?.organizer?.email || ev.organizer.email.endsWith('@udyaibase.com')) return false;
   const plan = effectiveHostPlan(ev.organizer);
   const cap = registrationLimit(plan, { boostedAt: ev.boostedAt, capacity: null });
   const canBoost = !ev.boostedAt && cap < EVENT_BOOST.registrationsPerEvent;
+  await notifyOrganizer(ev.organizerId, { type: 'plan_limit_reached', title: `${ev.title} reached ${cap.toLocaleString('en-IN')} registrations`, message: `That’s the most your ${plan.name} plan includes per event, so new sign-ups join the waitlist. ${canBoost ? 'Boost this event or go Pro for more spots.' : 'Go Pro for more spots.'}`, link: '/organizer/billing' });
   sendEmailFireAndForget({
     to: ev.organizer.email,
     from: FROM,

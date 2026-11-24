@@ -18,6 +18,8 @@ export const CRON_JOBS: Record<string, { label: string; maxGapHours: number }> =
   'event-series': { label: 'Event series: new-event emails to followers and repeat drafts (hourly)', maxGapHours: 3 },
   'weekly-hiring-report': { label: 'Monday hiring report to employers (weekly)', maxGapHours: 170 },
   'job-alerts': { label: 'Weekly job alert emails to site visitors (weekly)', maxGapHours: 170 },
+  'talent-alerts': { label: 'Saved talent search alerts to employers (daily)', maxGapHours: 30 },
+  'skill-suggestions': { label: 'AI suggestions for unknown skills (weekly, for admin review)', maxGapHours: 24 * 8 },
   // Saturday 16:00 to Monday 10:00 IST is the longest gap.
   'support-triage': { label: 'Support triage digest to the support inbox (Mon–Sat 10:00 and 16:00 IST)', maxGapHours: 44 },
 };

@@ -14,6 +14,7 @@ const db = vi.hoisted(() => ({
   event: { findFirst: vi.fn(), update: vi.fn((a: any) => ({ op: 'event.update', ...a })), updateMany: vi.fn((a: any) => ({ op: 'event.updateMany', ...a })) },
   eventOrganizer: { findUnique: vi.fn(), update: vi.fn((a: any) => ({ op: 'organizer.update', ...a })) },
   contentReport: { updateMany: vi.fn((a: any) => ({ op: 'reports', ...a })) },
+  organizerNotification: { create: vi.fn(async () => ({})) },
   $transaction: vi.fn(async (ops: any[]) => ops),
 }));
 vi.mock('@udyaibase/database', () => ({ prisma: db }));
@@ -45,6 +46,8 @@ describe('admin event review', () => {
     expect(ops[0].data).toMatchObject({ status: 'PUBLISHED', heldAt: null });
     expect(ops.some((o: any) => o.op === 'organizer.update' && o.data.verifiedAt)).toBe(true);
     expect(sendEmail).toHaveBeenCalledTimes(1);
+    // Same news in the organizer portal's bell.
+    expect(db.organizerNotification.create).toHaveBeenCalledWith({ data: expect.objectContaining({ organizerId: 'o1', type: 'event_approved', link: '/organizer/events/ev1' }) });
     expect(requestEventApproved).toHaveBeenCalledWith('ev1');
   });
 
@@ -63,6 +66,7 @@ describe('admin event review', () => {
     expect((await declineEventAction('ev1', 'Add the real venue address')).success).toBe(true);
     expect(db.$transaction.mock.calls[0][0][0].data).toMatchObject({ status: 'DRAFT' });
     expect(sendEmail.mock.calls[0][0].html).toContain('Add the real venue address');
+    expect(db.organizerNotification.create).toHaveBeenCalledWith({ data: expect.objectContaining({ organizerId: 'o1', type: 'event_declined', message: expect.stringContaining('Add the real venue address') }) });
   });
 
   it('suspending cancels upcoming events at once, blocks sign-in and hands attendee notices to the website', async () => {

@@ -1,3 +1,4 @@
+import { safeReturnPath } from '@/lib/safe-return';
 import { redirect } from 'next/navigation';
 import { getFounderSession } from '@/lib/founder-auth';
 import { prisma } from '@udyaibase/database';
@@ -44,8 +45,8 @@ export default async function OnboardingPage(
 
   // If onboarding is complete, redirect to returnTo or dashboard
   if (user.onboardingCompleted) {
-    redirect(searchParams.returnTo || '/founder/dashboard');
+    redirect(safeReturnPath(searchParams.returnTo, '/founder/dashboard'));
   }
 
-  return <OnboardingClient user={user} returnTo={searchParams.returnTo} />;
+  return <OnboardingClient user={user} returnTo={searchParams.returnTo ? safeReturnPath(searchParams.returnTo, '/founder/dashboard') : undefined} />;
 }

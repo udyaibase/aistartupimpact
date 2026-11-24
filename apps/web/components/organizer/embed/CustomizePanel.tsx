@@ -554,7 +554,7 @@ export function AppearanceSection({ widget, disabled, onChange }: LookProps) {
             return (
               <button key={c} role="radio" aria-checked={on} aria-label={c} disabled={disabled}
                 onClick={() => onChange({ accentColor: c.toLowerCase() })}
-                className={`w-11 h-11 rounded-full flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#A50F15] ${on ? "ring-2 ring-offset-2 ring-gray-900 dark:ring-white" : ""}`}
+                className={`w-11 h-11 rounded-full flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#A50F15] ${on ? "ring-2 ring-offset-2 ring-gray-900 dark:ring-gray-300" : ""}`}
                 style={{ background: c }}>
                 {on && <Check className="w-4 h-4 text-white" aria-hidden />}
               </button>
