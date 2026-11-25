@@ -130,7 +130,7 @@ export default async function JobDetailPage(props: PageProps) {
       sql`
         SELECT jl.id, jl.slug, jl.title, jl."workType", jl.category, jl."categoryLabel",
                jl.city, jl.country, jl."salaryMin", jl."salaryMax",
-               jl."salaryCurrency", jl."showSalary", jl."publishedAt"::text,
+               jl."salaryCurrency", jl."salaryPeriod", jl."showSalary", jl."publishedAt"::text,
                e."companyName", e."logoUrl"
         FROM "JobBoardListing" jl
         JOIN "JobBoardEmployer" e ON e.id = jl."employerId"
@@ -279,7 +279,7 @@ export default async function JobDetailPage(props: PageProps) {
                   <p className="font-sora font-bold text-lg sm:text-xl text-navy dark:text-white">
                     {salaryText(job)}
                   </p>
-                  <p className="text-[10px] text-gray-400 font-jakarta uppercase tracking-wider">per annum</p>
+                  <p className="text-[10px] text-gray-400 font-jakarta uppercase tracking-wider">{job.salaryPeriod === 'monthly' ? 'stipend' : 'per annum'}</p>
                 </div>
               )}
               <div>

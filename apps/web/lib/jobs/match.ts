@@ -17,6 +17,8 @@ export interface MatchJob {
   city: string | null;
   salaryMax: number | null;
   salaryCurrency: string | null;
+  /** 'monthly' for an internship stipend (compared as twelve months against the yearly expectation). */
+  salaryPeriod?: string | null;
   maxNoticeDays: number | null;
   screeningQuestions: unknown;
 }
@@ -133,9 +135,9 @@ export function computeMatch(job: MatchJob, app: MatchApplicant): MatchResult {
     }
   }
 
-  // Salary: expected yearly CTC (₹ lakh) against the job's top of range. INR roles only.
+  // Salary: expected yearly CTC (₹ lakh) against the job's top of range (a stipend counts twelve months). INR roles only.
   if (job.salaryMax && (job.salaryCurrency ?? 'INR') === 'INR') {
-    const maxL = job.salaryMax / 100_000;
+    const maxL = (job.salaryPeriod === 'monthly' ? job.salaryMax * 12 : job.salaryMax) / 100_000;
     const e = app.expectedCtcLakh;
     if (e == null) reasons.push({ key: 'salary', label: 'Salary', weight: W.salary, earned: W.salary * UNKNOWN, status: 'unknown', detail: `Expectation not given · range up to ₹${maxL.toFixed(0)} L` });
     else if (e <= maxL) reasons.push({ key: 'salary', label: 'Salary', weight: W.salary, earned: W.salary, status: 'pass', detail: `Expects ₹${e} L · within range` });

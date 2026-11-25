@@ -56,6 +56,8 @@ export interface CareersJob {
   salaryMin: number | null;
   salaryMax: number | null;
   salaryCurrency: string;
+  /** 'monthly' for an internship stipend, otherwise 'yearly'. */
+  salaryPeriod?: string;
   showSalary: boolean;
   hasEsops: boolean;
   skills: string[];
@@ -141,7 +143,7 @@ export async function getCareersJobs(employerId: string, departments: string[] =
     select: {
       id: true, slug: true, title: true, department: true, location: true, city: true, country: true, workType: true,
       employmentType: true, experienceBand: true, experienceMin: true, experienceMax: true, category: true, categoryLabel: true,
-      visaSponsorship: true, hiringManagerName: true, positions: true, salaryMin: true, salaryMax: true, salaryCurrency: true, showSalary: true,
+      visaSponsorship: true, hiringManagerName: true, positions: true, salaryMin: true, salaryMax: true, salaryCurrency: true, salaryPeriod: true, showSalary: true,
       hasEsops: true, skills: true, shortDescription: true, description: true, publishedAt: true, expiresAt: true,
       applicationType: true, applicationUrl: true, screeningQuestions: true,
     },

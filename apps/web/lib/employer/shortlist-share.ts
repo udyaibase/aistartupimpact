@@ -66,7 +66,7 @@ export async function loadSharedShortlist(token: string, now = new Date()) {
       select: {
         id: true, fullName: true, currentTitle: true, currentCompany: true, city: true, experienceYears: true, noticePeriodDays: true,
         expectedCtcLakh: true, status: true, confirmedSkills: true, matchedSkills: true, screeningAnswers: true, resumeKey: true, resumeUrl: true,
-        Listing: { select: { skills: true, mustHaveSkills: true, experienceMin: true, experienceMax: true, workType: true, city: true, salaryMax: true, salaryCurrency: true, maxNoticeDays: true, screeningQuestions: true } },
+        Listing: { select: { skills: true, mustHaveSkills: true, experienceMin: true, experienceMax: true, workType: true, city: true, salaryMax: true, salaryCurrency: true, salaryPeriod: true, maxNoticeDays: true, screeningQuestions: true } },
         AiScreening: { select: { status: true, fitScore: true, result: true } },
       },
     }),

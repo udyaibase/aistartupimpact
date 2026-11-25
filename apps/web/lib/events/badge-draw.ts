@@ -121,6 +121,8 @@ export function drawBadge(pg: Surface, cell: Cell, p: BadgePerson, c: Ctx) {
   const textWidth = bw - pad * 2;
   const cx = x0 + bw / 2;
   const bottomY = top - bh;
+  // Credit-card size: too short for a stacked header, so logo, event name and date share one row.
+  const compact = !portrait && bh < 180;
 
   // Background and colours.
   const darkTheme = c.background ? st.textColor === 'light' : st.template === 'dark';
@@ -172,6 +174,23 @@ export function drawBadge(pg: Surface, cell: Cell, p: BadgePerson, c: Ctx) {
     pg.drawText(clip(bold, c.title, s, tw), { x: left, y: top - h / 2 + (c.date ? s * 0.15 : -s * 0.35), size: s, font: bold, color: on });
     if (c.date) pg.drawText(clip(regular, c.date, s * 0.8, tw), { x: left, y: top - h / 2 - s * 0.95, size: s * 0.8, font: regular, color: on });
     y = top - h - pad * 0.8;
+  } else if (compact) {
+    const rowH = bh * 0.15;
+    let left = x0 + pad;
+    if (c.logo) {
+      const { width, height } = fitImage(c.logo, textWidth * 0.32, rowH);
+      pg.drawImage(c.logo, { x: left, y: top - pad - rowH / 2 - height / 2, width, height });
+      left += width + pad * 0.7;
+    }
+    const tw = x0 + bw - pad - left;
+    const ts = fitSize(bold, c.title, 8.5, tw, 5.5);
+    const mid = top - pad - rowH / 2;
+    pg.drawText(clip(bold, c.title, ts, tw), { x: left, y: c.date ? mid + 0.6 : mid - ts * 0.35, size: ts, font: bold, color: ink });
+    if (c.date) pg.drawText(clip(regular, c.date, ts * 0.85, tw), { x: left, y: mid - ts * 0.95, size: ts * 0.85, font: regular, color: muted });
+    y = top - pad - rowH - pad * 0.5;
+    // A thin rule under the header: in the accent colour on Classic, quiet grey otherwise.
+    pg.drawLine({ start: { x: x0 + pad, y }, end: { x: x0 + bw - pad, y }, thickness: st.template === 'classic' ? 1.2 : 0.5, color: st.template === 'classic' ? accent : darkTheme ? rgb(0.3, 0.32, 0.36) : GUIDE });
+    y -= pad * 0.2;
   } else {
     if (c.logo) {
       const { width, height } = fitImage(c.logo, textWidth * 0.5, Math.min(bh * 0.11, 30));
@@ -225,10 +244,18 @@ export function drawBadge(pg: Surface, cell: Cell, p: BadgePerson, c: Ctx) {
   }
 
   // The person: name, role and company, and up to two registration answers.
+  // On wide badges the QR sits beside the text, so every line of the person's details uses the space next to it
+  // (it used to be only the lines low enough to reach the QR, which left the name and role centred differently).
+  const plate = darkTheme ? 4 : 0;
+  const beside = !stacked && !!c.qr;
+  const laneGap = pad * 0.6 + plate;
+  const [laneL, laneR] = !beside ? [x0 + pad, x0 + bw - pad] : pos === 'left' ? [qx + qrSize + laneGap, x0 + bw - pad] : [x0 + pad, qx - laneGap];
+  const personWidth = Math.max(20, laneR - laneL);
+  const personCx = (laneL + laneR) / 2;
   const name = drawable(bold, p.name) || 'Guest';
-  const { lines, size } = nameLines(bold, name, portrait ? 30 : 22, textWidth);
+  const { lines, size } = nameLines(bold, name, portrait ? 30 : compact ? 17 : 22, personWidth);
   const subText = drawable(regular, [st.fields.role ? p.occupation : null, st.fields.company ? p.company : null].filter(Boolean).join(', '));
-  const subSize = subText ? fitSize(regular, subText, portrait ? 12 : 10, textWidth, 7) : 0;
+  const subSize = subText ? fitSize(regular, subText, portrait ? 12 : compact ? 8.5 : 10, personWidth, 6.5) : 0;
   const answers = st.questionIds
     .map((id) => {
       const a = p.answers?.[id]?.trim();
@@ -236,33 +263,21 @@ export function drawBadge(pg: Surface, cell: Cell, p: BadgePerson, c: Ctx) {
       return a && label ? drawable(regular, `${label}: ${a}`) : '';
     })
     .filter(Boolean);
-  const ansSize = portrait ? 9.5 : 8;
+  const ansSize = portrait ? 9.5 : compact ? 7 : 8;
   const minimalGap = st.template === 'minimal' ? size * 0.7 : 0;
   const blockH = minimalGap + size * lines.length * 1.1 + (subText ? size * 0.55 + subSize * 1.4 : 0) + answers.length * ansSize * 1.35;
-  const spare = Math.max(0, y - (portrait ? 18 : 6) - blockFloor - blockH);
-  let nameTop = y - (portrait ? 18 : 6);
+  const spare = Math.max(0, y - (portrait ? 18 : compact ? 4 : 6) - blockFloor - blockH);
+  let nameTop = y - (portrait ? 18 : compact ? 4 : 6);
   if (st.textPosition === 'center') nameTop -= spare / 2;
   else if (st.textPosition === 'bottom') nameTop -= spare;
 
   if (st.template === 'minimal') {
-    pg.drawRectangle({ x: cx - 14, y: nameTop - 2.5, width: 28, height: 2.5, color: accent });
+    pg.drawRectangle({ x: personCx - 14, y: nameTop - 2.5, width: 28, height: 2.5, color: accent });
     nameTop -= minimalGap;
   }
-  // On wide badges the QR sits beside the text: a line that reaches down to the QR's height stays in the space
-  // next to it (centred there, shrunk or cut to fit), so text never runs into the code.
-  // Dark badges put the QR on a white backing 4pt larger on each side: keep clear of that too.
-  const plate = darkTheme ? 4 : 0;
-  const qrTop = floor + qrSize + plate + 3;
-  const lane = (baseline: number): { cx: number; width: number } => {
-    if (stacked || !c.qr || baseline > qrTop) return { cx, width: textWidth };
-    const gap = pad * 0.6 + plate;
-    const [l, r] = pos === 'left' ? [qx + qrSize + gap, x0 + bw - pad] : [x0 + pad, qx - gap];
-    return { cx: (l + r) / 2, width: Math.max(20, r - l) };
-  };
   const line = (font: PDFFont, text: string, baseline: number, wanted: number, color: RGB, minSize: number) => {
-    const { cx: lx, width } = lane(baseline);
-    const sz = fitSize(font, text, wanted, width, Math.min(wanted, minSize));
-    centerText(pg, font, clip(font, text, sz, width), lx, baseline, sz, color);
+    const sz = fitSize(font, text, wanted, personWidth, Math.min(wanted, minSize));
+    centerText(pg, font, clip(font, text, sz, personWidth), personCx, baseline, sz, color);
   };
   lines.forEach((ln, k) => line(bold, ln, nameTop - size * (k + 1) * 1.1, size, ink, size * 0.6));
   let ty = nameTop - size * lines.length * 1.1 - size * 0.55;

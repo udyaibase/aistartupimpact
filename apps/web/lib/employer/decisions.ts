@@ -47,7 +47,7 @@ export async function recordDecision(opts: {
   const { session } = opts;
   const app = await prisma.jobBoardApplication.findFirst({
     where: { id: opts.applicationId, Listing: { employerId: session.id, ...(session.jobIds ? { id: { in: session.jobIds } } : {}) }, withdrawnAt: null },
-    select: { id: true, status: true, Listing: { select: { decisionOwnerEmail: true, decisionDelegateEmail: true, salaryCurrency: true } } },
+    select: { id: true, status: true, Listing: { select: { decisionOwnerEmail: true, decisionDelegateEmail: true, salaryCurrency: true, salaryPeriod: true } } },
   });
   if (!app) return { ok: false, error: 'Candidate not found.', status: 404 };
   if (!canDecide(session, app.Listing)) return { ok: false, error: 'Only this job’s decision owner (or their delegate) records the final decision.', status: 403 };
@@ -118,7 +118,7 @@ export interface Finalist {
 export async function loadFinalists(employerId: string, listingId: string, jobIds: string[] | null, ids?: string[]) {
   const job = await prisma.jobBoardListing.findFirst({
     where: { id: listingId, employerId, deletedAt: null, ...(jobIds ? { id: { in: jobIds } } : {}) },
-    select: { id: true, title: true, skills: true, mustHaveSkills: true, interviewRounds: true, salaryMin: true, salaryMax: true, salaryCurrency: true, decisionOwnerEmail: true, decisionDelegateEmail: true },
+    select: { id: true, title: true, skills: true, mustHaveSkills: true, interviewRounds: true, salaryMin: true, salaryMax: true, salaryCurrency: true, salaryPeriod: true, decisionOwnerEmail: true, decisionDelegateEmail: true },
   });
   if (!job) return null;
   const apps = await prisma.jobBoardApplication.findMany({
@@ -157,7 +157,8 @@ export async function loadFinalists(employerId: string, listingId: string, jobId
       lastDecision: a.Decisions[0] ? { decision: a.Decisions[0].decision, reason: a.Decisions[0].reason, by: a.Decisions[0].decidedBy, at: a.Decisions[0].createdAt.toISOString() } : null,
     };
   });
-  const band = (job.salaryCurrency ?? 'INR') === 'INR' && (job.salaryMin || job.salaryMax)
+  // In lakh a year; an internship stipend (a month) isn't a band to compare a CTC against.
+  const band = (job.salaryCurrency ?? 'INR') === 'INR' && job.salaryPeriod !== 'monthly' && (job.salaryMin || job.salaryMax)
     ? { minLakh: job.salaryMin ? job.salaryMin / 100_000 : null, maxLakh: job.salaryMax ? job.salaryMax / 100_000 : null } : null;
   return { job: { id: job.id, title: job.title, rounds, band, decisionOwner: decisionOwnerLabel(job) }, finalists };
 }

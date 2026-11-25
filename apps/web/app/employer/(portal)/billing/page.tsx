@@ -5,7 +5,7 @@ import { foundingEligible, FOUNDING_LIMIT, planPrice, planSoldName, PLANS, type 
 import BillingClient from '@/components/employer/billing/BillingClient';
 import { invoicesEnabled } from '@/lib/billing/invoice';
 import { BILLING_SELECT, profileFromRow } from '@/lib/billing/details';
-import { seatsUsed } from '@/lib/employer/counts';
+import { countOpenJobs, seatsUsed } from '@/lib/employer/counts';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Plans & billing' };
@@ -20,7 +20,7 @@ export default async function BillingPage() {
       take: 24,
       select: { id: true, plan: true, cycle: true, amountPaise: true, gstPaise: true, totalPaise: true, status: true, paidAt: true, createdAt: true, periodStart: true, periodEnd: true, invoiceNumber: true, invoiceEmailedAt: true, refundAmountPaise: true, creditNoteNumber: true },
     }),
-    prisma.jobBoardListing.count({ where: { employerId: session.id, status: 'OPEN', deletedAt: null } }),
+    countOpenJobs(session.id),
     prisma.jobBoardEmployer.findUnique({ where: { id: session.id }, select: { ...BILLING_SELECT, email: true, companyName: true, foundingMemberAt: true, foundingLostAt: true } }),
     seatsUsed(session.id),
     prisma.jobBoardEmployer.count({ where: { foundingMemberAt: { not: null } } }),

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { notifyEmployer } from '@/lib/employer/notify';
 import { prisma } from '@udyaibase/database';
 import { listingScope } from '@/lib/employer/permissions';
 import { listTeam, sendMentionEmails } from '@/lib/employer/team';
@@ -36,6 +37,12 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   if (mentions.length) {
     sendMentionEmails({ employerId: session.id, to: mentions, authorName, candidateName: app.fullName, jobId: app.listingId, applicationId: app.id, note: text })
       .catch((err) => console.error('Mention email failed:', err));
+    for (const m of mentions) {
+      await notifyEmployer(session.id, {
+        type: 'note_mention', title: `${authorName} mentioned you on ${app.fullName}`, message: text.slice(0, 300),
+        link: `/employer/applications?job=${app.listingId}&candidate=${app.id}`,
+      }, { email: m });
+    }
   }
   return NextResponse.json({ note: { id: note.id, mentions, authorName: note.authorName, authorEmail: note.authorEmail, body: note.body, createdAt: note.createdAt.toISOString() } }, { status: 201 });
 }

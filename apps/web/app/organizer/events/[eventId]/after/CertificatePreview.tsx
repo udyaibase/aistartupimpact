@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { CERTIFICATE_PAGE, CERTIFICATE_THEMES, TECH_BAND_HOST, type Triple } from '@/lib/events/certificate-themes';
 import type { CertificateTemplate } from '@/lib/events/after-event';
 import { fillMarkers, qrBox, sampleMarkerValues, viewBoxOf } from '@/lib/events/certificate-custom';
+import { fitRow, LOGO_GAP, planLogos, rowLeft, type LogoPlace, type LogoPlan, type PartnerPlacement } from '@/lib/events/certificate-logos';
 
 /**
  * The certificate as the host is designing it, redrawn on every keystroke. It follows the PDF's own layout
@@ -44,15 +45,29 @@ export interface CertificatePreviewProps {
   logoOffsetY?: number;
   /** White plate behind the logo on dark areas. Default on. */
   logoPlate?: boolean;
+  partnerLogoPlacement?: PartnerPlacement;
+  partnerLogoHeight?: number | null;
+  partnerLogoOffsetX?: number;
+  partnerLogoOffsetY?: number;
   /** The host's own design (SVG code), shown when template is "custom". */
   customSvg?: string;
   duration?: string;
 }
 
 const LOGO_HEIGHT = { small: 38, medium: 56, large: 74 } as const;
-const LOGO_GAP = 22;
-type LogoPlace = { position: 'center' | 'left' | 'right'; maxHeight: number; maxWidth: number; dx: number; dy: number; plate: boolean };
 const logoHeightOf = (p: CertificatePreviewProps) => Math.min(74, Math.max(24, p.logoHeight ?? LOGO_HEIGHT[p.logoSize ?? 'medium']));
+
+/** The same logo layout as the PDF (certificate-logos.ts). */
+function logoPlanOf(p: CertificatePreviewProps, opts: { full: boolean; plate: boolean; custom?: boolean }) {
+  return planLogos({
+    hasMain: !!p.logoUrl, hasPartner: !!p.partnerLogoUrl,
+    position: p.logoPosition ?? 'center', partnerPlacement: p.partnerLogoPlacement ?? 'beside',
+    mainHeight: logoHeightOf(p), partnerHeight: p.partnerLogoHeight ?? logoHeightOf(p),
+    dx: p.logoOffsetX ?? 0, dy: p.logoOffsetY ?? 0, partnerDx: p.partnerLogoOffsetX ?? 0, partnerDy: p.partnerLogoOffsetY ?? 0,
+    full: opts.full, plate: opts.plate, custom: opts.custom,
+  });
+}
+const urlsFor = (p: CertificatePreviewProps, items: ('main' | 'partner')[]) => items.map((it) => (it === 'main' ? p.logoUrl : p.partnerLogoUrl) as string);
 
 /** Each picture's width divided by its height, once it has loaded (a typical logo shape until then). */
 function useAspects(urls: string[]): number[] {
@@ -72,17 +87,11 @@ function useAspects(urls: string[]): number[] {
   return urls.map((u) => known[u] ?? 2.4);
 }
 
-/** The size each logo takes inside its limits, as the PDF works it out. */
-function fitLogos(aspects: number[], place: Pick<LogoPlace, 'maxHeight' | 'maxWidth'>) {
-  const sized = aspects.map((a) => { const k = Math.min(place.maxWidth / a, place.maxHeight); return { width: a * k, height: k }; });
-  return { sized, total: sized.reduce((w, x) => w + x.width, 0) + LOGO_GAP * Math.max(0, sized.length - 1), height: sized.length ? Math.max(...sized.map((x) => x.height)) : 0 };
-}
-
-/** The logo and partner logo in a row, as the PDF places them. `top` is the row's top edge in PDF points. */
+/** Logos in a row, as the PDF places them. `top` is the row's top edge in PDF points. */
 function Logos({ urls, aspects, top, place }: { urls: string[]; aspects: number[]; top: number; place: LogoPlace }) {
   if (!urls.length) return null;
-  const { sized, total, height } = fitLogos(aspects, place);
-  const left = (place.position === 'left' ? 72 : place.position === 'right' ? W - 72 - total : (W - total) / 2) + place.dx;
+  const { sized, total, height } = fitRow(aspects, place);
+  const left = rowLeft(place, total, W);
   const rowTop = H - top + place.dy; // SVG's y runs down
   let x = left;
   return (
@@ -93,6 +102,18 @@ function Logos({ urls, aspects, top, place }: { urls: string[]; aspects: number[
         x += sized[i].width + LOGO_GAP;
         return node;
       })}
+    </>
+  );
+}
+
+/** The logo row and a partner logo on its own spot, with each picture's shape looked up from `all`. */
+function LogoSet({ p, plan, top, soloTop, all, aspects }: { p: CertificatePreviewProps; plan: LogoPlan; top: number | null; soloTop: number; all: string[]; aspects: number[] }) {
+  const aspectOf = (u: string) => aspects[all.indexOf(u)] ?? 2.4;
+  const rowUrls = plan.row ? urlsFor(p, plan.row.items) : [];
+  return (
+    <>
+      {plan.row && top !== null && <Logos urls={rowUrls} aspects={rowUrls.map(aspectOf)} top={top} place={plan.row.place} />}
+      {plan.solo && p.partnerLogoUrl && <Logos urls={[p.partnerLogoUrl]} aspects={[aspectOf(p.partnerLogoUrl)]} top={soloTop} place={plan.solo.place} />}
     </>
   );
 }
@@ -134,7 +155,7 @@ function CustomPreview(p: CertificatePreviewProps) {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={src} alt="Preview of your custom certificate design" className="absolute inset-0 w-full h-full" />
       <svg viewBox={`0 0 ${W} ${H}`} className="absolute inset-0 w-full h-full" aria-hidden>
-        <Logos urls={logos} aspects={aspects} top={H - 34} place={{ position: p.logoPosition ?? 'center', maxHeight: logoHeightOf(p), maxWidth: 170, dx: p.logoOffsetX ?? 0, dy: p.logoOffsetY ?? 0, plate: false }} />
+        <LogoSet p={p} plan={logoPlanOf(p, { full: false, plate: false, custom: true })} top={H - 34} soloTop={H - 34} all={logos} aspects={aspects} />
         <rect x={x - 12} y={yTop - 5} width={size + 24} height={size + 29} fill="#fff" />
         <QrPlaceholder x={x} y={yTop} size={size} dark={false} />
         <text x={x + size / 2} y={yTop + size + 11} textAnchor="middle" fontFamily={SANS} fontSize={6.5} fill="#4d4d54">ID SAMPLE0000000000</text>
@@ -252,18 +273,13 @@ function BuiltInPreview(p: CertificatePreviewProps) {
   const skills = p.skills.map((k) => k.trim()).filter(Boolean).slice(0, 6);
   const full = !!description || skills.length > 0;
   const logos = [p.logoUrl, p.partnerLogoUrl].filter((u): u is string => !!u);
-  const logoPosition = p.logoPosition ?? 'center';
-  const centred = logos.length > 0 && logoPosition === 'center';
   const aspects = useAspects(logos);
-  // The same rules as the PDF: centred, the logo heads the page; in a corner it is kept smaller.
-  const place: LogoPlace = {
-    position: centred ? 'center' : logoPosition,
-    maxHeight: centred ? Math.max(24, logoHeightOf(p) - (full ? 16 : 0)) : Math.min(logoHeightOf(p), 56),
-    maxWidth: centred ? 170 : 120,
-    dx: p.logoOffsetX ?? 0, dy: p.logoOffsetY ?? 0,
-    plate: (p.logoPlate ?? true) && (!!t.dark || inBand),
-  };
-  const rowHeight = centred ? fitLogos(aspects, place).height : 0;
+  // The same rules as the PDF: centred, the logo row heads the page; in a corner it is kept smaller.
+  const plan = logoPlanOf(p, { full, plate: (p.logoPlate ?? true) && (!!t.dark || inBand) });
+  const centred = plan.centred && !!plan.row;
+  const logoPosition = p.logoPosition ?? 'center';
+  const rowUrls = plan.row ? urlsFor(p, plan.row.items) : [];
+  const rowHeight = centred && plan.row ? fitRow(rowUrls.map((u) => aspects[logos.indexOf(u)] ?? 2.4), plan.row.place).height : 0;
   // The Tech band grows to hold the logo, host name and title.
   const headerEnd = H - 78 - (centred ? rowHeight + 6 + (p.showHostName ? 10 : 0) : 20) - 34 - 16;
   const band = Math.max(BAND, H - (headerEnd - 20));
@@ -322,7 +338,7 @@ function BuiltInPreview(p: CertificatePreviewProps) {
     return { lines: out, ruleY: rule, logoTop: logoAt };
     // The fonts and colours all follow from the template, so the listed values are everything that can change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [p.template, p.title, p.phrase, p.eventTitle, p.dateLine, p.hostName, logos.join('|'), logoPosition, rowHeight, band, p.showHostName, p.sampleName, description, skills.join('|')]);
+  }, [p.template, p.title, p.phrase, p.eventTitle, p.dateLine, p.hostName, logos.join('|'), logoPosition, centred, rowHeight, band, p.showHostName, p.sampleName, description, skills.join('|')]);
 
   const sigX = 90;
   const lineY = 112;
@@ -380,7 +396,7 @@ function BuiltInPreview(p: CertificatePreviewProps) {
       )}
 
       {/* The host's logo is their own upload, shown as it is. */}
-      {logoTop !== null && <Logos urls={logos} aspects={aspects} top={logoTop} place={place} />}
+      <LogoSet p={p} plan={plan} top={logoTop} soloTop={H - 46} all={logos} aspects={aspects} />
 
       <line x1={W / 2 - 60} x2={W / 2 + 60} y1={H - ruleY} y2={H - ruleY} stroke={accent} strokeWidth={1.2} />
 

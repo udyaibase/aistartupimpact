@@ -29,7 +29,7 @@ export function canSeeAmounts(session: Pick<Session, 'role' | 'email'>, job: Off
 
 export { offerState };
 
-const JOB_SELECT = { id: true, positions: true, title: true, decisionOwnerEmail: true, decisionDelegateEmail: true, recruitersSeeOffers: true, salaryMin: true, salaryMax: true, salaryCurrency: true } as const;
+const JOB_SELECT = { id: true, positions: true, title: true, decisionOwnerEmail: true, decisionDelegateEmail: true, recruitersSeeOffers: true, salaryMin: true, salaryMax: true, salaryCurrency: true, salaryPeriod: true } as const;
 
 async function findApp(session: Session, applicationId: string) {
   return prisma.jobBoardApplication.findFirst({
@@ -64,7 +64,7 @@ export async function loadOffers(session: Session, applicationId: string, now = 
     canSeeAmounts: amounts,
     canDecide: canDecide(session, app.Listing),
     openings: await openingsFor(app.listingId, app.Listing.positions),
-    band: amounts && (app.Listing.salaryMin || app.Listing.salaryMax) ? { min: app.Listing.salaryMin, max: app.Listing.salaryMax, currency: app.Listing.salaryCurrency ?? 'INR' } : null,
+    band: amounts && app.Listing.salaryPeriod !== 'monthly' && (app.Listing.salaryMin || app.Listing.salaryMax) ? { min: app.Listing.salaryMin, max: app.Listing.salaryMax, currency: app.Listing.salaryCurrency ?? 'INR' } : null,
     hire: app.status === 'HIRED' ? { joiningDate: app.joiningDate?.toISOString() ?? null, joinedAt: app.joinedAt?.toISOString() ?? null } : null,
     offers: rows.map((o) => ({
       id: o.id, status: o.status, state: offerState(o, now), currency: o.currency,

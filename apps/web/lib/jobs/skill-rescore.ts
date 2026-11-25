@@ -29,7 +29,7 @@ export async function rescoreReviews(opts: { batch?: number; now?: Date } = {}):
           select: {
             confirmedSkills: true, experienceYears: true, city: true, noticePeriodDays: true, expectedCtcLakh: true, screeningAnswers: true,
             ResumeProfile: { select: { data: true } },
-            Listing: { select: { title: true, description: true, skills: true, mustHaveSkills: true, experienceMin: true, experienceMax: true, workType: true, city: true, salaryMax: true, salaryCurrency: true, maxNoticeDays: true, screeningQuestions: true } },
+            Listing: { select: { title: true, description: true, skills: true, mustHaveSkills: true, experienceMin: true, experienceMax: true, workType: true, city: true, salaryMax: true, salaryCurrency: true, salaryPeriod: true, maxNoticeDays: true, screeningQuestions: true } },
           },
         },
       },

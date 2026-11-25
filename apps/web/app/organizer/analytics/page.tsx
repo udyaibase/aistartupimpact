@@ -73,27 +73,27 @@ export default async function AnalyticsPage() {
   const conversionRate = totalViews > 0 && totalRegs <= totalViews ? ((totalRegs / totalViews) * 100).toFixed(1) : '—';
 
   const statCards = [
-    { label: 'Events', value: events.length, icon: CalendarDays, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
-    { label: 'Page Views', value: totalViews, icon: Eye, color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-900/20' },
-    { label: 'Registrations', value: totalRegs, icon: Users, color: 'text-green-600', bg: 'bg-green-50 dark:bg-green-900/20' },
-    { label: 'Checked In', value: checkedIn, icon: UserCheck, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
-    { label: 'Shares', value: totalShares, icon: Share2, color: 'text-pink-600', bg: 'bg-pink-50 dark:bg-pink-900/20' },
-    { label: 'Conversion', value: conversionRate === '—' ? '—' : `${conversionRate}%`, icon: TrendingUp, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20' },
+    { label: 'Events', value: events.length, icon: CalendarDays, color: 'text-gray-700 dark:text-gray-300', bg: 'bg-gray-100 dark:bg-gray-800' },
+    { label: 'Page Views', value: totalViews, icon: Eye, color: 'text-gray-700 dark:text-gray-300', bg: 'bg-gray-100 dark:bg-gray-800' },
+    { label: 'Registrations', value: totalRegs, icon: Users, color: 'text-gray-700 dark:text-gray-300', bg: 'bg-gray-100 dark:bg-gray-800' },
+    { label: 'Checked In', value: checkedIn, icon: UserCheck, color: 'text-gray-700 dark:text-gray-300', bg: 'bg-gray-100 dark:bg-gray-800' },
+    { label: 'Shares', value: totalShares, icon: Share2, color: 'text-gray-700 dark:text-gray-300', bg: 'bg-gray-100 dark:bg-gray-800' },
+    { label: 'Conversion', value: conversionRate === '—' ? '—' : `${conversionRate}%`, icon: TrendingUp, color: 'text-gray-700 dark:text-gray-300', bg: 'bg-gray-100 dark:bg-gray-800' },
   ];
 
   const sourceBreakdown = [
-    { label: 'Direct', value: trafficSources.direct, icon: Globe, color: 'bg-blue-500', pct: totalSourceViews > 0 ? Math.round((trafficSources.direct / totalSourceViews) * 100) : 0 },
-    { label: 'Search (Google)', value: trafficSources.search, icon: Search, color: 'bg-green-500', pct: totalSourceViews > 0 ? Math.round((trafficSources.search / totalSourceViews) * 100) : 0 },
-    { label: 'Social Media', value: trafficSources.social, icon: Share2, color: 'bg-purple-500', pct: totalSourceViews > 0 ? Math.round((trafficSources.social / totalSourceViews) * 100) : 0 },
-    { label: 'Email', value: trafficSources.email, icon: AtSign, color: 'bg-amber-500', pct: totalSourceViews > 0 ? Math.round((trafficSources.email / totalSourceViews) * 100) : 0 },
-    { label: 'Referral', value: trafficSources.referral, icon: Link2, color: 'bg-cyan-500', pct: totalSourceViews > 0 ? Math.round((trafficSources.referral / totalSourceViews) * 100) : 0 },
+    { label: 'Direct', value: trafficSources.direct, icon: Globe, color: 'bg-gray-900 dark:bg-gray-100', pct: totalSourceViews > 0 ? Math.round((trafficSources.direct / totalSourceViews) * 100) : 0 },
+    { label: 'Search (Google)', value: trafficSources.search, icon: Search, color: 'bg-gray-900 dark:bg-gray-100', pct: totalSourceViews > 0 ? Math.round((trafficSources.search / totalSourceViews) * 100) : 0 },
+    { label: 'Social Media', value: trafficSources.social, icon: Share2, color: 'bg-gray-900 dark:bg-gray-100', pct: totalSourceViews > 0 ? Math.round((trafficSources.social / totalSourceViews) * 100) : 0 },
+    { label: 'Email', value: trafficSources.email, icon: AtSign, color: 'bg-gray-900 dark:bg-gray-100', pct: totalSourceViews > 0 ? Math.round((trafficSources.email / totalSourceViews) * 100) : 0 },
+    { label: 'Referral', value: trafficSources.referral, icon: Link2, color: 'bg-gray-900 dark:bg-gray-100', pct: totalSourceViews > 0 ? Math.round((trafficSources.referral / totalSourceViews) * 100) : 0 },
   ];
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="portal-title flex items-center gap-2">
-          <BarChart3 className="w-5 h-5 text-brand" />
+          <BarChart3 className="w-5 h-5 text-gray-900 dark:text-white" />
           Event Analytics
         </h1>
         <p className="portal-subtitle">Track event performance, traffic sources & registrations</p>
@@ -145,9 +145,9 @@ export default async function AnalyticsPage() {
           <h2 className="portal-section-title mb-4">Registration Funnel</h2>
           <div className="space-y-3">
             {[
-              { label: 'Page Views', value: totalViews, pct: 100, color: 'bg-blue-500' },
-              { label: 'Registrations', value: totalRegs, pct: totalViews > 0 ? Math.round((totalRegs / totalViews) * 100) : 0, color: 'bg-green-500' },
-              { label: 'Checked In', value: checkedIn, pct: totalRegs > 0 ? Math.round((checkedIn / totalRegs) * 100) : 0, color: 'bg-emerald-500' },
+              { label: 'Page Views', value: totalViews, pct: 100, color: 'bg-gray-900 dark:bg-gray-100' },
+              { label: 'Registrations', value: totalRegs, pct: totalViews > 0 ? Math.round((totalRegs / totalViews) * 100) : 0, color: 'bg-gray-900 dark:bg-gray-100' },
+              { label: 'Checked In', value: checkedIn, pct: totalRegs > 0 ? Math.round((checkedIn / totalRegs) * 100) : 0, color: 'bg-gray-900 dark:bg-gray-100' },
             ].map((step) => (
               <div key={step.label}>
                 <div className="flex items-center justify-between mb-1">
@@ -185,8 +185,8 @@ export default async function AnalyticsPage() {
                   <dl className="mt-2 grid grid-cols-3 gap-2 text-center">
                     {[
                       { k: "Views", v: a.views, c: "text-navy dark:text-white" },
-                      { k: "Registrations", v: e.registrationCount, c: "text-green-600" },
-                      { k: "Conversion", v: conv, c: "text-amber-600" },
+                      { k: "Registrations", v: e.registrationCount, c: "text-navy dark:text-white" },
+                      { k: "Conversion", v: conv, c: "text-navy dark:text-white" },
                     ].map((m) => (
                       <div key={m.k} className="rounded-lg bg-gray-50 dark:bg-gray-800/60 py-2">
                         <dd className={`text-base font-bold font-sora ${m.c}`}>{m.v}</dd>
@@ -226,11 +226,11 @@ export default async function AnalyticsPage() {
                         {new Date(e.startAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" })}
                       </td>
                       <td className="py-2.5 px-2 text-center text-navy dark:text-white font-semibold">{a.views}</td>
-                      <td className="py-2.5 px-2 text-center text-green-600 font-semibold">{e.registrationCount}</td>
-                      <td className="py-2.5 px-2 text-center text-amber-500 font-semibold">{conv}</td>
-                      <td className="py-2.5 px-2 text-center text-pink-500">{a.shares}</td>
-                      <td className="py-2.5 px-2 text-center text-purple-500">{a.socialViews}</td>
-                      <td className="py-2.5 pl-2 text-center text-green-500">{a.searchViews}</td>
+                      <td className="py-2.5 px-2 text-center text-navy dark:text-white font-semibold">{e.registrationCount}</td>
+                      <td className="py-2.5 px-2 text-center text-navy dark:text-white font-semibold">{conv}</td>
+                      <td className="py-2.5 px-2 text-center text-gray-600 dark:text-gray-400">{a.shares}</td>
+                      <td className="py-2.5 px-2 text-center text-gray-600 dark:text-gray-400">{a.socialViews}</td>
+                      <td className="py-2.5 pl-2 text-center text-gray-600 dark:text-gray-400">{a.searchViews}</td>
                     </tr>
                   );
                 })}

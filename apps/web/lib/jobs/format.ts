@@ -6,16 +6,22 @@ const label = (list: readonly { value: string; label: string }[], v: string | nu
 const CURRENCY_SYMBOL: Record<string, string> = { USD: '$', EUR: '€', GBP: '£', SGD: 'S$', AED: 'AED ' };
 
 /**
- * A yearly salary range, written one way everywhere a job is shown: "₹16–29 L" in lakh for INR, "$90K–120K" in
- * thousands for other currencies. A range with only one end shows that end ("₹18 L"), never "–0L". Null when there
+ * A salary range, written one way everywhere a job is shown: "₹16–29 L" in lakh for INR, "$90K–120K" in
+ * thousands for other currencies, a year; an internship stipend in thousands a month ("₹15K–25K/month"). A range with only one end shows that end ("₹18 L"), never "–0L". Null when there
  * is nothing to show (including a salary the employer hides: the queries send none).
  */
-export function salaryText(j: { salaryMin?: number | null; salaryMax?: number | null; salaryCurrency?: string | null }): string | null {
+export function salaryText(j: { salaryMin?: number | null; salaryMax?: number | null; salaryCurrency?: string | null; salaryPeriod?: string | null }): string | null {
   const min = Number(j.salaryMin) || 0;
   const max = Number(j.salaryMax) || 0;
   if (!min && !max) return null;
   const range = min && max && min !== max;
   const currency = j.salaryCurrency || 'INR';
+  // An internship stipend: in thousands a month, whatever the currency ("₹15K–25K/month").
+  if (j.salaryPeriod === 'monthly') {
+    const sym = currency === 'INR' ? '₹' : CURRENCY_SYMBOL[currency] ?? `${currency} `;
+    const k = (n: number) => `${(n / 1000).toLocaleString('en-IN', { maximumFractionDigits: 1 })}K`;
+    return `${sym}${range ? `${k(min)}–${k(max)}` : k(min || max)}/month`;
+  }
   if (currency === 'INR') {
     const l = (n: number) => (n / 100000).toLocaleString('en-IN', { maximumFractionDigits: 1 });
     return range ? `₹${l(min)}–${l(max)} L` : `₹${l(min || max)} L`;

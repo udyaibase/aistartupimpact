@@ -402,8 +402,8 @@ export async function getRelatedContentForOpinion(articleId: string, tagIds: str
 
       sql`
         SELECT jl.id, jl.slug, jl.title, COALESCE(jl.city, jl.location) AS location, jl."workType"::text AS type,
-               CASE WHEN jl."showSalary" AND jl."salaryCurrency" = 'INR' THEN jl."salaryMin" END AS "salaryRangeMin",
-               CASE WHEN jl."showSalary" AND jl."salaryCurrency" = 'INR' THEN jl."salaryMax" END AS "salaryRangeMax",
+               CASE WHEN jl."showSalary" AND jl."salaryCurrency" = 'INR' AND jl."salaryPeriod" <> 'monthly' THEN jl."salaryMin" END AS "salaryRangeMin",
+               CASE WHEN jl."showSalary" AND jl."salaryCurrency" = 'INR' AND jl."salaryPeriod" <> 'monthly' THEN jl."salaryMax" END AS "salaryRangeMax",
                e."companyName", e.slug AS "companySlug", e."logoUrl" AS "companyLogo"
         FROM "JobBoardListing" jl
         JOIN "JobBoardEmployer" e ON e.id = jl."employerId"
@@ -1740,7 +1740,7 @@ export async function getLatestJobsDirect(limit = 6) {
     const rows = await sql`
       SELECT jl.id, jl.slug, jl.title, jl."shortDescription", jl.category,
              jl."workType", jl.location, jl.city, jl.country,
-             jl."salaryMin", jl."salaryMax", jl."salaryCurrency", jl."showSalary",
+             jl."salaryMin", jl."salaryMax", jl."salaryCurrency", jl."salaryPeriod", jl."showSalary",
              jl."isFeatured", jl."listingTier",
              jl."publishedAt"::text,
              e."companyName", e.slug AS "companySlug", e."logoUrl"

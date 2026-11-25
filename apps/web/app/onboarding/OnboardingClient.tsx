@@ -34,6 +34,9 @@ type Step = 'intents' | 'topics' | 'jobs' | 'finish';
 type CityResult = { id: string; name: string; state: string | null; country: string };
 
 const card = 'rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900';
+/** Fewest answers each step needs before Continue works (Skip at the top still leaves onboarding at any point). */
+const MIN_INTENTS = 2;
+const MIN_TOPICS = 3;
 const primaryBtn = 'inline-flex items-center justify-center gap-2 min-h-[44px] px-5 rounded-[10px] bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors';
 const quietBtn = 'inline-flex items-center justify-center gap-1.5 min-h-[44px] px-3 rounded-[10px] text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors';
 const chip = (on: boolean) => `inline-flex items-center gap-1 sm:gap-1.5 min-h-[36px] sm:min-h-[40px] px-3 sm:px-3.5 rounded-full border text-[13px] sm:text-sm font-medium transition-colors ${on ? 'border-gray-900 dark:border-white bg-gray-900 dark:bg-white text-white dark:text-gray-900' : 'border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 hover:border-gray-500'}`;
@@ -194,6 +197,7 @@ export default function OnboardingClient({
   );
 
   /** Under the content: optional status on the left, the main button on the right (full width on phones). */
+  const jobsAnswered = roles.length > 0 && !!experience && workModes.length > 0;
   const footer = (primary: React.ReactNode, note?: React.ReactNode) => (
     <div className="mt-5 sm:mt-6">
       {finishError && <p role="alert" className="mb-4 rounded-[10px] border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/30 px-3.5 py-2.5 text-sm text-red-800 dark:text-red-300">{finishError}</p>}
@@ -256,7 +260,7 @@ export default function OnboardingClient({
 
           {step === 'intents' && (
             <>
-              {heading(`Welcome, ${firstName}. What are you here for?`, `Choose up to ${MAX_INTENTS}. We’ll shape your home page around them, and you can change this any time in Settings.`)}
+              {heading(`Welcome, ${firstName}. What are you here for?`, `Choose ${MIN_INTENTS} or ${MAX_INTENTS}. We’ll shape your home page around them, and you can change this any time in Settings.`)}
               <div role="group" aria-label="What you're here for" className={`${card} divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden`}>
                 {INTENTS.map(({ value, label, description }) => {
                   const on = intents.includes(value);
@@ -285,7 +289,7 @@ export default function OnboardingClient({
                   );
                 })}
               </div>
-              {footer(<button type="button" onClick={next} disabled={!intents.length} className={primaryBtn}>Continue</button>, intents.length ? `${intents.length} of ${MAX_INTENTS} chosen` : `Choose up to ${MAX_INTENTS}`)}
+              {footer(<button type="button" onClick={next} disabled={intents.length < MIN_INTENTS} className={primaryBtn}>Continue</button>, intents.length < MIN_INTENTS ? `Choose at least ${MIN_INTENTS} (${intents.length} chosen)` : `${intents.length} of ${MAX_INTENTS} chosen`)}
             </>
           )}
 
@@ -311,15 +315,15 @@ export default function OnboardingClient({
                 ))}
               </div>
               {footer(
-                <button type="button" onClick={next} className={primaryBtn}>{topics.length ? 'Continue' : 'Continue without topics'}</button>,
-                topics.length >= MAX_TOPICS ? `${MAX_TOPICS} chosen, the most you can follow` : topics.length ? `${topics.length} chosen` : 'Optional. Pick 3 or more for the best results.',
+                <button type="button" onClick={next} disabled={topics.length < MIN_TOPICS} className={primaryBtn}>Continue</button>,
+                topics.length >= MAX_TOPICS ? `${MAX_TOPICS} chosen, the most you can follow` : topics.length < MIN_TOPICS ? `Choose at least ${MIN_TOPICS} (${topics.length} chosen)` : `${topics.length} chosen`,
               )}
             </>
           )}
 
           {step === 'jobs' && (
             <>
-              {heading('What kind of job are you looking for?', 'We’ll show matching jobs first. Everything here is optional and you can change it later.')}
+              {heading('What kind of job are you looking for?', 'Pick a role, your experience and where you want to work. We’ll show matching jobs first, and you can change this later.')}
               <div className="space-y-7">
                 <div role="group" aria-labelledby="ob-roles">
                   <div className="flex items-baseline justify-between gap-3 mb-2.5">
@@ -369,7 +373,10 @@ export default function OnboardingClient({
                   </div>
                 </div>
               </div>
-              {footer(<button type="button" onClick={next} className={primaryBtn}>Continue</button>)}
+              {footer(
+                <button type="button" onClick={next} disabled={!jobsAnswered} className={primaryBtn}>Continue</button>,
+                jobsAnswered ? 'All set' : `Still to choose: ${[!roles.length && 'a role', !experience && 'experience', !workModes.length && 'where you want to work'].filter(Boolean).join(', ')}`,
+              )}
             </>
           )}
 

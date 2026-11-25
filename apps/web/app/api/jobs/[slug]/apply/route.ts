@@ -1,4 +1,5 @@
 import { ensureSkillOverrides } from '@/lib/jobs/skill-overrides';
+import { notifyEmployer } from '@/lib/employer/notify';
 import { numberAnswer } from '@/lib/jobs/knockouts';
 import { referrerFor } from '@/lib/employer/referrals';
 import { markStep } from '@/lib/employer/onboarding';
@@ -191,6 +192,11 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
       matched: matchedSkills.length, total: listing.skills.length, source: SOURCE_LABEL[source],
     });
   }
+
+  void notifyEmployer(listing.employerId, {
+    type: 'new_application', title: `New applicant for ${listing.title}`,
+    message: `${fullName} applied via ${SOURCE_LABEL[source]}.`, link: `/employer/applications?job=${listing.id}`,
+  });
 
   // Auto-screening on, with quota left on any plan: review runs after the response, so the candidate never waits.
   const employerId = listing.employerId;

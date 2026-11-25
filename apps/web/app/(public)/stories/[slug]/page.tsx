@@ -122,7 +122,7 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbSchema) }} />
       <ReadingProgress targetId="story-body" />
 
-      <article className="mx-auto max-w-[720px]">
+      <article className="mx-auto max-w-[820px]">
         <nav aria-label="Breadcrumb" className="flex items-center gap-0.5 text-sm font-jakarta text-gray-500 dark:text-gray-400 mb-2 sm:mb-4">
           <Link href="/stories" className="-ml-1 inline-flex min-h-[40px] items-center gap-1 pl-1 pr-1 hover:text-brand">
             <ChevronLeft className="w-4 h-4" aria-hidden /> Stories
@@ -148,23 +148,27 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
         )}
 
         {/* Who wrote it, when, and the actions */}
-        <div className="mt-5 flex items-center justify-between gap-3 border-y border-gray-100 dark:border-gray-800 py-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <Avatar src={author.avatar} name={author.name} size={44} square={founder && !namedFounder} />
-            <div className="min-w-0">
-              <p className="truncate text-[15px] font-semibold text-gray-900 dark:text-white font-jakarta">
+        <div className="mt-5 flex items-center justify-between gap-3 border-y border-gray-100 dark:border-gray-800 py-2.5">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Avatar src={author.avatar} name={author.name} size={36} square={founder && !namedFounder} />
+            <div className="min-w-0 leading-tight">
+              <p className="truncate text-[14px] font-semibold text-gray-900 dark:text-white font-jakarta">
                 {author.slug && !founder
                   ? <Link href={`/authors/${author.slug}`} className="hover:text-brand">{author.name}</Link>
                   : (author.name || 'Udyaibase')}
               </p>
-              <p className="truncate text-[13px] text-gray-500 dark:text-gray-400 font-jakarta">
-                {startup && founder && namedFounder ? (
-                  <>{author.role ? `${author.role} at ` : 'Founder, '}<Link href={`/startups/${startup.slug}`} className="font-medium text-gray-700 dark:text-gray-300 hover:text-brand">{startup.name}</Link></>
-                ) : authorLine}
-              </p>
-              <p className="text-[13px] text-gray-500 dark:text-gray-400 font-jakarta">
-                <time dateTime={story.publishedAt || undefined}>{formatStoryDate(story.publishedAt)}</time>
-                {story.readTimeMinutes ? <> · {story.readTimeMinutes} min read</> : null}
+              {/* Role, startup, date and reading time on one line; on a narrow phone the date drops to its own line. */}
+              <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[13px] text-gray-500 dark:text-gray-400 font-jakarta">
+                <span className="truncate max-w-full">
+                  {startup && founder && namedFounder ? (
+                    <>{author.role ? `${author.role} at ` : 'Founder, '}<Link href={`/startups/${startup.slug}`} className="font-medium text-gray-700 dark:text-gray-300 hover:text-brand">{startup.name}</Link></>
+                  ) : authorLine}
+                </span>
+                <span aria-hidden>·</span>
+                <span className="whitespace-nowrap">
+                  <time dateTime={story.publishedAt || undefined}>{formatStoryDate(story.publishedAt)}</time>
+                  {story.readTimeMinutes ? <> · {story.readTimeMinutes} min read</> : null}
+                </span>
               </p>
             </div>
           </div>
@@ -176,7 +180,7 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
 
         {story.coverImage && (
           <figure className="relative mt-5 aspect-[16/9] overflow-hidden rounded-[14px] bg-gray-100 dark:bg-gray-800 sm:-mx-6">
-            <Image src={story.coverImage} alt={story.title} fill priority sizes="(max-width: 768px) 100vw, 768px" className="object-cover" />
+            <Image src={story.coverImage} alt={story.title} fill priority sizes="(max-width: 860px) 100vw, 820px" className="object-cover" />
           </figure>
         )}
 
@@ -208,19 +212,19 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
 
         {/* The people and the company behind it */}
         {(namedFounder || (!founder && author.name) || startup) && (
-          <section aria-label="About" className="mt-8 grid gap-3">
+          <section aria-label="About" className="mt-7 grid gap-2.5">
             {namedFounder && (
-              <div className="rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 sm:p-5">
-                <p className="text-xs font-bold uppercase tracking-wider text-gray-400 font-jakarta">Written by</p>
-                <div className="mt-3 flex items-start gap-3">
-                  <Avatar src={author.avatar} name={author.name} size={52} />
+              <div className="rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 py-3.5">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 font-jakarta">Written by</p>
+                <div className="mt-2 flex items-start gap-3">
+                  <Avatar src={author.avatar} name={author.name} size={44} />
                   <div className="min-w-0 flex-1">
-                    <p className="font-sora text-base font-bold text-gray-900 dark:text-white">{author.name}</p>
+                    <p className="font-sora text-[15px] font-bold leading-snug text-gray-900 dark:text-white">{author.name}</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400 font-jakarta">{[author.role || 'Founder', startup?.name].filter(Boolean).join(', ')}</p>
                     {author.bio && <p className="mt-2 text-[15px] leading-relaxed text-gray-600 dark:text-gray-300 font-jakarta line-clamp-4">{author.bio}</p>}
                     {author.linkedin && /^https?:\/\//i.test(author.linkedin) && (
                       <a href={author.linkedin} target="_blank" rel="noopener noreferrer nofollow"
-                        className="mt-3 inline-flex min-h-[40px] items-center gap-1.5 rounded-[10px] border border-gray-200 dark:border-gray-700 px-3 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:border-gray-300">
+                        className="mt-2 inline-flex min-h-[36px] items-center gap-1.5 rounded-[10px] border border-gray-200 dark:border-gray-700 px-3 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:border-gray-300">
                         LinkedIn <ArrowUpRight className="h-4 w-4" aria-hidden />
                       </a>
                     )}
@@ -230,16 +234,16 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
             )}
 
             {!founder && author.name && (
-              <div className="rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 sm:p-5">
-                <p className="text-xs font-bold uppercase tracking-wider text-gray-400 font-jakarta">Written by</p>
-                <div className="mt-3 flex items-start gap-3">
-                  <Avatar src={author.avatar} name={author.name} size={52} />
+              <div className="rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 py-3.5">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 font-jakarta">Written by</p>
+                <div className="mt-2 flex items-start gap-3">
+                  <Avatar src={author.avatar} name={author.name} size={44} />
                   <div className="min-w-0 flex-1">
-                    <p className="font-sora text-base font-bold text-gray-900 dark:text-white">{author.name}</p>
+                    <p className="font-sora text-[15px] font-bold leading-snug text-gray-900 dark:text-white">{author.name}</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400 font-jakarta">Udyaibase editorial</p>
                     {author.bio && <p className="mt-2 text-[15px] leading-relaxed text-gray-600 dark:text-gray-300 font-jakarta line-clamp-4">{author.bio}</p>}
                     {author.slug && (
-                      <Link href={`/authors/${author.slug}`} className="mt-3 inline-flex min-h-[40px] items-center gap-1 text-sm font-semibold text-brand hover:underline">
+                      <Link href={`/authors/${author.slug}`} className="mt-2 inline-flex min-h-[36px] items-center gap-1 text-sm font-semibold text-brand hover:underline">
                         More from {author.name.split(' ')[0]} <ArrowRight className="h-4 w-4" aria-hidden />
                       </Link>
                     )}
@@ -250,17 +254,17 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
 
             {startup && (
               <Link href={`/startups/${startup.slug}`}
-                className="group flex items-center gap-3 rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 sm:p-5 hover:border-gray-300 dark:hover:border-gray-700">
-                <Avatar src={startup.logoUrl} name={startup.name} size={52} square />
+                className="group flex items-center gap-3 rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 py-3.5 hover:border-gray-300 dark:hover:border-gray-700">
+                <Avatar src={startup.logoUrl} name={startup.name} size={44} square />
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold uppercase tracking-wider text-gray-400 font-jakarta">{founder ? 'The startup' : 'Startup in this story'}</p>
-                  <p className="mt-0.5 flex items-center gap-1.5 font-sora text-base font-bold text-gray-900 dark:text-white">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 font-jakarta">{founder ? 'The startup' : 'Startup in this story'}</p>
+                  <p className="flex items-center gap-1.5 font-sora text-[15px] font-bold text-gray-900 dark:text-white">
                     <span className="truncate">{startup.name}</span>
                     {startup.isVerified && <BadgeCheck className="h-4 w-4 shrink-0 text-blue-500" aria-label="Verified" />}
                   </p>
                   {startup.tagline && <p className="text-sm text-gray-600 dark:text-gray-400 font-jakarta line-clamp-2">{startup.tagline}</p>}
                   {(stageLabel(startup.stage) || startup.foundedYear) && (
-                    <p className="mt-1 text-[13px] text-gray-500 font-jakarta">
+                    <p className="mt-0.5 text-[13px] text-gray-500 font-jakarta">
                       {[stageLabel(startup.stage), startup.foundedYear ? `Founded ${startup.foundedYear}` : null].filter(Boolean).join(' · ')}
                     </p>
                   )}
@@ -294,11 +298,30 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
           <SubscribeForm source="sidebar" buttonText="Subscribe free" />
         </div>
         <div className="rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 sm:col-span-2 flex flex-col">
-          <h2 className="font-sora font-bold text-base text-navy dark:text-white mb-1">Building an AI startup?</h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400 font-jakarta">Share your story, or reach AI founders with a featured spot.</p>
-          <div className="mt-auto flex flex-wrap gap-2 pt-4">
-            <Link href="/founder/content" className="inline-flex min-h-[44px] items-center rounded-[10px] bg-gray-900 dark:bg-white px-4 text-sm font-semibold text-white dark:text-gray-900">Write a story</Link>
-            <Link href="/advertise" className="inline-flex min-h-[44px] items-center rounded-[10px] border border-gray-200 dark:border-gray-700 px-4 text-sm font-semibold text-gray-700 dark:text-gray-200">Advertise</Link>
+          <h2 className="font-sora font-bold text-base text-navy dark:text-white mb-1">Share your founder story</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 font-jakarta">Three steps to publish on Udyaibase.</p>
+          <ol className="mt-4 space-y-3 font-jakarta">
+            {[
+              ['Submit your startup', 'Add it to the startup directory.'],
+              ['Verify it', 'Confirm with a work email or a DNS record.'],
+              ['Write your story', 'Our editors review it before it goes live.'],
+            ].map(([step, detail], i) => (
+              <li key={step} className="flex gap-3">
+                <span aria-hidden className="mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-gray-300 dark:border-gray-700 text-xs font-semibold text-gray-700 dark:text-gray-200">{i + 1}</span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-gray-900 dark:text-white">{step}</span>
+                  <span className="block text-[13px] text-gray-500 dark:text-gray-400">{detail}</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+          <div className="mt-auto pt-5">
+            <Link href="/founder/startups/new" className="group inline-flex w-full min-h-[44px] items-center justify-center gap-2 rounded-[10px] bg-gray-900 dark:bg-white px-4 text-sm font-semibold text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors">
+              Get started <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
+            </Link>
+            <p className="mt-2 text-center text-xs text-gray-500 dark:text-gray-400 font-jakarta">
+              Already verified? <Link href="/founder/content/new" className="font-semibold text-gray-700 dark:text-gray-200 underline underline-offset-2">Write your story</Link>
+            </p>
           </div>
         </div>
       </section>

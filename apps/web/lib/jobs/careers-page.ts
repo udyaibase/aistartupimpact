@@ -27,7 +27,7 @@ export async function getCareersPageJobs(employerId: string, opts: { widget?: { 
     take: 100,
     select: {
       slug: true, title: true, department: true, workType: true, city: true, country: true, location: true, employmentType: true,
-      salaryMin: true, salaryMax: true, salaryCurrency: true, showSalary: true,
+      salaryMin: true, salaryMax: true, salaryCurrency: true, salaryPeriod: true, showSalary: true,
     },
   });
   return rows.map((r) => {

@@ -68,3 +68,16 @@ export async function seatsUsed(employerId: string): Promise<number> {
   const ownerHasRow = !!account && members.some((m) => m.email.toLowerCase() === account.email.toLowerCase());
   return members.length + (ownerHasRow ? 0 : 1);
 }
+
+/**
+ * Jobs that use up the plan's open-job allowance: open and not past their closing date. A job past its date shows as
+ * Closed on the Jobs page before the nightly job updates its status, so it mustn't block publishing another one.
+ * The hidden "General application" listing is always closed, so it never counts.
+ */
+export function openJobsWhere(employerId: string, now = new Date()) {
+  return { employerId, status: 'OPEN' as const, deletedAt: null, isGeneral: false, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] };
+}
+
+export function countOpenJobs(employerId: string, now = new Date()) {
+  return prisma.jobBoardListing.count({ where: openJobsWhere(employerId, now) });
+}

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Check, Loader2, Plus, Trash2, Info, Eye, AlertTriangle, BadgeCheck } from 'lucide-react';
 import {
   APPLY_VIA, CURRENCIES, CUSTOM_EXPERIENCE, EMPLOYMENT_TYPES, EXPERIENCE_BANDS, MAX_EXPERIENCE_YEARS, MAX_OPEN_DAYS, MAX_POSITIONS, MAX_SCREENING_QUESTIONS, MAX_QUESTION_OPTIONS, MAX_SKILLS,
-  WORK_TYPES, draftToData, publishProblems, salaryUnit, type ApplyVia, type JobDraft, type ScreeningQuestion,
+  WORK_TYPES, draftToData, payPeriodFor, publishProblems, salaryUnit, type ApplyVia, type JobDraft, type ScreeningQuestion,
 } from '@/lib/jobs/composer';
 import DescriptionEditor from './DescriptionEditor';
 import { CategorySelect, TeamSelect } from './CustomSelects';
@@ -213,6 +213,11 @@ export default function JobComposer({
       if (!res.ok) {
         if (data.code === 'email_unverified') {
           setActionError(<>Verify your email before publishing. Your job is saved as a draft. <a href="#verify-email" className="font-semibold underline">Verify now</a></>);
+        } else if (data.code === 'limit' && data.upgradeTo) {
+          const name = ({ GROWTH: 'Growth', PRO: 'Pro', SCALE: 'Scale' } as Record<string, string>)[data.upgradeTo] ?? 'a bigger plan';
+          setActionError(data.canUpgrade
+            ? <>{data.error} <Link href={`/employer/billing#plan-${data.upgradeTo}`} className="font-semibold underline">Upgrade to {name}</Link></>
+            : <>{data.error} Ask a workspace owner to upgrade to {name}.</>);
         } else if (data.code === 'startup_unverified' || data.code === 'review_rejected') {
           setActionError(<>{data.error} <Link href="/employer/company" className="font-semibold underline">Ask your founder</Link></>);
         } else {
@@ -309,7 +314,8 @@ export default function JobComposer({
   }
   if (waiting) return <WaitingScreen title={draft.title} waiting={waiting} clearance={clearance} />;
 
-  const unit = salaryUnit(draft.salaryCurrency);
+  const monthly = payPeriodFor(draft.employmentType) === 'monthly';
+  const unit = salaryUnit(draft.salaryCurrency, monthly ? 'monthly' : 'yearly');
   const today = new Date().toISOString().slice(0, 10);
   const maxDate = new Date(Date.now() + MAX_OPEN_DAYS * 86_400_000).toISOString().slice(0, 10);
   const err = (k: keyof JobDraft) => errors[k];
@@ -468,7 +474,7 @@ export default function JobComposer({
             </div>
           </Card>
 
-          <Card id="pay" title="Pay" hint="Jobs that show a salary range get more applicants.">
+          <Card id="pay" title={monthly ? 'Stipend' : 'Pay'} hint={monthly ? 'Internships show a monthly stipend. Ones that show it get more applicants.' : 'Jobs that show a salary range get more applicants.'}>
             <div className="grid grid-cols-[110px_1fr_1fr] gap-2 sm:gap-3 items-end">
               <Field label="Currency" htmlFor="job-salaryCurrency">
                 <select id="job-salaryCurrency" value={draft.salaryCurrency} onChange={(e) => update('salaryCurrency', e.target.value)} className={inputCls}>
@@ -480,7 +486,7 @@ export default function JobComposer({
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500" aria-hidden>{unit.symbol.trim()}</span>
                     <input id={`job-${k}`} inputMode="decimal" value={draft[k]} onChange={(e) => update(k, e.target.value.replace(/[^\d.]/g, ''))}
-                      placeholder={k === 'salaryMin' ? (unit.suffix === 'L' ? '18' : '80') : (unit.suffix === 'L' ? '28' : '120')}
+                      placeholder={monthly ? (k === 'salaryMin' ? '15' : '25') : k === 'salaryMin' ? (unit.suffix === 'L' ? '18' : '80') : (unit.suffix === 'L' ? '28' : '120')}
                       className={`${inputCls} pl-8 pr-9`} {...aria(k)} aria-describedby="pay-unit" />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-gray-500" aria-hidden>{unit.suffix}</span>
                   </div>
@@ -488,10 +494,11 @@ export default function JobComposer({
               ))}
             </div>
             <p id="pay-unit" className="text-[13px] text-gray-500 dark:text-gray-400 -mt-2">
-              {unit.suffix === 'L' ? 'In lakh per year. 18 means ₹18,00,000.' : `In thousands per year. 80 means ${unit.symbol.trim()}80,000.`}
+              {monthly ? `In thousands per month. 15 means ${unit.symbol.trim()}15,000 a month.`
+                : unit.suffix === 'L' ? 'In lakh per year. 18 means ₹18,00,000.' : `In thousands per year. 80 means ${unit.symbol.trim()}80,000.`}
             </p>
             {err('salaryMax') && <p className="text-[13px] text-red-700 dark:text-red-400 -mt-2">{err('salaryMax')}</p>}
-            <Toggle id="job-showSalary" label="Show the salary on the job" checked={draft.showSalary} onChange={(v) => update('showSalary', v)} />
+            <Toggle id="job-showSalary" label={monthly ? 'Show the stipend on the job' : 'Show the salary on the job'} checked={draft.showSalary} onChange={(v) => update('showSalary', v)} />
             <Toggle id="job-hasEsops" label="ESOPs or equity offered" checked={draft.hasEsops} onChange={(v) => update('hasEsops', v)} />
           </Card>
 

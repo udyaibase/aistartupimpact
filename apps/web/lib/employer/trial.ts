@@ -1,4 +1,5 @@
 import { prisma } from '@udyaibase/database';
+import { notifyEmployer } from '@/lib/employer/notify';
 import { ownerInboxes } from '@/lib/employer/team';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 import { button, esc, shell } from '@/lib/jobs/apply-emails';
@@ -42,6 +43,7 @@ export async function maybeStartTrial(employerId: string, now = new Date()): Pro
   if (e.passwordHash !== '') {
     const site = (process.env.NEXT_PUBLIC_SITE_URL || 'https://udyaibase.com').replace(/\/$/, '');
     const date = end.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', timeZone: 'Asia/Kolkata' });
+    await notifyEmployer(e.id, { type: 'trial_started', title: `Your free ${TRIAL_DAYS}-day ${PLANS[TRIAL_PLAN].name} trial has started`, message: `Your job is live and featured. The trial ends on ${date}.`, link: '/employer/billing' }, 'owners');
     for (const to of await ownerInboxes(e.id)) sendEmailFireAndForget({
       to,
       subject: `Your job is live, with a free ${TRIAL_DAYS}-day ${PLANS[TRIAL_PLAN].name} trial`,

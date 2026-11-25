@@ -8,6 +8,7 @@ import { ArrowLeftRight, UserCheck, CreditCard,
 } from 'lucide-react';
 import { maskEmail } from '@/lib/mask';
 import ThemeToggle from '@/components/ThemeToggle';
+import NotificationBell from '@/components/NotificationBell';
 import CommandPalette, { type SearchResult } from '@/components/organizer/CommandPalette';
 import type { EmployerShell } from '@/lib/employer/portal';
 import { can, ROLE_LABEL, type Permission, WORKSPACE_WIDE_PAGES } from '@/lib/employer/roles';
@@ -99,14 +100,7 @@ export default function EmployerHeader({ employer, shell }: Props) {
         {/* Right */}
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          <Link
-            href="/employer/applications?stage=new"
-            aria-label={shell.newCandidates > 0 ? `${shell.newCandidates} unseen candidates` : 'Candidates'}
-            className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md relative"
-          >
-            <Bell className="w-4 h-4" />
-            {shell.newCandidates > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-brand rounded-full" aria-hidden />}
-          </Link>
+          <NotificationBell api="/api/employer/notifications/feed" />
           <AccountMenu employer={employer} shell={shell} />
         </div>
       </header>

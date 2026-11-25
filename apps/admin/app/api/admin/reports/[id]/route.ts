@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { notifyEmployerPerson } from '@/lib/employer-notify';
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@udyaibase/database";
@@ -23,8 +24,13 @@ async function putHandler(request: NextRequest, props: { params: Promise<{ id: s
       const job = await prisma.jobBoardListing.update({
         where: { id: report.entityId },
         data: { status: 'CLOSED', isActive: false, closedAt: now, closeReason: 'MANUAL', moderationHold: false },
-        select: { title: true, publishedByEmail: true, Employer: { select: { email: true, passwordHash: true } } },
+        select: { title: true, employerId: true, publishedByEmail: true, Employer: { select: { email: true, passwordHash: true } } },
       });
+      // The bell too: the owner, and whoever published it if that's someone else.
+      const why = adminNotes ? String(adminNotes).slice(0, 300) : 'Several people reported it and our team reviewed it.';
+      for (const who of new Set([null, job.publishedByEmail])) {
+        await notifyEmployerPerson(job.employerId, { type: 'job_closed_by_moderation', title: `We closed “${job.title}” after review`, message: why, link: '/employer/jobs' }, who);
+      }
       // Tell the workspace owner (and whoever published it) why; placeholder workspaces have no inbox.
       const to = Array.from(new Set([job.Employer.passwordHash !== '' ? job.Employer.email : null, job.publishedByEmail].filter(Boolean) as string[]));
       if (to.length) {

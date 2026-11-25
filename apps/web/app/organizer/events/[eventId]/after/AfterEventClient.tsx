@@ -4,13 +4,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Award, CheckCircle2, ExternalLink, Eye, ImagePlus, Loader2, Lock, Mail, MessageSquareText, Plus, Send, Star, Trash2, Upload, Users, X } from 'lucide-react';
 import { payWithRazorpay } from '@/lib/billing/checkout-client';
+import type { PartnerPlacement } from '@/lib/events/certificate-logos';
 import CertificatePreview from './CertificatePreview';
 import ImageDropField from '@/components/ui/ImageDropField';
 import { CERTIFICATE_MARKERS, certificatePrompt, checkCustomSvg } from '@/lib/events/certificate-custom';
 
 type Template = 'classic' | 'modern' | 'minimal' | 'executive' | 'heritage' | 'tech' | 'custom';
 type Phrase = 'participated' | 'attended' | 'completed' | 'spoke' | 'volunteered';
-type CertSettings = { template: Template; audience: 'CHECKED_IN' | 'REGISTERED'; title: string; signerName: string; signerTitle: string; signatureUrl: string | null; autoIssue: boolean; phrase: Phrase; description: string; skills: string[]; duration: string; logoUrl: string | null; partnerLogoUrl: string | null; logoPosition: 'center' | 'left' | 'right'; logoSize: 'small' | 'medium' | 'large'; showHostName: boolean; customSvg: string; logoHeight: number | null; logoOffsetX: number; logoOffsetY: number; logoPlate: boolean };
+type CertSettings = { template: Template; audience: 'CHECKED_IN' | 'REGISTERED'; title: string; signerName: string; signerTitle: string; signatureUrl: string | null; autoIssue: boolean; phrase: Phrase; description: string; skills: string[]; duration: string; logoUrl: string | null; partnerLogoUrl: string | null; logoPosition: 'center' | 'left' | 'right'; logoSize: 'small' | 'medium' | 'large'; showHostName: boolean; customSvg: string; logoHeight: number | null; logoOffsetX: number; logoOffsetY: number; logoPlate: boolean; partnerLogoPlacement: PartnerPlacement; partnerLogoHeight: number | null; partnerLogoOffsetX: number; partnerLogoOffsetY: number; issueWhenEnded: boolean };
 type FollowSettings = { auto: boolean; includeMissed: boolean; attendedSubject: string; attendedBody: string; missedSubject: string; missedBody: string };
 type FeedbackSettings = { enabled: boolean; questions: string[] };
 type RecapLink = { kind: 'recording' | 'slides' | 'other'; title: string; url: string };
@@ -98,7 +99,7 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
       const d = await r.json();
       if (!r.ok || !d.success) { setLoadError(d.error || 'Couldn’t load this event.'); return; }
       setData(d);
-      setCert((c) => c ?? { phrase: 'participated', description: '', skills: [], duration: '', logoUrl: null, partnerLogoUrl: null, logoPosition: 'center', logoSize: 'medium', showHostName: false, customSvg: '', logoHeight: null, logoOffsetX: 0, logoOffsetY: 0, logoPlate: true, ...d.certificates.settings });
+      setCert((c) => c ?? { phrase: 'participated', description: '', skills: [], duration: '', logoUrl: null, partnerLogoUrl: null, logoPosition: 'center', logoSize: 'medium', showHostName: false, customSvg: '', logoHeight: null, logoOffsetX: 0, logoOffsetY: 0, logoPlate: true, partnerLogoPlacement: 'beside', partnerLogoHeight: null, partnerLogoOffsetX: 0, partnerLogoOffsetY: 0, issueWhenEnded: false, ...d.certificates.settings });
       setSkillsText((t) => t ?? (d.certificates.settings.skills ?? []).join(', '));
       setFollow((f) => f ?? d.followUp.settings);
       setFb((f) => f ?? d.feedback.settings);
@@ -135,6 +136,12 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
   async function issue() {
     setBusy('issue');
     try {
+      // Unsaved changes are saved first, so people get the design they see.
+      if (certDirty) {
+        const sr = await fetch(`/api/organizer/events/${eventId}/after-event`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ certificateSettings: { ...cert, skills: skillsText ?? '' } }) });
+        const sd = await sr.json().catch(() => ({}));
+        if (!sr.ok || !sd.success) { flash('error', sd.error || 'Couldn’t save the design.'); return; }
+      }
       const r = await fetch(`/api/organizer/events/${eventId}/certificates`, { method: 'POST' });
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !d.success) flash('error', d.error || 'Couldn’t issue certificates.');
@@ -230,6 +237,10 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
     logoOffsetX: cert.logoOffsetX ?? 0,
     logoOffsetY: cert.logoOffsetY ?? 0,
     logoPlate: cert.logoPlate !== false,
+    partnerLogoPlacement: cert.partnerLogoPlacement ?? 'beside',
+    partnerLogoHeight: cert.partnerLogoHeight ?? null,
+    partnerLogoOffsetX: cert.partnerLogoOffsetX ?? 0,
+    partnerLogoOffsetY: cert.partnerLogoOffsetY ?? 0,
     showHostName: !!cert.showHostName,
     customSvg: cert.customSvg ?? '',
     duration: cert.duration ?? '',
@@ -239,8 +250,19 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
     sampleName: 'Priya Sharma',
   } as const : null;
   const logoHeightNow = cert ? cert.logoHeight ?? LOGO_HEIGHTS[cert.logoSize ?? 'medium'] : 56;
+  const partnerHeightNow = cert.partnerLogoHeight ?? logoHeightNow;
+  const partnerPlacement = cert.partnerLogoPlacement ?? 'beside';
+  // On its own spot only when it differs from your logo's; otherwise it joins your logo's row.
+  const partnerOnOwn = partnerPlacement !== 'beside' && partnerPlacement !== (cert.logoPosition ?? 'center');
+  const savedCert = JSON.stringify(data.certificates.settings);
+  const certDirty = !data.certificates.configured || JSON.stringify({ ...data.certificates.settings, ...cert, skills: (skillsText ?? '').split(',').map((x) => x.trim()).filter(Boolean) }) !== savedCert;
   const previewHref = `/api/organizer/events/${eventId}/certificates/preview?settings=${encodeURIComponent(JSON.stringify({ ...cert, customSvg: undefined, skills: skillsText ?? '' }))}`;
   const eligible = cert.audience === 'CHECKED_IN' ? counts.attended : counts.registered;
+  // The one reason the Issue button is off, said in words (it used to be a silent grey button).
+  const issueBlock = !certificates.allowed ? 'certificates aren’t on for this event yet (add them above, or move to Pro).'
+    : !event.started ? `the event hasn’t started. You can issue once it starts${cert.issueWhenEnded ? ', and it’s scheduled for when it ends' : ', or turn on “Issue to everyone automatically when the event ends”'}.`
+    : eligible === 0 ? (cert.audience === 'CHECKED_IN' ? 'nobody has checked in yet. Check people in, or choose “Everyone who registered” under Who gets one.' : 'nobody has registered for this event.')
+    : '';
 
   return (
     <div className="font-jakarta max-w-4xl">
@@ -463,10 +485,11 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
                 hint={cert.logoUrl ? undefined : 'Without one, your profile picture is used if you have it; otherwise your organization’s name is printed.'} />
               <ImageDropField label="Partner logo (optional)" value={cert.partnerLogoUrl} busy={busy === 'upload'} cropTitle="Crop the partner logo"
                 onPick={(file) => uploadImage(file, 'partnerLogoUrl')} onRemove={() => setCert({ ...cert, partnerLogoUrl: null })}
-                hint="A sponsor, partner or accrediting body, shown beside yours." />
+                hint="A sponsor, partner or accrediting body. Place and size it below." />
             </div>
 
-            <div className="mt-4 grid sm:grid-cols-2 gap-x-6 gap-y-4">
+            <p className="mt-5 text-[13px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Your logo</p>
+            <div className="mt-2 grid sm:grid-cols-2 gap-x-6 gap-y-4">
               <fieldset>
                 <legend className={label}>Position</legend>
                 <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Logo position">
@@ -512,6 +535,62 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
                 <button type="button" onClick={() => setCert({ ...cert, logoHeight: null, logoOffsetX: 0, logoOffsetY: 0, logoPosition: 'center' })} className="ml-auto text-sm font-semibold text-gray-600 dark:text-gray-300 hover:underline min-h-[32px]">Reset position and size</button>
               )}
             </div>
+
+            {cert.partnerLogoUrl && (
+              <div className="mt-5 pt-4 border-t border-gray-200 dark:border-gray-800">
+                <p className="text-[13px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Partner logo</p>
+                <div className="mt-2 grid sm:grid-cols-2 gap-x-6 gap-y-4">
+                  <fieldset>
+                    <legend className={label}>Position</legend>
+                    <div className="grid grid-cols-4 gap-1.5" role="radiogroup" aria-label="Partner logo position">
+                      {([['beside', 'Beside yours'], ['left', 'Left'], ['center', 'Centre'], ['right', 'Right']] as const).map(([value, name]) => {
+                        const on = partnerPlacement === value;
+                        return (
+                          <button key={value} type="button" role="radio" aria-checked={on} onClick={() => setCert({ ...cert, partnerLogoPlacement: value })}
+                            className={`min-h-[44px] rounded-[10px] border px-1.5 py-1.5 flex flex-col items-center justify-center gap-1 text-[11px] sm:text-xs font-semibold leading-tight text-center transition-colors ${on ? 'border-brand bg-brand/5 text-brand' : 'border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-gray-400'}`}>
+                            <span aria-hidden className={`flex gap-[2px] w-9 h-[18px] rounded-[3px] border border-current p-[2px] ${value === 'left' ? 'justify-start' : value === 'right' ? 'justify-end' : 'justify-center'}`}>
+                              {value === 'beside' ? <><span className="block w-2 h-1.5 rounded-[1px] bg-current opacity-40" /><span className="block w-2 h-1.5 rounded-[1px] bg-current" /></> : <span className="block w-2.5 h-1.5 rounded-[1px] bg-current" />}
+                            </span>
+                            {name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {partnerPlacement !== 'beside' && !partnerOnOwn && <p className="mt-1.5 text-xs text-gray-500">Same spot as your logo, so it sits beside it.</p>}
+                  </fieldset>
+                  <div>
+                    <div className="flex items-baseline justify-between">
+                      <label htmlFor="cert-partner-height" className={label}>Size</label>
+                      <span className="text-xs text-gray-500 tabular-nums">{partnerHeightNow} pt</span>
+                    </div>
+                    <input id="cert-partner-height" type="range" min={24} max={74} step={1} value={partnerHeightNow} onChange={(e) => setCert({ ...cert, partnerLogoHeight: Number(e.target.value) })} className="w-full h-11 accent-[#A50F15]" />
+                  </div>
+                  {partnerOnOwn && (
+                    <>
+                      <div>
+                        <div className="flex items-baseline justify-between">
+                          <label htmlFor="cert-partner-x" className={label}>Move left or right</label>
+                          <span className="text-xs text-gray-500 tabular-nums">{offsetText(cert.partnerLogoOffsetX ?? 0, 'left', 'right')}</span>
+                        </div>
+                        <input id="cert-partner-x" type="range" min={-140} max={140} step={2} value={cert.partnerLogoOffsetX ?? 0} onChange={(e) => setCert({ ...cert, partnerLogoOffsetX: Number(e.target.value) })} className="w-full h-11 accent-[#A50F15]" />
+                      </div>
+                      <div>
+                        <div className="flex items-baseline justify-between">
+                          <label htmlFor="cert-partner-y" className={label}>Move up or down</label>
+                          <span className="text-xs text-gray-500 tabular-nums">{offsetText(cert.partnerLogoOffsetY ?? 0, 'up', 'down')}</span>
+                        </div>
+                        <input id="cert-partner-y" type="range" min={-40} max={40} step={1} value={cert.partnerLogoOffsetY ?? 0} onChange={(e) => setCert({ ...cert, partnerLogoOffsetY: Number(e.target.value) })} className="w-full h-11 accent-[#A50F15]" />
+                      </div>
+                    </>
+                  )}
+                </div>
+                {(cert.partnerLogoHeight !== null || partnerPlacement !== 'beside' || (cert.partnerLogoOffsetX ?? 0) !== 0 || (cert.partnerLogoOffsetY ?? 0) !== 0) && (
+                  <div className="mt-2 flex">
+                    <button type="button" onClick={() => setCert({ ...cert, partnerLogoPlacement: 'beside', partnerLogoHeight: null, partnerLogoOffsetX: 0, partnerLogoOffsetY: 0 })} className="ml-auto text-sm font-semibold text-gray-600 dark:text-gray-300 hover:underline min-h-[32px]">Reset partner logo</button>
+                  </div>
+                )}
+              </div>
+            )}
           </fieldset>
 
           <div className="grid sm:grid-cols-2 gap-4">
@@ -562,22 +641,34 @@ export default function AfterEventClient({ eventId }: { eventId: string }) {
               hint="A photo of a signature on white paper works: the white is made see-through when you crop it." />
           </div>
 
-          <Toggle id="cert-auto" checked={cert.autoIssue} onChange={(v) => setCert({ ...cert, autoIssue: v })}>
-            Issue automatically when someone checks in
-          </Toggle>
+          <div className="space-y-2">
+            <Toggle id="cert-auto" checked={cert.autoIssue} onChange={(v) => setCert({ ...cert, autoIssue: v })}>
+              Issue automatically when someone checks in
+            </Toggle>
+            <Toggle id="cert-when-ended" checked={!!cert.issueWhenEnded} onChange={(v) => setCert({ ...cert, issueWhenEnded: v })}>
+              Issue to everyone automatically when the event ends
+            </Toggle>
+            {cert.issueWhenEnded && (
+              <p className="text-[13px] text-gray-600 dark:text-gray-400 pl-1">
+                {event.ended ? 'The event has ended: certificates are issued within 15 minutes of saving, then for late check-ins for a few hours.' : `Scheduled for ${new Date(event.endAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}, when the event ends.`}
+                {' '}Everyone in “Who gets one” gets theirs before the automatic follow-up goes out.
+              </p>
+            )}
+          </div>
 
           <div className="flex flex-col sm:flex-row gap-2 pt-1">
             <a href={previewHref} target="_blank" rel="noopener" className={secondary}><Eye className="w-4 h-4" aria-hidden /> Preview PDF</a>
             <button type="button" onClick={() => save('cert')} disabled={saving === 'cert'} className={secondary}>
-              {saving === 'cert' && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} Save design
+              {saving === 'cert' && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />} {cert.issueWhenEnded ? 'Save design and schedule' : 'Save design'}
             </button>
-            <button type="button" onClick={issue} disabled={!certificates.allowed || !certificates.configured || !event.started || busy === 'issue' || eligible === 0} className={primary}
-              title={!certificates.configured ? 'Save the design first' : undefined}>
-              {busy === 'issue' ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Users className="w-4 h-4" aria-hidden />} Issue certificates ({eligible})
+            <button type="button" onClick={issue} disabled={!!issueBlock || busy === 'issue' || saving === 'cert'} className={primary}>
+              {busy === 'issue' ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Users className="w-4 h-4" aria-hidden />} {certDirty && !issueBlock ? 'Save and issue' : 'Issue certificates'} ({eligible})
             </button>
           </div>
           <p className="text-[13px] text-gray-600 dark:text-gray-400">
-            {certificates.issued > 0 ? `${certificates.issued} issued so far. ` : ''}Issue them before you send the follow-up, so the thank-you email includes each person’s certificate.
+            {issueBlock
+              ? <><strong className="font-semibold text-gray-800 dark:text-gray-200">Why you can’t issue yet:</strong> {issueBlock}</>
+              : <>{certificates.issued > 0 ? `${certificates.issued} issued so far. ` : ''}Issue them before you send the follow-up, so the thank-you email includes each person’s certificate.</>}
           </p>
         </Card>
 

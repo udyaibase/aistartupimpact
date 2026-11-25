@@ -6,6 +6,7 @@ import { isOwnMediaUrl } from './urls';
 import { CERTIFICATE_PAGE, CERTIFICATE_THEMES, TECH_BAND_HOST, type Triple } from './certificate-themes';
 import { fillMarkers, qrBox, viewBoxOf } from './certificate-custom';
 import { sanitizeCustomSvg } from './certificate-custom-server';
+import { fitRow, LOGO_GAP, planLogos, rowLeft, type LogoPlace, type PartnerPlacement } from './certificate-logos';
 
 /**
  * Certificate PDF (A4 landscape) in one of six templates, with the host's logo and signature and a QR code that
@@ -50,34 +51,48 @@ export interface CertificateData {
   logoOffsetY?: number;
   /** White plate behind the logo on dark areas. Default on. */
   logoPlate?: boolean;
+  /** The partner logo beside the host's ("beside") or on its own: left, centre or right. */
+  partnerLogoPlacement?: PartnerPlacement;
+  /** Partner logo height in points; null means the same as the host logo. */
+  partnerLogoHeight?: number | null;
+  partnerLogoOffsetX?: number;
+  partnerLogoOffsetY?: number;
   /** The host's own design (SVG). Drawn when template is "custom"; if it can't be, Classic is drawn. */
   customSvg?: string;
 }
 
 const LOGO_HEIGHT = { small: 38, medium: 56, large: 74 } as const;
 
-const LOGO_GAP = 22;
-type LogoPlace = { position: 'center' | 'left' | 'right'; maxHeight: number; maxWidth: number; dx: number; dy: number; plate: boolean };
-
 /** The logo's height in points: the slider's value, else the small / medium / large choice. */
 const logoHeightOf = (d: CertificateData) => Math.min(74, Math.max(24, d.logoHeight ?? LOGO_HEIGHT[d.logoSize ?? 'medium']));
 
+/** The logo layout for this certificate (see certificate-logos.ts), with the pictures it uses. */
+function logoLayout(d: CertificateData, logo: PDFImage | null, partner: PDFImage | null, opts: { full: boolean; plate: boolean; custom?: boolean }) {
+  const plan = planLogos({
+    hasMain: !!logo, hasPartner: !!partner,
+    position: d.logoPosition ?? 'center', partnerPlacement: d.partnerLogoPlacement ?? 'beside',
+    mainHeight: logoHeightOf(d), partnerHeight: d.partnerLogoHeight ?? logoHeightOf(d),
+    dx: d.logoOffsetX ?? 0, dy: d.logoOffsetY ?? 0, partnerDx: d.partnerLogoOffsetX ?? 0, partnerDy: d.partnerLogoOffsetY ?? 0,
+    full: opts.full, plate: opts.plate, custom: opts.custom,
+  });
+  const pick = (it: 'main' | 'partner') => (it === 'main' ? logo : partner) as PDFImage;
+  return { plan, rowImages: plan.row ? plan.row.items.map(pick) : [], soloImages: plan.solo && partner ? [partner] : [] };
+}
+
 /** Height the logo row will take, without drawing it (0 when there is no logo). */
-function logoRowHeight(images: PDFImage[], place: Pick<LogoPlace, 'maxHeight' | 'maxWidth'>): number {
-  return images.length ? Math.max(...images.map((img) => img.scaleToFit(place.maxWidth, place.maxHeight).height)) : 0;
+function logoRowHeight(images: PDFImage[], place: LogoPlace): number {
+  return fitRow(images.map((i) => i.width / i.height), place).height;
 }
 
 /**
- * Draws the logo, and a partner logo beside it, in a row whose top edge is `top`. `dx` and `dy` nudge it right and
- * down. On a dark area a white plate goes behind it, so a logo made for white paper can still be seen.
+ * Draws logos in a row whose top edge is `top`, each at its own height. `dx` and `dy` nudge it right and down.
+ * On a dark area a white plate goes behind it, so a logo made for white paper can still be seen.
  * Returns the row's height (0 when there is no logo).
  */
 function drawLogos(page: PDFPage, images: PDFImage[], top: number, place: LogoPlace): number {
   if (!images.length) return 0;
-  const sized = images.map((img) => ({ img, ...img.scaleToFit(place.maxWidth, place.maxHeight) }));
-  const total = sized.reduce((w, s) => w + s.width, 0) + LOGO_GAP * (sized.length - 1);
-  const height = Math.max(...sized.map((s) => s.height));
-  const left = (place.position === 'left' ? 72 : place.position === 'right' ? W - 72 - total : (W - total) / 2) + place.dx;
+  const { sized, total, height } = fitRow(images.map((i) => i.width / i.height), place);
+  const left = rowLeft(place, total, W);
   const rowTop = top - place.dy;
   if (place.plate) {
     const pad = 7, r = 6;
@@ -86,10 +101,11 @@ function drawLogos(page: PDFPage, images: PDFImage[], top: number, place: LogoPl
     page.drawSvgPath(`M ${r} 0 H ${pw - r} Q ${pw} 0 ${pw} ${r} V ${ph - r} Q ${pw} ${ph} ${pw - r} ${ph} H ${r} Q 0 ${ph} 0 ${ph - r} V ${r} Q 0 0 ${r} 0 Z`, { x: px, y: rowTop + pad, color: rgb(1, 1, 1) });
   }
   let x = left;
-  for (const s of sized) {
-    page.drawImage(s.img, { x, y: rowTop - height + (height - s.height) / 2, width: s.width, height: s.height });
+  images.forEach((img, i) => {
+    const s = sized[i];
+    page.drawImage(img, { x, y: rowTop - height + (height - s.height) / 2, width: s.width, height: s.height });
     x += s.width + LOGO_GAP;
-  }
+  });
   return height;
 }
 
@@ -113,7 +129,9 @@ async function renderCustomPage(doc: PDFDocument, page: PDFPage, d: CertificateD
     page.drawImage(await doc.embedPng(png), { x: 0, y: 0, width: W, height: H });
 
     const [logo, partner] = await Promise.all([loadImage(doc, d.logoUrl), loadImage(doc, d.partnerLogoUrl ?? null)]);
-    drawLogos(page, [logo, partner].filter((i): i is PDFImage => !!i), H - 34, { position: d.logoPosition ?? 'center', maxHeight: logoHeightOf(d), maxWidth: 170, dx: d.logoOffsetX ?? 0, dy: d.logoOffsetY ?? 0, plate: false });
+    const lay = logoLayout(d, logo, partner, { full: false, plate: false, custom: true });
+    if (lay.plan.row) drawLogos(page, lay.rowImages, H - 34, lay.plan.row.place);
+    if (lay.plan.solo) drawLogos(page, lay.soloImages, H - 34, lay.plan.solo.place);
 
     // The QR code, where the design marked it (<rect id="qr">) or bottom right. On a white plate so it always scans,
     // with the ID and verify address on the same plate so they can always be read.
@@ -267,9 +285,6 @@ export async function renderCertificatePdf(d: CertificateData): Promise<Uint8Arr
   const nameFont = t.serif ? serifItalic : sansBold;
 
   const [logo, partner, signature] = await Promise.all([loadImage(doc, d.logoUrl), loadImage(doc, d.partnerLogoUrl ?? null), loadImage(doc, d.signatureUrl)]);
-  const logos = [logo, partner].filter((i): i is PDFImage => !!i);
-  const logoPosition = d.logoPosition ?? 'center';
-
   const description = drawable(body, d.description ?? '');
   const skills = (d.skills ?? []).map((k) => drawable(sansBold, k)).filter(Boolean);
   // With the extra lines the page is fuller, so the logo and the gaps above the name give a little back.
@@ -277,15 +292,12 @@ export async function renderCertificatePdf(d: CertificateData): Promise<Uint8Arr
   // On the tech design the logo, host name and title sit in the dark band, in light colours.
   const inBand = d.template === 'tech';
 
-  // Where the logo goes. Centred, it heads the page and the text starts below it. In a corner it is kept smaller,
-  // because the title runs across the page beside it.
-  const centred = logos.length > 0 && logoPosition === 'center';
-  const place: LogoPlace = centred
-    ? { position: 'center', maxHeight: Math.max(24, logoHeightOf(d) - (full ? 16 : 0)), maxWidth: 170, dx: d.logoOffsetX ?? 0, dy: d.logoOffsetY ?? 0, plate: false }
-    : { position: logoPosition, maxHeight: Math.min(logoHeightOf(d), 56), maxWidth: 120, dx: d.logoOffsetX ?? 0, dy: d.logoOffsetY ?? 0, plate: false };
-  // A dark logo needs a white plate on the navy page and on the Tech band.
-  place.plate = (d.logoPlate ?? true) && (!!t.dark || inBand);
-  const rowHeight = centred ? logoRowHeight(logos, place) : 0;
+  // Where the logos go (see certificate-logos.ts). Centred, the row heads the page and the text starts below it; in a
+  // corner it is kept smaller. A dark logo needs a white plate on the navy page and on the Tech band.
+  const lay = logoLayout(d, logo, partner, { full, plate: (d.logoPlate ?? true) && (!!t.dark || inBand) });
+  const centred = lay.plan.centred && !!lay.plan.row;
+  const hasLogo = !!lay.plan.row;
+  const rowHeight = centred && lay.plan.row ? logoRowHeight(lay.rowImages, lay.plan.row.place) : 0;
 
   // The Tech band is as tall as what it holds (logo, host name, title), so the title is always inside it. It used
   // to be a fixed height: with a logo the title fell below the band, white on white.
@@ -327,15 +339,17 @@ export async function renderCertificatePdf(d: CertificateData): Promise<Uint8Arr
     const host = drawable(sansBold, d.hostName).toUpperCase();
     centered(page, sansBold, host, y, fit(sansBold, host, size, 520), inBand ? paint(TECH_BAND_HOST) : t.muted);
   };
-  if (centred) {
-    drawLogos(page, logos, y + 18, place);
+  if (centred && lay.plan.row) {
+    drawLogos(page, lay.rowImages, y + 18, lay.plan.row.place);
     y -= rowHeight + 6;
     if (d.showHostName) { y += 4; hostLine(10); y -= 14; }
   } else {
-    if (logos.length) drawLogos(page, logos, H - 46, place);
-    if (!logos.length || d.showHostName) hostLine(13);
+    if (lay.plan.row) drawLogos(page, lay.rowImages, H - 46, lay.plan.row.place);
+    if (!hasLogo || d.showHostName) hostLine(13);
     y -= 20;
   }
+  // A partner logo placed on its own sits in the top band, in its own spot.
+  if (lay.plan.solo) drawLogos(page, lay.soloImages, H - 46, lay.plan.solo.place);
 
   // Title
   const title = drawable(heading, d.title.toUpperCase());

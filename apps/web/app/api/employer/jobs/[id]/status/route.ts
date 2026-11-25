@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse, after } from 'next/server';
+import { notifyEmployer } from '@/lib/employer/notify';
 import { prisma } from '@udyaibase/database';
 import { ownerInboxes, sendApprovalDeclinedEmail, sendApprovalRequestEmail } from '@/lib/employer/team';
 import { setListingStatus } from '@/lib/jobs/listing-status';
@@ -69,6 +70,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     await prisma.jobBoardListing.update({ where: { id }, data: { approvalRequestedAt: null, approvalRequestedBy: null } });
     if (listing.approvalRequestedBy) {
       sendApprovalDeclinedEmail({ to: listing.approvalRequestedBy, who: session.memberName || session.email, jobTitle: listing.title, jobId: id, note: String(body.note ?? '').trim().slice(0, 500) });
+      await notifyEmployer(session.id, {
+        type: 'job_approval_declined', title: `“${listing.title}” wasn’t published yet`,
+        message: String(body.note ?? '').trim().slice(0, 300) || `${session.memberName || session.email} asked for changes first.`, link: `/employer/jobs/${id}/edit`,
+      }, { email: listing.approvalRequestedBy });
     }
     return NextResponse.json({ success: true, status: listing.status, approval: null });
   }
@@ -99,7 +104,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       const ready = await readyToPublish(session.id, listing, employer, gate);
       if (!ready.ok) {
         const { ok: _ok, status, ...body } = ready;
-        return NextResponse.json(body, { status });
+        // Only someone who manages the account can change the plan; teammates are told to ask an owner.
+        return NextResponse.json(body.upgradeTo ? { ...body, canUpgrade: can(session.role, 'account.manage') } : body, { status });
       }
     }
   }
@@ -112,6 +118,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     if (!already) {
       const who = session.memberName || session.email;
       for (const to of await ownerInboxes(session.id)) sendApprovalRequestEmail({ to, who, jobTitle: listing.title, jobId: id });
+      await notifyEmployer(session.id, { type: 'job_approval_request', title: `${who} wants to publish “${listing.title}”`, message: 'Review the job and publish it, or ask for changes.', link: `/employer/jobs/${id}/edit` }, 'owners');
     }
     return NextResponse.json({ success: true, status: listing.status, approval: 'requested' }, { status: 202 });
   }

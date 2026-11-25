@@ -1,7 +1,9 @@
 import { recordUnknownSkills } from '@/lib/jobs/skill-overrides';
+import { notifyEmployer } from '@/lib/employer/notify';
 import { after } from 'next/server';
 import { prisma } from '@udyaibase/database';
-import { effectivePlan, PLANS } from '@/lib/employer/plans';
+import { effectivePlan, nextPlan, PLANS } from '@/lib/employer/plans';
+import { countOpenJobs } from '@/lib/employer/counts';
 import { featuredFor } from '@/lib/employer/billing';
 import { sendTeammatePublishedEmail } from '@/lib/employer/team';
 import { maybeStartTrial } from '@/lib/employer/trial';
@@ -51,7 +53,7 @@ function later(fn: () => Promise<unknown>) {
  * that passed only the company check). Fixes an old free-text city to the standard one on the way.
  */
 export async function readyToPublish(employerId: string, listing: ListingRow, employer: PublishEmployer & { maxActiveJobs: number }, gate: Extract<PublishGate, { ok: true }>):
-  Promise<{ ok: true } | { ok: false; status: number; error: string; field?: string; problems?: unknown; code?: string }> {
+  Promise<{ ok: true } | { ok: false; status: number; error: string; field?: string; problems?: unknown; code?: string; upgradeTo?: string | null }> {
   const problems = publishProblems(draftFromRow(listing));
   if (problems.length) return { ok: false, status: 400, error: problems[0].message, field: problems[0].field, problems };
   const loc = await standardJobLocation({ workType: listing.workType, city: listing.city, country: listing.country });
@@ -59,7 +61,7 @@ export async function readyToPublish(employerId: string, listing: ListingRow, em
   if (loc.data.city !== listing.city || loc.data.country !== listing.country) {
     await prisma.jobBoardListing.update({ where: { id: listing.id }, data: { city: loc.data.city, country: loc.data.country, location: loc.data.location } });
   }
-  const open = await prisma.jobBoardListing.count({ where: { employerId, status: 'OPEN', deletedAt: null } });
+  const open = await countOpenJobs(employerId);
   const plan = effectivePlan(employer);
   // A lapsed paid plan falls back to Free; otherwise keep any higher limit an admin granted.
   const planLimit = plan.key === 'FREE' && employer.plan !== 'FREE' ? PLANS.FREE.maxActiveJobs : Math.max(plan.maxActiveJobs, employer.maxActiveJobs);
@@ -67,7 +69,15 @@ export async function readyToPublish(employerId: string, listing: ListingRow, em
     return { ok: false, status: 403, code: 'limit', error: `You can have ${gate.maxLive} live jobs until your founder verifies the startup on Udyaibase. Close or pause one first, or ask your founder to verify.` };
   }
   if (open >= planLimit) {
-    return { ok: false, status: 403, code: 'limit', error: `You can have ${planLimit} open job${planLimit === 1 ? '' : 's'} on the ${plan.name} plan. Close or pause one first, or upgrade for more.` };
+    // Point at the next plan up that allows more (Free → Growth → Pro → Scale); past Scale, talk to us.
+    const next = nextPlan(plan.key, planLimit);
+    const jobs = (n: number) => `${n} open job${n === 1 ? '' : 's'}`;
+    return {
+      ok: false, status: 403, code: 'limit', upgradeTo: next?.key ?? null,
+      error: next
+        ? `The ${plan.name} plan includes ${jobs(planLimit)}. Upgrade to ${next.name} for up to ${jobs(next.maxActiveJobs)}, or pause or close a job first.`
+        : `You have ${jobs(planLimit)}, the most your plan includes. Pause or close a job first, or email billing@udyaibase.com for more.`,
+    };
   }
   return { ok: true };
 }
@@ -96,6 +106,7 @@ export async function publishNow(opts: {
   // A teammate published under the startup's name: tell the owner straight away (placeholder workspaces have no inbox).
   if (firstPublish && actor.memberId && employer.passwordHash !== '' && actor.email.toLowerCase() !== employer.email.toLowerCase()) {
     sendTeammatePublishedEmail({ to: employer.email, who: actor.name || actor.email, jobTitle: listing.title, slug: listing.slug, jobId: listing.id });
+    await notifyEmployer(employerId, { type: 'teammate_published', title: `${actor.name || actor.email} published “${listing.title}”`, message: 'It’s live on your careers page and Udyaibase Jobs.', link: `/employer/jobs/${listing.id}/edit` }, 'owners');
   }
   if (!employer.firstJobPublishedAt) {
     await prisma.jobBoardEmployer.update({ where: { id: employerId }, data: { firstJobPublishedAt: now } });
@@ -161,6 +172,12 @@ export async function publishWaiting(employerId: string, now = new Date()): Prom
     entry.live.push(listing.title);
   }
 
+  if (result.published.length) {
+    await notifyEmployer(employerId, {
+      type: 'jobs_released', title: `${result.published.length} ${result.published.length === 1 ? 'job is' : 'jobs are'} now live`,
+      message: 'Jobs waiting for your company check were published.', link: '/employer/jobs',
+    });
+  }
   for (const [to, { live, draft }] of byPerson) {
     if (!/@/.test(to) || to.endsWith('.invalid')) continue;
     const list = (xs: string[]) => xs.map((t) => `<li>${esc(t)}</li>`).join('');

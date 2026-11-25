@@ -49,6 +49,33 @@ export async function issueCertificates(eventId: string, opts: { registrationIds
   return { issued: missing.length, eligible: people.length };
 }
 
+/**
+ * Cron (every 15 minutes): events whose host chose "issue to everyone when the event ends". Runs for events that ended
+ * in the last 6 hours, so it lands before the automatic follow-up (2 hours after the end) and still picks up late
+ * check-ins. Issuing is idempotent and sends no email, so running it more than once is harmless.
+ */
+export async function runScheduledCertificates(now = new Date()): Promise<{ events: number; issued: number }> {
+  const due = await prisma.event.findMany({
+    where: {
+      deletedAt: null, status: { in: ['PUBLISHED', 'COMPLETED'] },
+      endAt: { lte: now, gte: new Date(now.getTime() - 6 * 3_600_000) },
+      certificateSettings: { path: ['issueWhenEnded'], equals: true },
+    },
+    select: { id: true, organizerId: true, certificatesPaidAt: true },
+    take: 50,
+  });
+  let issued = 0;
+  for (const e of due) {
+    try {
+      if (!(await certificatesAllowed(e))) continue;
+      issued += (await issueCertificates(e.id)).issued;
+    } catch (err) {
+      console.error('[scheduled certificates]', e.id, err instanceof Error ? err.message : err);
+    }
+  }
+  return { events: due.length, issued };
+}
+
 /** At check-in: issue straight away when the host turned on automatic certificates (and has them). Never throws. */
 export async function issueCertificateOnCheckIn(registrationId: string): Promise<void> {
   try {
@@ -99,7 +126,7 @@ export async function certificateByCode(code: unknown) {
     hostName,
     logoUrl: s.logoUrl ?? e.organizer.avatar,
     partnerLogoUrl: s.partnerLogoUrl, logoPosition: s.logoPosition, logoSize: s.logoSize, showHostName: s.showHostName,
-    logoHeight: s.logoHeight, logoOffsetX: s.logoOffsetX, logoOffsetY: s.logoOffsetY, logoPlate: s.logoPlate,
+    logoHeight: s.logoHeight, logoOffsetX: s.logoOffsetX, logoOffsetY: s.logoOffsetY, logoPlate: s.logoPlate, partnerLogoPlacement: s.partnerLogoPlacement, partnerLogoHeight: s.partnerLogoHeight, partnerLogoOffsetX: s.partnerLogoOffsetX, partnerLogoOffsetY: s.partnerLogoOffsetY,
     customSvg: s.customSvg, duration: s.duration,
     signerName: s.signerName,
     signerTitle: s.signerTitle,
