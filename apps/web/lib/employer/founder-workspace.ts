@@ -1,4 +1,5 @@
 import { prisma } from '@udyaibase/database';
+import { notifyEmployer } from '@/lib/employer/notify';
 import { setEmployerSession } from '@/lib/employer-auth';
 import { founderOwnsVerifiedStartup } from '@/lib/startups/ownership';
 import { emailMatchesDomain, VERIFIED_CLAIM_METHODS } from '@/lib/jobs/trust';
@@ -51,6 +52,7 @@ export async function openFounderWorkspace(founderUserId: string, startupId: str
         if (!member) throw new WorkspaceError('Founder account email can’t be used for hiring.', 400);
         if (!existing.founderUserId) await prisma.jobBoardEmployer.update({ where: { id: existing.id }, data: { founderUserId } });
         for (const to of owners.filter((o) => o !== founder.email.toLowerCase())) sendFounderJoinedEmail(to, founder.name ?? founder.email, founder.email, startup.name);
+        await notifyEmployer(existing.id, { type: 'founder_joined', title: `${founder.name ?? founder.email} joined as Owner`, message: `The verified founder of ${startup.name} now has Owner access.`, link: '/employer/team' }, 'owners');
         await setEmployerSession({ id: existing.id, email: existing.email, companyName: existing.companyName, slug: existing.slug, plan: existing.plan, onboardingCompleted: true }, { id: member.id, email: member.email });
         return existing;
       }
@@ -130,6 +132,7 @@ export async function openFounderWorkspace(founderUserId: string, startupId: str
   const released = await publishWaiting(e.id);
   if (!released.published.length) {
     for (const to of adoptedFrom.filter((o) => o !== founder.email.toLowerCase())) sendWorkspaceVerifiedEmail(to, founder.name ?? founder.email, startup.name);
+    await notifyEmployer(e.id, { type: 'workspace_verified', title: `${startup.name}’s hiring workspace is verified`, message: `${founder.name ?? founder.email}, the startup’s founder, confirmed it.`, link: '/employer/dashboard' }, 'owners');
   }
   await setEmployerSession(
     { id: e.id, email: e.email, companyName: e.companyName, slug: e.slug, plan: e.plan, onboardingCompleted: true },

@@ -38,7 +38,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ event
     dateLine: [eventDateText(event.startAt, event.endAt, event.timezone), full ? eventPlaceText(full) : '', s.duration].filter(Boolean).join(' · '),
     phrase: CERTIFICATE_PHRASES[s.phrase], description: s.description, skills: s.skills,
     hostName, logoUrl: s.logoUrl ?? full?.organizer.avatar ?? null,
-    partnerLogoUrl: s.partnerLogoUrl, logoPosition: s.logoPosition, logoSize: s.logoSize, showHostName: s.showHostName, logoHeight: s.logoHeight, logoOffsetX: s.logoOffsetX, logoOffsetY: s.logoOffsetY, logoPlate: s.logoPlate, customSvg: s.customSvg, duration: s.duration, signerName: s.signerName, signerTitle: s.signerTitle, signatureUrl: s.signatureUrl,
+    partnerLogoUrl: s.partnerLogoUrl, logoPosition: s.logoPosition, logoSize: s.logoSize, showHostName: s.showHostName, logoHeight: s.logoHeight, logoOffsetX: s.logoOffsetX, logoOffsetY: s.logoOffsetY, logoPlate: s.logoPlate, partnerLogoPlacement: s.partnerLogoPlacement, partnerLogoHeight: s.partnerLogoHeight, partnerLogoOffsetX: s.partnerLogoOffsetX, partnerLogoOffsetY: s.partnerLogoOffsetY, customSvg: s.customSvg, duration: s.duration, signerName: s.signerName, signerTitle: s.signerTitle, signatureUrl: s.signatureUrl,
     code: 'SAMPLE0000000000', verifyUrl: verifyUrl('SAMPLE'), showBranding: false,
   });
   return new NextResponse(Buffer.from(pdf), {

@@ -87,7 +87,7 @@ export async function poolMatchesForJob(employerId: string, listingId: string, n
   await ensureSkillOverrides();
   const job = await prisma.jobBoardListing.findFirst({
     where: { id: listingId, employerId, isGeneral: false, applicationType: { not: 'EXTERNAL' }, ...publicListingWhere(now) },
-    select: { skills: true, mustHaveSkills: true, experienceMin: true, experienceMax: true, workType: true, city: true, salaryMax: true, salaryCurrency: true, maxNoticeDays: true, screeningQuestions: true },
+    select: { skills: true, mustHaveSkills: true, experienceMin: true, experienceMax: true, workType: true, city: true, salaryMax: true, salaryCurrency: true, salaryPeriod: true, maxNoticeDays: true, screeningQuestions: true },
   });
   if (!job) return [];
   const pool = await prisma.jobBoardApplication.findMany({

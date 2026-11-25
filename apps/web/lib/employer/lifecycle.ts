@@ -1,4 +1,5 @@
 import { sweepSourced } from '@/lib/employer/sourcing';
+import { notifyEmployer } from '@/lib/employer/notify';
 import { assessmentReminders } from '@/lib/employer/assessments';
 import { offerMaintenance } from '@/lib/employer/offers';
 import { holdReturns } from '@/lib/employer/hold';
@@ -58,6 +59,11 @@ export async function runHiringMaintenance(now = new Date(), opts: { onlyEmploye
   }
   for (const [employerId, e] of byEmployer) {
     for (const to of await hiringInboxes(employerId, e.email)) sendWaitingEmail(to, e.jobs);
+    const waitingTotal = e.jobs.reduce((n, j) => n + j.n, 0);
+    await notifyEmployer(employerId, {
+      type: 'candidates_waiting', title: `${waitingTotal} ${waitingTotal === 1 ? 'candidate is' : 'candidates are'} waiting for a reply`,
+      message: e.jobs.length === 1 ? `For ${e.jobs[0].title}.` : `Across ${e.jobs.length} jobs.`, link: '/employer/applications?stage=new',
+    });
     await prisma.jobBoardEmployer.update({ where: { id: employerId }, data: { reviewNudgeAt: now } });
   }
 
@@ -75,6 +81,10 @@ export async function runHiringMaintenance(now = new Date(), opts: { onlyEmploye
   }
   for (const [employerId, e] of closingBy) {
     for (const to of await hiringInboxes(employerId, e.email)) sendClosingEmail(to, e.jobs);
+    await notifyEmployer(employerId, {
+      type: 'jobs_closing', title: e.jobs.length === 1 ? `“${e.jobs[0].title}” closes soon` : `${e.jobs.length} jobs close soon`,
+      message: 'Renew them to keep receiving applications.', link: '/employer/jobs',
+    });
   }
   if (closing.length) await prisma.jobBoardListing.updateMany({ where: { id: { in: closing.map((l) => l.id) } }, data: { expiryNudgeAt: now } });
 

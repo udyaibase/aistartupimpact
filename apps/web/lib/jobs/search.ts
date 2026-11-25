@@ -67,7 +67,7 @@ export async function searchJobs(filters: JobSearchFilters, { limit = 15, offset
                -- A salary the employer chose not to show never leaves the database: not in the page data, not in the sort.
                CASE WHEN jl."showSalary" THEN jl."salaryMin" END AS "salaryMin",
                CASE WHEN jl."showSalary" THEN jl."salaryMax" END AS "salaryMax",
-               jl."salaryCurrency", jl."showSalary",
+               jl."salaryCurrency", jl."salaryPeriod", jl."showSalary",
                jl."experienceMin", jl."experienceMax", jl.skills,
                jl."isFeatured", jl."listingTier", jl."visaSponsorship",
                jl."publishedAt"::text, jl."viewsCount", jl."employmentType", jl.positions,
@@ -88,7 +88,7 @@ export async function searchJobs(filters: JobSearchFilters, { limit = 15, offset
       )
       SELECT id, slug, title, "shortDescription", category,
              "workType", location, city, country,
-             "salaryMin", "salaryMax", "salaryCurrency", "showSalary",
+             "salaryMin", "salaryMax", "salaryCurrency", "salaryPeriod", "showSalary",
              "experienceMin", "experienceMax", skills,
              "isFeatured", "listingTier", "visaSponsorship",
              "publishedAt", "employmentType", positions,

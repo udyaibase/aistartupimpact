@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { notifyEmployerPerson } from "@/lib/employer-notify";
+import { notifyFounder } from "@/lib/founder-notify";
+import { notifyOrganizer } from "@/lib/organizer-notify";
 import { requireApiAuth } from "@/lib/api-auth";
 import { prisma } from "@udyaibase/database";
 import { sendEmailFireAndForget } from "@/lib/email-send";
@@ -38,8 +41,12 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     if (!ticket.firstReplyAt) data.firstReplyAt = new Date();
     if (Object.keys(data).length) await prisma.supportTicket.update({ where: { id: params.id }, data });
 
-    // Tell them: otherwise a reply sits unseen in the portal.
+    // Tell them: otherwise a reply sits unseen in the portal. The portal's bell gets it too.
     const path = PORTAL_PATH[ticket.portal];
+    const note = { type: "support_reply", title: `Support replied: ${ticket.subject}`.slice(0, 200), message: String(body).slice(0, 300), link: path ? `${path}/${ticket.id}` : undefined };
+    if (ticket.portal === "EMPLOYER" && ticket.submitterType === "EMPLOYER") await notifyEmployerPerson(ticket.submitterId, note, ticket.submitterEmail);
+    else if (ticket.portal === "FOUNDER" && ticket.submitterType === "FOUNDER") await notifyFounder(ticket.submitterId, note);
+    else if (ticket.portal === "ORGANIZER" && ticket.submitterType === "ORGANIZER") await notifyOrganizer(ticket.submitterId, note);
     if (path && /@/.test(ticket.submitterEmail) && !ticket.submitterEmail.endsWith(".invalid")) {
       sendEmailFireAndForget({
         to: ticket.submitterEmail,

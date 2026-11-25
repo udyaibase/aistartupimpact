@@ -167,7 +167,7 @@ const getStartup = cache(async (slug: string) => {
         : Promise.resolve([]),
       sql`
         SELECT jl.id, jl.title, jl.slug, jl.city AS location, jl."workType" AS type,
-               jl."salaryMin" AS "salaryRangeMin", jl."salaryMax" AS "salaryRangeMax", jl."salaryCurrency", jl."showSalary",
+               jl."salaryMin" AS "salaryRangeMin", jl."salaryMax" AS "salaryRangeMax", jl."salaryCurrency", jl."salaryPeriod", jl."showSalary",
                jl."publishedAt"::text AS "createdAt", 'board' AS source, e.slug AS "companySlug"
         FROM "JobBoardListing" jl
         LEFT JOIN "JobBoardEmployer" e ON e.id = jl."employerId"
@@ -933,10 +933,10 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
                         <span>{job.location || 'Remote'}</span>
                         <span>·</span>
                         <span>{job.type?.replace(/_/g, ' ') || 'Full Time'}</span>
-                        {job.showSalary !== false && salaryText({ salaryMin: job.salaryRangeMin, salaryMax: job.salaryRangeMax, salaryCurrency: job.salaryCurrency ?? 'INR' }) && (
+                        {job.showSalary !== false && salaryText({ salaryMin: job.salaryRangeMin, salaryMax: job.salaryRangeMax, salaryCurrency: job.salaryCurrency ?? 'INR', salaryPeriod: job.salaryPeriod }) && (
                           <>
                             <span>·</span>
-                            <span>{salaryText({ salaryMin: job.salaryRangeMin, salaryMax: job.salaryRangeMax, salaryCurrency: job.salaryCurrency ?? 'INR' })}</span>
+                            <span>{salaryText({ salaryMin: job.salaryRangeMin, salaryMax: job.salaryRangeMax, salaryCurrency: job.salaryCurrency ?? 'INR', salaryPeriod: job.salaryPeriod })}</span>
                           </>
                         )}
                       </div>

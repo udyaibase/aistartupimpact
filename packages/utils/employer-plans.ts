@@ -73,6 +73,12 @@ export const PLANS: Record<PlanKey, PlanDef> = {
 
 export const PAID_PLANS: PlanKey[] = ['GROWTH', 'PRO', 'SCALE'];
 
+/** The cheapest plan above `current` that allows more than `limit` open jobs (Free → Growth → Pro → Scale), or null at the top. */
+export function nextPlan(current: PlanKey, limit: number = PLANS[current].maxActiveJobs): PlanDef | null {
+  const order: PlanKey[] = ['FREE', ...PAID_PLANS];
+  return order.slice(order.indexOf(current) + 1).map((k) => PLANS[k]).find((p) => p.maxActiveJobs > limit) ?? null;
+}
+
 /**
  * Stored plan value → plan. Plans renamed in Nov 2026 map to their successors (Featured → Pro, Premium → Scale,
  * which keeps Premium's 50 jobs), so old rows never fall back to Free. Anything unknown is Free.

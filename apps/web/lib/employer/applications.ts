@@ -16,7 +16,7 @@ export const GENERAL_LABEL = 'General applications';
 
 const MATCH_JOB = {
   skills: true, mustHaveSkills: true, experienceMin: true, experienceMax: true, workType: true, city: true,
-  salaryMax: true, salaryCurrency: true, maxNoticeDays: true, screeningQuestions: true,
+  salaryMax: true, salaryCurrency: true, salaryPeriod: true, maxNoticeDays: true, screeningQuestions: true,
 } as const;
 
 /** Must-have skills (only when the job marks some) that the candidate didn't confirm, for the card's "Missing" flag. */

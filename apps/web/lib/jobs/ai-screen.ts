@@ -133,7 +133,7 @@ export function jobHashOf(l: ListingForAi): string {
 const LISTING_SELECT = {
   id: true, employerId: true, title: true, description: true, skills: true, mustHaveSkills: true, experienceBand: true,
   experienceMin: true, experienceMax: true, workType: true, city: true, screeningQuestions: true,
-  salaryMax: true, salaryCurrency: true, maxNoticeDays: true,
+  salaryMax: true, salaryCurrency: true, salaryPeriod: true, maxNoticeDays: true,
 } as const;
 
 export type ScreenOutcome =

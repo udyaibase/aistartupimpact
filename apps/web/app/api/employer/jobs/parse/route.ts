@@ -9,7 +9,7 @@ import { checkLocation } from '@/lib/locations';
 import { normalizeCountry } from '@udyaibase/utils/src/locations';
 import { employerApi } from '@/lib/employer/api-session';
 import {
-  CURRENCIES, EMPLOYMENT_TYPES, EXPERIENCE_BANDS, JOB_CATEGORIES, MAX_SKILLS, WORK_TYPES, salaryUnit, type JobDraft,
+  CURRENCIES, EMPLOYMENT_TYPES, EXPERIENCE_BANDS, JOB_CATEGORIES, MAX_SKILLS, WORK_TYPES, payPeriodFor, salaryUnit, type JobDraft,
 } from '@/lib/jobs/composer';
 
 export const dynamic = 'force-dynamic';
@@ -60,7 +60,7 @@ const SCHEMA = {
       city: { type: 'string' },
       country: { type: 'string' },
       salaryCurrency: { type: 'string', enum: [...CURRENCIES, ''] },
-      salaryMinYearly: { type: ['number', 'null'], description: 'Minimum yearly salary in full currency units only if explicitly stated. Convert "18 LPA" to 1800000. Never guess.' },
+      salaryMinYearly: { type: ['number', 'null'], description: 'Minimum yearly salary in full currency units only if explicitly stated. Convert "18 LPA" to 1800000; a monthly stipend of 15,000 is 180000 a year. Never guess.' },
       salaryMaxYearly: { type: ['number', 'null'] },
       hasEsops: { type: 'boolean', description: 'True only if ESOPs, equity or stock options are mentioned.' },
       skills: { type: 'array', items: { type: 'string' }, description: `Up to ${MAX_SKILLS} concrete skills or tools, short names.` },
@@ -135,8 +135,10 @@ export async function POST(request: NextRequest) {
   }
 
   const currency = (CURRENCIES as readonly string[]).includes(fields.salaryCurrency) ? fields.salaryCurrency : 'INR';
-  const { factor } = salaryUnit(currency);
-  const toUnit = (n: unknown) => (typeof n === 'number' && n > 0 ? String(Math.round((n / factor) * 10) / 10) : '');
+  // An internship's pay goes in as a monthly stipend; the model gives yearly amounts, so a twelfth of that.
+  const monthly = payPeriodFor(fields.employmentType) === 'monthly';
+  const { factor } = salaryUnit(currency, monthly ? 'monthly' : 'yearly');
+  const toUnit = (n: unknown) => (typeof n === 'number' && n > 0 ? String(Math.round(((monthly ? n / 12 : n) / factor) * 10) / 10) : '');
 
   const draft: Partial<JobDraft> = {};
   const set = <K extends keyof JobDraft>(k: K, v: JobDraft[K] | '' | undefined | null) => {

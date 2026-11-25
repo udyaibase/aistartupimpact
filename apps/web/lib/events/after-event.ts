@@ -1,4 +1,5 @@
 import { MAX_CUSTOM_SVG } from './certificate-custom';
+import { PARTNER_PLACEMENTS, type PartnerPlacement } from './certificate-logos';
 import crypto from 'crypto';
 import { prisma } from '@udyaibase/database';
 import { effectiveHostPlan, isPlatformOrganizer } from '@/lib/events/plans';
@@ -73,6 +74,14 @@ export interface CertificateSettings {
   logoOffsetY: number;
   /** A white plate behind the logo on dark areas (the navy design, the Tech design's band), so a dark logo shows. */
   logoPlate: boolean;
+  /** The partner logo beside the host's ("beside") or on its own spot, with its own size and nudges. */
+  partnerLogoPlacement: PartnerPlacement;
+  /** Partner logo height in points. Null means the same as the host logo. */
+  partnerLogoHeight: number | null;
+  partnerLogoOffsetX: number;
+  partnerLogoOffsetY: number;
+  /** Issue everyone's certificate automatically when the event ends (before the automatic follow-up goes out). */
+  issueWhenEnded: boolean;
   /** The host's own design, as cleaned SVG code. Used when template is "custom". */
   customSvg: string;
 }
@@ -126,6 +135,11 @@ export function certificateSettings(raw: unknown): CertificateSettings {
     logoOffsetX: within(Number(r.logoOffsetX) || 0, -LOGO_OFFSET_MAX.x, LOGO_OFFSET_MAX.x),
     logoOffsetY: within(Number(r.logoOffsetY) || 0, -LOGO_OFFSET_MAX.y, LOGO_OFFSET_MAX.y),
     logoPlate: r.logoPlate !== false,
+    partnerLogoPlacement: PARTNER_PLACEMENTS.includes(r.partnerLogoPlacement as PartnerPlacement) ? (r.partnerLogoPlacement as PartnerPlacement) : 'beside',
+    partnerLogoHeight: r.partnerLogoHeight === null || r.partnerLogoHeight === undefined || r.partnerLogoHeight === '' || !Number.isFinite(Number(r.partnerLogoHeight)) ? null : within(Number(r.partnerLogoHeight), LOGO_HEIGHT_RANGE.min, LOGO_HEIGHT_RANGE.max),
+    partnerLogoOffsetX: within(Number(r.partnerLogoOffsetX) || 0, -LOGO_OFFSET_MAX.x, LOGO_OFFSET_MAX.x),
+    partnerLogoOffsetY: within(Number(r.partnerLogoOffsetY) || 0, -LOGO_OFFSET_MAX.y, LOGO_OFFSET_MAX.y),
+    issueWhenEnded: r.issueWhenEnded === true,
     customSvg,
   };
 }
@@ -223,6 +237,21 @@ function verifyId(purpose: string, token: unknown): string | null {
 
 export const seriesFollowToken = (followerId: string, action: 'confirm' | 'stop') => signId(`series-${action}`, followerId);
 export const verifySeriesFollowToken = (token: unknown, action: 'confirm' | 'stop') => verifyId(`series-${action}`, token);
+/** One-tap follow from a follow-up email: signs the registration, whose email address already received this link. */
+export const seriesJoinToken = (registrationId: string) => signId('series-join', registrationId);
+export const verifySeriesJoinToken = (token: unknown) => verifyId('series-join', token);
+
+/** For a series-join link: the registration's email (as the follow-up used it) and its event's series. */
+export async function seriesJoinTarget(registrationId: string) {
+  const reg = await prisma.eventRegistration.findUnique({
+    where: { id: registrationId },
+    select: { guestEmail: true, userId: true, event: { select: { series: { select: { id: true, name: true, slug: true } } } } },
+  });
+  if (!reg?.event.series) return null;
+  const user = !reg.guestEmail && reg.userId ? await prisma.webUser.findUnique({ where: { id: reg.userId }, select: { email: true } }) : null;
+  const email = (reg.guestEmail || user?.email || '').trim().toLowerCase();
+  return email ? { email, series: reg.event.series } : null;
+}
 export const hostOptOutToken = (registrationId: string) => signId('host-optout', registrationId);
 export const verifyHostOptOutToken = (token: unknown) => verifyId('host-optout', token);
 /** "I didn't register" link in a registration email: names one registration, and only its recipient has it. */

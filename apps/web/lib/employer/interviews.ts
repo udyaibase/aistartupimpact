@@ -1,4 +1,5 @@
 import { prisma } from '@udyaibase/database';
+import { notifyEmployer } from '@/lib/employer/notify';
 import { sendEmail } from '@/lib/email/send';
 import { button, esc, shell } from '@/lib/jobs/apply-emails';
 import { cleanTimeZone, zonedToUtc } from '@/lib/events/zoned-time';
@@ -48,7 +49,7 @@ export async function scheduleInterview(opts: {
   const now = opts.now ?? new Date();
   const app = await prisma.jobBoardApplication.findFirst({
     where: { id: opts.applicationId, Listing: { employerId: opts.employerId, ...(opts.jobIds ? { id: { in: opts.jobIds } } : {}) }, withdrawnAt: null, NOT: { email: { endsWith: '@deleted.invalid' } } },
-    select: { id: true, email: true, fullName: true, status: true, Listing: { select: { title: true, interviewRounds: true } } },
+    select: { id: true, email: true, fullName: true, status: true, listingId: true, Listing: { select: { title: true, interviewRounds: true } } },
   });
   if (!app) return { ok: false, error: 'Candidate not found.', status: 404 };
   if (app.status === 'REJECTED' || app.status === 'HIRED') return { ok: false, error: 'Move them back into the pipeline first.', status: 409 };
@@ -97,6 +98,7 @@ ${link ? `<p style="margin:0 0 20px">${button(link, 'Join the call')}</p>` : '<p
   const attachments = [{ filename: 'interview.ics', content: ics, contentType: 'text/calendar; method=REQUEST; charset=UTF-8' }];
   await sendEmail({ to: app.email, subject: `Interview: ${app.Listing.title} at ${ctx.company}`.replace(/[\r\n]+/g, ' '), html, replyTo: opts.actor.email, attachments, type: 'interview_invite' });
   for (const p of panel) {
+    await notifyEmployer(opts.employerId, { type: 'interview_panel', title: `You’re on the panel for ${app.fullName}`, message: `${round}, ${app.Listing.title} · ${when}`, link: `/employer/applications?job=${app.listingId}&candidate=${app.id}` }, { email: p });
     await sendEmail({ to: p, subject: `Interview: ${app.fullName} · ${app.Listing.title}`.replace(/[\r\n]+/g, ' '), html: shell(`<p style="margin:0 0 16px;font-size:15px;line-height:1.6">You’re on the panel for <strong>${esc(app.fullName)}</strong> (${esc(round)}, ${esc(app.Listing.title)}) on <strong>${esc(when)}</strong>.</p>${link ? `<p>${button(link, 'Join the call')}</p>` : ''}`), attachments, type: 'interview_panel' });
   }
 

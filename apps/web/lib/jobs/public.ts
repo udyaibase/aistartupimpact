@@ -41,7 +41,7 @@ export function isListingPublic(l: { status: string; deletedAt: Date | string | 
 
 
 /** JobPosting baseSalary; Google rejects salary markup without a unit. */
-export function jobPostingSalary(l: { salaryMin: number | null; salaryMax: number | null; salaryCurrency: string | null }) {
+export function jobPostingSalary(l: { salaryMin: number | null; salaryMax: number | null; salaryCurrency: string | null; salaryPeriod?: string | null }) {
   if (!l.salaryMin && !l.salaryMax) return undefined;
   return {
     '@type': 'MonetaryAmount',
@@ -50,7 +50,7 @@ export function jobPostingSalary(l: { salaryMin: number | null; salaryMax: numbe
       '@type': 'QuantitativeValue',
       ...(l.salaryMin ? { minValue: l.salaryMin } : {}),
       ...(l.salaryMax ? { maxValue: l.salaryMax } : {}),
-      unitText: 'YEAR',
+      unitText: l.salaryPeriod === 'monthly' ? 'MONTH' : 'YEAR',
     },
   };
 }

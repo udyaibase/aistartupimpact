@@ -120,7 +120,7 @@ export interface ScreeningQuestion {
   maxValue?: number | null;
 }
 
-/** Form state. Salary is in display units: lakh for INR, thousands for other currencies. */
+/** Form state. Salary is in display units: lakh a year for INR, thousands a year for other currencies, thousands a month for an internship stipend. */
 export interface JobDraft {
   title: string;
   category: string;
@@ -164,9 +164,21 @@ export interface JobDraft {
   positions: string;
 }
 
-export function salaryUnit(currency: string): { factor: number; suffix: string; symbol: string } {
-  if (currency === 'INR') return { factor: 100_000, suffix: 'L', symbol: '₹' };
-  const symbol = ({ USD: '$', EUR: '€', GBP: '£', SGD: 'S$' } as Record<string, string>)[currency] ?? `${currency} `;
+export type PayPeriod = 'yearly' | 'monthly';
+
+/** Internships are paid a monthly stipend; every other job a yearly salary. */
+export function payPeriodFor(employmentType: string | null | undefined): PayPeriod {
+  return employmentType === 'INTERNSHIP' ? 'monthly' : 'yearly';
+}
+
+/**
+ * The unit salaries are typed in: lakh a year for INR and thousands a year for other currencies, or thousands a
+ * month for a monthly stipend (₹15K = ₹15,000 a month).
+ */
+export function salaryUnit(currency: string, period: PayPeriod = 'yearly'): { factor: number; suffix: string; symbol: string } {
+  const symbol = currency === 'INR' ? '₹' : ({ USD: '$', EUR: '€', GBP: '£', SGD: 'S$' } as Record<string, string>)[currency] ?? `${currency} `;
+  if (period === 'monthly') return { factor: 1_000, suffix: 'K', symbol };
+  if (currency === 'INR') return { factor: 100_000, suffix: 'L', symbol };
   return { factor: 1_000, suffix: 'K', symbol };
 }
 
@@ -194,7 +206,7 @@ export function emptyDraft(): JobDraft {
 export function draftFromRow(row: Record<string, any>): JobDraft {
   const base = emptyDraft();
   const currency = row.salaryCurrency || 'INR';
-  const { factor } = salaryUnit(currency);
+  const { factor } = salaryUnit(currency, row.salaryPeriod === 'monthly' ? 'monthly' : 'yearly');
   const toUnit = (n: number | null) => (n ? String(Math.round((n / factor) * 10) / 10) : '');
   const knownBand = EXPERIENCE_BANDS.find((b) => b.value === row.experienceBand)?.value
     || EXPERIENCE_BANDS.find((b) => b.min === row.experienceMin && b.max === row.experienceMax)?.value;
@@ -262,7 +274,8 @@ const oneOf = <T extends readonly { value: string }[]>(list: T, v: unknown, fall
 export function draftToData(input: Partial<JobDraft>) {
   const d = { ...emptyDraft(), ...input };
   const currency = (CURRENCIES as readonly string[]).includes(d.salaryCurrency) ? d.salaryCurrency : 'INR';
-  const { factor } = salaryUnit(currency);
+  const salaryPeriod = payPeriodFor(oneOf(EMPLOYMENT_TYPES, d.employmentType, 'FULL_TIME'));
+  const { factor } = salaryUnit(currency, salaryPeriod);
   const money = (v: string) => {
     const n = parseFloat(String(v).replace(/,/g, ''));
     return Number.isFinite(n) && n > 0 ? Math.round(n * factor) : null;
@@ -332,7 +345,7 @@ export function draftToData(input: Partial<JobDraft>) {
     country: country || null,
     location: jobLocationLabel(d.workType, city, country),
     salaryCurrency: currency,
-    salaryPeriod: 'yearly',
+    salaryPeriod,
     salaryMin,
     salaryMax,
     showSalary: !!d.showSalary,
@@ -433,16 +446,19 @@ export function daysUntil(date: Date, now = new Date()): number {
  * The salary as candidates will see it, from what is typed in the form ("₹3–4.8 L per annum", "$90K–120K per annum").
  * Written the same way as salaryText (lib/jobs/format.ts) writes it on the job page; a test keeps the two in step.
  */
-export function formatSalaryDraft(d: Pick<JobDraft, 'salaryCurrency' | 'salaryMin' | 'salaryMax'>): string | null {
+export function formatSalaryDraft(d: Pick<JobDraft, 'salaryCurrency' | 'salaryMin' | 'salaryMax'> & { employmentType?: string }): string | null {
+  const monthly = payPeriodFor(d.employmentType) === 'monthly';
   const { symbol } = salaryUnit(d.salaryCurrency);
   const inr = d.salaryCurrency === 'INR';
   const num = (v: string) => Number(v.trim());
   const ok = (v: string) => v.trim() !== '' && Number.isFinite(num(v)) && num(v) > 0;
-  const one = (v: string) => (inr ? num(v).toLocaleString('en-IN', { maximumFractionDigits: 1 }) : `${Math.round(num(v))}K`);
+  const one = (v: string) => (monthly ? `${num(v).toLocaleString('en-IN', { maximumFractionDigits: 1 })}K`
+    : inr ? num(v).toLocaleString('en-IN', { maximumFractionDigits: 1 }) : `${Math.round(num(v))}K`);
   const min = ok(d.salaryMin) ? d.salaryMin : '';
   const max = ok(d.salaryMax) ? d.salaryMax : '';
   if (!min && !max) return null;
   const range = min && max && num(min) !== num(max) ? `${one(min)}–${one(max)}` : one(min || max);
+  if (monthly) return `${symbol}${range}/month`;
   return `${symbol}${range}${inr ? ' L' : ''} per annum`;
 }
 

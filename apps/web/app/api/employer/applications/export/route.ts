@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     include: { Listing: { select: {
       title: true, skills: true, mustHaveSkills: true, experienceMin: true, experienceMax: true, workType: true, city: true,
-      salaryMax: true, salaryCurrency: true, maxNoticeDays: true, screeningQuestions: true,
+      salaryMax: true, salaryCurrency: true, salaryPeriod: true, maxNoticeDays: true, screeningQuestions: true,
     } }, AiScreening: { select: { status: true, fitScore: true, recommendation: true } } },
   });
   type Row = Awaited<ReturnType<typeof page>>[number];

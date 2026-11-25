@@ -1,6 +1,6 @@
 import { prisma } from '@udyaibase/database';
 import { sendEmail } from '@/lib/email/send';
-import { eventPeople, fillTemplate, followUpSettings, followUpsLeft, hostOptOutToken } from './after-event';
+import { eventPeople, fillTemplate, followUpSettings, followUpsLeft, hostOptOutToken, seriesJoinToken } from './after-event';
 import { certificatePageUrl } from './certificates';
 import { feedbackSettings, feedbackUrl } from './feedback';
 
@@ -30,7 +30,16 @@ export function ratingRowHtml(urlFor: (rating: number) => string): string {
 <table role="presentation" cellpadding="0" cellspacing="0"><tr>${cells}</tr></table>`;
 }
 
-export function followUpEmailHtml(opts: { message: string; hostName: string; eventTitle: string; eventUrl: string; certificateUrl?: string | null; optOutUrl: string; ratingHtml?: string }): string {
+/** "Follow the series" block: one tap to hear about the next edition (only for people not already following). */
+export function seriesFollowHtml(seriesName: string, followUrl: string): string {
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:22px 0 4px;border:1px solid #e5e7eb;border-radius:10px"><tr><td style="padding:16px">
+<p style="margin:0 0 4px;font-size:14px;font-weight:600;color:#111827">Coming to the next ${esc(seriesName)}?</p>
+<p style="margin:0 0 12px;font-size:13px;line-height:1.5;color:#4b5563">Follow the series and we’ll email you once when the next event opens. Nothing else.</p>
+<a href="${followUrl}" style="display:inline-block;border:1px solid #d1d5db;color:#111827;text-decoration:none;padding:9px 16px;border-radius:8px;font-weight:600;font-size:13px">Follow ${esc(seriesName)}</a>
+</td></tr></table>`;
+}
+
+export function followUpEmailHtml(opts: { message: string; hostName: string; eventTitle: string; eventUrl: string; certificateUrl?: string | null; optOutUrl: string; ratingHtml?: string; seriesHtml?: string }): string {
   const cert = opts.certificateUrl
     ? `<p style="margin:22px 0 6px"><a href="${opts.certificateUrl}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:600;font-size:14px">Get your certificate</a></p>
 <p style="margin:0 0 14px;font-size:13px;color:#6b7280">Download it as a PDF or add it to your LinkedIn profile.</p>`
@@ -41,6 +50,7 @@ export function followUpEmailHtml(opts: { message: string; hostName: string; eve
 ${messageHtml(opts.message)}
 ${opts.ratingHtml ?? ''}
 ${cert}
+${opts.seriesHtml ?? ''}
 <p style="margin:18px 0 0;font-size:14px;color:#374151">${esc(opts.hostName)}</p>
 </td></tr></table>
 <p style="font-size:12px;color:#6b7280;margin:16px 0 0;line-height:1.6">You got this because you registered for <a href="${opts.eventUrl}" style="color:#6b7280">${esc(opts.eventTitle)}</a> on Udyaibase Events.<br>
@@ -57,7 +67,8 @@ export async function sendFollowUp(eventId: string, opts: { auto?: boolean } = {
   const event = await prisma.event.findFirst({
     where: { id: eventId, deletedAt: null },
     select: {
-      id: true, slug: true, title: true, organizerId: true, startAt: true, endAt: true, status: true, followUpSettings: true, feedbackSettings: true,
+      id: true, slug: true, title: true, organizerId: true, startAt: true, endAt: true, status: true, followUpSettings: true, feedbackSettings: true, seriesId: true,
+      series: { select: { name: true } },
       organizer: { select: { name: true, company: true, email: true } },
     },
   });
@@ -87,6 +98,10 @@ export async function sendFollowUp(eventId: string, opts: { auto?: boolean } = {
   });
 
   const eventUrl = `${SITE}/events/${event.slug}`;
+  // Part of a series: invite people who don't follow it yet (counts only reach the host; the address stays with us).
+  const following = event.seriesId
+    ? new Set((await prisma.eventSeriesFollower.findMany({ where: { seriesId: event.seriesId, confirmedAt: { not: null }, unsubscribedAt: null }, select: { email: true }, take: 20000 })).map((f) => f.email.toLowerCase()))
+    : null;
   let sent = 0;
   const sendOne = async (p: (typeof people)[number], group: 'attended' | 'missed') => {
     const vars = { name: p.name.split(' ')[0] || 'there', event: event.title };
@@ -106,6 +121,7 @@ export async function sendFollowUp(eventId: string, opts: { auto?: boolean } = {
         message, hostName, eventTitle: event.title, eventUrl, optOutUrl,
         certificateUrl: group === 'attended' && p.certificateCode ? certificatePageUrl(p.certificateCode) : null,
         ratingHtml: group === 'attended' && askFeedback ? ratingRowHtml((n) => feedbackUrl(p.id, n)) : undefined,
+        seriesHtml: event.series && following && !following.has(p.email) ? seriesFollowHtml(event.series.name, `${SITE}/series/join?t=${encodeURIComponent(seriesJoinToken(p.id))}`) : undefined,
       }),
     });
     if (r.success) sent++;

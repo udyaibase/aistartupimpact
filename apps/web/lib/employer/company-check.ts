@@ -1,4 +1,6 @@
 import { prisma } from '@udyaibase/database';
+import { notifyFounderByEmail } from '@/lib/founder/notify';
+import { notifyEmployer } from '@/lib/employer/notify';
 import { sendEmail, sendEmailFireAndForget } from '@/lib/email/send';
 import { button, esc, shell } from '@/lib/jobs/apply-emails';
 import { isFreeMailDomain, emailDomain, isClaimVerified } from '@/lib/jobs/trust';
@@ -63,10 +65,12 @@ export async function decideCompanyReview(opts: { employerId: string; approve: b
   });
   await markStep(e.id, 'REVIEW_DECIDED', { approved: opts.approve });
   if (opts.approve) {
+    await notifyEmployer(e.id, { type: 'company_verified', title: `${e.companyName} is verified`, message: 'Your company check is done. Jobs you publish go live straight away.', link: '/employer/jobs' }, 'owners');
     const r = await publishWaiting(e.id, now);
     return { ok: true, published: r.published.length };
   }
   await prisma.jobBoardListing.updateMany({ where: { employerId: e.id, publishWaitingAt: { not: null } }, data: { publishWaitingAt: null, publishWaitingBy: null } });
+  await notifyEmployer(e.id, { type: 'company_check_failed', title: `We couldn’t confirm ${e.companyName} yet`, message: note ?? 'See the email we sent for what to do next.', link: '/employer/company' }, 'owners');
   const to = e.companyReviewRequestedBy || e.email;
   if (isRealInbox(to)) {
     sendEmailFireAndForget({
@@ -111,6 +115,10 @@ export async function askFounder(opts: { employerId: string; memberEmail: string
     to, replyTo: opts.memberEmail, type: 'employer_founder_ask',
     subject: `Verify ${e.Startup.name} so your team’s jobs can go live`.replace(/[\r\n]+/g, ' '),
     html: founderEmailHtml({ company: e.Startup.name, asker: opts.memberEmail, link: `${SITE()}/startups/claim/${e.Startup.slug}`, reminder: false }),
+  });
+  await notifyFounderByEmail(to, {
+    type: 'hiring_verify_request', title: `Your hiring team asked you to verify ${e.Startup.name}`,
+    message: `${opts.memberEmail} is hiring for ${e.Startup.name}. Verify the startup so their jobs can go live.`, link: `/startups/claim/${e.Startup.slug}`,
   });
   await prisma.jobBoardEmployer.update({ where: { id: opts.employerId }, data: { founderAskEmail: to, founderAskedAt: now, founderAskRemindedAt: null } });
   await markStep(opts.employerId, 'FOUNDER_ASKED', { founderDomainIsFree: isFreeMailDomain(emailDomain(to) ?? '') });

@@ -6,6 +6,9 @@ import { CalendarDays, MapPin } from 'lucide-react';
 import { prisma } from '@udyaibase/database';
 import { utcToZoned } from '@/lib/events/zoned-time';
 import FollowSeries from './FollowSeries';
+import ShareMenu from '@/components/shared/ShareMenu';
+
+const SITE = (process.env.NEXT_PUBLIC_SITE_URL || 'https://udyaibase.com').replace(/\/$/, '');
 
 export const revalidate = 300;
 
@@ -34,6 +37,13 @@ export async function generateMetadata(props: { params: Promise<{ slug: string }
     title: `${s.name} event series`,
     description: (s.description || `Every ${s.name} event by ${host}, upcoming and past.`).slice(0, 160),
     alternates: { canonical: `/series/${s.slug}` },
+    openGraph: {
+      title: s.name,
+      description: (s.description || `Every ${s.name} event by ${host}.`).slice(0, 160),
+      url: `/series/${s.slug}`,
+      ...(s.coverImageUrl && { images: [{ url: s.coverImageUrl, width: 1200, height: 400 }] }),
+    },
+    twitter: { card: s.coverImageUrl ? 'summary_large_image' : 'summary' },
     robots: s.upcoming.length + s.past.length ? undefined : { index: false, follow: true },
   };
 }
@@ -84,7 +94,10 @@ export default async function SeriesPage(props: { params: Promise<{ slug: string
       <p className="text-sm font-semibold text-gray-500">Event series by {host}</p>
       <h1 className="mt-1 font-sora font-bold text-2xl sm:text-3xl text-navy dark:text-white">{s.name}</h1>
       {s.description && <p className="mt-3 text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">{s.description}</p>}
-      <p className="mt-3 text-sm text-gray-500">{s.upcoming.length + s.past.length} {s.upcoming.length + s.past.length === 1 ? 'event' : 'events'} so far</p>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <p className="text-sm text-gray-500">{s.upcoming.length + s.past.length} {s.upcoming.length + s.past.length === 1 ? 'event' : 'events'} so far</p>
+        <ShareMenu url={`${SITE}/series/${s.slug}`} title={s.name} utmCampaign="series" variant="button" buttonLabel="Share" className="w-28 shrink-0" />
+      </div>
 
       <div className="mt-6 p-4 sm:p-5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
         <FollowSeries slug={s.slug} name={s.name} />

@@ -3,9 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma, Prisma } from '@udyaibase/database';
 import { canAccessEvent, requirePermission, isEventLimited } from '@/lib/organizer-auth/require-permission';
 import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
-import { cleanRecurrence, uniqueSeriesSlug } from '@/lib/events/series';
+import { cleanRecurrence, scheduleKey, uniqueSeriesSlug } from '@/lib/events/series';
 import { isOwnMediaUrl } from '@/lib/events/certificate-pdf';
 import { refreshPaths } from '@/lib/revalidate';
+import { utcToZoned } from '@/lib/events/zoned-time';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +27,7 @@ export async function GET(_request: NextRequest, props: { params: Promise<{ id: 
       where: { organizerId: session.organizerId, deletedAt: null, sourceUrl: null },
       orderBy: { startAt: 'desc' },
       take: 300,
-      select: { id: true, title: true, startAt: true, timezone: true, status: true, seriesId: true },
+      select: { id: true, title: true, startAt: true, endAt: true, timezone: true, status: true, visibility: true, seriesId: true },
     }),
     prisma.eventSeriesFollower.count({ where: { seriesId: id, confirmedAt: { not: null }, unsubscribedAt: null } }),
   ]);
@@ -70,6 +71,10 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
     if (!rule) return NextResponse.json({ success: false, error: 'Choose how often it repeats and which event to copy.' }, { status: 400 });
     const template = await prisma.event.findFirst({ where: { id: rule.templateEventId, organizerId: session.organizerId, deletedAt: null, sourceUrl: null }, select: { id: true } });
     if (!template || !canAccessEvent(session, template.id)) return NextResponse.json({ success: false, error: 'The event to copy wasn’t found.' }, { status: 400 });
+    if (rule.ends === 'on' && rule.endOn) {
+      const t = await prisma.event.findUnique({ where: { id: template.id }, select: { startAt: true, timezone: true } });
+      if (t && rule.endOn <= utcToZoned(t.startAt, t.timezone).date) return NextResponse.json({ success: false, error: 'The end date must be after the event you copy.' }, { status: 400 });
+    }
     recurrence = rule;
     // The template is always part of the series.
     if (eventIds && !eventIds.includes(template.id)) eventIds.push(template.id);
@@ -82,8 +87,9 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
       data: {
         name, description, coverImageUrl, slug,
         ...(recurrence !== undefined && { recurrence }),
-        // A changed rule starts from today, never back-filling past dates.
-        ...(recurrence !== undefined && JSON.stringify(recurrence) !== JSON.stringify(series.recurrence) && { lastGeneratedFor: new Date() }),
+        // A changed schedule (how often, which week, which event) starts from today, never back-filling past dates.
+        // Pausing, ending or skipping a date keeps the progress, so drafts already made aren't made again.
+        ...(recurrence !== undefined && scheduleKey(cleanRecurrence(recurrence === Prisma.DbNull ? null : recurrence)) !== scheduleKey(cleanRecurrence(series.recurrence)) && { lastGeneratedFor: new Date() }),
       },
     });
     if (eventIds) {

@@ -3,6 +3,7 @@ import { sendEmail, sendEmailBatch } from '@/lib/email/send';
 import { seriesFollowToken } from './after-event';
 import { duplicateEvent } from './duplicate';
 import { utcToZoned } from './zoned-time';
+import { addDays, cleanRecurrence, plannedDates } from './recurrence';
 import { notifyOrganizer } from '@/lib/organizer-notify';
 
 /**
@@ -16,81 +17,17 @@ export const MAX_SERIES_PER_ORGANIZER = 25;
 /** Drafts created per series per run, so a long gap never floods the host. */
 const MAX_DRAFTS_PER_RUN = 3;
 
-export type Recurrence = {
-  freq: 'WEEKLY' | 'MONTHLY';
-  /** Every n weeks (1–4) or months (1–3). */
-  interval: number;
-  /** MONTHLY only: which week of the month (1–4, or -1 for the last). The weekday comes from the template. */
-  monthWeek: number | null;
-  /** How many days before each date the draft is created. */
-  createAheadDays: number;
-  templateEventId: string;
-};
-
-export function cleanRecurrence(raw: unknown): Recurrence | null {
-  const r = (raw && typeof raw === 'object' ? raw : null) as Record<string, unknown> | null;
-  if (!r || typeof r.templateEventId !== 'string' || !r.templateEventId) return null;
-  const freq = r.freq === 'MONTHLY' ? 'MONTHLY' : r.freq === 'WEEKLY' ? 'WEEKLY' : null;
-  if (!freq) return null;
-  const maxInterval = freq === 'WEEKLY' ? 4 : 3;
-  const interval = Math.min(maxInterval, Math.max(1, Math.round(Number(r.interval) || 1)));
-  const mw = Math.round(Number(r.monthWeek));
-  const monthWeek = freq === 'MONTHLY' ? (mw === -1 || (mw >= 1 && mw <= 4) ? mw : 1) : null;
-  const createAheadDays = Math.min(60, Math.max(3, Math.round(Number(r.createAheadDays) || 21)));
-  return { freq, interval, monthWeek, createAheadDays, templateEventId: r.templateEventId };
-}
-
-export function describeRecurrence(r: Recurrence, weekday: number): string {
-  const day = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][weekday];
-  if (r.freq === 'WEEKLY') return r.interval === 1 ? `Every ${day}` : `Every ${r.interval} weeks on ${day}`;
-  const nth = r.monthWeek === -1 ? 'last' : ['first', 'second', 'third', 'fourth'][(r.monthWeek ?? 1) - 1];
-  return `The ${nth} ${day} of every ${r.interval === 1 ? 'month' : `${r.interval} months`}`;
-}
-
-// ── Calendar dates as YYYY-MM-DD (no time zone; the event's own zone is applied when the draft is made) ──
-const toDay = (s: string) => new Date(`${s}T00:00:00Z`);
-const fromDay = (d: Date) => d.toISOString().slice(0, 10);
-export const weekdayOf = (s: string) => toDay(s).getUTCDay();
-export const addDays = (s: string, n: number) => fromDay(new Date(toDay(s).getTime() + n * 86_400_000));
-
-/** The nth (or last) given weekday in a month. */
-function nthWeekday(year: number, month: number, weekday: number, n: number): string {
-  if (n === -1) {
-    const last = new Date(Date.UTC(year, month + 1, 0));
-    const back = (last.getUTCDay() - weekday + 7) % 7;
-    return fromDay(new Date(Date.UTC(year, month + 1, -back)));
-  }
-  const first = new Date(Date.UTC(year, month, 1));
-  const ahead = (weekday - first.getUTCDay() + 7) % 7;
-  return fromDay(new Date(Date.UTC(year, month, 1 + ahead + (n - 1) * 7)));
-}
-
-/** Dates after `after` up to and including `until`, following the rule from the template's date. */
-export function occurrencesBetween(rule: Recurrence, templateDate: string, after: string, until: string, limit = 10): string[] {
-  const out: string[] = [];
-  const weekday = weekdayOf(templateDate);
-  if (rule.freq === 'WEEKLY') {
-    for (let d = templateDate, i = 0; d <= until && i < 400; d = addDays(d, 7 * rule.interval), i++) {
-      if (d > after) { out.push(d); if (out.length >= limit) break; }
-    }
-    return out;
-  }
-  const t = toDay(templateDate);
-  for (let k = 0; k < 120; k++) {
-    const m = t.getUTCMonth() + k * rule.interval;
-    const d = nthWeekday(t.getUTCFullYear() + Math.floor(m / 12), m % 12, weekday, rule.monthWeek ?? 1);
-    if (d > until) break;
-    if (d > after && d >= templateDate) { out.push(d); if (out.length >= limit) break; }
-  }
-  return out;
-}
+export type { Recurrence } from './recurrence';
+export { cleanRecurrence, describeRecurrence, occurrencesBetween, plannedDates, weekdayOf, addDays, scheduleKey } from './recurrence';
 
 export function slugifySeries(name: string): string {
   return name.toLowerCase().replace(/[^\w\s-]/g, '').replace(/[\s_]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'series';
 }
 
 export async function uniqueSeriesSlug(name: string, exceptId?: string): Promise<string> {
-  const base = slugifySeries(name);
+  // "join" and "unfollow" are pages under /series/, so a series can't take those addresses.
+  const raw = slugifySeries(name);
+  const base = ['join', 'unfollow'].includes(raw) ? `${raw}-series` : raw;
   for (let i = 1; i <= 30; i++) {
     const candidate = i === 1 ? base : `${base}-${i}`;
     const taken = await prisma.eventSeries.findUnique({ where: { slug: candidate }, select: { id: true } });
@@ -180,7 +117,8 @@ export async function generateRecurringDrafts(now = new Date()) {
   let created = 0;
   for (const s of all) {
     const rule = cleanRecurrence(s.recurrence);
-    if (!rule) continue;
+    // Paused: nothing is made, and dates that pass meanwhile aren't created later (the window starts from today).
+    if (!rule || rule.paused) continue;
     const template = await prisma.event.findFirst({ where: { id: rule.templateEventId, organizerId: s.organizerId, deletedAt: null }, select: { id: true, startAt: true, timezone: true } });
     if (!template) continue;
     const tz = template.timezone;
@@ -188,9 +126,14 @@ export async function generateRecurringDrafts(now = new Date()) {
     const today = utcToZoned(now, tz).date;
     const last = s.lastGeneratedFor ? utcToZoned(s.lastGeneratedFor, tz).date : templateDate;
     const after = last > today ? last : today;
-    const dates = occurrencesBetween(rule, templateDate, after, addDays(today, rule.createAheadDays), MAX_DRAFTS_PER_RUN);
+    // Within the end date; skipped dates are passed over (and recorded as done) without making a draft.
+    const dates = plannedDates(rule, templateDate, after, addDays(today, rule.createAheadDays), MAX_DRAFTS_PER_RUN);
     const made: { id: string; title: string; date: string }[] = [];
-    for (const date of dates) {
+    for (const { date, skipped } of dates) {
+      if (skipped) {
+        await prisma.eventSeries.update({ where: { id: s.id }, data: { lastGeneratedFor: new Date(`${date}T12:00:00Z`) } });
+        continue;
+      }
       // Skip a date the host already has an edition on (made by hand, or a re-run).
       const existing = await prisma.event.count({ where: { seriesId: s.id, deletedAt: null, startAt: { gte: new Date(`${date}T00:00:00Z`), lt: new Date(`${addDays(date, 1)}T00:00:00Z`) } } });
       if (!existing) {

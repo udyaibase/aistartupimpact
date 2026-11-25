@@ -1,4 +1,6 @@
 import { prisma } from '@udyaibase/database';
+import { openJobsWhere } from '@/lib/employer/counts';
+import { notifyEmployer } from '@/lib/employer/notify';
 import { ownerInboxes } from '@/lib/employer/team';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 import { button, esc, shell } from '@/lib/jobs/apply-emails';
@@ -134,6 +136,12 @@ export async function runPlanMaintenance(now = new Date(), opts: { onlyEmployerI
     take: 500,
   });
   for (const e of due) {
+    await notifyEmployer(e.id, {
+      type: e.planIsTrial ? 'trial_ending' : 'plan_ending',
+      title: e.planIsTrial ? 'Your free trial ends soon' : `Your ${planDef(e.plan).name} plan ends soon`,
+      message: `It ends on ${e.planExpiresAt!.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}. Choose a plan to keep everything running.`,
+      link: '/employer/billing',
+    }, 'owners');
     for (const to of await ownerInboxes(e.id)) {
       if (e.planIsTrial) sendTrialEndingEmail(to, e.planExpiresAt!);
       else sendPlanEndingEmail(to, planDef(e.plan).name, e.planExpiresAt!);
@@ -148,6 +156,7 @@ export async function runPlanMaintenance(now = new Date(), opts: { onlyEmployerI
   });
   for (const e of ended) {
     for (const to of await ownerInboxes(e.id)) sendGraceEmail(to, planDef(e.plan).name, new Date(e.planExpiresAt!.getTime() + GRACE_DAYS * DAY));
+    await notifyEmployer(e.id, { type: 'plan_grace', title: `Your ${planDef(e.plan).name} plan has ended`, message: `Everything keeps working for ${GRACE_DAYS} more days. Renew to avoid moving to Free.`, link: '/employer/billing' }, 'owners');
     await prisma.jobBoardEmployer.update({ where: { id: e.id }, data: { planGraceNoticeAt: now } });
   }
 
@@ -165,13 +174,14 @@ export async function runPlanMaintenance(now = new Date(), opts: { onlyEmployerI
     const loseFounding = !e.planIsTrial && e.foundingMemberAt && !e.foundingLostAt ? { foundingLostAt: now } : {};
     await prisma.jobBoardEmployer.update({ where: { id: e.id }, data: { plan: 'FREE', planIsTrial: false, maxActiveJobs: PLANS.FREE.maxActiveJobs, ...loseFounding } });
     const open = await prisma.jobBoardListing.findMany({
-      where: { employerId: e.id, status: 'OPEN', deletedAt: null },
+      where: openJobsWhere(e.id, now),
       orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
       select: { id: true, title: true },
     });
     const extra = open.slice(PLANS.FREE.maxActiveJobs);
     for (const j of extra) await setListingStatus(j.id, 'PAUSED');
     jobsPaused += extra.length;
+    if (e.passwordHash !== '') await notifyEmployer(e.id, { type: 'moved_to_free', title: 'You’re now on the Free plan', message: extra.length ? `${extra.length} ${extra.length === 1 ? 'job was' : 'jobs were'} paused to fit the Free plan.` : 'Your jobs stay open. Upgrade any time for more.', link: '/employer/billing' }, 'owners');
     if (e.passwordHash !== '') for (const to of await ownerInboxes(e.id)) sendMovedToFreeEmail(to, e.planIsTrial ? `${PLANS[TRIAL_PLAN].name} trial` : `${planDef(e.plan).name} plan`, open.slice(0, PLANS.FREE.maxActiveJobs), extra);
   }
 

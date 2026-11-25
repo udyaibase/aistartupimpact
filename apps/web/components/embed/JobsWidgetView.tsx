@@ -599,7 +599,7 @@ function JobDetail({ job, config, pageHref, onApply }: {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 pt-4 border-t" style={{ borderColor: "var(--w-border)" }}>
-          {salary && fact(`${salary}${job.hasEsops ? " + ESOPs" : ""}`, "per annum", true)}
+          {salary && fact(`${salary}${job.hasEsops ? " + ESOPs" : ""}`, job.salaryPeriod === "monthly" ? "stipend" : "per annum", true)}
           {fact(timeAgo(job.publishedAt), "posted")}
           {experience && fact(experience, "experience")}
           {fact(type, "type")}

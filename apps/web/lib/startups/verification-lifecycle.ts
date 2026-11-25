@@ -1,4 +1,5 @@
 import { prisma } from '@udyaibase/database';
+import { notifyFounder } from '@/lib/founder/notify';
 import { verifyDNS } from '@udyaibase/utils/src/verification/dns';
 import { sendEmail } from '@/lib/email/send';
 import { claimToken } from '@/lib/startups/claim';
@@ -81,6 +82,10 @@ export async function recordTakeover(opts: {
     errorMessage: `previousOwnerId=${opts.previousOwnerId}; previousMethod=${opts.previousMethod}`,
   });
   await moveOwnerLinks(opts.startupId, opts.previousOwnerId, opts.newOwnerId);
+  await notifyFounder(opts.previousOwnerId, {
+    type: 'startup_ownership', title: `${opts.startupName}: ownership moved to another founder`,
+    message: `Someone else proved control of ${opts.domain}. Not right? Contact support within 30 days.`, link: '/founder/support',
+  });
   if (prev) {
     const why = opts.previousMethod === 'EMAIL'
       ? `Someone proved control of ${opts.domain} by adding a DNS record. A DNS record is stronger proof than a work email, so ownership of ${opts.startupName} moved to them${next ? ` (${next.name})` : ''}.`
@@ -213,6 +218,13 @@ export async function runVerificationLifecycle(now = new Date(), budgetMs = 200_
         ], { label: s.verificationMethod === 'DNS' ? 'Check my DNS record' : 'Send me a new code', href: `${SITE}/founder/claim/${s.id}?method=${method}` }),
       }).catch(() => {});
     }
+    if (due) {
+      const days = Math.max(1, Math.ceil((expires.getTime() - now.getTime()) / DAY));
+      await notifyFounder(s.ownerId, {
+        type: 'verification_ending', title: `${s.name}: verification ends in ${days} day${days === 1 ? '' : 's'}`,
+        message: 'Verify again to keep the blue tick on your listing.', link: `/founder/claim/${s.id}?method=${s.verificationMethod === 'DNS' ? 'dns' : 'email'}`,
+      });
+    }
     await prisma.startup.update({ where: { id: s.id }, data: { verificationRemindedAt: now } });
     report.reminded++;
   }
@@ -227,6 +239,10 @@ export async function runVerificationLifecycle(now = new Date(), budgetMs = 200_
     await prisma.startup.update({ where: { id: s.id }, data: { isVerified: false, claimStatus: 'CLAIMED' } });
     await log(s.id, s.ownerId, 'VERIFICATION_LAPSED', s.verificationMethod ?? 'DNS', { success: false });
     await refreshPublicListing('startup', s.id).catch(() => {});
+    await notifyFounder(s.ownerId, {
+      type: 'verification_lapsed', title: `${s.name} is no longer verified`,
+      message: 'The blue tick is off your listing. You’re still the owner; verify again to get it back.', link: `/founder/claim/${s.id}?method=${s.verificationMethod === 'DNS' ? 'dns' : 'email'}`,
+    });
     const owner = await ownerEmail(s.ownerId);
     if (owner) {
       const cc = s.verifiedEmail && s.verifiedEmail.toLowerCase() !== owner.email.toLowerCase() ? [s.verifiedEmail] : undefined;
