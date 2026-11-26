@@ -30,6 +30,12 @@ const nextConfig = {
       // Per-job applicants moved to the Candidates board, filtered to the job.
       { source: '/employer/jobs/:id/applications', destination: '/employer/applications?job=:id', permanent: false },
       { source: '/employer/promote', destination: '/employer/billing', permanent: true },
+      // The website widget moved off /employer/careers, which read like the careers page (/employer/careers-page).
+      { source: '/employer/careers', destination: '/employer/widget', permanent: true },
+      // Every portal answers at /<portal>/dashboard; the organizer home itself lives at /organizer.
+      { source: '/organizer/dashboard', destination: '/organizer', permanent: false },
+      // Preferences live in the account area now (one copy, not a second page).
+      { source: '/settings/preferences', destination: '/profile?tab=preferences', permanent: true },
     ];
   },
   async headers() {
@@ -74,8 +80,9 @@ const nextConfig = {
       {
         // Pages that frame the events widget or Razorpay checkout (billing, paid event tickets, funding data packs) can't
         // require COEP: those frames don't send it.
-        // /careers is the jobs widget (it frames /embed/jobs/...).
-        source: '/((?!embed|events|organizer/embed|organizer/billing|employer/careers|employer/billing|funding|careers).*)',
+        // /careers is the jobs widget (it frames /embed/jobs/...); /employer/widget previews it, and employer/careers
+        // also covers /employer/careers-page.
+        source: '/((?!embed|events|organizer/embed|organizer/billing|employer/careers|employer/widget|employer/billing|funding|careers).*)',
         headers: [{ key: 'Cross-Origin-Embedder-Policy', value: 'credentialless' }],
       },
       {

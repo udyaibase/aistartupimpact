@@ -31,6 +31,9 @@ const OPTIONS: sanitizeHtmlLib.IOptions = {
   },
 };
 
+/** A caption left as the editor's placeholder, or left empty, is not saved. */
+const EMPTY_CAPTION = /<figcaption>(?:\s|&nbsp;|<br\s*\/?>)*(?:Add a caption(?:…|\.\.\.|&hellip;))?(?:\s|&nbsp;|<br\s*\/?>)*<\/figcaption>/gi;
+
 export function cleanArticleHtml(html: string): string {
-  return sanitizeHtmlLib(String(html ?? ''), OPTIONS).replace(/<p>(\s|&nbsp;|<br \/>)*<\/p>/g, '').trim();
+  return sanitizeHtmlLib(String(html ?? ''), OPTIONS).replace(EMPTY_CAPTION, '').replace(/<p>(\s|&nbsp;|<br \/>)*<\/p>/g, '').trim();
 }

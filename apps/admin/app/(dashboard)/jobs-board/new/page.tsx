@@ -376,8 +376,8 @@ export default function NewJobPage() {
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div>
-          <h1 className="font-sora font-bold text-2xl text-navy dark:text-white">Post New Job</h1>
-          <p className="text-sm text-gray-500 font-jakarta mt-1">Create a job listing linked to a startup</p>
+          <h1 className="portal-title">Post New Job</h1>
+          <p className="portal-subtitle">Create a job listing linked to a startup</p>
         </div>
       </div>
 

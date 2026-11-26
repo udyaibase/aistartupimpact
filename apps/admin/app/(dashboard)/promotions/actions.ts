@@ -3,8 +3,9 @@
 import { prisma } from '@udyaibase/database';
 import { requireActionAuth } from '@/lib/api-auth';
 import { logAuditEvent } from '@/lib/audit-log';
+import { sectionRoles } from '@/lib/section-access';
 
-const ROLES = ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'];
+const ROLES = sectionRoles('/promotions');
 
 export interface PromotionRow {
   id: string;

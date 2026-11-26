@@ -4,8 +4,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@udyaibase/database";
 import { logAuditEvent } from "@/lib/audit-log";
+import { publicError } from '@/lib/public-error';
+import { sectionRoles } from '@/lib/section-access';
 
-const ALLOWED = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "AD_MANAGER"];
+const ALLOWED = sectionRoles('/advertise');
 
 export async function getAdvStatsAction() {
   const session: any = await getServerSession(authOptions);
@@ -29,7 +31,7 @@ export async function getAdvStatsAction() {
       },
     };
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }
 
@@ -59,7 +61,7 @@ export async function getAdvPackagesAction() {
       })),
     };
   } catch (e: any) {
-    return { success: false, error: e.message, data: [] };
+    return { success: false, error: publicError(e), data: [] };
   }
 }
 
@@ -105,7 +107,7 @@ export async function getAdvPackageDetailAction(packageId: string) {
       },
     };
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }
 
@@ -137,7 +139,7 @@ export async function cancelAdvPackageAction(packageId: string) {
 
     return { success: true };
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }
 
@@ -186,6 +188,6 @@ export async function updateSocialPostAction(postId: string, data: { status?: st
 
     return { success: true };
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }

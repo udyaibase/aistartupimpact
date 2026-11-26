@@ -3,8 +3,9 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@udyaibase/database";
+import { sectionRoles } from '@/lib/section-access';
 
-const EVENT_ROLES = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "EVENT_ORGANIZER"];
+const EVENT_ROLES = sectionRoles('/events');
 
 /**
  * Check in an attendee by QR token, email, or name.

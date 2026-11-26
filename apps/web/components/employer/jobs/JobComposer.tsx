@@ -696,7 +696,7 @@ export default function JobComposer({
             <div className="space-y-3" id="job-showOnJobsPage" tabIndex={-1}>
               <Toggle id="where-jobs" label="Udyaibase jobs page" hint="Searchable by everyone looking for AI jobs." checked={draft.showOnJobsPage} onChange={(v) => update('showOnJobsPage', v)} />
               <Toggle id="where-profile" label="Your company profile" checked={draft.showOnProfile} onChange={(v) => update('showOnProfile', v)} />
-              <Toggle id="where-careers" label="Your website (careers widget)" hint={<Link href="/employer/careers" className="text-brand hover:underline">Set up the widget</Link>} checked={draft.showOnCareers} onChange={(v) => update('showOnCareers', v)} />
+              <Toggle id="where-careers" label="Your website (careers widget)" hint={<Link href="/employer/widget" className="text-brand hover:underline">Set up the widget</Link>} checked={draft.showOnCareers} onChange={(v) => update('showOnCareers', v)} />
               <Toggle id="where-google" disabled checked={company.verified}
                 label={<span className="inline-flex items-center gap-1.5">Google for Jobs {company.verified && <BadgeCheck className="w-4 h-4 text-green-700" aria-hidden />}</span>}
                 hint={company.verified

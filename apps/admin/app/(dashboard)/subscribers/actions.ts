@@ -3,8 +3,12 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@udyaibase/database";
+import { sectionRoles } from '@/lib/section-access';
+import { publicError } from '@/lib/public-error';
+import { logAuditEvent } from '@/lib/audit-log';
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "SENIOR_WRITER", "WRITER", "AD_MANAGER"];
+// Subscriber emails are personal data: only the roles that can open the Subscribers screen may read them.
+const ALLOWED_ROLES = sectionRoles('/subscribers');
 
 export async function getSubscribersAction(page = 1, limit = 20, search = "") {
   const session: any = await getServerSession(authOptions);
@@ -52,7 +56,7 @@ export async function getSubscribersAction(page = 1, limit = 20, search = "") {
     };
   } catch (e: any) {
     console.error("getSubscribersAction error:", e);
-    return { success: false, error: e.message, data: [], total: 0, pages: 0 };
+    return { success: false, error: publicError(e), data: [], total: 0, pages: 0 };
   }
 }
 
@@ -64,9 +68,10 @@ export async function deleteSubscriberAction(id: string) {
 
   try {
     await prisma.$executeRaw`DELETE FROM "NewsletterSubscriber" WHERE id = ${id}`;
+    await logAuditEvent({ action: 'DELETE', resourceType: 'SUBSCRIBER', resourceId: id });
     return { success: true };
   } catch (e: any) {
     console.error("deleteSubscriberAction error:", e);
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }

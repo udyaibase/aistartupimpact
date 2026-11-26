@@ -12,6 +12,9 @@ vi.mock('@/app/(dashboard)/articles/actions', () => ({
   getArticleByIdAction: vi.fn(async () => ({ success: false })),
   getCategoriesAction: vi.fn(async () => ({ success: true, data: [] })),
 }));
+// The editor reports problems as a toast (it used to be a browser alert).
+const notify = vi.hoisted(() => vi.fn());
+vi.mock('@/components/Toast', () => ({ notify }));
 vi.mock('@/components/SelectionToolbar', () => ({ default: () => null }));
 vi.mock('@/components/MediaPicker', () => ({ default: () => null }));
 vi.mock('@/components/SEOScorePanel', () => ({ default: () => null }));
@@ -50,7 +53,7 @@ const dataTransfer = (files: File[]) => ({ types: ['Files'], files, dropEffect: 
 beforeEach(() => {
   upload.mockReset();
   upload.mockResolvedValue({ success: true, data: { url: 'https://media.udyaibase.com/uploads/cover.png' } });
-  vi.spyOn(window, 'alert').mockImplementation(() => {});
+  notify.mockClear();
   document.execCommand = vi.fn(() => true);
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -77,7 +80,7 @@ describe('article editor image drag and drop', () => {
     const pdf = new File(['%PDF'], 'doc.pdf', { type: 'application/pdf' });
     await fire(coverBox(container), 'drop', { dataTransfer: dataTransfer([pdf]) });
     expect(upload).not.toHaveBeenCalled();
-    expect(window.alert).toHaveBeenCalledWith(expect.stringContaining('JPG, PNG'));
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining('JPG, PNG'));
   });
 
   it('inserts an image dropped into the article body', async () => {

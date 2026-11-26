@@ -3,6 +3,9 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@udyaibase/database';
 import StatForm from '../StatForm';
 import { refreshPublic } from '@/lib/refresh-public';
+import { requireFormAuth } from '@/lib/api-auth';
+import { formFields } from '@/lib/form-fields';
+import { logAuditEvent } from '@/lib/audit-log';
 
 export const metadata: Metadata = {
   title: 'Add Live Stat | Admin',
@@ -12,17 +15,20 @@ export default function NewStatPage() {
   async function createStat(formData: FormData) {
     'use server';
 
-    const metricKey = formData.get('metricKey') as string;
-    const metricLabel = formData.get('metricLabel') as string;
-    const metricValue = formData.get('metricValue') as string;
+    await requireFormAuth();
+    const f = formFields(formData);
+
+    const metricKey = f.required('metricKey', 300);
+    const metricLabel = f.required('metricLabel', 300);
+    const metricValue = f.required('metricValue', 300);
     if (!metricKey || !metricLabel || !metricValue) {
       throw new Error('Key, Label, and Value are required');
     }
 
-    const metricChange = formData.get('metricChange') as string || null;
-    const metricIcon = formData.get('metricIcon') as string || 'rocket';
-    const displayOrder = parseInt(formData.get('displayOrder') as string) || 0;
-    const isActive = formData.get('isActive') === 'on';
+    const metricChange = f.optional('metricChange');
+    const metricIcon = f.optional('metricIcon', 40) ?? 'rocket';
+    const displayOrder = f.int('displayOrder');
+    const isActive = f.flag('isActive');
 
     await prisma.indiaAIStats.create({
       data: {
@@ -36,6 +42,8 @@ export default function NewStatPage() {
       },
     });
 
+    await logAuditEvent({ action: 'CREATE', resourceType: 'INDIA_AI_STATS', resourceName: String(formData.get('name') ?? formData.get('title') ?? formData.get('metricLabel') ?? formData.get('component') ?? '').slice(0, 200) });
+
     await refreshPublic(['india-ai', 'home']);
 
     redirect('/india-ai/stats');
@@ -44,10 +52,10 @@ export default function NewStatPage() {
   return (
     <div className="p-6">
       <div className="mb-6 font-jakarta">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white font-sora">
+        <h1 className="portal-title">
           Add Live Statistic
         </h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+        <p className="portal-subtitle">
           Add a new live statistic counter to the India AI landing page hero section.
         </p>
       </div>

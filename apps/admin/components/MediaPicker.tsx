@@ -1,10 +1,12 @@
 'use client';
 
+import { notify } from '@/components/Toast';
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Upload, Image as ImageIcon, Search, Trash2, CheckCircle2 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { listMediaAction, uploadMediaFileAction, deleteMediaAction } from '../app/(dashboard)/media/actions';
+import { ask } from '@/components/Ask';
 
 // Helper for standardizing tailwind classes
 function cn(...inputs: ClassValue[]) {
@@ -66,6 +68,7 @@ export default function MediaPicker({ isOpen, onClose, onSelect, title = "Select
       }
     } catch (err) {
       console.error('Error fetching media:', err);
+      notify("Couldn't load this. Check your connection and refresh.", 'error');
     } finally {
       setLoading(false);
     }
@@ -87,11 +90,11 @@ export default function MediaPicker({ isOpen, onClose, onSelect, title = "Select
         onSelect(res.data.url);
         onClose();
       } else {
-        alert(res.error || "Upload failed");
+        notify(res.error || "Upload failed");
       }
     } catch (err) {
       console.error('Upload error:', err);
-      alert("An error occurred during upload.");
+      notify("An error occurred during upload.");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -99,7 +102,7 @@ export default function MediaPicker({ isOpen, onClose, onSelect, title = "Select
   };
 
   const handleDelete = async (fileId: string) => {
-    if (!confirm("Are you sure you want to delete this asset? It will be removed globally.")) return;
+    if (!(await ask({ title: 'Delete this file', message: 'It is removed from the media library and from every place that uses it. This can’t be undone.', confirmLabel: 'Delete', danger: true }))) return;
 
     try {
       const res = await deleteMediaAction(fileId);
@@ -107,11 +110,11 @@ export default function MediaPicker({ isOpen, onClose, onSelect, title = "Select
         setFiles(f => f.filter(x => x.id !== fileId));
         if (selectedFile?.id === fileId) setSelectedFile(null);
       } else {
-        alert(res.error || 'Delete failed');
+        notify(res.error || 'Delete failed');
       }
     } catch (err) {
       console.error('Delete error:', err);
-      alert('Delete failed');
+      notify('Delete failed');
     }
   };
 

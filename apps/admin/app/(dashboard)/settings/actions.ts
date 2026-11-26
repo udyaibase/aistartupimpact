@@ -8,8 +8,13 @@ import nextPackage from "next/package.json";
 import appPackage from "../../../package.json";
 import { runServiceChecks } from "./service-health";
 import { refreshPublic } from '@/lib/refresh-public';
+import { sectionRoles } from '@/lib/section-access';
+import { publicError } from '@/lib/public-error';
+import { logAuditEvent } from '@/lib/audit-log';
 
-const ALLOWED = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "AD_MANAGER"];
+// Same roles as the Settings screen (super admin only). This list used to let editors and ad managers save
+// site settings by calling the action directly.
+const ALLOWED = sectionRoles('/settings');
 
 export async function getSettingsAction() {
   const session: any = await getServerSession(authOptions);
@@ -68,7 +73,7 @@ export async function getSettingsAction() {
       data: { ...defaults, ...settingsMap },
     };
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }
 
@@ -106,10 +111,11 @@ export async function saveSettingsAction(settings: Record<string, any>) {
       `;
     }
 
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'SETTINGS', resourceName: 'Site settings', after: { keys: Object.keys(settings).sort() } });
     await refreshPublic(['all']); return { success: true };
   } catch (e: any) {
     console.error('Save settings error:', e);
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }
 
@@ -179,7 +185,7 @@ export async function getSystemStatsAction() {
       },
     };
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }
 // Vercel exposes the deployed commit at runtime; BUILD_* come from next.config for other hosts and local builds
@@ -205,6 +211,6 @@ export async function getServiceHealthAction() {
   try {
     return { success: true as const, data: { checks: await runServiceChecks(), checkedAt: new Date().toISOString() } };
   } catch (e: any) {
-    return { success: false as const, error: e.message };
+    return { success: false as const, error: publicError(e) };
   }
 }

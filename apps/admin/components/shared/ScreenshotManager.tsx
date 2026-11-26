@@ -1,5 +1,6 @@
 'use client';
 
+import { notify } from '@/components/Toast';
 import { useState, useRef, useCallback } from 'react';
 import { X, Plus, Loader2, GripVertical, ImagePlus, Globe, Check, RotateCcw } from 'lucide-react';
 
@@ -43,7 +44,7 @@ export default function ScreenshotManager({
     if (imageFiles.length === 0) return;
 
     if (screenshots.length + imageFiles.length > maxScreenshots) {
-      alert(`Maximum ${maxScreenshots} screenshots allowed`);
+      notify(`Maximum ${maxScreenshots} screenshots allowed`);
       return;
     }
 
@@ -61,6 +62,7 @@ export default function ScreenshotManager({
         }
       } catch (err) {
         console.error('Screenshot upload error:', err);
+        notify("Couldn't load this. Check your connection and refresh.", 'error');
       }
     }
 

@@ -35,7 +35,7 @@ export default function ForYouSection() {
             <h2 id="for-you-title" className="font-sora text-lg sm:text-xl font-bold text-gray-900 dark:text-white">For you</h2>
             <p className="text-[13px] text-gray-600 dark:text-gray-400 mt-0.5">Based on your interests and what you’ve read.</p>
           </div>
-          <Link href="/settings/preferences" className="shrink-0 inline-flex items-center gap-1 min-h-[40px] text-sm font-semibold text-gray-700 dark:text-gray-300 hover:underline">
+          <Link href="/profile?tab=preferences" className="shrink-0 inline-flex items-center gap-1 min-h-[40px] text-sm font-semibold text-gray-700 dark:text-gray-300 hover:underline">
             Edit interests <ArrowRight className="w-3.5 h-3.5" aria-hidden />
           </Link>
         </div>

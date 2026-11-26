@@ -35,8 +35,8 @@ export default function OnboardingFunnelPage() {
     <div className="space-y-6">
       <div>
         <Link href="/employers" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:underline font-jakarta"><ArrowLeft className="w-4 h-4" /> Employers</Link>
-        <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white flex items-center gap-2 mt-2"><Timer className="w-6 h-6 text-brand" /> Employer onboarding</h1>
-        <p className="text-gray-500 text-sm font-jakarta mt-1">Workspaces created in the last {days} days. Times are medians from workspace creation. Target: first job live in under 5 minutes for founders, under 1 day for everyone else.</p>
+        <h1 className="portal-title flex items-center gap-2 mt-2"><Timer className="w-6 h-6 text-brand" /> Employer onboarding</h1>
+        <p className="portal-subtitle">Workspaces created in the last {days} days. Times are medians from workspace creation. Target: first job live in under 5 minutes for founders, under 1 day for everyone else.</p>
       </div>
       <div className="flex gap-2" role="group" aria-label="Period">
         {[7, 30, 90].map((d) => (

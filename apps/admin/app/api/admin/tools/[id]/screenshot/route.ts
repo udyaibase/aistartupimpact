@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { requireApiAuth } from "@/lib/api-auth";
+import { sectionRoles } from '@/lib/section-access';
 import { r2, R2_BUCKET, getPublicUrl } from "@/lib/media";
 import { withPublicRefresh } from '@/lib/refresh-public';
+import { publicError } from '@/lib/public-error';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -45,7 +47,7 @@ async function postHandler(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { error } = await requireApiAuth();
+  const { error } = await requireApiAuth(sectionRoles('/tools-dir'));
   if (error) return error;
 
   const { id } = await params;
@@ -184,7 +186,7 @@ async function postHandler(
   } catch (err: any) {
     console.error("Screenshot capture error:", err);
     return NextResponse.json(
-      { error: err.message || "Screenshot capture failed" },
+      { error: publicError(err) || "Screenshot capture failed" },
       { status: 500 }
     );
   }

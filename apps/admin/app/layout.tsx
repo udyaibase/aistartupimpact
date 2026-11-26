@@ -3,6 +3,7 @@ import { Sora, Plus_Jakarta_Sans, JetBrains_Mono } from 'next/font/google';
 import ThemeProvider from '@/components/ThemeProvider';
 import { NextAuthProvider } from '@/components/NextAuthProvider';
 import { ToastProvider } from '@/components/Toast';
+import { AskHost } from '@/components/Ask';
 import './globals.css';
 import { connection } from 'next/server';
 import { THEME_SCRIPT } from '@/lib/csp';
@@ -73,6 +74,7 @@ export default async function RootLayout({
           <ThemeProvider>
             <ToastProvider>
               {children}
+              <AskHost />
             </ToastProvider>
           </ThemeProvider>
         </NextAuthProvider>

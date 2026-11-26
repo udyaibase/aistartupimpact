@@ -1,15 +1,11 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  Plus, Search, Building2, MapPin, Star, StarOff,
-  Edit3, Trash2, Crown, CheckCircle, Clock, Calendar, X,
-  ShieldCheck, UserCheck, AlertCircle,
-} from 'lucide-react';
-import { ConfirmModal } from '@/components/ConfirmModal';
-import { TableEmptyState } from '@/components/EmptyState';
-import { Pagination } from '@/components/Pagination';
+import { Plus, Building2, Edit3, Trash2, Crown, ShieldCheck, X } from 'lucide-react';
+import DataTable, { type BulkAction, type Column, type TableFilter } from '@/components/ui/DataTable';
+import { ask } from '@/components/Ask';
 import {
   getStartupsAction,
   deleteStartupAction,
@@ -23,6 +19,7 @@ import {
   bulkArchiveStartupsAction,
   bulkDeleteStartupsAction,
 } from './actions';
+import { notify } from '@/components/Toast';
 
 interface Startup {
   id: string;
@@ -50,22 +47,11 @@ interface Startup {
   updatedAt: string;
 }
 
-const PAGE_SIZE = 20;
 
 export default function StartupsDirPage() {
   const router = useRouter();
   const [startups, setStartups] = useState<Startup[]>([]);
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  const [deleteTyped, setDeleteTyped] = useState('');
-  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
-  const [bulkDeleteTyped, setBulkDeleteTyped] = useState('');
   const [loading, setLoading] = useState(true);
-  const [filterReview, setFilterReview] = useState<'all' | 'reviewed' | 'under_review'>('all');
-  const [filterClaim, setFilterClaim] = useState<'all' | 'UNCLAIMED' | 'PENDING' | 'CLAIMED'>('all');
-  const [permissionError, setPermissionError] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [featureModal, setFeatureModal] = useState<Startup | null>(null);
   const [featureTier, setFeatureTier] = useState<'PREMIUM' | 'STANDARD' | 'BASIC'>('STANDARD');
   const [featureStart, setFeatureStart] = useState('');
@@ -74,7 +60,6 @@ export default function StartupsDirPage() {
   const [featurePrice, setFeaturePrice] = useState('');
   const [featureError, setFeatureError] = useState('');
   const [featureSubmitting, setFeatureSubmitting] = useState(false);
-  const [bulkAction, setBulkAction] = useState<'approve' | 'archive' | null>(null);
 
   useEffect(() => {
     loadStartups();
@@ -87,62 +72,33 @@ export default function StartupsDirPage() {
       setStartups(data as Startup[]);
     } catch (error) {
       console.error('Error loading startups:', error);
+      notify("Couldn't load this. Check your connection and refresh.", 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const filtered = startups.filter(s =>
-    s.name.toLowerCase().includes(search.toLowerCase()) ||
-    (s.tagline || '').toLowerCase().includes(search.toLowerCase())
-  ).filter(s => {
-    if (filterReview === 'reviewed') return s.contentReviewed;
-    if (filterReview === 'under_review') return !s.contentReviewed;
-    return true;
-  }).filter(s => {
-    if (filterClaim !== 'all') return s.claimStatus === filterClaim;
-    return true;
-  });
-
-  const totalFiltered = filtered.length;
-  const totalPages = Math.ceil(totalFiltered / PAGE_SIZE);
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
   const featuredCount = startups.filter(s => s.isFeatured).length;
   const pendingCount = startups.filter(s => !s.isApproved).length;
   const underReviewCount = startups.filter(s => !s.contentReviewed).length;
 
-  const openCreate = () => {
-    router.push('/startups-dir/new');
-  };
-
-  const openEdit = (startup: Startup) => {
-    router.push(`/startups-dir/${startup.id}/edit`);
-  };
-
-  const handleDelete = async (id: string) => {
+  /** Runs one change, says what happened, and reloads the list. */
+  const run = async (work: () => Promise<{ success: boolean; error?: string }>, done: string, failed: string) => {
     try {
-      const result = await deleteStartupAction(id);
-      if (result.success) {
-        await loadStartups();
-      } else if (result.error) {
-        setPermissionError(result.error);
-      }
-      setDeleteConfirm(null);
-    } catch (error) {
-      console.error('Error deleting startup:', error);
+      const result = await work();
+      if (!result.success) { notify(result.error || failed, 'error'); return false; }
+      notify(done, 'success');
+      await loadStartups();
+      return true;
+    } catch {
+      notify(`${failed} Check your connection and try again.`, 'error');
+      return false;
     }
   };
 
-  const toggleFeatured = async (id: string, currentFeatured: boolean) => {
-    try {
-      const result = await toggleFeaturedAction(id, !currentFeatured);
-      if (result.success) {
-        await loadStartups();
-      }
-    } catch (error) {
-      console.error('Error toggling featured status:', error);
-    }
+  const handleDelete = async (st: Startup) => {
+    if (!(await ask({ title: 'Delete startup', message: `Delete ${st.name}? Its page, funding rounds and milestones are removed for good.${st.isApproved ? ' It is live on the website now.' : ''}`, confirmLabel: 'Delete', danger: true }))) return;
+    await run(() => deleteStartupAction(st.id), `${st.name} deleted.`, `Couldn't delete ${st.name}.`);
   };
 
   const openFeatureModal = (startup: Startup) => {
@@ -187,43 +143,109 @@ export default function StartupsDirPage() {
     }
   };
 
-  const handleApprove = async (id: string) => {
-    try {
-      const result = await approveStartupAction(id);
-      if (result.success) {
-        await loadStartups();
-      } else {
-        console.error('Error approving startup:', result.error);
-      }
-    } catch (error) {
-      console.error('Error approving startup:', error);
-    }
-  };
+  const handleApprove = (st: Startup) => run(() => approveStartupAction(st.id), `${st.name} approved and live.`, `Couldn't approve ${st.name}.`);
+  const handleToggleReview = (st: Startup) => run(() => toggleContentReviewedAction(st.id, st.contentReviewed), st.contentReviewed ? `${st.name} is back under review.` : `${st.name} marked as reviewed.`, `Couldn't change the review status.`);
 
-  const handleToggleReview = async (id: string, current: boolean) => {
-    try {
-      const result = await toggleContentReviewedAction(id, current);
-      if (result.success) {
-        await loadStartups();
-      }
-    } catch (error) {
-      console.error('Error toggling review:', error);
-    }
-  };
+  const label = (v: string | null | undefined) => (v ? v.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase()) : '–');
+  const good = 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300';
+  const warn = 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300';
+  const neutral = 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300';
+  const pill = 'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap';
+  const claimOf = (st: Startup) => st.claimStatus || 'UNCLAIMED';
+  /** PENDING (ours to approve), FOUNDER (submitted by a founder: approved from Founders) or APPROVED. */
+  const approvalOf = (st: Startup) => (st.isApproved ? 'APPROVED' : st.ownerId ? 'FOUNDER' : 'PENDING');
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand"></div>
-      </div>
-    );
-  }
+  const columns = useMemo<Column<Startup>[]>(() => [
+    {
+      key: 'startup', header: 'Startup', sortValue: (st) => st.name, searchValue: (st) => `${st.name} ${st.tagline ?? ''} ${st.headquartersCity ?? ''}`,
+      cell: (st) => (
+        <div className="flex items-center gap-2.5 min-w-[200px] max-w-xs">
+          <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden shrink-0">
+            {st.logoUrl
+              // eslint-disable-next-line @next/next/no-img-element
+              ? <img src={st.logoUrl} alt="" className="w-full h-full object-contain p-0.5" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              : <Building2 className="w-3.5 h-3.5 text-gray-500" aria-hidden />}
+          </div>
+          <div className="min-w-0">
+            <Link href={`/startups-dir/${st.id}/edit`} className="font-semibold text-gray-900 dark:text-white hover:underline flex items-center gap-1.5">
+              <span className="truncate">{st.name}</span>
+              {st.isFeatured && <Crown className="w-3 h-3 text-amber-500 shrink-0" aria-label="Featured" />}
+            </Link>
+            <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-1">{st.tagline}</p>
+          </div>
+        </div>
+      ),
+    },
+    { key: 'stage', header: 'Stage', sortValue: (st) => st.stage, cell: (st) => <span className="whitespace-nowrap">{label(st.stage)}</span> },
+    { key: 'city', header: 'City', sortValue: (st) => st.headquartersCity, cell: (st) => st.headquartersCity || '–' },
+    {
+      key: 'review', header: 'Content review', sortValue: (st) => (st.contentReviewed ? 1 : 0),
+      cell: (st) => (
+        <button onClick={() => handleToggleReview(st)} title={st.contentReviewed ? 'Put back under review' : 'Mark as reviewed'} aria-label={`${st.name}: ${st.contentReviewed ? 'reviewed. Put back under review' : 'under review. Mark as reviewed'}`}
+          className={`${pill} hover:ring-2 hover:ring-gray-300 dark:hover:ring-gray-600 ${st.contentReviewed ? good : warn}`}>{st.contentReviewed ? 'Reviewed' : 'Under review'}</button>
+      ),
+    },
+    {
+      key: 'claim', header: 'Claim', sortValue: (st) => claimOf(st),
+      cell: (st) => <span className={`${pill} ${claimOf(st) === 'CLAIMED' ? good : claimOf(st) === 'PENDING' ? warn : neutral}`}>{label(claimOf(st))}</span>,
+    },
+    {
+      key: 'verified', header: 'Verified', sortValue: (st) => (st.isVerified ? 0 : 1),
+      cell: (st) => (st.isVerified ? <span className={`${pill} ${good}`}><ShieldCheck className="w-3 h-3" aria-hidden /> Verified</span> : '–'),
+    },
+    {
+      key: 'approval', header: 'Approval', sortValue: (st) => approvalOf(st),
+      cell: (st) => approvalOf(st) === 'APPROVED'
+        ? <span className={`${pill} ${good}`}>Approved</span>
+        : approvalOf(st) === 'FOUNDER'
+          ? <span className={`${pill} ${neutral}`} title="Submitted by a founder. Approve it from the Founders section.">Founder submission</span>
+          : <button onClick={() => handleApprove(st)} aria-label={`Approve ${st.name}`} className={`${pill} ${warn} hover:ring-2 hover:ring-amber-300`}>Pending · approve</button>,
+    },
+    {
+      key: 'featured', header: 'Featured', sortValue: (st) => (st.isFeatured ? 0 : 1),
+      cell: (st) => (
+        <button onClick={() => openFeatureModal(st)} aria-label={`${st.name}: ${st.isFeatured ? 'featured' : 'not featured'}. Schedule featuring`} title="Schedule featuring"
+          className={`${pill} hover:ring-2 hover:ring-gray-300 dark:hover:ring-gray-600 ${st.isFeatured ? warn : neutral}`}>{st.isFeatured ? 'Featured' : 'Schedule'}</button>
+      ),
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'right',
+      cell: (st) => (
+        <div className="flex items-center justify-end gap-1">
+          <Link href={`/startups-dir/${st.id}/edit`} aria-label={`Edit ${st.name}`} title="Edit" className="p-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"><Edit3 className="w-4 h-4" aria-hidden /></Link>
+          <button onClick={() => handleDelete(st)} aria-label={`Delete ${st.name}`} title="Delete" className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 className="w-4 h-4" aria-hidden /></button>
+        </div>
+      ),
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- cells call the latest handlers
+  ], []);
+
+  const filters = useMemo<TableFilter<Startup>[]>(() => [
+    { key: 'approval', label: 'Approval', options: [{ value: 'PENDING', label: 'Pending' }, { value: 'FOUNDER', label: 'Founder submission' }, { value: 'APPROVED', label: 'Approved' }], matches: (st, v) => approvalOf(st) === v },
+    { key: 'review', label: 'Content review', options: [{ value: 'under_review', label: 'Under review' }, { value: 'reviewed', label: 'Reviewed' }], matches: (st, v) => st.contentReviewed === (v === 'reviewed') },
+    { key: 'claim', label: 'Claim', options: ['UNCLAIMED', 'PENDING', 'CLAIMED'].map((v) => ({ value: v, label: label(v) })), matches: (st, v) => claimOf(st) === v },
+    { key: 'stage', label: 'Stage', options: [...new Set(startups.map((st) => st.stage).filter(Boolean))].sort().map((v) => ({ value: v, label: label(v) })), matches: (st, v) => st.stage === v },
+    { key: 'featured', label: 'Featured', options: [{ value: 'yes', label: 'Featured' }, { value: 'no', label: 'Not featured' }], matches: (st, v) => st.isFeatured === (v === 'yes') },
+    { key: 'verified', label: 'Verified', options: [{ value: 'yes', label: 'Verified' }, { value: 'no', label: 'Not verified' }], matches: (st, v) => st.isVerified === (v === 'yes') },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [startups]);
+
+  const bulk = (work: (ids: string[]) => Promise<{ success: boolean; error?: string }>, done: string) => async (rows: Startup[]) => {
+    await run(() => work(rows.map((r) => r.id)), `${rows.length} startup${rows.length === 1 ? '' : 's'} ${done}.`, `Couldn't update the selected startups.`);
+  };
+  const bulkActions = useMemo<BulkAction<Startup>[]>(() => [
+    { label: 'Approve', run: bulk(bulkApproveStartupsAction, 'approved'), confirm: (n) => `Approve ${n} startup${n === 1 ? '' : 's'}? They go live on the website.` },
+    { label: 'Archive', run: bulk(bulkArchiveStartupsAction, 'archived'), confirm: (n) => `Archive ${n} startup${n === 1 ? '' : 's'}? They leave the website but are kept here.` },
+    { label: 'Delete', danger: true, run: bulk(bulkDeleteStartupsAction, 'deleted'), confirm: (n) => `Delete ${n} startup${n === 1 ? '' : 's'} for good? Only super admins can do this. This can't be undone.` },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], []);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Startups Directory</h1>
-          <p className="text-gray-400 dark:text-gray-500 text-sm font-jakarta mt-1">
+          <h1 className="portal-title">Startups directory</h1>
+          <p className="portal-subtitle">
             Manage startup profiles • {featuredCount} featured • {pendingCount > 0 ? <span className="text-amber-500 font-semibold">{pendingCount} pending approval</span> : 'All approved'} • {underReviewCount > 0 ? <span className="text-orange-400 font-semibold">{underReviewCount} under review</span> : 'All reviewed'}
           </p>
         </div>
@@ -231,349 +253,22 @@ export default function StartupsDirPage() {
           <button onClick={() => router.push('/startups-dir/manage')} className="btn-outline text-xs flex items-center gap-1.5 px-3 py-2">
             Categories & Types
           </button>
-          <button onClick={openCreate} className="btn-brand text-sm flex items-center gap-2">
-            <Plus className="w-4 h-4" /> Add Startup
-          </button>
+          <Link href="/startups-dir/new" className="btn-brand text-sm gap-2"><Plus className="w-4 h-4" aria-hidden /> Add startup</Link>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input type="text" placeholder="Search startups..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="input-field pl-10" />
-        </div>
-        {/* Review filter */}
-        <select
-          value={filterReview}
-          onChange={(e) => { setFilterReview(e.target.value as any); setPage(1); }}
-          className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-jakarta text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-brand"
-        >
-          <option value="all">All Reviews</option>
-          <option value="under_review">🟠 Under Review</option>
-          <option value="reviewed">🟢 Reviewed</option>
-        </select>
-        {/* Claim filter */}
-        <select
-          value={filterClaim}
-          onChange={(e) => { setFilterClaim(e.target.value as any); setPage(1); }}
-          className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-jakarta text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-brand"
-        >
-          <option value="all">All Claims</option>
-          <option value="UNCLAIMED">🔵 Unclaimed</option>
-          <option value="PENDING">🟡 Pending</option>
-          <option value="CLAIMED">🟢 Claimed</option>
-        </select>
-      </div>
-
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-gray-50 dark:bg-gray-800/50 text-left">
-              <th className="px-3 py-3 w-10">
-                <input
-                  type="checkbox"
-                  checked={selectedIds.size === filtered.length && filtered.length > 0}
-                  onChange={(e) => {
-                    if (e.target.checked) setSelectedIds(new Set(filtered.map((s: any) => s.id)));
-                    else setSelectedIds(new Set());
-                  }}
-                  className="w-4 h-4 text-brand border-gray-300 rounded focus:ring-brand"
-                />
-              </th>
-              <th className="px-4 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Startup</th>
-              <th className="px-4 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden md:table-cell">Stage</th>
-              <th className="px-4 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Review</th>
-              <th className="px-4 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden lg:table-cell">Claim</th>
-              <th className="px-4 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden lg:table-cell">Verified</th>
-              <th className="px-4 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Approval</th>
-              <th className="px-4 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden xl:table-cell">Featured</th>
-              <th className="px-4 py-3 w-20"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {paginated.map((startup) => (
-              <tr key={startup.id} className="border-t border-gray-50 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
-                <td className="px-3 py-3">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(startup.id)}
-                    onChange={(e) => {
-                      const next = new Set(selectedIds);
-                      if (e.target.checked) next.add(startup.id);
-                      else next.delete(startup.id);
-                      setSelectedIds(next);
-                    }}
-                    className="w-4 h-4 text-brand border-gray-300 rounded focus:ring-brand"
-                  />
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center overflow-hidden shrink-0">
-                      {startup.logoUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={startup.logoUrl} alt={startup.name} className="w-full h-full object-contain p-0.5" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                      ) : (
-                        <Building2 className="w-3.5 h-3.5 text-brand" />
-                      )}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <h4 className="font-sora font-semibold text-xs text-navy dark:text-white">{startup.name}</h4>
-                        {startup.isFeatured && <Crown className="w-3 h-3 text-yellow-500" />}
-                      </div>
-                      <p className="text-[10px] text-gray-400 font-jakarta line-clamp-1 max-w-[160px]">{startup.tagline}</p>
-                    </div>
-                  </div>
-                </td>
-
-                {/* Stage */}
-                <td className="px-4 py-3 hidden md:table-cell whitespace-nowrap">
-                  <span className="badge-category text-[9px] px-2 py-0.5">{startup.stage.replace(/_/g, ' ')}</span>
-                </td>
-
-                {/* Content Review — compact toggle */}
-                <td className="px-4 py-3 whitespace-nowrap">
-                  <button
-                    onClick={() => handleToggleReview(startup.id, startup.contentReviewed)}
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide cursor-pointer transition-colors ${
-                      startup.contentReviewed
-                        ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
-                        : 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400'
-                    }`}
-                    title={startup.contentReviewed ? 'Mark as Under Review' : 'Mark as Reviewed'}
-                  >
-                    {startup.contentReviewed
-                      ? <><CheckCircle className="w-2.5 h-2.5" /> Reviewed</>
-                      : <><Clock className="w-2.5 h-2.5" /> Under Review</>
-                    }
-                  </button>
-                </td>
-
-                {/* Claim Status */}
-                <td className="px-4 py-3 hidden lg:table-cell whitespace-nowrap">
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
-                    startup.claimStatus === 'CLAIMED'
-                      ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
-                      : startup.claimStatus === 'PENDING'
-                      ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400'
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
-                  }`}>
-                    {startup.claimStatus === 'CLAIMED' ? '●' : startup.claimStatus === 'PENDING' ? '◐' : '○'}
-                    {' '}{startup.claimStatus || 'Unclaimed'}
-                  </span>
-                </td>
-
-                {/* Verified */}
-                <td className="px-4 py-3 hidden lg:table-cell whitespace-nowrap">
-                  {startup.isVerified ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400">
-                      <ShieldCheck className="w-2.5 h-2.5" /> Verified
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-gray-300 dark:text-gray-600">—</span>
-                  )}
-                </td>
-
-                {/* Approval */}
-                <td className="px-4 py-3 whitespace-nowrap">
-                  {startup.isApproved ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400">
-                      <CheckCircle className="w-2.5 h-2.5" /> Approved
-                    </span>
-                  ) : startup.ownerId ? (
-                    <span 
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400" 
-                      title="Submitted by founder. Please approve from the Founder Management section."
-                    >
-                      <Clock className="w-2.5 h-2.5" /> Founder Submission
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => handleApprove(startup.id)}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 hover:bg-green-50 hover:text-green-700 dark:hover:bg-green-900/20 dark:hover:text-green-400 transition-colors cursor-pointer"
-                    >
-                      <Clock className="w-2.5 h-2.5" /> Approve
-                    </button>
-                  )}
-                </td>
-
-                {/* Featured */}
-                <td className="px-4 py-3 hidden xl:table-cell whitespace-nowrap">
-                  <button
-                    onClick={() => openFeatureModal(startup)}
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold cursor-pointer transition-colors ${
-                      startup.isFeatured
-                        ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-yellow-50'
-                    }`}
-                  >
-                    {startup.isFeatured
-                      ? <><Star className="w-2.5 h-2.5 fill-current" /> Featured</>
-                      : <><Calendar className="w-2.5 h-2.5" /> Schedule</>
-                    }
-                  </button>
-                </td>
-
-                {/* Actions */}
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => openEdit(startup)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
-                      <Edit3 className="w-3.5 h-3.5 text-gray-400" />
-                    </button>
-                    <button onClick={() => setDeleteConfirm(startup.id)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20">
-                      <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-500" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {paginated.length === 0 && (
-              <TableEmptyState colSpan={9} icon={Building2} title="No startups found" description="Try adjusting your search or filters" />
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <Pagination page={page} totalPages={totalPages} total={totalFiltered} pageSize={PAGE_SIZE} onPageChange={setPage} />
-
-      {/* Delete Confirmation Modal */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-sm shadow-2xl border border-gray-200 dark:border-gray-800 p-6 text-center">
-            <Trash2 className="w-10 h-10 text-red-500 mx-auto mb-3" />
-            <h3 className="font-sora font-bold text-lg text-navy dark:text-white">Delete Startup?</h3>
-            <p className="text-sm text-gray-500 font-jakarta mt-2">This action is permanent and cannot be undone.</p>
-            <p className="text-xs text-gray-400 font-jakarta mt-3">Type <span className="font-bold text-red-500">DELETE</span> to confirm:</p>
-            <input
-              type="text"
-              value={deleteTyped}
-              onChange={(e) => setDeleteTyped(e.target.value)}
-              placeholder="Type DELETE"
-              className="w-full mt-2 px-4 py-2 text-center text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500 focus:border-transparent font-mono tracking-widest"
-              autoFocus
-            />
-            <div className="flex gap-3 mt-4">
-              <button onClick={() => { setDeleteConfirm(null); setDeleteTyped(''); }} className="flex-1 px-4 py-2.5 text-sm font-medium border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300">Cancel</button>
-              <button onClick={() => { handleDelete(deleteConfirm); setDeleteTyped(''); }} disabled={deleteTyped !== 'DELETE'} className="flex-1 px-4 py-2.5 text-sm font-medium bg-red-500 hover:bg-red-600 text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-opacity">Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk Action Bar */}
-      {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-gray-900 dark:bg-gray-800 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-4 border border-gray-700">
-          <span className="text-sm font-semibold font-jakarta">{selectedIds.size} selected</span>
-          <div className="w-px h-6 bg-gray-700" />
-          <button
-            onClick={() => setBulkAction('approve')}
-            className="px-3 py-1.5 text-xs font-semibold bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
-          >
-            Approve All
-          </button>
-          <button
-            onClick={() => setBulkAction('archive')}
-            className="px-3 py-1.5 text-xs font-semibold bg-orange-600 hover:bg-orange-700 rounded-lg transition-colors"
-          >
-            Archive All
-          </button>
-          <button
-            onClick={() => setBulkDeleteConfirm(true)}
-            className="px-3 py-1.5 text-xs font-semibold bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
-          >
-            Delete All
-          </button>
-          <button onClick={() => setSelectedIds(new Set())} className="p-1.5 text-gray-400 hover:text-white">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Bulk Delete Confirmation */}
-      {bulkDeleteConfirm && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-sm shadow-2xl border border-gray-200 dark:border-gray-800 p-6 text-center">
-            <Trash2 className="w-10 h-10 text-red-500 mx-auto mb-3" />
-            <h3 className="font-sora font-bold text-lg text-navy dark:text-white">Delete {selectedIds.size} Startups?</h3>
-            <p className="text-sm text-gray-500 font-jakarta mt-2">This will permanently delete all selected startups. Only Super Admins can perform this action.</p>
-            <p className="text-xs text-gray-400 font-jakarta mt-3">Type <span className="font-bold text-red-500">DELETE</span> to confirm:</p>
-            <input
-              type="text"
-              value={bulkDeleteTyped}
-              onChange={(e) => setBulkDeleteTyped(e.target.value)}
-              placeholder="Type DELETE"
-              className="w-full mt-2 px-4 py-2 text-center text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500 focus:border-transparent font-mono tracking-widest"
-              autoFocus
-            />
-            <div className="flex gap-3 mt-4">
-              <button onClick={() => { setBulkDeleteConfirm(false); setBulkDeleteTyped(''); }} className="flex-1 px-4 py-2.5 text-sm font-medium border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300">Cancel</button>
-              <button
-                onClick={async () => {
-                  const result = await bulkDeleteStartupsAction([...selectedIds]);
-                  if (!result.success) setPermissionError(result.error || 'Permission denied');
-                  else { setSelectedIds(new Set()); await loadStartups(); }
-                  setBulkDeleteConfirm(false);
-                  setBulkDeleteTyped('');
-                }}
-                disabled={bulkDeleteTyped !== 'DELETE'}
-                className="flex-1 px-4 py-2.5 text-sm font-medium bg-red-500 hover:bg-red-600 text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
-              >
-                Delete All
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Permission Denied Modal */}
-      {permissionError && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-sm shadow-2xl border border-gray-200 dark:border-gray-800 p-6 text-center">
-            <div className="w-14 h-14 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-7 h-7 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-              </svg>
-            </div>
-            <h3 className="font-sora font-bold text-lg text-navy dark:text-white">Permission Denied</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 font-jakarta mt-2 leading-relaxed">{permissionError}</p>
-            <button
-              onClick={() => setPermissionError(null)}
-              className="mt-5 w-full px-4 py-2.5 text-sm font-medium bg-gray-900 dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-100 text-white dark:text-gray-900 rounded-xl transition-colors"
-            >
-              Understood
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk Approve/Archive Confirm Modal */}
-      <ConfirmModal
-        open={bulkAction === 'approve'}
-        onClose={() => setBulkAction(null)}
-        onConfirm={async () => {
-          setBulkAction(null);
-          await bulkApproveStartupsAction([...selectedIds]);
-          setSelectedIds(new Set());
-          await loadStartups();
-        }}
-        title="Approve Startups"
-        message={`Approve ${selectedIds.size} startups?`}
-        confirmLabel="Approve"
-        variant="warning"
-      />
-      <ConfirmModal
-        open={bulkAction === 'archive'}
-        onClose={() => setBulkAction(null)}
-        onConfirm={async () => {
-          setBulkAction(null);
-          await bulkArchiveStartupsAction([...selectedIds]);
-          setSelectedIds(new Set());
-          await loadStartups();
-        }}
-        title="Archive Startups"
-        message={`Archive ${selectedIds.size} startups?`}
-        confirmLabel="Archive"
-        variant="warning"
+      <DataTable
+        tableId="startups-dir"
+        noun="startups"
+        rows={startups}
+        rowKey={(st) => st.id}
+        columns={columns}
+        filters={filters}
+        bulkActions={bulkActions}
+        loading={loading}
+        pageSize={20}
+        searchPlaceholder="Search startup, tagline or city"
+        empty={{ title: 'No startups yet', description: 'Startups submitted by founders, or added by you, appear here.' }}
       />
 
       {/* Featured Campaign Scheduling Modal */}

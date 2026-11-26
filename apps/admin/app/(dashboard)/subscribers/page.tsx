@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Mail, Search, Trash2, ShieldAlert, Loader2, Download } from 'lucide-react';
-import { TableEmptyState } from '@/components/EmptyState';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { Download, Trash2 } from 'lucide-react';
+import DataTable, { type Column, type ServerQuery } from '@/components/ui/DataTable';
+import { ask } from '@/components/Ask';
+import { notify } from '@/components/Toast';
 import { getSubscribersAction, deleteSubscriberAction } from './actions';
 
 interface Subscriber {
@@ -16,174 +18,107 @@ interface Subscriber {
   subscribedAt: string;
 }
 
+const PAGE_SIZE = 25;
+type State = 'Active' | 'Pending' | 'Unsubscribed';
+const stateOf = (s: Subscriber): State => (s.isActive && s.emailVerified ? 'Active' : !s.isActive && !s.emailVerified ? 'Pending' : 'Unsubscribed');
+const STATE_STYLE: Record<State, string> = {
+  Active: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
+  Pending: 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300',
+  Unsubscribed: 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300',
+};
+const csvCell = (v: string) => {
+  const safe = /^[=+\-@]/.test(v) ? `'${v}` : v;
+  return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+};
+
 export default function SubscribersPage() {
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const lastQuery = useRef<ServerQuery | null>(null);
+  const request = useRef(0);
 
-  const fetchSubscribers = useCallback(async () => {
+  // The list is searched and paged on the server: it can run to many thousands of addresses.
+  const load = useCallback(async (q: ServerQuery) => {
+    lastQuery.current = q;
+    const mine = ++request.current;
     setLoading(true);
-    setError(null);
     try {
-      const res = await getSubscribersAction(page, 20, search);
-      if (res.success) {
-        setSubscribers(res.data as Subscriber[]);
-        setTotal(res.total);
-        setTotalPages(res.pages);
-      } else {
-        setError(res.error || 'Failed to load subscribers');
-      }
-    } catch (e: any) {
-      setError(e.message || 'Unexpected error');
+      const res = await getSubscribersAction(q.page, q.pageSize, q.search.trim());
+      if (mine !== request.current) return; // an older answer arriving late
+      if (res.success) { setSubscribers(res.data as Subscriber[]); setTotal(res.total); }
+      else notify(res.error || "Couldn't load subscribers. Refresh to try again.", 'error');
+    } catch {
+      if (mine === request.current) notify("Couldn't load subscribers. Check your connection and refresh.", 'error');
     } finally {
-      setLoading(false);
+      if (mine === request.current) setLoading(false);
     }
-  }, [page, search]);
+  }, []);
 
-  useEffect(() => {
-    const t = setTimeout(fetchSubscribers, search ? 400 : 0);
-    return () => clearTimeout(t);
-  }, [fetchSubscribers]);
-
-  const handleDelete = async () => {
-    if (!deleteId) return;
-    const res = await deleteSubscriberAction(deleteId);
-    if (res.success) {
-      setSubscribers(prev => prev.filter(s => s.id !== deleteId));
-      setTotal(t => t - 1);
-    }
-    setDeleteId(null);
+  const remove = async (s: Subscriber) => {
+    if (!(await ask({ title: 'Delete subscriber', message: `Remove ${s.email} from the newsletter list for good? This can’t be undone.`, confirmLabel: 'Delete', danger: true }))) return;
+    const res = await deleteSubscriberAction(s.id);
+    if (!res.success) { notify(res.error || "Couldn't delete the subscriber. Try again.", 'error'); return; }
+    notify(`${s.email} deleted.`, 'success');
+    if (lastQuery.current) load(lastQuery.current);
   };
 
   const exportCsv = () => {
-    const headers = ['Email', 'Name', 'Source', 'Status', 'Date Subscribed'];
-    const rows = subscribers.map(s => [
-      s.email, s.name || '-', s.source || '-',
-      s.isActive && s.emailVerified ? 'Active' : !s.isActive && !s.emailVerified ? 'Pending' : 'Unsubscribed',
-      new Date(s.subscribedAt).toISOString(),
-    ].join(','));
-    const blob = new Blob([[headers.join(','), ...rows].join('\n')], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
+    const rows = subscribers.map((s) => [s.email, s.name || '', s.source || 'direct', stateOf(s), new Date(s.subscribedAt).toISOString()].map(csvCell).join(','));
+    const url = URL.createObjectURL(new Blob([['Email,Name,Source,Status,Date subscribed', ...rows].join('\n')], { type: 'text/csv' }));
     const a = document.createElement('a');
-    a.href = url; a.download = `subscribers-${new Date().toISOString().split('T')[0]}.csv`; a.click();
+    a.href = url;
+    a.download = `subscribers-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
     URL.revokeObjectURL(url);
   };
 
+  const columns = useMemo<Column<Subscriber>[]>(() => [
+    {
+      key: 'contact', header: 'Subscriber',
+      cell: (s) => <><span className="font-medium text-gray-900 dark:text-white">{s.email}</span>{s.name && <span className="block text-xs text-gray-600 dark:text-gray-400">{s.name}</span>}</>,
+    },
+    { key: 'source', header: 'Source', cell: (s) => <span className="capitalize">{s.source || 'direct'}</span> },
+    { key: 'status', header: 'Status', cell: (s) => <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATE_STYLE[stateOf(s)]}`}>{stateOf(s)}</span> },
+    {
+      key: 'date', header: 'Subscribed',
+      cell: (s) => <span className="whitespace-nowrap">{new Date(s.subscribedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}</span>,
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'right',
+      cell: (s) => (
+        <button onClick={() => remove(s)} aria-label={`Delete ${s.email}`} title="Delete" className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
+          <Trash2 className="w-4 h-4" aria-hidden />
+        </button>
+      ),
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- cells call the latest handlers
+  ], []);
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-extrabold font-sora text-navy dark:text-white flex items-center gap-2">
-            <Mail className="w-6 h-6 text-brand" /> Subscribers
-          </h1>
-          <p className="text-sm text-gray-500 font-jakarta mt-1">
-            {total > 0 ? `${total.toLocaleString()} total subscribers` : 'Manage all newsletter subscribers'}
-          </p>
+          <h1 className="portal-title">Subscribers</h1>
+          <p className="portal-subtitle">Everyone on the newsletter list{total > 0 ? `: ${total.toLocaleString('en-IN')} matching` : ''}.</p>
         </div>
-        <button onClick={exportCsv} className="btn-secondary text-sm flex items-center gap-2">
-          <Download className="w-4 h-4" /> Export CSV
+        <button onClick={exportCsv} disabled={subscribers.length === 0} className="btn-outline text-sm gap-2 disabled:opacity-50">
+          <Download className="w-4 h-4" aria-hidden /> Export this page
         </button>
       </div>
 
-      <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl overflow-hidden">
-        <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex items-center gap-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text" placeholder="Search emails or names..."
-              value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="input-field pl-10 w-full"
-            />
-          </div>
-        </div>
-
-        {error && (
-          <div className="px-6 py-3 bg-red-50 dark:bg-red-900/20 text-sm text-red-600 dark:text-red-400 font-jakarta border-b border-red-100 dark:border-red-800">
-            {error}
-          </div>
-        )}
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800">
-                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider font-jakarta">Contact</th>
-                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider font-jakarta">Source</th>
-                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider font-jakarta">Status</th>
-                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider font-jakarta">Date</th>
-                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider font-jakarta text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {loading ? (
-                <tr><td colSpan={5} className="px-6 py-12 text-center"><Loader2 className="w-6 h-6 animate-spin text-brand mx-auto" /></td></tr>
-              ) : subscribers.length === 0 ? (
-                <TableEmptyState colSpan={5} icon={Mail} title="No subscribers found" description="Try adjusting your search" />
-              ) : subscribers.map((sub) => (
-                <tr key={sub.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                  <td className="px-6 py-4">
-                    <span className="text-sm font-medium text-navy dark:text-white font-jakarta">{sub.email}</span>
-                    {sub.name && <p className="text-xs text-gray-500 font-jakarta mt-0.5">{sub.name}</p>}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="px-2 py-1 text-xs rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 font-medium capitalize">
-                      {sub.source || 'direct'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-1.5">
-                      <span className={`w-2 h-2 rounded-full ${sub.isActive && sub.emailVerified ? 'bg-green-500' : !sub.isActive && !sub.emailVerified ? 'bg-amber-500' : 'bg-red-500'}`} />
-                      <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                        {sub.isActive && sub.emailVerified ? 'Active' : !sub.isActive && !sub.emailVerified ? 'Pending' : 'Unsubscribed'}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500 font-jakarta">
-                    {new Date(sub.subscribedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <button onClick={() => setDeleteId(sub.id)}
-                      className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {totalPages > 1 && (
-          <div className="p-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between text-sm font-jakarta">
-            <span className="text-gray-500">Page {page} of {totalPages}</span>
-            <div className="flex gap-2">
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg disabled:opacity-50">Prev</button>
-              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg disabled:opacity-50">Next</button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {deleteId && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-sm p-6 text-center border border-gray-100 dark:border-gray-800">
-            <ShieldAlert className="w-12 h-12 text-red-500 mx-auto mb-4" />
-            <h3 className="font-sora font-bold text-navy dark:text-white text-lg">Delete Subscriber?</h3>
-            <p className="font-jakarta text-sm text-gray-500 mt-2">This will permanently remove this email from your list.</p>
-            <div className="flex gap-3 mt-6">
-              <button onClick={() => setDeleteId(null)} className="flex-1 btn-secondary">Cancel</button>
-              <button onClick={handleDelete} className="flex-1 btn-brand !bg-red-500 hover:!bg-red-600 !border-red-500">Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DataTable
+        tableId="subscribers"
+        noun="subscribers"
+        rows={subscribers}
+        rowKey={(s) => s.id}
+        columns={columns}
+        loading={loading}
+        pageSize={PAGE_SIZE}
+        server={{ total, onQuery: load }}
+        searchPlaceholder="Search email or name"
+        empty={{ title: 'No subscribers yet', description: 'People who sign up for the newsletter appear here.' }}
+      />
     </div>
   );
 }

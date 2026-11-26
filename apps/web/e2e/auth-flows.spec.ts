@@ -55,7 +55,7 @@ test.describe('Auth flows', () => {
       await expect(page.locator('input[type="email"]').first()).toBeVisible();
       const usePassword = page.getByRole('button', { name: 'Use a password instead' });
       // The cookie banner covers the bottom of the page; dismiss it the way a visitor would.
-      await page.getByRole('button', { name: 'Reject all cookies' }).click({ timeout: 5_000 }).catch(() => {});
+      await page.getByRole('button', { name: 'Use required cookies only' }).click({ timeout: 5_000 }).catch(() => {});
       if (passwordSignInOpen()) {
         await usePassword.click();
         await expect(page.locator('input[type="password"]').first()).toBeVisible();

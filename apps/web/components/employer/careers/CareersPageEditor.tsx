@@ -309,7 +309,7 @@ export default function CareersPageEditor({ initial, page, pageUrl, isNew, canHi
               </button>
             </div>
             <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">Point your website’s “Careers” button at this link, or share it on LinkedIn.</p>
-            <Link href="/employer/careers" className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-[#A50F15] hover:underline">
+            <Link href="/employer/widget" className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-[#A50F15] hover:underline">
               <Globe className="w-4 h-4" aria-hidden /> Or show it inside your website
             </Link>
           </section>

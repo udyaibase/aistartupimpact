@@ -4,8 +4,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@udyaibase/database";
 import { refreshPublic } from '@/lib/refresh-public';
+import { publicError } from '@/lib/public-error';
+import { logAuditEvent } from '@/lib/audit-log';
+import { sectionRoles } from '@/lib/section-access';
 
-const ALLOWED = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "AD_MANAGER"];
+const ALLOWED = sectionRoles('/placements');
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
@@ -29,7 +32,7 @@ export async function getPlacementStatsAction() {
       },
     };
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }
 
@@ -64,7 +67,7 @@ export async function getPlacementsAction() {
     `;
     return { success: true, data: rows };
   } catch (e: any) {
-    return { success: false, error: e.message, data: [] };
+    return { success: false, error: publicError(e), data: [] };
   }
 }
 
@@ -100,6 +103,7 @@ export async function savePlacementAction(payload: {
             "updatedAt" = NOW()
         WHERE id = ${id}
       `;
+      await logAuditEvent({ action: 'UPDATE', resourceType: 'PLACEMENT', resourceName: 'savePlacementAction' });
       await refreshPublic(['all']); return { success: true, id };
     } else {
       const rows = await prisma.$queryRaw<any[]>`
@@ -117,7 +121,7 @@ export async function savePlacementAction(payload: {
       await refreshPublic(['all']); return { success: true, id: rows[0]?.id };
     }
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }
 
@@ -161,9 +165,10 @@ export async function saveCreativeAction(payload: {
         )
       `;
     }
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'PLACEMENT', resourceName: 'saveCreativeAction' });
     await refreshPublic(['all']); return { success: true };
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }
 
@@ -180,9 +185,10 @@ export async function updatePlacementStatusAction(id: string, status: string) {
       SET status = ${status}::"CampaignStatus", "updatedAt" = NOW()
       WHERE id = ${id}
     `;
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'PLACEMENT', resourceId: id, resourceName: 'updatePlacementStatusAction' });
     await refreshPublic(['all']); return { success: true };
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }
 
@@ -196,8 +202,9 @@ export async function deletePlacementAction(id: string) {
   try {
     await prisma.$executeRaw`DELETE FROM "AdCreative" WHERE "campaignId" = ${id}`;
     await prisma.$executeRaw`DELETE FROM "AdCampaign" WHERE id = ${id}`;
+    await logAuditEvent({ action: 'DELETE', resourceType: 'PLACEMENT', resourceId: id, resourceName: 'deletePlacementAction' });
     await refreshPublic(['all']); return { success: true };
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }

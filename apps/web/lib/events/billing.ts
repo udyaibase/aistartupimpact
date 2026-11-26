@@ -7,6 +7,7 @@ import { emailInvoice } from '@/lib/billing/invoice';
 import { refundPayment } from '@/lib/billing/razorpay';
 import { logOrganizerActivity, paiseLabel } from '@/lib/workspace-activity';
 import { notifyOrganizer } from '@/lib/organizer-notify';
+import { recordRazorpayFee } from '@/lib/billing/razorpay-fee';
 
 /** Upcoming = published and not yet ended. */
 export const upcomingWhere = (organizerId: string, now = new Date()) => ({
@@ -54,6 +55,7 @@ export async function activateOrganizerPayment(orderId: string, paymentId: strin
       data: { status: 'SUCCESS', razorpayPaymentId: paymentId, paidAt: new Date() },
     });
     if (!flipped.count) return 'already';
+    recordRazorpayFee(paymentId); // after the response; never blocks or fails the payment
     const now = Date.now();
 
     if (pay.kind === 'PRO') {

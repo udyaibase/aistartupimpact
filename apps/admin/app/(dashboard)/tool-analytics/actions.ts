@@ -3,8 +3,10 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@udyaibase/database";
+import { publicError } from '@/lib/public-error';
+import { sectionRoles } from '@/lib/section-access';
 
-const ALLOWED = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "SENIOR_WRITER", "AD_MANAGER"];
+const ALLOWED = sectionRoles('/tool-analytics');
 
 function getDaysBack(period: string): number {
   switch (period) {
@@ -216,7 +218,7 @@ export async function getToolClickAnalyticsAction(period: string = '7 days') {
     };
   } catch (error: any) {
     console.error('[tool-analytics] Error:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: publicError(error) };
   }
 }
 
@@ -272,6 +274,6 @@ export async function exportToolClicksAction(period: string = '7 days') {
     return { success: true, data: csvData };
   } catch (error: any) {
     console.error('[export-clicks] Error:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: publicError(error) };
   }
 }

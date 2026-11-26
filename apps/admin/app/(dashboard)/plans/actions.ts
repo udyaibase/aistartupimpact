@@ -6,6 +6,8 @@ import { requireActionAuth } from '@/lib/api-auth';
 import { logAuditEvent } from '@/lib/audit-log';
 import { GRACE_DAYS, GST_RATE, isPaidPlan, planKeyOf, PLANS } from '@udyaibase/utils/employer-plans';
 import { refreshPublic } from '@/lib/refresh-public';
+import { tooMany } from '@/lib/rate-limit';
+import { sectionRoles } from '@/lib/section-access';
 
 /**
  * Manual plan grants for customers who pay by invoice or UPI. Mirrors what a Razorpay payment does in
@@ -24,20 +26,23 @@ export interface PlanAccount {
   planExpiresAt: string | null;
 }
 
+/** With no search, every account that is or was on a paid plan is listed, up to this many per portal. */
+const PAID_LIST_MAX = 300;
+
 export async function listPlanAccountsAction(q: string) {
-  const { error } = await requireActionAuth(['SUPER_ADMIN']);
+  const { error } = await requireActionAuth(sectionRoles('/plans'));
   if (error) return { success: false as const, error };
   const term = q.trim();
   const match = term ? { contains: term, mode: 'insensitive' as const } : undefined;
   const [employers, hosts] = await Promise.all([
     prisma.jobBoardEmployer.findMany({
       where: { deletedAt: null, ...(match ? { OR: [{ companyName: match }, { email: match }] } : { plan: { not: 'FREE' } }) },
-      orderBy: { updatedAt: 'desc' }, take: 30,
+      orderBy: { updatedAt: 'desc' }, take: match ? 30 : PAID_LIST_MAX,
       select: { id: true, companyName: true, email: true, plan: true, planExpiresAt: true },
     }),
     prisma.eventOrganizer.findMany({
       where: { deletedAt: null, ...(match ? { OR: [{ name: match }, { company: match }, { email: match }] } : { plan: { not: 'FREE' } }) },
-      orderBy: { updatedAt: 'desc' }, take: 30,
+      orderBy: { updatedAt: 'desc' }, take: match ? 30 : PAID_LIST_MAX,
       select: { id: true, name: true, company: true, email: true, plan: true, planExpiresAt: true },
     }),
   ]);
@@ -49,8 +54,10 @@ export async function listPlanAccountsAction(q: string) {
 }
 
 export async function grantPlanAction(input: { kind: 'EMPLOYER' | 'HOST'; id: string; plan: string; days: number; amountRupees: number; reference: string }) {
-  const { session, error } = await requireActionAuth(['SUPER_ADMIN']);
+  const { session, error } = await requireActionAuth(sectionRoles('/plans'));
   if (error) return { success: false as const, error };
+  const paused = tooMany(session?.user?.id, 'planChange');
+  if (paused) return { success: false as const, error: paused };
   const days = Math.round(Number(input.days));
   if (!Number.isFinite(days) || days < 1 || days > 400) return { success: false as const, error: 'Days must be between 1 and 400.' };
   const reference = String(input.reference ?? '').trim().slice(0, 120);
@@ -107,7 +114,7 @@ export async function grantPlanAction(input: { kind: 'EMPLOYER' | 'HOST'; id: st
 
 /** End a paid plan now (refund, abuse). The account drops to Free immediately; open jobs and events stay. */
 export async function endPlanAction(input: { kind: 'EMPLOYER' | 'HOST'; id: string }) {
-  const { error } = await requireActionAuth(['SUPER_ADMIN']);
+  const { error } = await requireActionAuth(sectionRoles('/plans'));
   if (error) return { success: false as const, error };
   await endPlanNow(input.kind, input.id);
   return { success: true as const };
@@ -115,7 +122,7 @@ export async function endPlanAction(input: { kind: 'EMPLOYER' | 'HOST'; id: stri
 
 /** Shared by "End plan" and refunds. Callers check SUPER_ADMIN first. */
 export async function endPlanNow(kind: 'EMPLOYER' | 'HOST', id: string) {
-  const { error } = await requireActionAuth(['SUPER_ADMIN']);
+  const { error } = await requireActionAuth(sectionRoles('/plans'));
   if (error) throw new Error(error);
   const now = new Date();
   if (kind === 'EMPLOYER') {

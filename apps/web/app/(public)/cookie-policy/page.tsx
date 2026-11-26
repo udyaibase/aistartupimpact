@@ -23,7 +23,7 @@ export default function CookiePolicyPage() {
         <h2>1. How We Use Cookies</h2>
         <p>We use cookies for the following purposes:</p>
 
-        <h3>Necessary Cookies</h3>
+        <h3>Required Cookies</h3>
         <p>
           These cookies are essential for the website to function properly. They enable core
           functionality such as security, network management, and accessibility.

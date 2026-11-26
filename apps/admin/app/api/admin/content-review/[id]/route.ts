@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@udyaibase/database";
 import { withPublicRefresh } from '@/lib/refresh-public';
+import { logAuditEvent } from '@/lib/audit-log';
 
 async function putHandler(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -59,6 +60,7 @@ async function putHandler(request: NextRequest, props: { params: Promise<{ id: s
       });
     }
 
+    await logAuditEvent({ action: action === 'approve' ? 'APPROVE' : action === 'reject' ? 'REJECT' : 'UPDATE', resourceType: 'CONTENT_REVIEW', resourceId: params.id, after: { action, note: typeof note === 'string' ? note.slice(0, 300) : undefined } });
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("[admin/content-review/[id] PUT]", err);

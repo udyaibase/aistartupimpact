@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { Plus, X, Upload, User, GripVertical } from "lucide-react";
 import { uploadEventImageAction } from "../../actions";
+import { notify } from '@/components/Toast';
 
 interface Props {
   formData: any;
@@ -26,6 +27,7 @@ export default function StepDetails({ formData, updateFormData }: Props) {
       }
     } catch (err) {
       console.error("Cover upload error:", err);
+      notify("Couldn't load this. Check your connection and refresh.", 'error');
     } finally {
       setUploadingCover(false);
       e.target.value = "";

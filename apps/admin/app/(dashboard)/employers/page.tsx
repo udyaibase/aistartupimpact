@@ -1,15 +1,14 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { Building2, Globe, Briefcase, CheckCircle, XCircle, Crown, Search, Loader2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Building2, CheckCircle, Crown, Globe, XCircle } from 'lucide-react';
 import { getEmployersAction, toggleEmployerVerifyAction, toggleEmployerActiveAction } from './actions';
-import { Pagination } from '@/components/Pagination';
-import { TableEmptyState } from '@/components/EmptyState';
 import Link from 'next/link';
 import CompanyChecks from './CompanyChecks';
 import NetworkPilot from './NetworkPilot';
-
-const PAGE_SIZE = 20;
+import DataTable, { type Column, type TableFilter } from '@/components/ui/DataTable';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { notify } from '@/components/Toast';
 
 interface Employer {
   id: string;
@@ -28,188 +27,150 @@ interface Employer {
   jobCount: number;
 }
 
+const PLAN_LABEL: Record<string, string> = { FREE: 'Free', GROWTH: 'Growth', PRO: 'Pro', SCALE: 'Scale', FEATURED: 'Featured (old)', PREMIUM: 'Premium (old)' };
+const PLAN_STYLE: Record<string, string> = {
+  SCALE: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300', PREMIUM: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300',
+  PRO: 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300', FEATURED: 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300',
+  GROWTH: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300',
+};
+const stateOf = (e: Employer) => (e.deactivatedAt ? 'DEACTIVATED' : e.isActive ? 'ACTIVE' : 'SUSPENDED');
+const STATE_LABEL = { ACTIVE: 'Active', SUSPENDED: 'Suspended', DEACTIVATED: 'Deactivated' } as const;
+const STATE_STYLE = {
+  ACTIVE: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
+  SUSPENDED: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300',
+  DEACTIVATED: 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300',
+} as const;
+
 export default function AdminEmployersPage() {
   const [employers, setEmployers] = useState<Employer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
+  const [suspending, setSuspending] = useState<Employer | null>(null);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = useCallback(async () => {
     const res = await getEmployersAction();
-    if (res.success) {
-      setEmployers((res.data || []) as Employer[]);
-    }
+    if (res.success) setEmployers((res.data || []) as Employer[]);
+    else notify(res.error || "Couldn't load employers. Refresh to try again.", 'error');
     setLoading(false);
-  };
+  }, []);
+  useEffect(() => { loadData(); }, [loadData]);
 
-  const toggleVerify = async (id: string, isVerified: boolean) => {
-    const res = await toggleEmployerVerifyAction(id, !isVerified);
+  const toggleVerify = async (e: Employer) => {
+    const res = await toggleEmployerVerifyAction(e.id, !e.isVerified);
     if (res.success) {
-      setEmployers(prev => prev.map(e => e.id === id ? { ...e, isVerified: !isVerified } : e));
-    }
+      setEmployers((prev) => prev.map((x) => (x.id === e.id ? { ...x, isVerified: !e.isVerified } : x)));
+      notify(e.isVerified ? `Verified mark removed from ${e.companyName}.` : `${e.companyName} is now marked verified.`, 'success');
+    } else notify(res.error || "Couldn't change verification. Try again.", 'error');
   };
 
-  const toggleActive = async (id: string, isActive: boolean) => {
-    const res = await toggleEmployerActiveAction(id, !isActive);
+  const setActive = async (e: Employer, active: boolean) => {
+    const res = await toggleEmployerActiveAction(e.id, active);
     if (res.success) {
-      setEmployers(prev => prev.map(e => e.id === id ? { ...e, isActive: !isActive } : e));
-    }
+      setEmployers((prev) => prev.map((x) => (x.id === e.id ? { ...x, isActive: active } : x)));
+      notify(active ? `${e.companyName} is active again.` : `${e.companyName} is suspended.`, 'success');
+    } else notify(res.error || "Couldn't change the account. Try again.", 'error');
   };
 
-  const filtered = employers.filter(e =>
-    e.companyName.toLowerCase().includes(search.toLowerCase()) ||
-    e.email.toLowerCase().includes(search.toLowerCase())
-  );
+  const columns = useMemo<Column<Employer>[]>(() => [
+    {
+      key: 'company', header: 'Company', sortValue: (e) => e.companyName, searchValue: (e) => `${e.companyName} ${e.industry ?? ''}`,
+      cell: (e) => (
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden shrink-0">
+            {e.logoUrl
+              // eslint-disable-next-line @next/next/no-img-element
+              ? <img src={e.logoUrl} alt="" className="w-full h-full object-contain p-1" onError={(ev) => { (ev.target as HTMLImageElement).style.display = 'none'; }} />
+              : <Building2 className="w-4 h-4 text-gray-500" aria-hidden />}
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-gray-900 dark:text-white flex items-center gap-1.5">
+              <span className="truncate">{e.companyName}</span>
+              {e.isVerified && <Crown className="w-3.5 h-3.5 text-blue-600 shrink-0" aria-label="Verified" />}
+            </p>
+            {e.websiteUrl && (
+              <a href={e.websiteUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-brand hover:underline inline-flex items-center gap-1">
+                <Globe className="w-3 h-3" aria-hidden /> Website<span className="sr-only"> (opens in a new tab)</span>
+              </a>
+            )}
+          </div>
+        </div>
+      ),
+    },
+    { key: 'email', header: 'Email', sortValue: (e) => e.email, searchValue: (e) => e.email, cell: (e) => e.email },
+    {
+      key: 'plan', header: 'Plan', sortValue: (e) => e.plan,
+      cell: (e) => <span className={`text-xs font-semibold px-2 py-0.5 rounded ${PLAN_STYLE[e.plan] ?? 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`}>{PLAN_LABEL[e.plan] ?? e.plan}</span>,
+    },
+    { key: 'jobs', header: 'Jobs', align: 'right', sortValue: (e) => e.jobCount, cell: (e) => e.jobCount.toLocaleString('en-IN') },
+    { key: 'joined', header: 'Joined', sortValue: (e) => new Date(e.createdAt), cell: (e) => <span className="whitespace-nowrap">{new Date(e.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}</span> },
+    {
+      key: 'status', header: 'Status', sortValue: (e) => stateOf(e),
+      cell: (e) => <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${STATE_STYLE[stateOf(e)]}`}>{STATE_LABEL[stateOf(e)]}</span>,
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'right',
+      cell: (e) => (
+        <div className="flex items-center justify-end gap-1">
+          <button onClick={() => toggleVerify(e)} aria-label={e.isVerified ? `Remove the verified mark from ${e.companyName}` : `Mark ${e.companyName} as verified`} title={e.isVerified ? 'Remove verified mark' : 'Mark as verified'}
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
+            <Crown className={`w-4 h-4 ${e.isVerified ? 'text-blue-600' : 'text-gray-400'}`} aria-hidden />
+          </button>
+          {e.isActive ? (
+            <button onClick={() => setSuspending(e)} aria-label={`Suspend ${e.companyName}`} title="Suspend" className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20">
+              <XCircle className="w-4 h-4 text-red-600" aria-hidden />
+            </button>
+          ) : (
+            <button onClick={() => setActive(e, true)} aria-label={`Reactivate ${e.companyName}`} title="Reactivate" className="p-1.5 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20">
+              <CheckCircle className="w-4 h-4 text-green-600" aria-hidden />
+            </button>
+          )}
+        </div>
+      ),
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- cells call the latest handlers
+  ], []);
 
-  // Reset page when search changes
-  useMemo(() => { setPage(1); }, [search]);
+  const filters = useMemo<TableFilter<Employer>[]>(() => [
+    { key: 'status', label: 'Status', options: (['ACTIVE', 'SUSPENDED', 'DEACTIVATED'] as const).map((v) => ({ value: v, label: STATE_LABEL[v] })), matches: (e, v) => stateOf(e) === v },
+    { key: 'plan', label: 'Plan', options: [...new Set(employers.map((e) => e.plan))].sort().map((p) => ({ value: p, label: PLAN_LABEL[p] ?? p })), matches: (e, v) => e.plan === v },
+    { key: 'verified', label: 'Verified', options: [{ value: 'yes', label: 'Verified' }, { value: 'no', label: 'Not verified' }], matches: (e, v) => e.isVerified === (v === 'yes') },
+  ], [employers]);
 
-  const totalFiltered = filtered.length;
-  const totalPages = Math.ceil(totalFiltered / PAGE_SIZE);
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  const verifiedCount = employers.filter(e => e.isVerified).length;
+  const verifiedCount = employers.filter((e) => e.isVerified).length;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-5">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white flex items-center gap-2">
-            <Building2 className="w-6 h-6 text-brand" /> Employer Accounts
-          </h1>
-          <p className="text-gray-400 dark:text-gray-500 text-sm font-jakarta mt-1">
-            {employers.length} registered employers &bull; {verifiedCount} verified
-          </p>
+          <h1 className="portal-title">Employer accounts</h1>
+          <p className="portal-subtitle">{employers.length.toLocaleString('en-IN')} registered · {verifiedCount.toLocaleString('en-IN')} verified</p>
         </div>
-        <Link href="/employers/onboarding" className="text-sm font-semibold text-brand hover:underline font-jakarta">Onboarding funnel</Link>
+        <Link href="/employers/onboarding" className="text-sm font-semibold text-brand hover:underline">Onboarding funnel</Link>
       </div>
 
       <CompanyChecks />
       <NetworkPilot />
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <input
-          type="text"
-          placeholder="Search by company name or email..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="input-field pl-10"
-        />
-      </div>
+      <DataTable
+        tableId="employers"
+        noun="employers"
+        rows={employers}
+        rowKey={(e) => e.id}
+        columns={columns}
+        filters={filters}
+        loading={loading}
+        pageSize={20}
+        searchPlaceholder="Search company, industry or email"
+        empty={{ title: 'No employer accounts yet', description: 'Companies that sign up to hire appear here.' }}
+      />
 
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-gray-50 dark:bg-gray-800/50 text-left">
-              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Company</th>
-              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden md:table-cell">Email</th>
-              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden lg:table-cell">Plan</th>
-              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden sm:table-cell">Jobs</th>
-              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Status</th>
-              <th className="px-6 py-3 w-24"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={6} className="px-6 py-12 text-center"><Loader2 className="w-6 h-6 animate-spin text-brand mx-auto" /></td></tr>
-            ) : paginated.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-6 py-12 text-center">
-                  <Building2 className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
-                  <p className="text-sm text-gray-400 font-jakarta">No employer accounts found</p>
-                </td>
-              </tr>
-            ) : paginated.map((emp) => (
-              <tr key={emp.id} className="border-t border-gray-50 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-brand/10 flex items-center justify-center overflow-hidden shrink-0">
-                      {emp.logoUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={emp.logoUrl} alt={emp.companyName} className="w-full h-full object-contain p-1" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                      ) : (
-                        <Building2 className="w-4 h-4 text-brand" />
-                      )}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <h4 className="font-sora font-semibold text-sm text-navy dark:text-white">{emp.companyName}</h4>
-                        {emp.isVerified && <Crown className="w-3 h-3 text-blue-500" />}
-                      </div>
-                      {emp.websiteUrl && (
-                        <a href={emp.websiteUrl} target="_blank" rel="noopener noreferrer"
-                          className="text-[10px] text-brand hover:underline flex items-center gap-0.5 font-jakarta">
-                          <Globe className="w-2.5 h-2.5" /> Website
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 hidden md:table-cell">
-                  <span className="text-sm text-gray-500 dark:text-gray-400 font-jakarta">{emp.email}</span>
-                </td>
-                <td className="px-6 py-4 hidden lg:table-cell">
-                  <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded font-jakarta ${
-                    emp.plan === 'SCALE' || emp.plan === 'PREMIUM' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'
-                    : emp.plan === 'PRO' || emp.plan === 'FEATURED' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
-                    : emp.plan === 'GROWTH' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
-                  }`}>
-                    {emp.plan}
-                  </span>
-                </td>
-                <td className="px-6 py-4 hidden sm:table-cell">
-                  <span className="text-sm text-gray-600 dark:text-gray-400 font-jakarta font-medium flex items-center gap-1">
-                    <Briefcase className="w-3 h-3" />{emp.jobCount}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
-                    emp.deactivatedAt
-                      ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
-                      : emp.isActive
-                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                        : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
-                  }`}>
-                    {emp.deactivatedAt ? 'Deactivated' : emp.isActive ? <><CheckCircle className="w-3 h-3" /> Active</> : 'Suspended'}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => toggleVerify(emp.id, emp.isVerified)}
-                      className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
-                      title={emp.isVerified ? 'Remove verification' : 'Verify'}>
-                      <Crown className={`w-3.5 h-3.5 ${emp.isVerified ? 'text-blue-500' : 'text-gray-300 dark:text-gray-600'}`} />
-                    </button>
-                    <button onClick={() => toggleActive(emp.id, emp.isActive)}
-                      className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
-                      title={emp.isActive ? 'Suspend' : 'Activate'}>
-                      {emp.isActive
-                        ? <XCircle className="w-3.5 h-3.5 text-orange-500" />
-                        : <CheckCircle className="w-3.5 h-3.5 text-green-500" />
-                      }
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <Pagination
-          page={page}
-          totalPages={totalPages}
-          total={totalFiltered}
-          pageSize={PAGE_SIZE}
-          onPageChange={setPage}
-        />
-      </div>
+      <ConfirmModal
+        open={!!suspending}
+        onClose={() => setSuspending(null)}
+        onConfirm={async () => { const e = suspending; setSuspending(null); if (e) await setActive(e, false); }}
+        title="Suspend employer"
+        message={suspending ? `Suspend ${suspending.companyName}? Their team can no longer sign in to the hiring portal until you reactivate the account.` : ''}
+        confirmLabel="Suspend"
+      />
     </div>
   );
 }

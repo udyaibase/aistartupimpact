@@ -5,6 +5,8 @@ import { revalidatePath } from 'next/cache';
 import { requireActionAuth } from '@/lib/api-auth';
 import { invalidateToolCache, invalidateTaxonomyCache, invalidateToolTagsCache } from '@/lib/cache-invalidate';
 import { refreshPublic } from '@/lib/refresh-public';
+import { publicError } from '@/lib/public-error';
+import { logAuditEvent } from '@/lib/audit-log';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -119,10 +121,11 @@ export async function updateToolTagsAction(toolId: string, tagIds: string[]) {
     invalidateToolCache();
     invalidateTaxonomyCache();
     invalidateToolTagsCache(toolId);
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'TOOL_TAXONOMY', resourceId: toolId, resourceName: 'updateToolTagsAction' });
     await refreshPublic(['tools', 'home']); return { success: true, count: cappedTagIds.length };
   } catch (error: any) {
     console.error('updateToolTagsAction error:', error);
-    return { success: false, error: error.message || 'Failed to update tags' };
+    return { success: false, error: publicError(error) || 'Failed to update tags' };
   }
 }
 
@@ -162,10 +165,11 @@ export async function createTagAction(data: {
     `;
 
     revalidatePath('/tools-dir/tags');
+    await logAuditEvent({ action: 'CREATE', resourceType: 'TOOL_TAXONOMY', resourceName: 'createTagAction' });
     await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('createTagAction error:', error);
-    return { success: false, error: error.message || 'Failed to create tag' };
+    return { success: false, error: publicError(error) || 'Failed to create tag' };
   }
 }
 
@@ -213,10 +217,11 @@ export async function createTagsBulkAction(data: {
     revalidatePath('/tools-dir/tags');
     const created = results.filter(r => r.success).length;
     const failed = results.filter(r => !r.success);
+    await logAuditEvent({ action: 'CREATE', resourceType: 'TOOL_TAXONOMY', resourceName: 'createTagsBulkAction' });
     await refreshPublic(['tools', 'home']); return { success: true, created, failed };
   } catch (error: any) {
     console.error('createTagsBulkAction error:', error);
-    return { success: false, error: error.message || 'Failed to create tags' };
+    return { success: false, error: publicError(error) || 'Failed to create tags' };
   }
 }
 
@@ -238,10 +243,11 @@ export async function updateTagAction(id: string, data: { name?: string; emoji?:
     }
 
     revalidatePath('/tools-dir/tags');
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'TOOL_TAXONOMY', resourceId: id, resourceName: 'updateTagAction' });
     await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('updateTagAction error:', error);
-    return { success: false, error: error.message || 'Failed to update tag' };
+    return { success: false, error: publicError(error) || 'Failed to update tag' };
   }
 }
 
@@ -255,10 +261,11 @@ export async function deleteTagAction(id: string) {
     await sql`DELETE FROM "ToolSystemTag" WHERE id = ${id}`;
 
     revalidatePath('/tools-dir/tags');
+    await logAuditEvent({ action: 'DELETE', resourceType: 'TOOL_TAXONOMY', resourceId: id, resourceName: 'deleteTagAction' });
     await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('deleteTagAction error:', error);
-    return { success: false, error: error.message || 'Failed to delete tag' };
+    return { success: false, error: publicError(error) || 'Failed to delete tag' };
   }
 }
 
@@ -292,10 +299,11 @@ export async function createTagGroupAction(data: {
     `;
 
     revalidatePath('/tools-dir/tags');
+    await logAuditEvent({ action: 'CREATE', resourceType: 'TOOL_TAXONOMY', resourceName: 'createTagGroupAction' });
     await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('createTagGroupAction error:', error);
-    return { success: false, error: error.message || 'Failed to create tag group' };
+    return { success: false, error: publicError(error) || 'Failed to create tag group' };
   }
 }
 
@@ -311,9 +319,10 @@ export async function refreshTagCountsAction() {
       "updatedAt" = NOW()
     `;
     revalidatePath('/tools-dir/tags');
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'TOOL_TAXONOMY', resourceName: 'refreshTagCountsAction' });
     await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('refreshTagCountsAction error:', error);
-    return { success: false, error: error.message || 'Failed to refresh counts' };
+    return { success: false, error: publicError(error) || 'Failed to refresh counts' };
   }
 }

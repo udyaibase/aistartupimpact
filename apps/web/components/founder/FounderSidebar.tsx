@@ -26,7 +26,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Profile', href: '/founder/profile', icon: User },
   { label: 'Settings', href: '/founder/settings', icon: Settings },
   { label: 'Activity log', href: '/founder/activity', icon: History },
-  { label: 'Support', href: '/founder/support', icon: HelpCircle },
+  { label: 'Help & support', href: '/founder/support', icon: HelpCircle },
 ];
 
 export function WorkspaceAvatar({ shell, size = 36 }: { shell: FounderShell; size?: number }) {

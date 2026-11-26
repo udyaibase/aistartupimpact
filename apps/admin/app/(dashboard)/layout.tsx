@@ -4,6 +4,8 @@ import { AdminSidebar } from './components/Sidebar';
 import { AdminHeader } from './components/Header';
 import { SidebarProvider } from './components/Sidebar';
 import { redirect } from 'next/navigation';
+import { AttentionProvider } from '@/components/nav/AttentionProvider';
+import CommandPalette from '@/components/nav/CommandPalette';
 import { twoFactorBlock } from '@/lib/api-auth';
 
 export default async function AdminLayout({
@@ -23,15 +25,20 @@ export default async function AdminLayout({
 
   return (
     <SidebarProvider>
-      <div className="flex h-screen bg-gray-50 dark:bg-gray-950">
+      <AttentionProvider>
+      <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-gray-950">
         <AdminSidebar session={session} />
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           <AdminHeader />
-          <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50 dark:bg-gray-950">
+          {/* "relative": hidden screen-reader text (sr-only) is absolutely positioned, and without a positioned scroller it
+              lands in the document below the fold, which made the whole page, sidebar included, scroll. */}
+          <main className="relative flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50 dark:bg-gray-950">
             {children}
           </main>
         </div>
       </div>
+      <CommandPalette role={(session.user as { role?: string }).role ?? ''} />
+      </AttentionProvider>
     </SidebarProvider>
   );
 }

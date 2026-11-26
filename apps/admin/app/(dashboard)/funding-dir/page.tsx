@@ -1,7 +1,10 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
-import { Plus, IndianRupee, Calendar, CheckCircle, Clock, Edit3, Trash2, X, Save, TrendingUp, Building2 } from 'lucide-react';
+import { useState, useEffect, useMemo, useTransition } from 'react';
+import { Plus, Edit3, Trash2, X, Save, ExternalLink } from 'lucide-react';
+import DataTable, { type Column, type TableFilter } from '@/components/ui/DataTable';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { notify } from '@/components/Toast';
 import {
   getFundingDigestsAction, createFundingDigestAction, updateFundingDigestAction,
   deleteFundingDigestAction, toggleFundingDigestStatusAction,
@@ -28,6 +31,17 @@ function formatUsd(cents: string | number | null) {
   return `$${(usd / 1e3).toFixed(0)}K`;
 }
 
+/** Dates as plain yyyy-mm-dd text and deals as a list, whatever shape the server sent. */
+function toDigests(list: unknown): Digest[] {
+  return (list as any[]).map((x) => ({
+    ...x,
+    date: x.date instanceof Date ? x.date.toISOString().split('T')[0] : typeof x.date === 'string' ? x.date.split('T')[0] : String(x.date ?? ''),
+    deals: typeof x.deals === 'string' ? JSON.parse(x.deals) : x.deals || [],
+  }));
+}
+const usd = (cents: string | number | null) => Number(cents ?? 0) / 100;
+const iconButton = 'p-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800';
+
 export default function FundingDirPage() {
   const [tab, setTab] = useState<'digests' | 'rounds'>('rounds');
   const [digests, setDigests] = useState<Digest[]>([]);
@@ -39,12 +53,12 @@ export default function FundingDirPage() {
   // Digest modal
   const [digestModal, setDigestModal] = useState(false);
   const [editDigest, setEditDigest] = useState<Digest | null>(null);
-  const [deleteDigest, setDeleteDigest] = useState<string | null>(null);
+  const [deleteDigest, setDeleteDigest] = useState<Digest | null>(null);
 
   // Round modal
   const [roundModal, setRoundModal] = useState(false);
   const [editRound, setEditRound] = useState<Partial<Round> | null>(null);
-  const [deleteRound, setDeleteRound] = useState<string | null>(null);
+  const [deleteRound, setDeleteRound] = useState<Round | null>(null);
   const [investorInput, setInvestorInput] = useState('');
 
   useEffect(() => { loadAll(); }, []);
@@ -130,17 +144,106 @@ export default function FundingDirPage() {
     });
   };
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand" /></div>;
+  const toggleDigest = (d: Digest) => startTransition(async () => {
+    const r = await toggleFundingDigestStatusAction(d.id);
+    if (!r.success) { notify((r as { error?: string }).error || "Couldn't change the digest. Try again.", 'error'); return; }
+    setDigests(toDigests(await getFundingDigestsAction()));
+  });
+
+  const confirmDeleteRound = (r: Round) => { setDeleteRound(null); startTransition(async () => {
+    const res = await deleteFundingRoundDirectAction(r.id);
+    if (!res.success) { notify((res as { error?: string }).error || "Couldn't delete the round. Try again.", 'error'); return; }
+    setRounds((list) => list.filter((x) => x.id !== r.id));
+    notify(`${r.startupName} ${r.roundType} round deleted.`, 'success');
+  }); };
+
+  const confirmDeleteDigest = (d: Digest) => { setDeleteDigest(null); startTransition(async () => {
+    const res = await deleteFundingDigestAction(d.id);
+    if (!res.success) { notify((res as { error?: string }).error || "Couldn't delete the digest. Try again.", 'error'); return; }
+    setDigests((list) => list.filter((x) => x.id !== d.id));
+    notify('Digest deleted.', 'success');
+  }); };
+
+  const roundColumns = useMemo<Column<Round>[]>(() => [
+    {
+      key: 'startup', header: 'Startup', sortValue: (r) => r.startupName, searchValue: (r) => r.startupName,
+      cell: (r) => (
+        <div className="min-w-0">
+          <p className="font-semibold text-gray-900 dark:text-white truncate">{r.startupName}</p>
+          {r.sourceUrl && (
+            <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-brand hover:underline inline-flex items-center gap-0.5">
+              Source <ExternalLink className="w-3 h-3" aria-hidden /><span className="sr-only"> (opens in a new tab)</span>
+            </a>
+          )}
+        </div>
+      ),
+    },
+    { key: 'round', header: 'Round', sortValue: (r) => r.roundType, searchValue: (r) => r.roundType, cell: (r) => <span className="whitespace-nowrap">{r.roundType}</span> },
+    { key: 'amount', header: 'Amount', align: 'right', sortValue: (r) => usd(r.amountUsd), cell: (r) => <span className="font-semibold text-gray-900 dark:text-white tabular-nums whitespace-nowrap">{formatUsd(r.amountUsd)}</span> },
+    { key: 'valuation', header: 'Valuation', align: 'right', sortValue: (r) => (r.valuation ? usd(r.valuation) : null), cell: (r) => <span className="tabular-nums whitespace-nowrap">{formatUsd(r.valuation)}</span> },
+    {
+      key: 'investors', header: 'Lead investors', searchValue: (r) => (r.leadInvestors || []).join(' '),
+      cell: (r) => (r.leadInvestors || []).length
+        ? <span title={r.leadInvestors.join(', ')}>{r.leadInvestors.slice(0, 2).join(', ')}{r.leadInvestors.length > 2 ? ` +${r.leadInvestors.length - 2}` : ''}</span>
+        : '–',
+    },
+    {
+      key: 'date', header: 'Announced', sortValue: (r) => (r.announcedAt ? new Date(r.announcedAt) : null),
+      cell: (r) => <span className="whitespace-nowrap">{r.announcedAt ? new Date(r.announcedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '–'}</span>,
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'right',
+      cell: (r) => (
+        <div className="flex justify-end gap-1">
+          <button onClick={() => { setEditRound(r); setInvestorInput((r.leadInvestors || []).join(', ')); setRoundModal(true); }} aria-label={`Edit the ${r.roundType} round of ${r.startupName}`} title="Edit" className={iconButton}><Edit3 className="w-4 h-4" aria-hidden /></button>
+          <button onClick={() => setDeleteRound(r)} aria-label={`Delete the ${r.roundType} round of ${r.startupName}`} title="Delete" className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 className="w-4 h-4" aria-hidden /></button>
+        </div>
+      ),
+    },
+  ], []);
+
+  const roundFilters = useMemo<TableFilter<Round>[]>(() => [
+    { key: 'round', label: 'Round', options: [...new Set(rounds.map((r) => r.roundType))].sort().map((t) => ({ value: t, label: t })), matches: (r, v) => r.roundType === v },
+    { key: 'year', label: 'Year', options: [...new Set(rounds.filter((r) => r.announcedAt).map((r) => String(new Date(r.announcedAt).getFullYear())))].sort().reverse().map((y) => ({ value: y, label: y })), matches: (r, v) => !!r.announcedAt && String(new Date(r.announcedAt).getFullYear()) === v },
+  ], [rounds]);
+
+  const digestColumns = useMemo<Column<Digest>[]>(() => [
+    { key: 'title', header: 'Digest', sortValue: (d) => d.title, searchValue: (d) => `${d.title} ${d.deals.map((x) => x.startup).join(' ')}`, cell: (d) => <p className="font-semibold text-gray-900 dark:text-white max-w-md">{d.title}</p> },
+    { key: 'date', header: 'Week of', sortValue: (d) => d.date, cell: (d) => <span className="whitespace-nowrap">{d.date}</span> },
+    { key: 'deals', header: 'Deals', align: 'right', sortValue: (d) => d.dealsCount, cell: (d) => d.dealsCount },
+    { key: 'raised', header: 'Total raised', align: 'right', cell: (d) => <span className="whitespace-nowrap">{d.totalRaised || '–'}</span> },
+    {
+      key: 'status', header: 'Status', sortValue: (d) => d.status,
+      cell: (d) => <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${d.status === 'PUBLISHED' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`}>{d.status === 'PUBLISHED' ? 'Published' : 'Draft'}</span>,
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'right',
+      cell: (d) => (
+        <div className="flex items-center justify-end gap-1">
+          <button onClick={() => toggleDigest(d)} className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 whitespace-nowrap" aria-label={`${d.status === 'PUBLISHED' ? 'Unpublish' : 'Publish'} ${d.title}`}>
+            {d.status === 'PUBLISHED' ? 'Unpublish' : 'Publish'}
+          </button>
+          <button onClick={() => { setEditDigest({ ...d }); setDigestModal(true); }} aria-label={`Edit ${d.title}`} title="Edit" className={iconButton}><Edit3 className="w-4 h-4" aria-hidden /></button>
+          <button onClick={() => setDeleteDigest(d)} aria-label={`Delete ${d.title}`} title="Delete" className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 className="w-4 h-4" aria-hidden /></button>
+        </div>
+      ),
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- cells call the latest handlers
+  ], []);
+
+  const digestFilters = useMemo<TableFilter<Digest>[]>(() => [
+    { key: 'status', label: 'Status', options: [{ value: 'PUBLISHED', label: 'Published' }, { value: 'DRAFT', label: 'Draft' }], matches: (d, v) => (d.status === 'PUBLISHED') === (v === 'PUBLISHED') },
+  ], []);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Funding</h1>
-          <p className="text-gray-400 text-sm font-jakarta mt-1">{rounds.length} rounds · {digests.length} digests</p>
+          <h1 className="portal-title">Funding</h1>
+          <p className="portal-subtitle">Funding rounds in US dollars and the weekly deal digests.</p>
         </div>
         <button onClick={tab === 'digests' ? openCreateDigest : openCreateRound} className="btn-brand text-sm flex items-center gap-2">
-          <Plus className="w-4 h-4" /> {tab === 'digests' ? 'New Digest' : 'Add Round'}
+          <Plus className="w-4 h-4" aria-hidden /> {tab === 'digests' ? 'New digest' : 'Add round'}
         </button>
       </div>
 
@@ -149,98 +252,21 @@ export default function FundingDirPage() {
         {(['rounds', 'digests'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-5 py-2 rounded-lg text-sm font-semibold font-jakarta transition-all capitalize ${tab === t ? 'bg-white dark:bg-gray-900 text-navy dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
-            {t === 'rounds' ? `Funding Rounds (${rounds.length})` : `Weekly Digests (${digests.length})`}
+            {t === 'rounds' ? `Funding rounds (${rounds.length})` : `Weekly digests (${digests.length})`}
           </button>
         ))}
       </div>
 
-      {/* ── ROUNDS TAB ── */}
       {tab === 'rounds' && (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50 dark:bg-gray-800/50 text-left">
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta">Startup</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta hidden md:table-cell">Round</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta">Amount</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta hidden lg:table-cell">Lead Investors</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta hidden sm:table-cell">Date</th>
-                <th className="px-6 py-3 w-20" />
-              </tr>
-            </thead>
-            <tbody>
-              {rounds.map(r => (
-                <tr key={r.id} className="border-t border-gray-50 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center shrink-0">
-                        <Building2 className="w-4 h-4 text-brand" />
-                      </div>
-                      <span className="font-sora font-semibold text-sm text-navy dark:text-white">{r.startupName}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 hidden md:table-cell">
-                    <span className="text-xs font-bold px-2 py-1 rounded-full bg-brand/10 text-brand">{r.roundType}</span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="font-sora font-bold text-sm text-brand">{formatUsd(r.amountUsd)}</span>
-                  </td>
-                  <td className="px-6 py-4 hidden lg:table-cell">
-                    <span className="text-xs text-gray-500 font-jakarta">
-                      {(r.leadInvestors || []).slice(0, 2).join(', ')}{(r.leadInvestors || []).length > 2 ? ` +${r.leadInvestors.length - 2}` : ''}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 hidden sm:table-cell">
-                    <span className="text-xs text-gray-400 font-jakarta">{r.announcedAt ? new Date(r.announcedAt).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : '—'}</span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex gap-1">
-                      <button onClick={() => { setEditRound(r); setInvestorInput((r.leadInvestors || []).join(', ')); setRoundModal(true); }} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
-                        <Edit3 className="w-3.5 h-3.5 text-gray-400" />
-                      </button>
-                      <button onClick={() => setDeleteRound(r.id)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20">
-                        <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-500" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {rounds.length === 0 && <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-400 font-jakarta text-sm">No funding rounds yet</td></tr>}
-            </tbody>
-          </table>
-        </div>
+        <DataTable tableId="funding-dir-rounds" noun="funding rounds" rows={rounds} rowKey={(r) => r.id} columns={roundColumns} filters={roundFilters}
+          loading={loading} pageSize={25} searchPlaceholder="Search startup, round or investor"
+          empty={{ title: 'No funding rounds yet', description: 'Add a round to show it in the funding tracker.' }} />
       )}
 
-      {/* ── DIGESTS TAB ── */}
       {tab === 'digests' && (
-        <div className="space-y-3">
-          {digests.map(d => (
-            <div key={d.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5 hover:border-brand/30 transition-colors group">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-brand/10 flex items-center justify-center shrink-0"><IndianRupee className="w-5 h-5 text-brand" /></div>
-                  <div>
-                    <h3 className="font-sora font-bold text-sm text-navy dark:text-white group-hover:text-brand transition-colors">{d.title}</h3>
-                    <div className="flex items-center gap-3 mt-2">
-                      <span className="text-xs text-gray-400 font-jakarta flex items-center gap-1"><Calendar className="w-3 h-3" />{d.date}</span>
-                      <span className="text-xs text-gray-400 font-jakarta flex items-center gap-1"><TrendingUp className="w-3 h-3" />{d.dealsCount} deals</span>
-                      <span className="text-xs font-bold text-brand font-sora">{d.totalRaised}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button onClick={() => { startTransition(async () => { await toggleFundingDigestStatusAction(d.id); const u = await getFundingDigestsAction(); setDigests((u as any[]).map(x => ({ ...x, date: x.date instanceof Date ? x.date.toISOString().split('T')[0] : typeof x.date === 'string' ? x.date.split('T')[0] : String(x.date ?? ''), deals: typeof x.deals === 'string' ? JSON.parse(x.deals) : x.deals || [] }))); }); }}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold cursor-pointer ${d.status === 'PUBLISHED' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`}>
-                    {d.status === 'PUBLISHED' ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}{d.status}
-                  </button>
-                  <button onClick={() => { setEditDigest({ ...d }); setDigestModal(true); }} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"><Edit3 className="w-4 h-4 text-gray-400" /></button>
-                  <button onClick={() => setDeleteDigest(d.id)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 className="w-4 h-4 text-gray-400 hover:text-red-500" /></button>
-                </div>
-              </div>
-            </div>
-          ))}
-          {digests.length === 0 && <p className="text-center text-gray-400 font-jakarta text-sm py-12">No digests yet</p>}
-        </div>
+        <DataTable tableId="funding-dir-digests" noun="digests" rows={digests} rowKey={(d) => d.id} columns={digestColumns} filters={digestFilters}
+          loading={loading} pageSize={25} searchPlaceholder="Search digest or startup"
+          empty={{ title: 'No weekly digests yet', description: 'Create a digest to round up the week\u2019s deals.' }} />
       )}
 
       {/* ── ROUND MODAL ── */}
@@ -339,25 +365,20 @@ export default function FundingDirPage() {
         </div>
       )}
 
-      {/* Delete confirms */}
-      {(deleteRound || deleteDigest) && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-sm shadow-2xl border border-gray-200 dark:border-gray-800 p-6 text-center">
-            <Trash2 className="w-10 h-10 text-red-500 mx-auto mb-3" />
-            <h3 className="font-sora font-bold text-lg text-navy dark:text-white">Delete?</h3>
-            <p className="text-sm text-gray-500 font-jakarta mt-1">This cannot be undone.</p>
-            <div className="flex gap-3 mt-5">
-              <button onClick={() => { setDeleteRound(null); setDeleteDigest(null); }} className="flex-1 px-4 py-2.5 text-sm font-medium border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300">Cancel</button>
-              <button onClick={() => {
-                startTransition(async () => {
-                  if (deleteRound) { await deleteFundingRoundDirectAction(deleteRound); setRounds(rounds.filter(r => r.id !== deleteRound)); setDeleteRound(null); }
-                  if (deleteDigest) { await deleteFundingDigestAction(deleteDigest); setDigests(digests.filter(d => d.id !== deleteDigest)); setDeleteDigest(null); }
-                });
-              }} className="flex-1 px-4 py-2.5 text-sm font-medium bg-red-500 hover:bg-red-600 text-white rounded-xl">Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        open={!!deleteRound}
+        onClose={() => setDeleteRound(null)}
+        onConfirm={() => { if (deleteRound) confirmDeleteRound(deleteRound); }}
+        title="Delete funding round"
+        message={deleteRound ? `Delete the ${deleteRound.roundType} round of ${deleteRound.startupName}? It is removed from the website. This can't be undone.` : ''}
+      />
+      <ConfirmModal
+        open={!!deleteDigest}
+        onClose={() => setDeleteDigest(null)}
+        onConfirm={() => { if (deleteDigest) confirmDeleteDigest(deleteDigest); }}
+        title="Delete digest"
+        message={deleteDigest ? `Delete “${deleteDigest.title}”? This can't be undone.` : ''}
+      />
     </div>
   );
 }

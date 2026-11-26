@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import DataTable, { type Column, type TableFilter } from '@/components/ui/DataTable';
 import {
   Mail, Users, Send, Plus, Eye, Clock, CheckCircle, TrendingUp,
   Edit3, X, Save, Trash2, Loader2, AlertCircle, FlaskConical,
@@ -130,6 +131,60 @@ export default function NewsletterAdminPage() {
     { label: 'Click-through Rate', value: `${stats.ctr}%`, icon: TrendingUp },
   ] : [];
 
+
+  const rate = (part: number, whole: number) => (whole > 0 && part > 0 ? `${((part / whole) * 100).toFixed(1)}%` : null);
+  const campaignColumns = useMemo<Column<Campaign>[]>(() => [
+    {
+      key: 'subject', header: 'Subject', sortValue: (c) => c.subject, searchValue: (c) => `${c.subject} ${c.previewText ?? ''}`,
+      cell: (c) => (
+        <div className="min-w-[200px] max-w-md">
+          <p className="font-semibold text-gray-900 dark:text-white line-clamp-1">{c.subject}</p>
+          {c.previewText && <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-1">{c.previewText}</p>}
+        </div>
+      ),
+    },
+    {
+      key: 'status', header: 'Status', sortValue: (c) => c.status,
+      cell: (c) => <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyle[c.status] || statusStyle.DRAFT}`}>{c.status.charAt(0) + c.status.slice(1).toLowerCase()}</span>,
+    },
+    {
+      key: 'sentAt', header: 'Sent', sortValue: (c) => (c.sentAt ? new Date(c.sentAt) : null),
+      cell: (c) => <span className="whitespace-nowrap text-xs">{c.sentAt ? new Date(c.sentAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : '–'}</span>,
+    },
+    { key: 'sentTo', header: 'Sent to', align: 'right', sortValue: (c) => c.totalSent, cell: (c) => <span className="tabular-nums">{c.totalSent > 0 ? c.totalSent.toLocaleString('en-IN') : '–'}</span> },
+    {
+      key: 'opens', header: 'Opened', align: 'right', sortValue: (c) => (c.totalSent > 0 ? c.uniqueOpens / c.totalSent : null),
+      cell: (c) => <span className="tabular-nums">{rate(c.uniqueOpens, c.totalSent) ?? '–'}{c.uniqueOpens > 0 && <span className="block text-xs text-gray-600 dark:text-gray-400">{c.uniqueOpens.toLocaleString('en-IN')}</span>}</span>,
+    },
+    {
+      key: 'clicks', header: 'Clicked', align: 'right', sortValue: (c) => (c.totalSent > 0 ? c.uniqueClicks / c.totalSent : null),
+      cell: (c) => <span className="tabular-nums">{rate(c.uniqueClicks, c.totalSent) ?? '–'}{c.uniqueClicks > 0 && <span className="block text-xs text-gray-600 dark:text-gray-400">{c.uniqueClicks.toLocaleString('en-IN')}</span>}</span>,
+    },
+    { key: 'unsubs', header: 'Unsubscribed', align: 'right', sortValue: (c) => c.unsubscribes, cell: (c) => <span className="tabular-nums">{c.unsubscribes > 0 ? c.unsubscribes.toLocaleString('en-IN') : '–'}</span> },
+    {
+      key: 'actions', header: 'Actions', align: 'right',
+      cell: (c) => (
+        <div className="flex items-center justify-end gap-1">
+          {(c.status === 'DRAFT' || c.status === 'SCHEDULED') && (
+            <button onClick={() => setSendConfirm({ type: 'send', id: c.id })} disabled={sending === c.id} aria-label={`Send ${c.subject} to subscribers`}
+              className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 inline-flex items-center gap-1">
+              {sending === c.id ? <Loader2 className="w-3 h-3 animate-spin" aria-hidden /> : <Send className="w-3 h-3" aria-hidden />} Send
+            </button>
+          )}
+          {c.status !== 'SENT' && (
+            <button onClick={() => setTestModalId(c.id)} title="Send a test email" aria-label={`Send a test of ${c.subject}`} className="p-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"><FlaskConical className="w-4 h-4" aria-hidden /></button>
+          )}
+          <button onClick={() => openEdit(c)} title="Edit" aria-label={`Edit ${c.subject}`} className="p-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"><Edit3 className="w-4 h-4" aria-hidden /></button>
+          <button onClick={() => setDeleteConfirm(c.id)} title="Delete" aria-label={`Delete ${c.subject}`} className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 className="w-4 h-4" aria-hidden /></button>
+        </div>
+      ),
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- cells call the latest handlers; only `sending` changes how they look
+  ], [sending]);
+  const campaignFilters = useMemo<TableFilter<Campaign>[]>(() => [
+    { key: 'status', label: 'Status', options: [...new Set(campaigns.map((c) => c.status))].sort().map((v) => ({ value: v, label: v.charAt(0) + v.slice(1).toLowerCase() })), matches: (c, v) => c.status === v },
+  ], [campaigns]);
+
   return (
     <div className="space-y-6">
       {toast && (
@@ -141,8 +196,8 @@ export default function NewsletterAdminPage() {
 
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Newsletter</h1>
-          <p className="text-gray-400 dark:text-gray-500 text-sm font-jakarta mt-1">Manage email campaigns and subscribers</p>
+          <h1 className="portal-title">Newsletter</h1>
+          <p className="portal-subtitle">Manage email campaigns and subscribers</p>
         </div>
         <button onClick={openCreate} className="btn-brand text-sm flex items-center gap-2"><Plus className="w-4 h-4" /> New Campaign</button>
       </div>
@@ -161,84 +216,20 @@ export default function NewsletterAdminPage() {
         </div>
       )}
 
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 overflow-visible">
-        <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800">
-          <h2 className="font-sora font-bold text-base text-navy dark:text-white">Campaigns</h2>
-        </div>
-        <table className="w-full">
-          <thead>
-            <tr className="bg-gray-50 dark:bg-gray-800/50 text-left">
-              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Subject</th>
-              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden md:table-cell">Status</th>
-              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden sm:table-cell">Sent To</th>
-              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden lg:table-cell">Opens</th>
-              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden lg:table-cell">Clicks</th>
-              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden xl:table-cell">Unsubs</th>
-              <th className="px-6 py-3 w-40"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {campaigns.length === 0 && !loading && (
-              <tr><td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-400 font-jakarta">No campaigns yet. Create your first one.</td></tr>
-            )}
-            {campaigns.map((c) => (
-              <tr key={c.id} className="border-t border-gray-50 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <Mail className="w-4 h-4 text-brand shrink-0" />
-                    <div>
-                      <span className="font-sora font-semibold text-sm text-navy dark:text-white line-clamp-1">{c.subject}</span>
-                      {c.sentAt && <p className="text-xs text-gray-400 font-jakarta mt-0.5">{new Date(c.sentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>}
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 hidden md:table-cell">
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${statusStyle[c.status] || statusStyle.DRAFT}`}>
-                    {c.status === 'SENT' ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}{c.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 hidden sm:table-cell"><span className="text-sm text-gray-600 dark:text-gray-400 font-jakarta">{c.totalSent > 0 ? c.totalSent.toLocaleString() : '—'}</span></td>
-                <td className="px-6 py-4 hidden lg:table-cell">
-                  <div className="flex flex-col">
-                    <span className="text-sm text-gray-600 dark:text-gray-400 font-jakarta font-semibold">{c.uniqueOpens > 0 ? c.uniqueOpens.toLocaleString() : '—'}</span>
-                    {c.totalSent > 0 && c.uniqueOpens > 0 && (
-                      <span className="text-xs text-gray-400 font-jakarta">{((c.uniqueOpens / c.totalSent) * 100).toFixed(1)}%</span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-6 py-4 hidden lg:table-cell">
-                  <div className="flex flex-col">
-                    <span className="text-sm text-gray-600 dark:text-gray-400 font-jakarta font-semibold">{c.uniqueClicks > 0 ? c.uniqueClicks.toLocaleString() : '—'}</span>
-                    {c.totalSent > 0 && c.uniqueClicks > 0 && (
-                      <span className="text-xs text-gray-400 font-jakarta">{((c.uniqueClicks / c.totalSent) * 100).toFixed(1)}%</span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-6 py-4 hidden xl:table-cell">
-                  <span className="text-sm text-gray-600 dark:text-gray-400 font-jakarta">{c.unsubscribes > 0 ? c.unsubscribes.toLocaleString() : '—'}</span>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-1">
-                    {(c.status === 'DRAFT' || c.status === 'SCHEDULED') && (
-                      <button onClick={() => setSendConfirm({ type: 'send', id: c.id })} disabled={sending === c.id}
-                        className="px-2.5 py-1 text-[11px] font-semibold bg-brand/10 text-brand rounded-lg hover:bg-brand/20 transition-colors disabled:opacity-50 flex items-center gap-1">
-                        {sending === c.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />} Send
-                      </button>
-                    )}
-                    {c.status !== 'SENT' && (
-                      <button onClick={() => setTestModalId(c.id)} title="Send test" className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
-                        <FlaskConical className="w-3.5 h-3.5 text-gray-400" />
-                      </button>
-                    )}
-                    <button onClick={() => openEdit(c)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"><Edit3 className="w-3.5 h-3.5 text-gray-400" /></button>
-                    <button onClick={() => setDeleteConfirm(c.id)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-500" /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <section aria-labelledby="campaigns-title" className="space-y-3">
+        <h2 id="campaigns-title" className="portal-section-title">Campaigns</h2>
+        <DataTable
+          tableId="newsletter-campaigns"
+          noun="campaigns"
+          rows={campaigns}
+          rowKey={(c) => c.id}
+          columns={campaignColumns}
+          filters={campaignFilters}
+          loading={loading}
+          searchPlaceholder="Search subject"
+          empty={{ title: 'No campaigns yet', description: 'Create your first newsletter to see it here.' }}
+        />
+      </section>
 
       {/* Create/Edit Modal */}
       {modalOpen && editing && (

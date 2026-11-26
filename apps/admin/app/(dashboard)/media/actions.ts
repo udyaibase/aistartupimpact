@@ -12,6 +12,8 @@ import {
   deleteFromMediaLibrary,
   slugifyName,
 } from "@/lib/media";
+import { publicError } from '@/lib/public-error';
+import { logAuditEvent } from '@/lib/audit-log';
 
 // ── List media ──────────────────────────────────────────────────────────────
 
@@ -90,7 +92,7 @@ export async function listMediaAction(options: ListMediaOptions = {}) {
     return { success: true as const, data, total: filteredTotal, nextCursor };
   } catch (e: any) {
     console.error("listMediaAction error:", e);
-    return { success: false as const, error: e.message, data: [], total: 0, nextCursor: null };
+    return { success: false as const, error: publicError(e), data: [], total: 0, nextCursor: null };
   }
 }
 
@@ -133,7 +135,7 @@ export async function uploadMediaFileAction(formData: FormData) {
     };
   } catch (e: any) {
     console.error("uploadMediaFileAction error:", e);
-    return { success: false as const, error: e.message };
+    return { success: false as const, error: publicError(e) };
   }
 }
 
@@ -156,7 +158,7 @@ export async function uploadLogoAction(formData: FormData) {
     return { success: true as const, url: result.url, mediaId: result.id };
   } catch (e: any) {
     console.error("uploadLogoAction error:", e);
-    return { success: false as const, error: e.message };
+    return { success: false as const, error: publicError(e) };
   }
 }
 
@@ -175,10 +177,11 @@ export async function deleteMediaAction(id: string) {
     if (!media) return { success: false as const, error: "File not found" };
 
     await deleteFromMediaLibrary(media.key);
+    await logAuditEvent({ action: 'DELETE', resourceType: 'MEDIA', resourceId: id, resourceName: 'deleteMediaAction' });
     return { success: true as const };
   } catch (e: any) {
     console.error("deleteMediaAction error:", e);
-    return { success: false as const, error: e.message };
+    return { success: false as const, error: publicError(e) };
   }
 }
 
@@ -202,10 +205,11 @@ export async function updateMediaAction(
     if (data.tags !== undefined) update.tags = data.tags;
 
     const media = await prisma.mediaAsset.update({ where: { id }, data: update });
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'MEDIA', resourceId: id, resourceName: 'updateMediaAction' });
     return { success: true as const, data: media };
   } catch (e: any) {
     console.error("updateMediaAction error:", e);
-    return { success: false as const, error: e.message };
+    return { success: false as const, error: publicError(e) };
   }
 }
 
@@ -257,7 +261,7 @@ export async function getMediaUsageAction(mediaId: string) {
 
     return { success: true as const, data: resolved };
   } catch (e: any) {
-    return { success: false as const, error: e.message };
+    return { success: false as const, error: publicError(e) };
   }
 }
 
@@ -304,7 +308,7 @@ export async function getMediaStatsAction() {
       },
     };
   } catch (e: any) {
-    return { success: false as const, error: e.message };
+    return { success: false as const, error: publicError(e) };
   }
 }
 
@@ -355,7 +359,7 @@ export async function getFoldersAction() {
 
     return { success: true as const, data: folders };
   } catch (e: any) {
-    return { success: false as const, error: e.message, data: [] };
+    return { success: false as const, error: publicError(e), data: [] };
   }
 }
 

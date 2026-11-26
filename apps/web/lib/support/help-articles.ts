@@ -98,7 +98,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     body: [
       'Your Careers settings give you a jobs widget to paste into your website, and a hosted careers page you can link to. Both update by themselves when you publish or close a job.',
     ],
-    link: { href: '/employer/careers', label: 'Open careers settings' }, keywords: 'website widget careers page embed',
+    link: { href: '/employer/widget', label: 'Open careers settings' }, keywords: 'website widget careers page embed',
   },
   {
     slug: 'plans', title: 'Plans, the free trial and job limits',

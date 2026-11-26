@@ -1,5 +1,6 @@
 'use client';
 
+import { notify } from '@/components/Toast';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -107,7 +108,7 @@ export default function CategoriesManagementPage() {
       setAddDescription('');
       await loadData();
     } else {
-      alert(result.error || 'Failed');
+      notify(result.error || 'Failed');
     }
     setAddSubmitting(false);
   };
@@ -127,7 +128,7 @@ export default function CategoriesManagementPage() {
       setAddParentId('');
       await loadData();
     } else {
-      alert(result.error || 'Failed');
+      notify(result.error || 'Failed');
     }
     setAddSubmitting(false);
   };
@@ -149,7 +150,7 @@ export default function CategoriesManagementPage() {
     if (result.success) {
       await loadData();
     } else {
-      alert(result.error || 'Failed to delete');
+      notify(result.error || 'Failed to delete');
     }
   };
 
@@ -201,8 +202,8 @@ export default function CategoriesManagementPage() {
             <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
           </button>
           <div>
-            <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Tool Categories</h1>
-            <p className="text-gray-400 dark:text-gray-500 text-sm font-jakarta mt-1">
+            <h1 className="portal-title">Tool Categories</h1>
+            <p className="portal-subtitle">
               {totalParents} parents • {totalSubs} subcategories • {activeSubs} active
             </p>
           </div>

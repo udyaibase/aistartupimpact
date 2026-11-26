@@ -20,6 +20,7 @@ import {
   Mail,
   RefreshCw,
 } from 'lucide-react';
+import { notify } from '@/components/Toast';
 
 interface AuditLog {
   id: string;
@@ -163,6 +164,7 @@ export default function ActivityDashboard() {
       }
     } catch (error) {
       console.error('Error fetching stats:', error);
+      notify("Couldn't load this. Check your connection and refresh.", 'error');
     }
   };
 
@@ -182,6 +184,7 @@ export default function ActivityDashboard() {
       }
     } catch (error) {
       console.error('Error fetching logs:', error);
+      notify("Couldn't load this. Check your connection and refresh.", 'error');
     } finally {
       setLogsLoading(false);
       setLoading(false);
@@ -201,8 +204,8 @@ export default function ActivityDashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white font-sora">Team Activity</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Monitor admin actions, track accountability, and protect data</p>
+          <h1 className="portal-title">Team Activity</h1>
+          <p className="portal-subtitle">Monitor admin actions, track accountability, and protect data</p>
         </div>
         <button
           onClick={() => { fetchStats(); fetchLogs(); }}

@@ -1,14 +1,11 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { Users, Building2, Mail, Calendar, CheckCircle, XCircle, Clock, Eye, Search, Filter } from 'lucide-react';
-import { getFoundersAction } from './actions';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Pagination } from '@/components/Pagination';
-import { TableEmptyState } from '@/components/EmptyState';
-import { UserCog } from 'lucide-react';
-
-const PAGE_SIZE = 20;
+import { CheckCircle } from 'lucide-react';
+import { getFoundersAction } from './actions';
+import DataTable, { type Column, type TableFilter } from '@/components/ui/DataTable';
+import { notify } from '@/components/Toast';
 
 interface Founder {
   id: string;
@@ -24,290 +21,123 @@ interface Founder {
   onboardingCompleted: boolean;
   createdAt: string;
   lastLoginAt: string | null;
-  _count: {
-    startups: number;
-    tools: number;
-  };
+  _count: { startups: number; tools: number };
 }
+
+const STATUS_LABEL: Record<string, string> = { ACTIVE: 'Active', PENDING_VERIFICATION: 'Pending', SUSPENDED: 'Suspended' };
+const STATUS_STYLE: Record<string, string> = {
+  ACTIVE: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
+  PENDING_VERIFICATION: 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300',
+};
+const OTHER_STATUS = 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300';
+const day = (iso: string) => new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
 
 export default function FoundersPage() {
   const [founders, setFounders] = useState<Founder[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [page, setPage] = useState(1);
 
   useEffect(() => {
-    loadFounders();
+    (async () => {
+      try {
+        const result = await getFoundersAction();
+        if (result?.success) setFounders(result.data as Founder[]);
+        else notify(result?.error || "Couldn't load founders. Refresh to try again.", 'error');
+      } catch {
+        notify("Couldn't load founders. Check your connection and refresh.", 'error');
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
-  const loadFounders = async () => {
-    setLoading(true);
-    try {
-      const result = await getFoundersAction();
-      if (result && result.success) {
-        setFounders(result.data as Founder[]);
-      } else {
-        console.error('Failed to load founders:', result?.error);
-      }
-    } catch (error) {
-      console.error('Error loading founders:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const columns = useMemo<Column<Founder>[]>(() => [
+    {
+      key: 'founder', header: 'Founder', sortValue: (f) => f.name, searchValue: (f) => `${f.name} ${f.email} ${f.role ?? ''}`,
+      cell: (f) => (
+        <div className="min-w-0">
+          <Link href={`/founders/${f.id}`} className="font-semibold text-gray-900 dark:text-white hover:text-brand hover:underline">{f.name}</Link>
+          <p className="text-xs text-gray-600 dark:text-gray-400 truncate">{f.email}{f.role ? ` · ${f.role}` : ''}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'company', header: 'Company', sortValue: (f) => f.company, searchValue: (f) => `${f.company ?? ''} ${f.companyDomain ?? ''}`,
+      cell: (f) => f.company ? (
+        <div className="min-w-0">
+          <p className="text-gray-900 dark:text-white truncate">{f.company}</p>
+          {f.companyDomain && <p className="text-xs text-gray-600 dark:text-gray-400 truncate">{f.companyDomain}</p>}
+        </div>
+      ) : '–',
+    },
+    {
+      key: 'signin', header: 'Sign-in', sortValue: (f) => f.authProvider,
+      cell: (f) => (
+        <span className="inline-flex items-center gap-1.5 text-xs whitespace-nowrap">
+          {f.authProvider === 'google' ? 'Google' : 'Email'}
+          {f.emailVerified && <CheckCircle className="w-3.5 h-3.5 text-green-600" aria-label="Email verified" />}
+        </span>
+      ),
+    },
+    { key: 'startups', header: 'Startups', align: 'right', sortValue: (f) => f._count.startups, cell: (f) => f._count.startups },
+    { key: 'tools', header: 'Tools', align: 'right', sortValue: (f) => f._count.tools, cell: (f) => f._count.tools },
+    {
+      key: 'status', header: 'Status', sortValue: (f) => f.status,
+      cell: (f) => <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_STYLE[f.status] ?? OTHER_STATUS}`}>{STATUS_LABEL[f.status] ?? f.status}</span>,
+    },
+    { key: 'joined', header: 'Joined', sortValue: (f) => new Date(f.createdAt), cell: (f) => <span className="text-xs whitespace-nowrap">{day(f.createdAt)}</span> },
+    {
+      key: 'lastLogin', header: 'Last sign-in', sortValue: (f) => (f.lastLoginAt ? new Date(f.lastLoginAt) : null),
+      cell: (f) => <span className="text-xs whitespace-nowrap">{f.lastLoginAt ? day(f.lastLoginAt) : 'Never'}</span>,
+    },
+  ], []);
 
-  const filteredFounders = founders.filter(f => {
-    const matchesSearch = 
-      f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      f.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      f.company?.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'all' || f.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
+  const filters = useMemo<TableFilter<Founder>[]>(() => [
+    { key: 'status', label: 'Status', options: [...new Set(founders.map((f) => f.status))].sort().map((s) => ({ value: s, label: STATUS_LABEL[s] ?? s })), matches: (f, v) => f.status === v },
+    {
+      key: 'submissions', label: 'Submissions',
+      options: [{ value: 'some', label: 'Has a startup or tool' }, { value: 'none', label: 'Nothing submitted' }],
+      matches: (f, v) => (f._count.startups + f._count.tools > 0) === (v === 'some'),
+    },
+    { key: 'signin', label: 'Sign-in', options: [{ value: 'google', label: 'Google' }, { value: 'email', label: 'Email' }], matches: (f, v) => (f.authProvider === 'google') === (v === 'google') },
+  ], [founders]);
 
-  // Reset page when filters change
-  useMemo(() => { setPage(1); }, [searchQuery, statusFilter]);
-
-  const totalFiltered = filteredFounders.length;
-  const totalPages = Math.ceil(totalFiltered / PAGE_SIZE);
-  const paginatedFounders = filteredFounders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  const stats = {
-    total: founders.length,
-    active: founders.filter(f => f.status === 'ACTIVE').length,
-    pending: founders.filter(f => f.status === 'PENDING_VERIFICATION').length,
-    withSubmissions: founders.filter(f => f._count.startups > 0 || f._count.tools > 0).length,
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand" />
-      </div>
-    );
-  }
+  const stats = [
+    ['Founders', founders.length],
+    ['Active', founders.filter((f) => f.status === 'ACTIVE').length],
+    ['Pending', founders.filter((f) => f.status === 'PENDING_VERIFICATION').length],
+    ['With a startup or tool', founders.filter((f) => f._count.startups + f._count.tools > 0).length],
+  ] as const;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-5">
       <div>
-        <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Founder Management</h1>
-        <p className="text-gray-400 text-sm font-jakarta mt-1">
-          View and manage all registered founders and their submissions
-        </p>
+        <h1 className="portal-title">Founders</h1>
+        <p className="portal-subtitle">Everyone registered on the founder portal, and what they have submitted.</p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 font-jakarta">Total Founders</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{stats.total}</p>
+      {!loading && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {stats.map(([label, n]) => (
+            <div key={label} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+              <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">{label}</p>
+              <p className="text-2xl font-semibold text-gray-900 dark:text-white mt-1">{n.toLocaleString('en-IN')}</p>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-brand/10 flex items-center justify-center">
-              <Users className="w-6 h-6 text-brand" />
-            </div>
-          </div>
+          ))}
         </div>
+      )}
 
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 font-jakarta">Active</p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">{stats.active}</p>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-              <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 font-jakarta">Pending</p>
-              <p className="text-2xl font-bold text-orange-600 dark:text-orange-400 mt-1">{stats.pending}</p>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
-              <Clock className="w-6 h-6 text-orange-600 dark:text-orange-400" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 font-jakarta">With Submissions</p>
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">{stats.withSubmissions}</p>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-              <Building2 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search by name, email, or company..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Filter className="w-5 h-5 text-gray-400" />
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
-            >
-              <option value="all">All Status</option>
-              <option value="ACTIVE">Active</option>
-              <option value="PENDING_VERIFICATION">Pending</option>
-              <option value="SUSPENDED">Suspended</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Founders Table */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50 dark:bg-gray-800/50 text-left">
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta">Founder</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta hidden md:table-cell">Company</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta hidden lg:table-cell">Auth</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta">Submissions</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta">Status</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta hidden xl:table-cell">Joined</th>
-                <th className="px-6 py-3 w-24" />
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedFounders.map((founder) => (
-                <tr key={founder.id} className="border-t border-gray-50 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
-                  <td className="px-6 py-4">
-                    <div>
-                      <p className="font-sora font-semibold text-sm text-navy dark:text-white">{founder.name}</p>
-                      <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                        <Mail className="w-3 h-3" />
-                        {founder.email}
-                      </div>
-                      {founder.role && (
-                        <span className="inline-block mt-1 text-xs text-gray-500 dark:text-gray-400">{founder.role}</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 hidden md:table-cell">
-                    {founder.company ? (
-                      <div>
-                        <p className="text-sm font-medium text-gray-900 dark:text-white">{founder.company}</p>
-                        {founder.companyDomain && (
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{founder.companyDomain}</p>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-sm text-gray-400">—</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 hidden lg:table-cell">
-                    <div className="flex items-center gap-2">
-                      {founder.authProvider === 'google' ? (
-                        <span className="inline-flex items-center gap-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-semibold px-2 py-1 rounded-full">
-                          <svg className="w-3 h-3" viewBox="0 0 24 24">
-                            <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                          </svg>
-                          Google
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400 text-xs font-semibold px-2 py-1 rounded-full">
-                          <Mail className="w-3 h-3" />
-                          Email
-                        </span>
-                      )}
-                      {founder.emailVerified && (
-                        <CheckCircle className="w-4 h-4 text-green-500" />
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="text-center">
-                        <p className="text-lg font-bold text-brand">{founder._count.startups}</p>
-                        <p className="text-xs text-gray-500">Startups</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-lg font-bold text-purple-600 dark:text-purple-400">{founder._count.tools}</p>
-                        <p className="text-xs text-gray-500">Tools</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    {founder.status === 'ACTIVE' ? (
-                      <span className="inline-flex items-center gap-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold px-2 py-1 rounded-full">
-                        <CheckCircle className="w-3 h-3" />
-                        Active
-                      </span>
-                    ) : founder.status === 'PENDING_VERIFICATION' ? (
-                      <span className="inline-flex items-center gap-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 text-xs font-semibold px-2 py-1 rounded-full">
-                        <Clock className="w-3 h-3" />
-                        Pending
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 text-xs font-semibold px-2 py-1 rounded-full">
-                        <XCircle className="w-3 h-3" />
-                        {founder.status}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 hidden xl:table-cell">
-                    <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-                      <Calendar className="w-3 h-3" />
-                      {new Date(founder.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    </div>
-                    {founder.lastLoginAt && (
-                      <p className="text-xs text-gray-400 mt-1">
-                        Last: {new Date(founder.lastLoginAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    <Link
-                      href={`/founders/${founder.id}`}
-                      className="inline-flex items-center gap-1 text-brand hover:underline text-sm font-medium"
-                    >
-                      <Eye className="w-4 h-4" />
-                      View
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-              {paginatedFounders.length === 0 && (
-                <TableEmptyState colSpan={7} icon={UserCog} title="No founders found" description="Try adjusting your search or filters" />
-              )}
-            </tbody>
-          </table>
-        </div>
-        <Pagination
-          page={page}
-          totalPages={totalPages}
-          total={totalFiltered}
-          pageSize={PAGE_SIZE}
-          onPageChange={setPage}
-        />
-      </div>
+      <DataTable
+        tableId="founders"
+        noun="founders"
+        rows={founders}
+        rowKey={(f) => f.id}
+        columns={columns}
+        filters={filters}
+        loading={loading}
+        pageSize={20}
+        searchPlaceholder="Search name, email or company"
+        empty={{ title: 'No founders yet', description: 'Founders who register on the founder portal appear here.' }}
+      />
     </div>
   );
 }

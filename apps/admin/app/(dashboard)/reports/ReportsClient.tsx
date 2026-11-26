@@ -1,7 +1,9 @@
 "use client";
 
+import { notify } from '@/components/Toast';
 import { useState } from "react";
 import { Flag, Check, X, Eye, ExternalLink } from "lucide-react";
+import { askText } from '@/components/Ask';
 
 interface Props {
   reports: any[];
@@ -25,11 +27,12 @@ export default function ReportsClient({ reports: initialReports, stats }: Props)
   const jobAction = async (r: any, action: "close" | "release") => {
     let adminNotes: string | undefined;
     if (action === "close") {
-      if (!confirm(`Close "${r.entityName}"? It disappears from every public page and the employer is emailed.`)) return;
-      adminNotes = prompt("Reason to share with the employer (optional)")?.trim() || undefined;
+      const reason = await askText({ title: `Close “${r.entityName}”`, message: 'It disappears from every public page and the employer is emailed.', label: 'Reason to share with the employer', multiline: true, confirmLabel: 'Close job', danger: true });
+      if (reason === null) return;
+      adminNotes = reason || undefined;
     }
     const res = await fetch(`/api/admin/reports/${r.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobAction: action, adminNotes }) });
-    if (!res.ok) { alert("Couldn't update the job."); return; }
+    if (!res.ok) { notify("Couldn't update the job."); return; }
     const status = action === "close" ? "RESOLVED" : "DISMISSED";
     setReports(prev => prev.map(x => x.entityType === "JOB" && x.entityId === r.entityId && (x.status === "PENDING" || x.status === "REVIEWING")
       ? { ...x, status, job: x.job ? { ...x.job, hold: false, status: action === "close" ? "CLOSED" : x.job.status } : x.job } : x));
@@ -44,7 +47,7 @@ export default function ReportsClient({ reports: initialReports, stats }: Props)
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Content Reports</h1>
+        <h1 className="portal-title">Content Reports</h1>
         <div className="flex gap-2 text-xs font-jakarta">
           <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full font-semibold">{stats.pending} pending</span>
           <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-semibold">{stats.reviewing} reviewing</span>

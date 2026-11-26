@@ -1,5 +1,6 @@
 'use client';
 
+import { notify } from '@/components/Toast';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
@@ -60,7 +61,9 @@ const editorClasses = `min-h-[500px] focus:outline-none font-jakarta text-[18px]
   [&_pre]:bg-gray-100 dark:[&_pre]:bg-gray-800 [&_pre]:p-4 [&_pre]:rounded-xl [&_pre]:text-sm [&_pre]:font-mono [&_pre]:text-brand [&_pre]:my-4 [&_pre]:overflow-x-auto
   [&_code]:bg-gray-100 dark:[&_code]:bg-gray-800 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_code]:text-brand
   [&_hr]:my-8 [&_hr]:border-gray-200 dark:[&_hr]:border-gray-700
-  [&_figure]:my-6 [&_figcaption]:text-center [&_figcaption]:text-sm [&_figcaption]:text-gray-400 [&_figcaption]:mt-2
+  [&_figure]:my-6 [&_figcaption]:text-center [&_figcaption]:!text-[13px] [&_figcaption]:leading-snug [&_figcaption]:text-gray-500 dark:[&_figcaption]:text-gray-400 [&_figcaption]:mt-2 [&_figcaption]:min-h-[1.25rem]
+  [&_figcaption:empty]:before:content-['Add_a_caption_or_image_credit…'] [&_figcaption:empty]:before:text-gray-400
+  [&_img]:cursor-pointer [&_img[alt='']]:outline [&_img[alt='']]:outline-2 [&_img[alt='']]:outline-dashed [&_img[alt='']]:outline-amber-400 [&_img:not([alt])]:outline [&_img:not([alt])]:outline-2 [&_img:not([alt])]:outline-dashed [&_img:not([alt])]:outline-amber-400
   [&_img]:rounded-xl [&_img]:w-full [&_p]:mb-4 [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic
   [&_.mention]:bg-brand/10 [&_.mention]:text-brand [&_.mention]:font-semibold [&_.mention]:no-underline [&_.mention]:px-1 [&_.mention]:py-0.5 [&_.mention]:rounded [&_.mention]:text-[16px] [&_.mention]:cursor-default`;
 
@@ -88,6 +91,8 @@ export default function ArticleEditor({ articleId }: { articleId?: string }) {
   const [categories, setCategories] = useState<Array<{ id: string; name: string; slug: string }>>([]);
 
   const [showPlusMenu, setShowPlusMenu] = useState(false);
+  /** The picture whose alt text is being edited (click a picture in the article), and where to draw the box. */
+  const [altEdit, setAltEdit] = useState<{ img: HTMLImageElement; top: number; left: number; width: number; text: string } | null>(null);
   const [plusBtnPos, setPlusBtnPos] = useState<number | null>(null);
   const [showPreview, setShowPreview] = useState(false);
 
@@ -210,12 +215,12 @@ export default function ArticleEditor({ articleId }: { articleId?: string }) {
   };
 
   const uploadFile = async (file: File, set: (url: string) => void, busy: (b: boolean) => void) => {
-    if (!IMAGE_TYPES.includes(file.type)) { alert('Upload a JPG, PNG, WebP, GIF or AVIF image.'); return; }
+    if (!IMAGE_TYPES.includes(file.type)) { notify('Upload a JPG, PNG, WebP, GIF or AVIF image.'); return; }
     busy(true);
     const upload = await shrinkImage(file);
     if (upload.size > MAX_UPLOAD_BYTES) {
       busy(false);
-      alert(`This image is ${(upload.size / 1024 / 1024).toFixed(1)} MB. Use an image under 3.5 MB (GIFs can't be compressed here).`);
+      notify(`This image is ${(upload.size / 1024 / 1024).toFixed(1)} MB. Use an image under 3.5 MB (GIFs can't be compressed here).`);
       return;
     }
     const formData = new FormData();
@@ -223,7 +228,7 @@ export default function ArticleEditor({ articleId }: { articleId?: string }) {
     const json = await uploadMediaAction(formData).catch(() => null);
     busy(false);
     if (json?.success && json.data?.url) set(json.data.url);
-    else alert(json?.error || 'Failed to upload the image. Check your connection and try again.');
+    else notify(json?.error || 'Failed to upload the image. Check your connection and try again.');
   };
 
   // Drag and drop: any image box (and the article body) accepts an image file dragged from the desktop.
@@ -279,6 +284,21 @@ export default function ArticleEditor({ articleId }: { articleId?: string }) {
     void uploadFile(file, insertImage, setUploadingInline);
   };
 
+  /** Click a picture in the article to describe it (alt text) for screen readers and search. */
+  const openAltEditor = (img: HTMLImageElement) => {
+    const wrap = editorWrapRef.current;
+    if (!wrap || !canEdit) return;
+    const box = img.getBoundingClientRect();
+    const base = wrap.getBoundingClientRect();
+    setAltEdit({ img, top: box.top - base.top + 12, left: box.left - base.left + 12, width: Math.max(240, box.width - 24), text: img.getAttribute('alt') ?? '' });
+  };
+  const saveAlt = () => {
+    if (!altEdit) return;
+    altEdit.img.setAttribute('alt', altEdit.text.trim().slice(0, 250));
+    setAltEdit(null);
+    onBodyChange();
+  };
+
   const handleUpdateImageAlt = (src: string, alt: string) => {
     editorRef.current?.querySelectorAll('img').forEach((img) => { if (img.getAttribute('src') === src) img.setAttribute('alt', alt); });
     onBodyChange();
@@ -328,7 +348,7 @@ export default function ArticleEditor({ articleId }: { articleId?: string }) {
     editor.focus();
     const sel = window.getSelection();
     if (inlineRange.current && sel) { sel.removeAllRanges(); sel.addRange(inlineRange.current); }
-    document.execCommand('insertHTML', false, `<figure><img src="${escAttr(url)}" alt=""><figcaption>Add a caption…</figcaption></figure><p><br></p>`);
+    document.execCommand('insertHTML', false, `<figure><img src="${escAttr(url)}" alt=""><figcaption></figcaption></figure><p><br></p>`);
     inlineRange.current = null;
     onBodyChange();
   };
@@ -574,7 +594,7 @@ export default function ArticleEditor({ articleId }: { articleId?: string }) {
                 {...dropZone('body', (f, e) => uploadInline(f, { x: e.clientX, y: e.clientY }))}
                 onInput={() => { onBodyChange(); trackCursorLine(); checkForMention(); }}
                 onKeyUp={() => { trackCursorLine(); checkForMention(); }}
-                onClick={trackCursorLine}
+                onClick={(e) => { trackCursorLine(); if (e.target instanceof HTMLImageElement) openAltEditor(e.target); else setAltEdit(null); }}
                 onKeyDown={(e) => {
                   if (e.key === 'Tab') { e.preventDefault(); format('insertText', '    '); }
                   if (e.key === '/') {
@@ -589,6 +609,26 @@ export default function ArticleEditor({ articleId }: { articleId?: string }) {
               />
 
               {mentionPopup}
+
+              {altEdit && (
+                <form onSubmit={(e) => { e.preventDefault(); saveAlt(); }} style={{ top: altEdit.top, left: altEdit.left, width: altEdit.width }}
+                  className="absolute z-20 max-w-md rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg p-3 font-jakarta">
+                  <label htmlFor="img-alt" className="block text-sm font-semibold text-gray-900 dark:text-white">Alt text</label>
+                  <p id="img-alt-hint" className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">Say what the picture shows, for people who can&rsquo;t see it and for search. Leave it empty only if the picture is decoration.</p>
+                  <textarea id="img-alt" aria-describedby="img-alt-hint" autoFocus rows={2} maxLength={250} value={altEdit.text}
+                    onChange={(e) => setAltEdit({ ...altEdit, text: e.target.value })}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveAlt(); } if (e.key === 'Escape') setAltEdit(null); }}
+                    placeholder="e.g. Founders of Sarvam AI at their Bengaluru office"
+                    className="mt-2 w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-gray-900 dark:text-white outline-none focus:border-brand focus:ring-1 focus:ring-brand resize-none" />
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <span className="text-xs text-gray-600 dark:text-gray-400 tabular-nums">{altEdit.text.length}/250</span>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setAltEdit(null)} className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">Cancel</button>
+                      <button type="submit" className="btn-brand !min-h-0 !py-1.5 !px-3">Save</button>
+                    </div>
+                  </div>
+                </form>
+              )}
             </div>
 
             <div className="mt-12 pt-6 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between text-sm text-gray-400 dark:text-gray-500 font-jakarta">
@@ -832,7 +872,7 @@ export default function ArticleEditor({ articleId }: { articleId?: string }) {
             </div>
             <div className="my-8 h-px bg-gray-100 dark:bg-gray-800" />
             {/* The editor's own content (pasted HTML is already cleaned on the way in). */}
-            <div className={editorClasses} dangerouslySetInnerHTML={{ __html: bodyHtml || '<p style="color:#ccc;font-style:italic">No content yet…</p>' }} />
+            <div className={`${editorClasses} [&_img]:!outline-none [&_img]:!cursor-default [&_figcaption:empty]:hidden`} dangerouslySetInnerHTML={{ __html: bodyHtml || '<p style="color:#ccc;font-style:italic">No content yet…</p>' }} />
           </div>
         </div>
       )}

@@ -47,8 +47,8 @@ export default function DevToolsPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Development Tools</h1>
-          <p className="text-gray-400 text-sm font-jakarta mt-1">
+          <h1 className="portal-title">Development Tools</h1>
+          <p className="portal-subtitle">
             Tools for development and testing
           </p>
         </div>
@@ -70,11 +70,11 @@ export default function DevToolsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white flex items-center gap-2">
+        <h1 className="portal-title flex items-center gap-2">
           <Wrench className="h-7 w-7 text-brand" />
           Development Tools
         </h1>
-        <p className="text-gray-400 text-sm font-jakarta mt-1">
+        <p className="portal-subtitle">
           Tools for development and testing (only available in dev mode)
         </p>
       </div>

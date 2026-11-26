@@ -2,11 +2,13 @@
 
 import { neon } from '@neondatabase/serverless';
 import { requireActionAuth } from '@/lib/api-auth';
+import { logAuditEvent } from '@/lib/audit-log';
+import { sectionRoles } from '@/lib/section-access';
 
 const sql = neon(process.env.DATABASE_URL!);
 /** Same key the web app reads (apps/web/lib/support/portal-status.ts). */
 const KEY = 'employer_portal_status';
-const ROLES = ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'];
+const ROLES = sectionRoles('/support');
 
 export async function getPortalStatusAction() {
   const { error } = await requireActionAuth(ROLES);
@@ -29,5 +31,6 @@ export async function setPortalStatusAction(input: { message: string; level: str
     INSERT INTO "SiteSetting" (id, key, value, "updatedAt") VALUES (gen_random_uuid()::text, ${KEY}, ${JSON.stringify(value)}::jsonb, NOW())
     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, "updatedAt" = NOW()
   `;
+  await logAuditEvent({ action: 'UPDATE', resourceType: 'SUPPORT', resourceName: 'setPortalStatusAction' });
   return { success: true };
 }

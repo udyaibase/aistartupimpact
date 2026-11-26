@@ -1,5 +1,6 @@
 'use client';
 
+import { notify } from '@/components/Toast';
 import { useState, useEffect, useCallback } from 'react';
 import {
   Search, X, FileText, ExternalLink, Download, ChevronDown, Loader2,
@@ -10,6 +11,7 @@ import {
   listApplicationsAction, updateApplicationStatusAction,
   deleteApplicationAction, getApplicationStatsAction, getApplicationRolesAction,
 } from './actions';
+import { ask } from '@/components/Ask';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -128,14 +130,14 @@ export default function ApplicationsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Permanently delete this application?')) return;
+    if (!(await ask({ title: 'Delete application', message: 'The application and its details are removed for good. This can’t be undone.', confirmLabel: 'Delete', danger: true }))) return;
     const res = await deleteApplicationAction(id);
     if (res.success) {
       setApps(prev => prev.filter(a => a.id !== id));
       setTotal(prev => prev - 1);
       if (detail?.id === id) setDetail(null);
     } else {
-      alert(res.error || 'Delete failed');
+      notify(res.error || 'Delete failed');
     }
   };
 
@@ -151,8 +153,8 @@ export default function ApplicationsPage() {
     <div className="space-y-6">
       {/* ── Header ──────────────────────────────────────────────── */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white font-sora">Career Applications</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 font-jakarta mt-1">
+        <h1 className="portal-title">Career Applications</h1>
+        <p className="portal-subtitle">
           Udyaibase internal hiring — internship and full-time applications from the <span className="text-brand font-semibold">/careers</span> page
         </p>
       </div>

@@ -23,8 +23,10 @@ export default function DashboardError({
         Something went wrong
       </h2>
       <p className="text-gray-500 dark:text-gray-400 text-sm font-jakarta text-center max-w-md mb-6">
-        An error occurred while loading this page. Please try again.
+        This page couldn’t load. Nothing you entered elsewhere is lost. Try again; if it keeps happening, send the
+        reference below to the team.
       </p>
+      {error.digest && <p className="text-xs font-mono text-gray-500 dark:text-gray-400 mb-6 -mt-3">Reference: {error.digest}</p>}
       <button
         onClick={reset}
         className="btn-brand flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium"

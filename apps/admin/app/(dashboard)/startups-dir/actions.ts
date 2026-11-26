@@ -9,6 +9,7 @@ import { sendEmailFireAndForget } from '@/lib/email-send';
 import { requireActionAuth } from '@/lib/api-auth';
 import { refreshPublic } from '@/lib/refresh-public';
 import { checkLocation } from '@/lib/locations';
+import { publicError } from '@/lib/public-error';
 
 /** Startup descriptions are capped at 1,000 characters (matches the founder portal). */
 const STARTUP_DESCRIPTION_MAX = 1000;
@@ -237,7 +238,7 @@ export async function createStartupAction(data: {
     await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
     console.error('Error creating startup:', error);
-    return { success: false, error: error.message || 'Failed to create startup' };
+    return { success: false, error: publicError(error) || 'Failed to create startup' };
   }
 }
 
@@ -419,7 +420,7 @@ export async function updateStartupAction(id: string, data: {
     await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
     console.error('Error updating startup:', error);
-    return { success: false, error: error.message || 'Failed to update startup' };
+    return { success: false, error: publicError(error) || 'Failed to update startup' };
   }
 }
 
@@ -606,7 +607,7 @@ export async function scheduleFeaturedCampaignAction(data: {
     await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
     console.error('Error scheduling featured campaign:', error);
-    return { success: false, error: error.message || 'Failed to schedule campaign' };
+    return { success: false, error: publicError(error) || 'Failed to schedule campaign' };
   }
 }
 
@@ -640,7 +641,7 @@ export async function cancelFeaturedCampaignAction(campaignId: string) {
     await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
     console.error('Error cancelling featured campaign:', error);
-    return { success: false, error: error.message || 'Failed to cancel campaign' };
+    return { success: false, error: publicError(error) || 'Failed to cancel campaign' };
   }
 }
 
@@ -685,7 +686,7 @@ export async function toggleContentReviewedAction(id: string, currentValue: bool
     await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
     console.error('toggleContentReviewedAction error:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: publicError(error) };
   }
 }
 
@@ -767,7 +768,7 @@ export async function approveStartupAction(id: string) {
     await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
     console.error('Error approving startup:', error);
-    return { success: false, error: error.message || 'Failed to approve startup' };
+    return { success: false, error: publicError(error) || 'Failed to approve startup' };
   }
 }
 
@@ -788,7 +789,7 @@ export async function bulkApproveStartupsAction(ids: string[]) {
     await logAuditEvent({ action: 'APPROVE', resourceType: 'STARTUP', after: { bulkAction: true, count: ids.length } });
     await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true, count: ids.length };
   } catch (error: any) {
-    return { success: false, error: error.message };
+    return { success: false, error: publicError(error) };
   }
 }
 
@@ -806,7 +807,7 @@ export async function bulkArchiveStartupsAction(ids: string[]) {
     await logAuditEvent({ action: 'UPDATE', resourceType: 'STARTUP', after: { bulkAction: 'ARCHIVE', count: ids.length } });
     await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true, count: ids.length };
   } catch (error: any) {
-    return { success: false, error: error.message };
+    return { success: false, error: publicError(error) };
   }
 }
 
@@ -823,7 +824,7 @@ export async function bulkDeleteStartupsAction(ids: string[]) {
     await logAuditEvent({ action: 'DELETE', resourceType: 'STARTUP', after: { bulkAction: true, count: ids.length } });
     await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true, count: ids.length };
   } catch (error: any) {
-    return { success: false, error: error.message };
+    return { success: false, error: publicError(error) };
   }
 }
 

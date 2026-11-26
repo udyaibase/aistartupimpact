@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import crypto from 'crypto';
+import { recordRazorpayFee } from '@/lib/billing/razorpay-fee';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,6 +61,7 @@ export async function POST(request: NextRequest) {
       if (claimed.count === 0) {
         return NextResponse.json({ status: 'already_processed' }, { status: 200 });
       }
+      recordRazorpayFee(paymentId); // after the response; never blocks or fails the payment
 
       try {
         switch (payment.purpose) {

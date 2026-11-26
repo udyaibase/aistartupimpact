@@ -4728,6 +4728,22 @@ model OrganizerPayment {
 
 /// Sequential GST invoice numbers per financial year (April to March), shared by all portals.
 /// Paid funding-data downloads (Excel) bought on /funding. No account: the buyer is identified by a verified email.
+/// What Razorpay kept on one captured payment, read from Razorpay (payment.fee / payment.tax). One row per Razorpay
+/// payment id, for every revenue stream, so the payment tables themselves stay unchanged. Filled by the admin's
+/// "Sync Razorpay fees" action; used by Billing → Reconciliation.
+model RazorpayFee {
+  /// Razorpay payment id (pay_…).
+  paymentId  String    @id
+  /// Total Razorpay deducted, GST on the fee included (Razorpay's "fee").
+  feePaise   Int
+  /// GST inside feePaise (Razorpay's "tax"): claimable as input credit.
+  taxPaise   Int
+  /// card, upi, netbanking, wallet…
+  method     String?
+  capturedAt DateTime?
+  fetchedAt  DateTime  @default(now())
+}
+
 model FundingDataPurchase {
   id                  String                @id @default(cuid())
   email               String

@@ -1,6 +1,6 @@
+import { verifyUserToken } from '@/lib/user-session';
 import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from 'next/server';
-import { jwtVerify } from 'jose';
 import { sql } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -18,8 +18,7 @@ export async function POST(req: NextRequest) {
       return new NextResponse(null, { status: 204 });
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    const userId = payload.userId as string;
+    const userId = (await verifyUserToken(token))?.userId;
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

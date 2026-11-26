@@ -134,7 +134,7 @@ export default function PrivacyPage() {
 
         <h2>8. Cookies</h2>
         <p>
-          We use a cookie consent banner that allows you to accept, reject, or customise your cookie preferences across three categories: Necessary (always active), Analytics, and Marketing. See our full <a href="/cookie-policy">Cookie Policy</a> for details.
+          We use a cookie consent banner that allows you to accept all cookies, keep required cookies only, or customise your cookie preferences across three categories: Required (always active), Analytics, and Marketing. See our full <a href="/cookie-policy">Cookie Policy</a> for details.
         </p>
 
         <h2>9. Marketing Communications</h2>

@@ -17,6 +17,7 @@ import {
   deleteLiveTickerAction,
   reorderLiveTickersAction,
 } from './actions';
+import { notify } from '@/components/Toast';
 
 interface Ticker {
   id: string;
@@ -52,6 +53,7 @@ export default function TickersPage() {
       setLiveTickers(live as Ticker[]);
     } catch (error) {
       console.error('Error loading tickers:', error);
+      notify("Couldn't load this. Check your connection and refresh.", 'error');
     } finally {
       setLoading(false);
     }
@@ -98,6 +100,7 @@ export default function TickersPage() {
       setNewText('');
     } catch (error) {
       console.error('Error saving ticker:', error);
+      notify("Couldn't save. Check your connection and try again.", 'error');
     }
   };
 
@@ -111,6 +114,7 @@ export default function TickersPage() {
       setDeleteConfirm(null);
     } catch (error) {
       console.error('Error deleting ticker:', error);
+      notify("Couldn't delete. Check your connection and try again.", 'error');
     }
   };
 
@@ -125,6 +129,7 @@ export default function TickersPage() {
       }
     } catch (error) {
       console.error('Error toggling ticker status:', error);
+      notify("Something went wrong. Check your connection and try again.", 'error');
     }
   };
 
@@ -140,8 +145,8 @@ export default function TickersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Ticker Management</h1>
-          <p className="text-gray-400 dark:text-gray-500 text-sm font-jakarta mt-1">
+          <h1 className="portal-title">Ticker Management</h1>
+          <p className="portal-subtitle">
             Manage breaking news and live ticker content
           </p>
         </div>

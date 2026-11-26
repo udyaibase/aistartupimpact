@@ -2,11 +2,13 @@
 
 import { neon } from '@neondatabase/serverless';
 import { requireActionAuth } from '@/lib/api-auth';
+import { sectionRoles } from '@/lib/section-access';
+import { logAuditEvent } from '@/lib/audit-log';
 
 const sql = neon(process.env.DATABASE_URL!);
 
 export async function getAnnouncementsAction() {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/announcements'));
   if (error) return { success: false, error };
 
   const rows = await sql`
@@ -37,7 +39,7 @@ export async function createAnnouncementAction(data: {
   startsAt?: string;
   endsAt?: string;
 }) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/announcements'));
   if (error) return { success: false, error };
 
   const maxOrder = await sql`SELECT COALESCE(MAX("sortOrder"), -1) + 1 AS next FROM "SiteAnnouncement"`;
@@ -68,6 +70,7 @@ export async function createAnnouncementAction(data: {
     )
   `;
 
+  await logAuditEvent({ action: 'CREATE', resourceType: 'ANNOUNCEMENT', resourceName: 'createAnnouncementAction' });
   return { success: true };
 }
 
@@ -86,7 +89,7 @@ export async function updateAnnouncementAction(id: string, data: {
   startsAt?: string | null;
   endsAt?: string | null;
 }) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/announcements'));
   if (error) return { success: false, error };
 
   await sql`
@@ -108,6 +111,7 @@ export async function updateAnnouncementAction(id: string, data: {
     WHERE id = ${id}
   `;
 
+  await logAuditEvent({ action: 'UPDATE', resourceType: 'ANNOUNCEMENT', resourceId: id, resourceName: 'updateAnnouncementAction' });
   return { success: true };
 }
 
@@ -116,11 +120,12 @@ export async function deleteAnnouncementAction(id: string) {
   if (error) return { success: false, error };
 
   await sql`DELETE FROM "SiteAnnouncement" WHERE id = ${id}`;
+  await logAuditEvent({ action: 'DELETE', resourceType: 'ANNOUNCEMENT', resourceId: id, resourceName: 'deleteAnnouncementAction' });
   return { success: true };
 }
 
 export async function toggleAnnouncementAction(id: string) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/announcements'));
   if (error) return { success: false, error };
 
   await sql`
@@ -129,11 +134,12 @@ export async function toggleAnnouncementAction(id: string) {
     WHERE id = ${id}
   `;
 
+  await logAuditEvent({ action: 'UPDATE', resourceType: 'ANNOUNCEMENT', resourceId: id, resourceName: 'toggleAnnouncementAction' });
   return { success: true };
 }
 
 export async function reorderAnnouncementsAction(ids: string[]) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/announcements'));
   if (error) return { success: false, error };
 
   for (let i = 0; i < ids.length; i++) {
@@ -144,11 +150,12 @@ export async function reorderAnnouncementsAction(ids: string[]) {
     `;
   }
 
+  await logAuditEvent({ action: 'UPDATE', resourceType: 'ANNOUNCEMENT', resourceName: 'reorderAnnouncementsAction' });
   return { success: true };
 }
 
 export async function searchExistingDataAction(type: string, query: string) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/announcements'));
   if (error) return { success: false, error };
 
   const searchTerm = `%${query}%`;

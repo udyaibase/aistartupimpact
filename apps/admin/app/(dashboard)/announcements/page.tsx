@@ -15,6 +15,7 @@ import {
   reorderAnnouncementsAction,
   searchExistingDataAction,
 } from './actions';
+import { ask } from '@/components/Ask';
 
 const TYPES = [
   { value: 'CUSTOM', label: 'Custom', icon: FileText, color: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' },
@@ -191,7 +192,7 @@ export default function AnnouncementsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this announcement permanently?')) return;
+    if (!(await ask({ title: 'Delete announcement', message: 'It is removed from the website straight away. This can’t be undone.', confirmLabel: 'Delete', danger: true }))) return;
     await deleteAnnouncementAction(id);
     loadAnnouncements();
   };
@@ -263,8 +264,8 @@ export default function AnnouncementsPage() {
             <Megaphone className="w-5 h-5 text-brand" />
           </div>
           <div>
-            <h1 className="text-xl font-sora font-bold text-gray-900 dark:text-white">Announcements</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 font-jakarta">Manage the announcement bar on the website</p>
+            <h1 className="portal-title">Announcements</h1>
+            <p className="portal-subtitle">Manage the announcement bar on the website</p>
           </div>
         </div>
         <button onClick={openCreate} className="btn-brand flex items-center gap-2 px-4 py-2 text-sm">

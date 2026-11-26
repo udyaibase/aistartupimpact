@@ -1,5 +1,6 @@
 'use client';
 
+import { notify } from '@/components/Toast';
 import { useState, useRef } from 'react';
 import { Plus, Trash2, Upload, Loader2 } from 'lucide-react';
 
@@ -44,11 +45,11 @@ export default function FoundersDetailsManager({ founders, onChange, maxFounders
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      alert('Please select a JPG or PNG image file');
+      notify('Please select a JPG or PNG image file');
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be less than 5MB');
+      notify('Image must be less than 5MB');
       return;
     }
 
@@ -67,7 +68,7 @@ export default function FoundersDetailsManager({ founders, onChange, maxFounders
       updateFounder(index, 'avatar', data.url);
     } catch (err: any) {
       console.error('Photo upload failed:', err);
-      alert('Upload failed: ' + (err.message || 'Please try again'));
+      notify('Upload failed: ' + (err.message || 'Please try again'));
     } finally {
       setUploadingIndex(null);
       if (fileInputRefs.current[index]) {

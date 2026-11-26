@@ -46,7 +46,7 @@ test.describe('Employer portal (signed in)', () => {
   test('moving a candidate from the open panel shows the confirmation above the panel', async ({ page }) => {
     await signInAsEmployer(page, 'owner');
     await page.goto('/employer/applications?view=list');
-    await page.getByRole('button', { name: 'Reject all cookies' }).click({ timeout: 3_000 }).catch(() => {});
+    await page.getByRole('button', { name: 'Use required cookies only' }).click({ timeout: 3_000 }).catch(() => {});
     // Open the first candidate in the list.
     await page.locator('main table tbody tr').first().locator('td').nth(1).getByRole('button').click();
     const panel = page.locator('[aria-labelledby="cand-title"]');

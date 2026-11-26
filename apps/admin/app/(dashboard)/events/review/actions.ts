@@ -7,6 +7,7 @@ import { refreshPublic, requestEventApproved, requestOrganizerSuspended } from "
 import { sendEmailFireAndForget } from "@/lib/email-send";
 import { notifyOrganizer } from "@/lib/organizer-notify";
 import { SUSPENSION_NOTE } from "@udyaibase/utils/event-moderation";
+import { sectionRoles } from '@/lib/section-access';
 
 /**
  * Event trust & safety. New independent organizers' first events and events hidden after reports wait here
@@ -15,7 +16,7 @@ import { SUSPENSION_NOTE } from "@udyaibase/utils/event-moderation";
  * refunds run on the website (instantly when it can be reached, otherwise from its daily job).
  */
 
-const ROLES = ["SUPER_ADMIN", "EDITOR_IN_CHIEF"];
+const ROLES = sectionRoles('/events/review');
 const SITE = (process.env.NEXT_PUBLIC_SITE_URL || "https://udyaibase.com").replace(/\/$/, "");
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);

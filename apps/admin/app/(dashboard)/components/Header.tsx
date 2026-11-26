@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { ChevronRight, Menu, Moon, Sun } from 'lucide-react';
+import { ChevronRight, Menu, Moon, Search, Sun } from 'lucide-react';
 import { useTheme } from '@/components/ThemeProvider';
 import { useSidebar } from './Sidebar';
 
@@ -54,7 +54,7 @@ const segmentLabels: Record<string, string> = {
 export function AdminHeader() {
   const pathname = usePathname();
   const { theme, toggle } = useTheme();
-  const { toggle: toggleSidebar } = useSidebar();
+  const { toggle: toggleSidebar, openPalette } = useSidebar();
 
   const segments = (pathname || '')
     .split('/')
@@ -92,6 +92,15 @@ export function AdminHeader() {
       </div>
 
       <div className="flex items-center gap-1 sm:gap-3 shrink-0">
+        <button
+          onClick={openPalette}
+          className="flex items-center gap-2 h-9 px-2.5 sm:px-3 rounded-lg border border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          aria-label="Search sections (Ctrl+K)"
+        >
+          <Search className="w-4 h-4" aria-hidden />
+          <span className="hidden sm:inline">Search</span>
+          <kbd className="hidden md:inline text-[11px] font-mono text-gray-500 border border-gray-200 dark:border-gray-700 rounded px-1.5 py-0.5">Ctrl K</kbd>
+        </button>
         <button
           onClick={toggle}
           className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"

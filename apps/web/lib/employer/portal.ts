@@ -169,7 +169,7 @@ export async function getEmployerHome(employerId: string): Promise<EmployerHome>
     { key: 'profile', label: 'Complete your company profile', hint: 'Logo, short description, website and location.', href: '/employer/company', done: profileDone },
     { key: 'first_job', label: 'Post your first job', hint: 'Paste a job description and we’ll fill in the form.', href: '/employer/jobs/new', done: !!employer?.firstJobPublishedAt || roles.length > 0 },
     { key: 'verify_email', label: 'Verify your email', hint: 'Required before a job can go live.', href: '#verify-email', done: !!employer?.emailVerified },
-    { key: 'careers', label: 'Add jobs to your website', hint: 'Paste one snippet; candidates apply from your own site.', href: '/employer/careers', done: widgetCount > 0 },
+    { key: 'careers', label: 'Add jobs to your website', hint: 'Paste one snippet; candidates apply from your own site.', href: '/employer/widget', done: widgetCount > 0 },
   ];
 
   return {

@@ -241,8 +241,8 @@ export default function EditJobPage() {
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div>
-          <h1 className="font-sora font-bold text-2xl text-navy dark:text-white">Edit Job</h1>
-          <p className="text-sm text-gray-500 font-jakarta mt-1">{form.title || 'Untitled'}</p>
+          <h1 className="portal-title">Edit Job</h1>
+          <p className="portal-subtitle">{form.title || 'Untitled'}</p>
         </div>
       </div>
 

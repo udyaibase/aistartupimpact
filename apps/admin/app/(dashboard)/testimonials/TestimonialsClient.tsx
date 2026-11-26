@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Save, X, Eye, EyeOff, MessageSquare } from 'lucide-react';
+import { notify } from '@/components/Toast';
+import { useState, useEffect, useMemo } from 'react';
+import { Plus, Edit2, Trash2, Save, X } from 'lucide-react';
 import { ConfirmModal } from '@/components/ConfirmModal';
-import { TableEmptyState } from '@/components/EmptyState';
+import DataTable, { type Column, type TableFilter } from '@/components/ui/DataTable';
 
 interface Testimonial {
   id: number;
@@ -33,7 +34,7 @@ export default function TestimonialsClient() {
     is_active: true,
     display_order: 0,
   });
-  const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Testimonial | null>(null);
 
   useEffect(() => {
     fetchTestimonials();
@@ -48,6 +49,7 @@ export default function TestimonialsClient() {
       }
     } catch (error) {
       console.error('Error fetching testimonials:', error);
+      notify("Couldn't load this. Check your connection and refresh.", 'error');
     } finally {
       setLoading(false);
     }
@@ -71,13 +73,13 @@ export default function TestimonialsClient() {
       if (data.success) {
         await fetchTestimonials();
         resetForm();
-        alert(editingId ? 'Testimonial updated!' : 'Testimonial created!');
+        notify(editingId ? 'Testimonial updated!' : 'Testimonial created!');
       } else {
-        alert(data.error || 'Failed to save testimonial');
+        notify(data.error || 'Failed to save testimonial');
       }
     } catch (error) {
       console.error('Error saving testimonial:', error);
-      alert('Failed to save testimonial');
+      notify('Failed to save testimonial');
     }
   };
 
@@ -106,13 +108,13 @@ export default function TestimonialsClient() {
       
       if (data.success) {
         await fetchTestimonials();
-        alert('Testimonial deleted!');
+        notify('Testimonial deleted.', 'success');
       } else {
-        alert(data.error || 'Failed to delete testimonial');
+        notify(data.error || "Couldn't delete the testimonial. Try again.", 'error');
       }
     } catch (error) {
       console.error('Error deleting testimonial:', error);
-      alert('Failed to delete testimonial');
+      notify("Couldn't delete the testimonial. Check your connection and try again.", 'error');
     }
   };
 
@@ -131,30 +133,55 @@ export default function TestimonialsClient() {
     setShowForm(false);
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand"></div>
-      </div>
-    );
-  }
+  const columns = useMemo<Column<Testimonial>[]>(() => [
+    { key: 'order', header: 'Order', sortValue: (t) => t.display_order, cell: (t) => t.display_order, width: 'w-20' },
+    {
+      key: 'person', header: 'Person', sortValue: (t) => t.name, searchValue: (t) => `${t.name} ${t.role} ${t.company ?? ''}`,
+      cell: (t) => (
+        <div className="flex items-center gap-3 min-w-0">
+          <span aria-hidden className="w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 flex items-center justify-center text-sm font-semibold shrink-0">{t.avatar}</span>
+          <div className="min-w-0">
+            <p className="font-medium text-gray-900 dark:text-white truncate">{t.name}</p>
+            <p className="text-xs text-gray-600 dark:text-gray-400 truncate">{t.role}{t.company && `, ${t.company}`}</p>
+            {t.subscribed_duration && <p className="text-xs text-gray-600 dark:text-gray-400">{t.subscribed_duration}</p>}
+          </div>
+        </div>
+      ),
+    },
+    { key: 'quote', header: 'Quote', searchValue: (t) => t.quote, cell: (t) => <p className="line-clamp-2 max-w-md">{t.quote}</p> },
+    {
+      key: 'status', header: 'Status', sortValue: (t) => (t.is_active ? 0 : 1),
+      cell: (t) => <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${t.is_active ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`}>{t.is_active ? 'Shown' : 'Hidden'}</span>,
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'right',
+      cell: (t) => (
+        <div className="flex items-center justify-end gap-1">
+          <button onClick={() => handleEdit(t)} aria-label={`Edit the testimonial from ${t.name}`} title="Edit" className="p-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"><Edit2 className="w-4 h-4" aria-hidden /></button>
+          <button onClick={() => setConfirmDelete(t)} aria-label={`Delete the testimonial from ${t.name}`} title="Delete" className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 className="w-4 h-4" aria-hidden /></button>
+        </div>
+      ),
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- cells call the latest handlers
+  ], []);
+  const filters = useMemo<TableFilter<Testimonial>[]>(() => [
+    { key: 'status', label: 'Status', options: [{ value: 'shown', label: 'Shown on site' }, { value: 'hidden', label: 'Hidden' }], matches: (t, v) => t.is_active === (v === 'shown') },
+  ], []);
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Newsletter Testimonials</h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Manage testimonials that appear on the newsletter page
-          </p>
+          <h1 className="portal-title">Newsletter testimonials</h1>
+          <p className="portal-subtitle">Quotes from readers shown on the newsletter page.</p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
           className="flex items-center gap-2 px-4 py-2 bg-brand hover:bg-brand/90 text-white rounded-lg transition-colors"
         >
           {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-          {showForm ? 'Cancel' : 'Add Testimonial'}
+          {showForm ? 'Cancel' : 'Add testimonial'}
         </button>
       </div>
 
@@ -296,125 +323,24 @@ export default function TestimonialsClient() {
         </div>
       )}
 
-      {/* Testimonials List */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Order
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Person
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Quote
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {testimonials.length === 0 ? (
-                <TableEmptyState colSpan={5} icon={MessageSquare} title="No testimonials yet" description="Click 'Add Testimonial' to create your first one" />
-              ) : (
-                testimonials.map((testimonial) => (
-                  <tr key={testimonial.id} className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm font-medium text-gray-900 dark:text-white">
-                        {testimonial.display_order}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand to-red-600 flex items-center justify-center flex-shrink-0">
-                          <span className="text-white font-bold text-sm">{testimonial.avatar}</span>
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-gray-900 dark:text-white">
-                            {testimonial.name}
-                          </div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">
-                            {testimonial.role}
-                            {testimonial.company && `, ${testimonial.company}`}
-                          </div>
-                          {testimonial.subscribed_duration && (
-                            <div className="text-xs text-gray-400 dark:text-gray-500">
-                              {testimonial.subscribed_duration}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 max-w-md">
-                        {testimonial.quote}
-                      </p>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                          testimonial.is_active
-                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                            : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400'
-                        }`}
-                      >
-                        {testimonial.is_active ? (
-                          <>
-                            <Eye className="w-3 h-3" /> Active
-                          </>
-                        ) : (
-                          <>
-                            <EyeOff className="w-3 h-3" /> Hidden
-                          </>
-                        )}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => handleEdit(testimonial)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                          title="Edit"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setConfirmDelete(testimonial.id)}
-                          className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable
+        tableId="testimonials"
+        noun="testimonials"
+        rows={testimonials}
+        rowKey={(t) => String(t.id)}
+        columns={columns}
+        filters={filters}
+        loading={loading}
+        searchPlaceholder="Search person, company or quote"
+        empty={{ title: 'No testimonials yet', description: 'Add one to show it on the newsletter page.' }}
+      />
 
       <ConfirmModal
         open={!!confirmDelete}
         onClose={() => setConfirmDelete(null)}
-        onConfirm={() => {
-          if (confirmDelete) {
-            handleDelete(confirmDelete);
-            setConfirmDelete(null);
-          }
-        }}
-        title="Delete Testimonial"
-        message="Are you sure you want to delete this testimonial?"
-        confirmLabel="Delete Testimonial"
-        variant="danger"
-        requireTyping={true}
+        onConfirm={() => { const t = confirmDelete; setConfirmDelete(null); if (t) handleDelete(t.id); }}
+        title="Delete testimonial"
+        message={confirmDelete ? `Delete the testimonial from ${confirmDelete.name}? It is removed from the newsletter page. This can't be undone.` : ''}
       />
     </div>
   );

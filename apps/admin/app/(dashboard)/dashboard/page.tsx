@@ -3,6 +3,9 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import Link from 'next/link';
 import Greeting from '@/components/shared/Greeting';
+import { Suspense } from 'react';
+import AttentionPanel from '@/components/nav/AttentionPanel';
+import AccessNotice from '@/components/nav/AccessNotice';
 import {
   FileText,
   Users,
@@ -162,10 +165,10 @@ export default async function DashboardPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">
+          <h1 className="portal-title">
             <Greeting name={userName} />
           </h1>
-          <p className="text-gray-400 dark:text-gray-500 text-sm font-jakarta mt-1">
+          <p className="portal-subtitle">
             {todayFormatted} &mdash; Here&apos;s your platform overview.
           </p>
         </div>
@@ -179,6 +182,11 @@ export default async function DashboardPage() {
           </Link>
         </div>
       </div>
+
+      <Suspense fallback={null}><AccessNotice /></Suspense>
+
+      {/* Everything waiting for this person, across every section */}
+      <AttentionPanel />
 
       {/* Metric Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">

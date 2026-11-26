@@ -2,263 +2,264 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Receipt, LogOut, Menu, X } from 'lucide-react';
-import { useState, useEffect, createContext, useContext } from 'react';
-import {
-  LayoutDashboard,
-  FileText,
-  Image,
-  Wrench,
-  Building2,
-  IndianRupee,
-  Mail,
-  Megaphone,
-  Users,
-  BarChart3,
-  Settings,
-  Radio,
-  Layers,
-  MessageSquare,
-  UserCog,
-  Shield,
-  Sparkles,
-  MapPin,
-  Newspaper,
-  GraduationCap,
-  Star,
-  CalendarDays,
-  Flag,
-  Activity,
-  Briefcase,
-  LifeBuoy,
-  Package,
-  CreditCard,
-  ClipboardList,
-  ShieldCheck,
-  BookOpen,
-} from 'lucide-react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { ChevronDown, ChevronsLeft, ChevronsRight, Inbox, LayoutDashboard, LogOut, Pin, PinOff, Search, X } from 'lucide-react';
+import { activeHref, navFor, type NavItem } from '@/components/nav/nav-config';
+import { useAttention } from '@/components/nav/AttentionProvider';
 
-const SidebarContext = createContext<{
+/**
+ * Admin menu state, kept in this browser: which groups are open, which sections are pinned, and whether the menu
+ * is narrow (icons only). Read after the page loads, so the first paint is always the same on server and browser.
+ */
+const KEYS = { open: 'admin-nav-open', pins: 'admin-nav-pins', narrow: 'admin-nav-narrow' };
+
+interface SidebarState {
+  /** Phone drawer. */
   isOpen: boolean;
   toggle: () => void;
   close: () => void;
-}>({ isOpen: false, toggle: () => {}, close: () => {} });
+  narrow: boolean;
+  toggleNarrow: () => void;
+  pins: string[];
+  togglePin: (href: string) => void;
+  paletteOpen: boolean;
+  openPalette: () => void;
+  closePalette: () => void;
+}
+
+const SidebarContext = createContext<SidebarState>({
+  isOpen: false, toggle: () => {}, close: () => {}, narrow: false, toggleNarrow: () => {}, pins: [], togglePin: () => {},
+  paletteOpen: false, openPalette: () => {}, closePalette: () => {},
+});
 
 export function useSidebar() {
   return useContext(SidebarContext);
 }
 
-export function SidebarProvider({ children }: { children: React.ReactNode }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const pathname = usePathname();
-
-  useEffect(() => {
-    setIsOpen(false);
-  }, [pathname]);
-
-  return (
-    <SidebarContext.Provider
-      value={{
-        isOpen,
-        toggle: () => setIsOpen(v => !v),
-        close: () => setIsOpen(false),
-      }}
-    >
-      {children}
-    </SidebarContext.Provider>
-  );
+function readList(key: string): string[] | null {
+  try {
+    const v = JSON.parse(window.localStorage.getItem(key) ?? 'null');
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : null;
+  } catch { return null; }
+}
+function save(key: string, value: unknown) {
+  try { window.localStorage.setItem(key, JSON.stringify(value)); } catch { /* private window: keep it for this visit only */ }
 }
 
-const sidebarItems = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: 'all' },
+export function SidebarProvider({ children }: { children: React.ReactNode }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [narrow, setNarrow] = useState(false);
+  const [pins, setPins] = useState<string[]>([]);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const pathname = usePathname();
 
-  { type: 'divider' as const, label: 'Content', roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER', 'WRITER', 'CONTRIBUTOR'] },
-  { label: 'Articles', href: '/articles', icon: FileText, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER', 'WRITER', 'CONTRIBUTOR'] },
-  { label: 'Hero Slots', href: '/hero-slots', icon: Layers, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-  { label: 'Media Library', href: '/media', icon: Image, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER', 'WRITER'] },
-  { label: 'Tickers', href: '/tickers', icon: Radio, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
+  useEffect(() => { setIsOpen(false); setPaletteOpen(false); }, [pathname]);
+  useEffect(() => {
+    setPins(readList(KEYS.pins) ?? []);
+    try { setNarrow(window.localStorage.getItem(KEYS.narrow) === '1'); } catch { /* default wide */ }
+  }, []);
 
-  { type: 'divider' as const, label: 'Directories', roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER'] },
-  { label: 'AI Tools', href: '/tools-dir', icon: Wrench, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER'] },
-  { label: 'Tool Reviews', href: '/tool-reviews', icon: MessageSquare, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER'] },
-  { label: 'Startups', href: '/startups-dir', icon: Building2, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER'] },
-  { label: 'Startup Reviews', href: '/startup-reviews', icon: Star, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER'] },
-  { label: 'Funding Digests', href: '/funding-dir', icon: IndianRupee, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER'] },
+  // Ctrl+K / Cmd+K opens search from anywhere, including while typing in a form.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setPaletteOpen((v) => !v); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
-  { type: 'divider' as const, label: 'India AI', roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER'] },
-  { label: 'Stats & Cities', href: '/india-ai/stats', icon: MapPin, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER'] },
-  { label: 'Gov Schemes', href: '/india-ai/schemes', icon: FileText, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER'] },
-  { label: 'Policy Updates', href: '/india-ai/policy', icon: Newspaper, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER'] },
-  { label: 'AI Researchers', href: '/india-ai/researchers', icon: GraduationCap, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER'] },
-  { label: 'Indian AI Tools', href: '/india-ai/tools', icon: Wrench, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER'] },
-  { label: 'Featured Founders', href: '/india-ai/founders', icon: Star, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER'] },
+  const value: SidebarState = {
+    isOpen,
+    toggle: () => setIsOpen((v) => !v),
+    close: () => setIsOpen(false),
+    narrow,
+    toggleNarrow: () => setNarrow((v) => { try { window.localStorage.setItem(KEYS.narrow, v ? '0' : '1'); } catch { /* ignore */ } return !v; }),
+    pins,
+    togglePin: (href) => setPins((p) => { const next = p.includes(href) ? p.filter((h) => h !== href) : [...p, href]; save(KEYS.pins, next); return next; }),
+    paletteOpen,
+    openPalette: () => setPaletteOpen(true),
+    closePalette: () => setPaletteOpen(false),
+  };
+  return <SidebarContext.Provider value={value}>{children}</SidebarContext.Provider>;
+}
 
-  { type: 'divider' as const, label: 'Events', roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'EVENT_ORGANIZER'] },
-  { label: 'Events', href: '/events', icon: CalendarDays, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'EVENT_ORGANIZER'] },
-  { label: 'Event review', href: '/events/review', icon: ShieldCheck, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-  { label: 'Event Subscribers', href: '/events/subscribers', icon: Users, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-
-  { type: 'divider' as const, label: 'Careers', roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-  { label: 'Applications', href: '/applications', icon: ClipboardList, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-
-  { type: 'divider' as const, label: 'Job Board', roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-  { label: 'Job Listings', href: '/jobs-board', icon: Briefcase, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-  { label: 'Employers', href: '/employers', icon: Building2, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-  { label: 'Skills Dictionary', href: '/skills', icon: BookOpen, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-  { label: 'Billing', href: '/billing', icon: Receipt, roles: ['SUPER_ADMIN'] },
-  { label: 'Monitoring', href: '/monitoring', icon: Activity, roles: ['SUPER_ADMIN'] },
-  { label: 'Plans', href: '/plans', icon: CreditCard, roles: ['SUPER_ADMIN'] },
-  { label: 'Premium Promotions', href: '/promotions', icon: Megaphone, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-
-  { type: 'divider' as const, label: 'Marketing', roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'AD_MANAGER'] },
-  { label: 'Subscribers', href: '/subscribers', icon: Users, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'AD_MANAGER'] },
-  { label: 'Newsletter', href: '/newsletter-admin', icon: Mail, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-  { label: 'Highlights', href: '/newsletter-highlights', icon: Sparkles, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-  { label: 'Testimonials', href: '/testimonials', icon: MessageSquare, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'AD_MANAGER'] },
-  { label: 'Announcements', href: '/announcements', icon: Megaphone, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-  { label: 'Placements', href: '/placements', icon: Megaphone, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'AD_MANAGER'] },
-  { label: 'Sponsors', href: '/sponsors', icon: Building2, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'AD_MANAGER'] },
-  { label: 'Adv Packages', href: '/advertise', icon: Package, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'AD_MANAGER'] },
-  { label: 'Adv Payments', href: '/advertise/payments', icon: CreditCard, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'AD_MANAGER'] },
-
-  { type: 'divider' as const, label: 'Analytics', roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER', 'AD_MANAGER'] },
-  { label: 'Analytics', href: '/analytics', icon: BarChart3, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER', 'AD_MANAGER'] },
-  { label: 'Tool Analytics', href: '/tool-analytics', icon: Sparkles, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER', 'AD_MANAGER'] },
-
-  { type: 'divider' as const, label: 'Founder Content', roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-  { label: 'Listing Edits', href: '/listing-edits', icon: FileText, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-  { label: 'Content Review', href: '/content-review', icon: FileText, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-  { label: 'Milestones', href: '/milestones', icon: Flag, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-
-  { type: 'divider' as const, label: 'Users', roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-  { label: 'People', href: '/people', icon: Users, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-  { label: 'Founders', href: '/founders', icon: UserCog, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-  { label: 'Web Users', href: '/web-users', icon: Users, roles: ['SUPER_ADMIN'] },
-
-  { type: 'divider' as const, label: 'System', roles: ['SUPER_ADMIN'] },
-  { label: 'Team Activity', href: '/activity', icon: Activity, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-  { label: 'Cities', href: '/cities', icon: MapPin, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-  { label: 'Admin Users', href: '/users', icon: Shield, roles: ['SUPER_ADMIN'] },
-  { label: 'Consent Logs', href: '/consent-logs', icon: Shield, roles: ['SUPER_ADMIN'] },
-  { label: 'Support Tickets', href: '/support', icon: LifeBuoy, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-  { label: 'Reports', href: '/reports', icon: Flag, roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-  { label: 'Settings', href: '/settings', icon: Settings, roles: ['SUPER_ADMIN'] },
-  { label: 'Dev Tools', href: '/dev-tools', icon: Wrench, roles: ['SUPER_ADMIN'] },
-];
+const Count = ({ n, narrow }: { n: number; narrow?: boolean }) => (
+  <span
+    aria-label={`${n} waiting`}
+    className={narrow
+      ? 'absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-amber-400 text-gray-900 text-[11px] font-bold leading-none tabular-nums'
+      : 'ml-auto shrink-0 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-amber-400/90 text-gray-900 text-[11px] font-bold leading-none tabular-nums'}
+  >
+    {n > 99 ? '99+' : n}
+  </span>
+);
 
 export function AdminSidebar({ session }: { session: any }) {
   const pathname = usePathname();
-  const { isOpen, close } = useSidebar();
-  const userName = session?.user?.name || "Admin User";
-  const userRole = session?.user?.role?.replace(/_/g, ' ') || "SUPER ADMIN";
-  const userRoleRaw = session?.user?.role || "SUPER_ADMIN";
-  const userInitials = userName.substring(0, 2).toUpperCase();
+  const { isOpen, close, narrow, toggleNarrow, pins, togglePin, openPalette } = useSidebar();
+  const { counts, total } = useAttention();
+  const role: string = session?.user?.role || '';
+  const userName = session?.user?.name || 'Admin';
   const userAvatar = session?.user?.image || session?.user?.avatar;
 
-  const visibleItems = sidebarItems.filter((item: any) => {
-    if (item.roles === 'all') return true;
-    if (Array.isArray(item.roles)) return item.roles.includes(userRoleRaw);
-    return true;
-  });
+  const groups = useMemo(() => navFor(role), [role]);
+  const current = activeHref(pathname);
+  const activeGroup = groups.find((g) => g.items.some((i) => i.href === current))?.id;
 
-  const filteredItems = visibleItems.filter((item: any, index: number) => {
-    if ('type' in item && item.type === 'divider') {
-      for (let i = index + 1; i < visibleItems.length; i++) {
-        if ('type' in visibleItems[i] && (visibleItems[i] as any).type === 'divider') return false;
-        if (!('type' in visibleItems[i])) return true;
-      }
-      return false;
-    }
-    return true;
-  });
+  // Open groups: what was left open last time, plus always the group of the page being viewed.
+  const [open, setOpen] = useState<string[]>([]);
+  useEffect(() => { setOpen(readList(KEYS.open) ?? ['content', 'review']); }, []);
+  const isGroupOpen = (id: string) => open.includes(id) || id === activeGroup;
+  const toggleGroup = useCallback((id: string) => {
+    setOpen((o) => { const next = o.includes(id) ? o.filter((x) => x !== id) : [...o, id]; save(KEYS.open, next); return next; });
+  }, []);
+
+  const pinned = pins.map((href) => groups.flatMap((g) => g.items).find((i) => i.href === href)).filter(Boolean) as NavItem[];
+  // The narrow menu only applies on wide screens; the phone drawer is always full width.
+  const rail = narrow && !isOpen;
+
+  const itemClass = (active: boolean) => `group/item relative flex items-center gap-3 rounded-lg text-sm font-jakarta font-medium transition-colors ${rail ? 'justify-center h-10 w-10 mx-auto' : 'px-3 py-2'} ${active ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'}`;
+
+  const renderItem = (item: NavItem, opts: { pinnedRow?: boolean } = {}) => {
+    const active = item.href === current;
+    const n = counts[item.href] ?? 0;
+    const Icon = item.icon;
+    const isPinned = pins.includes(item.href);
+    return (
+      <li key={`${opts.pinnedRow ? 'pin:' : ''}${item.href}`} className="relative group/row">
+        <Link href={item.href} title={rail ? item.label : undefined} aria-current={active ? 'page' : undefined} className={itemClass(active)}>
+          {active && !rail && <span aria-hidden className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-brand" />}
+          <Icon className="w-[18px] h-[18px] shrink-0" aria-hidden />
+          {rail ? <span className="sr-only">{item.label}</span> : <span className="truncate">{item.label}</span>}
+          {n > 0 && <Count n={n} narrow={rail} />}
+        </Link>
+        {!rail && (
+          <button
+            type="button"
+            onClick={() => togglePin(item.href)}
+            aria-label={isPinned ? `Unpin ${item.label}` : `Pin ${item.label} to the top`}
+            aria-pressed={isPinned}
+            className={`absolute top-1/2 -translate-y-1/2 p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/10 focus-visible:opacity-100 ${n > 0 ? 'right-9' : 'right-1.5'} ${isPinned && opts.pinnedRow ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100'}`}
+          >
+            {isPinned ? <PinOff className="w-3.5 h-3.5" aria-hidden /> : <Pin className="w-3.5 h-3.5" aria-hidden />}
+          </button>
+        )}
+      </li>
+    );
+  };
 
   return (
     <>
-      {isOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={close}
-        />
-      )}
+      {isOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={close} />}
 
       <aside
-        className={`
-          fixed inset-y-0 left-0 z-50 w-64 bg-navy dark:bg-gray-900 text-white flex flex-col shrink-0 border-r border-white/5 dark:border-gray-800
-          transform transition-transform duration-200 ease-in-out
-          lg:relative lg:translate-x-0
-          ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-        `}
+        aria-label="Admin menu"
+        className={`on-dark fixed inset-y-0 left-0 z-50 ${rail ? 'lg:w-16' : ''} w-64 bg-navy dark:bg-gray-900 text-white flex flex-col shrink-0 border-r border-white/5 dark:border-gray-800 transform transition-[transform,width] duration-200 ease-in-out lg:relative lg:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
-        <div className="h-16 flex items-center justify-between px-6 border-b border-white/10 dark:border-gray-800">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <span className="font-sora font-extrabold text-lg">
-              <span className="text-brand">U</span>
-              <span className="text-white">B</span>
-            </span>
-            <span className="text-gray-400 text-xs font-jakarta">Admin</span>
+        <div className={`h-16 flex items-center border-b border-white/10 dark:border-gray-800 ${rail ? 'justify-center px-2' : 'justify-between px-5'}`}>
+          <Link href="/dashboard" className="flex items-center gap-2" aria-label="Udyaibase admin home">
+            <span className="font-sora font-extrabold text-lg"><span className="text-[#F0555A]">U</span><span className="text-white">B</span></span>
+            {!rail && <span className="text-gray-400 text-xs font-jakarta">Admin</span>}
           </Link>
-          <button
-            onClick={close}
-            className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors lg:hidden"
-          >
-            <X className="w-5 h-5" />
+          <button onClick={close} aria-label="Close menu" className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors lg:hidden">
+            <X className="w-5 h-5" aria-hidden />
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          {filteredItems.map((item: any, i: number) => {
-            if ('type' in item && item.type === 'divider') {
-              return (
-                <div key={i} className="pt-4 pb-2">
-                  <span className="px-3 text-[10px] font-semibold uppercase tracking-widest text-gray-500">
-                    {item.label}
-                  </span>
-                </div>
-              );
-            }
+        <div className={rail ? 'px-2 pt-3' : 'px-3 pt-3'}>
+          <button
+            type="button"
+            onClick={openPalette}
+            title={rail ? 'Search (Ctrl+K)' : undefined}
+            className={`flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 text-sm text-gray-400 hover:text-white hover:border-white/20 transition-colors ${rail ? 'justify-center h-10 w-10 mx-auto' : 'w-full px-3 py-2'}`}
+          >
+            <Search className="w-4 h-4 shrink-0" aria-hidden />
+            {rail ? <span className="sr-only">Search</span> : <><span>Search</span><kbd className="ml-auto text-[11px] font-mono text-gray-500 border border-white/10 rounded px-1.5 py-0.5">Ctrl K</kbd></>}
+          </button>
+        </div>
 
-            const hasChildInSidebar = sidebarItems.some((other: any) => other.href && other.href !== item.href && other.href.startsWith(item.href + '/'));
-            const isActive = hasChildInSidebar ? pathname === item.href : (pathname === item.href || pathname?.startsWith(item.href + '/'));
-            const Icon = 'icon' in item ? item.icon : null;
-
-            return (
-              <Link
-                key={item.label}
-                href={item.href || '#'}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-jakarta font-medium transition-all duration-200 group ${isActive
-                  ? 'bg-brand text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-                  }`}
-              >
-                {Icon && <Icon className="w-4.5 h-4.5 shrink-0" />}
-                <span>{item.label}</span>
+        <nav className={`flex-1 overflow-y-auto py-3 ${rail ? 'px-2' : 'px-3'}`}>
+          <ul className="space-y-0.5">
+            <li>
+              <Link href="/dashboard" title={rail ? 'Dashboard' : undefined} aria-current={pathname === '/dashboard' ? 'page' : undefined} className={itemClass(pathname === '/dashboard')}>
+                <LayoutDashboard className="w-[18px] h-[18px] shrink-0" aria-hidden />
+                {rail ? <span className="sr-only">Dashboard</span> : <span>Dashboard</span>}
               </Link>
+            </li>
+            <li>
+              <Link href="/dashboard#needs-attention" title={rail ? `Needs attention (${total})` : undefined} className={itemClass(false)}>
+                <Inbox className="w-[18px] h-[18px] shrink-0" aria-hidden />
+                {rail ? <span className="sr-only">Needs attention</span> : <span>Needs attention</span>}
+                {total > 0 && <Count n={total} narrow={rail} />}
+              </Link>
+            </li>
+          </ul>
+
+          {pinned.length > 0 && (
+            <div className="mt-3">
+              {!rail && <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Pinned</p>}
+              {rail && <div aria-hidden className="mx-3 my-2 border-t border-white/10" />}
+              <ul className="space-y-0.5">{pinned.map((i) => renderItem(i, { pinnedRow: true }))}</ul>
+            </div>
+          )}
+
+          {groups.map((g) => {
+            const groupCount = g.items.reduce((n, i) => n + (counts[i.href] ?? 0), 0);
+            const expanded = rail || isGroupOpen(g.id);
+            return (
+              <div key={g.id} className="mt-3">
+                {rail ? (
+                  <div aria-hidden className="mx-3 my-2 border-t border-white/10" />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(g.id)}
+                    aria-expanded={expanded}
+                    aria-controls={`nav-${g.id}`}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-[11px] font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors"
+                  >
+                    <span>{g.label}</span>
+                    {!expanded && groupCount > 0 && <span aria-label={`${groupCount} waiting`} className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                    <ChevronDown className={`ml-auto w-3.5 h-3.5 transition-transform ${expanded ? '' : '-rotate-90'}`} aria-hidden />
+                  </button>
+                )}
+                {expanded && (
+                  <ul id={`nav-${g.id}`} className="space-y-0.5">
+                    {g.items.map((i) => renderItem(i))}
+                  </ul>
+                )}
+              </div>
             );
           })}
         </nav>
 
-        <div className="p-4 border-t border-white/10 dark:border-gray-800 flex items-center justify-between">
-          <div className="flex items-center gap-3 overflow-hidden">
-            <div className="w-8 h-8 rounded-full bg-brand/20 flex shrink-0 items-center justify-center text-brand text-sm font-bold overflow-hidden">
-              {userAvatar ? (
+        <div className={`border-t border-white/10 dark:border-gray-800 ${rail ? 'p-2 space-y-1' : 'p-3'}`}>
+          <div className={`flex items-center ${rail ? 'flex-col gap-1' : 'gap-3'}`}>
+            <div className="w-8 h-8 rounded-full bg-white/10 flex shrink-0 items-center justify-center text-white text-sm font-bold overflow-hidden" title={rail ? userName : undefined}>
+              {userAvatar
                 // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={userAvatar}
-                  alt={userName}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                userInitials
-              )}
+                ? <img src={userAvatar} alt="" className="w-full h-full object-cover" />
+                : userName.substring(0, 2).toUpperCase()}
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{userName}</p>
-              <p className="text-xs text-gray-500 truncate">{userRole}</p>
-            </div>
+            {!rail && (
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{userName}</p>
+                <p className="text-xs text-gray-400 truncate">{role.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())}</p>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={toggleNarrow}
+              aria-label={narrow ? 'Widen the menu' : 'Narrow the menu to icons'}
+              aria-pressed={narrow}
+              className="hidden lg:inline-flex p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+            >
+              {narrow ? <ChevronsRight className="w-4 h-4" aria-hidden /> : <ChevronsLeft className="w-4 h-4" aria-hidden />}
+            </button>
+            <Link href="/api/auth/signout" aria-label="Sign out" title="Sign out" className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
+              <LogOut className="w-4 h-4" aria-hidden />
+            </Link>
           </div>
-          <Link href="/api/auth/signout" className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
-            <LogOut className="w-4 h-4" />
-          </Link>
         </div>
       </aside>
     </>

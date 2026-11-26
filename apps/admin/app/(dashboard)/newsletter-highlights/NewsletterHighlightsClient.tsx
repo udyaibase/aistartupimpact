@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Save, X, Eye, EyeOff, Newspaper, Sparkles } from 'lucide-react';
+import { notify } from '@/components/Toast';
+import { useState, useEffect, useMemo } from 'react';
+import { Plus, Edit2, Trash2, Save, X, Newspaper } from 'lucide-react';
 import { ConfirmModal } from '@/components/ConfirmModal';
-import { TableEmptyState } from '@/components/EmptyState';
+import DataTable, { type Column, type TableFilter } from '@/components/ui/DataTable';
 
 interface Highlight {
   id: number;
@@ -29,7 +30,7 @@ export default function NewsletterHighlightsClient() {
     is_active: true,
     display_order: 0,
   });
-  const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Highlight | null>(null);
 
   useEffect(() => {
     fetchHighlights();
@@ -44,6 +45,7 @@ export default function NewsletterHighlightsClient() {
       }
     } catch (error) {
       console.error('Error fetching highlights:', error);
+      notify("Couldn't load this. Check your connection and refresh.", 'error');
     } finally {
       setLoading(false);
     }
@@ -67,13 +69,13 @@ export default function NewsletterHighlightsClient() {
       if (data.success) {
         await fetchHighlights();
         resetForm();
-        alert(editingId ? 'Highlight updated!' : 'Highlight created!');
+        notify(editingId ? 'Highlight updated!' : 'Highlight created!');
       } else {
-        alert(data.error || 'Failed to save highlight');
+        notify(data.error || 'Failed to save highlight');
       }
     } catch (error) {
       console.error('Error saving highlight:', error);
-      alert('Failed to save highlight');
+      notify('Failed to save highlight');
     }
   };
 
@@ -100,13 +102,13 @@ export default function NewsletterHighlightsClient() {
       
       if (data.success) {
         await fetchHighlights();
-        alert('Highlight deleted!');
+        notify('Highlight deleted.', 'success');
       } else {
-        alert(data.error || 'Failed to delete highlight');
+        notify(data.error || 'Failed to delete highlight');
       }
     } catch (error) {
       console.error('Error deleting highlight:', error);
-      alert('Failed to delete highlight');
+      notify('Failed to delete highlight');
     }
   };
 
@@ -123,21 +125,45 @@ export default function NewsletterHighlightsClient() {
     setShowForm(false);
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand"></div>
-      </div>
-    );
-  }
+  const columns = useMemo<Column<Highlight>[]>(() => [
+    { key: 'order', header: 'Order', sortValue: (h) => h.display_order, cell: (h) => h.display_order, width: 'w-20' },
+    {
+      key: 'highlight', header: 'Highlight', sortValue: (h) => h.title, searchValue: (h) => `${h.title} ${h.description}`,
+      cell: (h) => (
+        <div className="min-w-0 max-w-md">
+          <p className="font-medium text-gray-900 dark:text-white">{h.title}</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 mt-0.5">{h.description}</p>
+          {h.link && <a href={h.link} target="_blank" rel="noopener noreferrer" className="text-xs text-brand hover:underline">Open link<span className="sr-only"> (new tab)</span></a>}
+        </div>
+      ),
+    },
+    { key: 'date', header: 'Date', searchValue: (h) => h.date, cell: (h) => <span className="text-xs whitespace-nowrap">{h.date}</span> },
+    {
+      key: 'status', header: 'Status', sortValue: (h) => (h.is_active ? 0 : 1),
+      cell: (h) => <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${h.is_active ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`}>{h.is_active ? 'Shown' : 'Hidden'}</span>,
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'right',
+      cell: (h) => (
+        <div className="flex items-center justify-end gap-1">
+          <button onClick={() => handleEdit(h)} aria-label={`Edit ${h.title}`} title="Edit" className="p-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"><Edit2 className="w-4 h-4" aria-hidden /></button>
+          <button onClick={() => setConfirmDelete(h)} aria-label={`Delete ${h.title}`} title="Delete" className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 className="w-4 h-4" aria-hidden /></button>
+        </div>
+      ),
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- cells call the latest handlers
+  ], []);
+  const filters = useMemo<TableFilter<Highlight>[]>(() => [
+    { key: 'status', label: 'Status', options: [{ value: 'shown', label: 'Shown on site' }, { value: 'hidden', label: 'Hidden' }], matches: (h, v) => h.is_active === (v === 'shown') },
+  ], []);
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Newsletter Highlights</h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          <h1 className="portal-title">Newsletter Highlights</h1>
+          <p className="portal-subtitle">
             Manage highlights shown in the "Recent Highlights" section on the newsletter page
           </p>
         </div>
@@ -279,114 +305,24 @@ export default function NewsletterHighlightsClient() {
         </div>
       )}
 
-      {/* Highlights List */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Order
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Highlight
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Date
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {highlights.length === 0 ? (
-                <TableEmptyState colSpan={5} icon={Sparkles} title="No highlights yet" description="Click 'Add Highlight' to create your first one" />
-              ) : (
-                highlights.map((highlight) => (
-                  <tr key={highlight.id} className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm font-medium text-gray-900 dark:text-white">
-                        {highlight.display_order}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900 dark:text-white">
-                          {highlight.title}
-                        </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mt-1 max-w-md">
-                          {highlight.description}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-xs text-gray-600 dark:text-gray-400">
-                        {highlight.date}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                          highlight.is_active
-                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                            : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400'
-                        }`}
-                      >
-                        {highlight.is_active ? (
-                          <>
-                            <Eye className="w-3 h-3" /> Active
-                          </>
-                        ) : (
-                          <>
-                            <EyeOff className="w-3 h-3" /> Hidden
-                          </>
-                        )}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => handleEdit(highlight)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                          title="Edit"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setConfirmDelete(highlight.id)}
-                          className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable
+        tableId="newsletter-highlights"
+        noun="highlights"
+        rows={highlights}
+        rowKey={(h) => String(h.id)}
+        columns={columns}
+        filters={filters}
+        loading={loading}
+        searchPlaceholder="Search title or description"
+        empty={{ title: 'No highlights yet', description: 'Add one to show it on the newsletter page.' }}
+      />
 
       <ConfirmModal
         open={!!confirmDelete}
         onClose={() => setConfirmDelete(null)}
-        onConfirm={() => {
-          if (confirmDelete) {
-            handleDelete(confirmDelete);
-            setConfirmDelete(null);
-          }
-        }}
-        title="Delete Highlight"
-        message="Are you sure you want to delete this highlight?"
-        confirmLabel="Delete Highlight"
-        variant="danger"
-        requireTyping={true}
+        onConfirm={() => { const h = confirmDelete; setConfirmDelete(null); if (h) handleDelete(h.id); }}
+        title="Delete highlight"
+        message={confirmDelete ? `Delete “${confirmDelete.title}”? It is removed from the newsletter page. This can't be undone.` : ''}
       />
     </div>
   );

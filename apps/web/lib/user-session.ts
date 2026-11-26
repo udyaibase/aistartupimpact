@@ -18,6 +18,41 @@ export interface UserSession {
   onboardingCompleted: boolean;
 }
 
+export interface UserIds { userId: string; email: string; sessionId: string | null }
+
+/**
+ * The one check every website-user route makes on the sign-in cookie. A valid signature is not enough: the account
+ * must still be open, and this sign-in must not have been ended ("sign out of other devices", a password change).
+ * Routes that only verified the signature kept working for up to 7 days after a sign-out.
+ * Returns the ids from the token, or null.
+ */
+export async function verifyUserToken(token: string | undefined | null): Promise<UserIds | null> {
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const userId = typeof payload.userId === 'string' ? payload.userId : null;
+    if (!userId) return null;
+    const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : null;
+    const rows = await sql`
+      SELECT u.id, u.email FROM "WebUser" u
+      WHERE u.id = ${userId} AND u."isActive" = true AND u."deactivatedAt" IS NULL
+        AND (${sessionId}::text IS NULL OR EXISTS (
+          SELECT 1 FROM "WebUserSession" s WHERE s.id = ${sessionId} AND s."webUserId" = u.id AND s."expiresAt" > NOW()
+        ))
+      LIMIT 1
+    `;
+    if (rows.length === 0) return null;
+    return { userId, email: String(rows[0].email), sessionId };
+  } catch {
+    return null;
+  }
+}
+
+/** verifyUserToken for the current request's cookie. */
+export async function getUserIds(): Promise<UserIds | null> {
+  return verifyUserToken((await cookies()).get('user-token')?.value);
+}
+
 /**
  * Server-side function to get the current user session
  * Use this in Server Components and Server Actions

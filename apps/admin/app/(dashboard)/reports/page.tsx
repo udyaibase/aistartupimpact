@@ -3,10 +3,11 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@udyaibase/database";
 import { redirect } from "next/navigation";
 import ReportsClient from "./ReportsClient";
+import { sectionRoles } from '@/lib/section-access';
 
 export default async function ReportsPage() {
   const session = await getServerSession(authOptions);
-  if (!session?.user || !["SUPER_ADMIN", "EDITOR_IN_CHIEF"].includes(session.user.role)) redirect("/dashboard");
+  if (!session?.user || !sectionRoles('/reports').includes(session.user.role)) redirect("/dashboard");
 
   const reports = await prisma.contentReport.findMany({
     orderBy: { createdAt: "desc" },

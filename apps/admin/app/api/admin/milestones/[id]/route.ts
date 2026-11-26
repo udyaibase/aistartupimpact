@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@udyaibase/database";
 import { withPublicRefresh } from '@/lib/refresh-public';
+import { logAuditEvent } from '@/lib/audit-log';
 
 async function putHandler(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -51,6 +52,7 @@ async function putHandler(request: NextRequest, props: { params: Promise<{ id: s
       },
     });
 
+    await logAuditEvent({ action: action === 'delete' ? 'DELETE' : 'UPDATE', resourceType: 'MILESTONE', resourceId: params.id, after: { action } });
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("[admin/milestones/[id] PUT]", err);

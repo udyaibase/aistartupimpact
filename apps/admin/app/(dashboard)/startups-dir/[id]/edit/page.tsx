@@ -1,5 +1,6 @@
 'use client';
 
+import { notify } from '@/components/Toast';
 import { useState, useRef, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, Upload, Loader2, Save, Crown, Briefcase, Plus, CheckCircle, XCircle } from 'lucide-react';
@@ -92,7 +93,7 @@ export default function EditStartupPage() {
       const startup = result.find((s: any) => s.id === startupId);
       
       if (!startup) {
-        alert('Startup not found');
+        notify('Startup not found');
         router.push('/startups-dir');
         return;
       }
@@ -158,12 +159,13 @@ export default function EditStartupPage() {
           if (dSocialLinks) setSocialLinks(dSocialLinks);
         } catch (e) {
           console.error('Failed to restore startup draft:', e);
+          notify("Something went wrong. Check your connection and try again.", 'error');
         }
       }
       setDraftLoaded(true);
     } catch (error) {
       console.error('Error loading startup:', error);
-      alert('Error loading startup');
+      notify('Error loading startup');
     } finally {
       setLoading(false);
       setLoadingFaqs(false);
@@ -207,10 +209,10 @@ export default function EditStartupPage() {
       if (result.success && result.url) {
         setFormData(prev => prev ? { ...prev, logoUrl: result.url! } : null);
       } else {
-        alert('Upload failed: ' + (result.error || 'Unknown error'));
+        notify('Upload failed: ' + (result.error || 'Unknown error'));
       }
     } catch (err: any) {
-      alert('Upload error: ' + err.message);
+      notify('Upload error: ' + err.message);
     } finally {
       setLogoUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -221,7 +223,7 @@ export default function EditStartupPage() {
     e.preventDefault();
     
     if (!formData || !formData.name || !formData.tagline) {
-      alert('Name and tagline are required');
+      notify('Name and tagline are required');
       return;
     }
     
@@ -256,10 +258,10 @@ export default function EditStartupPage() {
         router.push('/startups-dir');
         router.refresh();
       } else {
-        alert('Error: ' + (result.error || 'Failed to update startup'));
+        notify('Error: ' + (result.error || 'Failed to update startup'));
       }
     } catch (error: any) {
-      alert('Error: ' + error.message);
+      notify('Error: ' + error.message);
     } finally {
       setSaving(false);
     }
@@ -293,8 +295,8 @@ export default function EditStartupPage() {
           <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
         </button>
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Edit Startup</h1>
-          <p className="text-gray-400 dark:text-gray-500 text-sm font-jakarta mt-1">
+          <h1 className="portal-title">Edit Startup</h1>
+          <p className="portal-subtitle">
             Update startup information
           </p>
         </div>

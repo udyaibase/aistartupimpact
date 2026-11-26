@@ -4,6 +4,8 @@ import { neon } from '@neondatabase/serverless';
 import { revalidatePath } from 'next/cache';
 import { requireActionAuth } from '@/lib/api-auth';
 import { refreshPublic } from '@/lib/refresh-public';
+import { publicError } from '@/lib/public-error';
+import { logAuditEvent } from '@/lib/audit-log';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -54,10 +56,11 @@ export async function addBusinessCategoryAction(name: string) {
     `;
 
     revalidatePath('/startups-dir/manage');
+    await logAuditEvent({ action: 'CREATE', resourceType: 'STARTUP', resourceName: 'addBusinessCategoryAction' });
     await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
     console.error('addBusinessCategoryAction error:', error);
-    return { success: false, error: error.message || 'Failed to add category' };
+    return { success: false, error: publicError(error) || 'Failed to add category' };
   }
 }
 
@@ -78,10 +81,11 @@ export async function updateBusinessCategoryAction(oldName: string, newName: str
     `;
 
     revalidatePath('/startups-dir/manage');
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'STARTUP', resourceName: 'updateBusinessCategoryAction' });
     await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
     console.error('updateBusinessCategoryAction error:', error);
-    return { success: false, error: error.message || 'Failed to update category' };
+    return { success: false, error: publicError(error) || 'Failed to update category' };
   }
 }
 
@@ -100,10 +104,11 @@ export async function deleteBusinessCategoryAction(name: string) {
     await sql`DELETE FROM "StartupBusinessCategory" WHERE name = ${name}`;
 
     revalidatePath('/startups-dir/manage');
+    await logAuditEvent({ action: 'DELETE', resourceType: 'STARTUP', resourceName: 'deleteBusinessCategoryAction' });
     await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
     console.error('deleteBusinessCategoryAction error:', error);
-    return { success: false, error: error.message || 'Failed to delete category' };
+    return { success: false, error: publicError(error) || 'Failed to delete category' };
   }
 }
 
@@ -113,9 +118,10 @@ export async function toggleBusinessCategoryAction(name: string, isActive: boole
   try {
     await sql`UPDATE "StartupBusinessCategory" SET "isActive" = ${isActive} WHERE name = ${name}`;
     revalidatePath('/startups-dir/manage');
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'STARTUP', resourceName: 'toggleBusinessCategoryAction' });
     await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
-    return { success: false, error: error.message };
+    return { success: false, error: publicError(error) };
   }
 }
 
@@ -162,10 +168,11 @@ export async function addBusinessTypeAction(name: string) {
     `;
 
     revalidatePath('/startups-dir/manage');
+    await logAuditEvent({ action: 'CREATE', resourceType: 'STARTUP', resourceName: 'addBusinessTypeAction' });
     await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
     console.error('addBusinessTypeAction error:', error);
-    return { success: false, error: error.message || 'Failed to add business type' };
+    return { success: false, error: publicError(error) || 'Failed to add business type' };
   }
 }
 
@@ -184,10 +191,11 @@ export async function updateBusinessTypeAction(oldName: string, newName: string)
     `;
 
     revalidatePath('/startups-dir/manage');
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'STARTUP', resourceName: 'updateBusinessTypeAction' });
     await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
     console.error('updateBusinessTypeAction error:', error);
-    return { success: false, error: error.message || 'Failed to update business type' };
+    return { success: false, error: publicError(error) || 'Failed to update business type' };
   }
 }
 
@@ -205,10 +213,11 @@ export async function deleteBusinessTypeAction(name: string) {
     await sql`DELETE FROM "StartupBusinessType" WHERE name = ${name}`;
 
     revalidatePath('/startups-dir/manage');
+    await logAuditEvent({ action: 'DELETE', resourceType: 'STARTUP', resourceName: 'deleteBusinessTypeAction' });
     await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
     console.error('deleteBusinessTypeAction error:', error);
-    return { success: false, error: error.message || 'Failed to delete business type' };
+    return { success: false, error: publicError(error) || 'Failed to delete business type' };
   }
 }
 
@@ -218,9 +227,10 @@ export async function toggleBusinessTypeAction(name: string, isActive: boolean) 
   try {
     await sql`UPDATE "StartupBusinessType" SET "isActive" = ${isActive} WHERE name = ${name}`;
     revalidatePath('/startups-dir/manage');
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'STARTUP', resourceName: 'toggleBusinessTypeAction' });
     await refreshPublic(['startups', 'funding', 'india-ai', 'home']); return { success: true };
   } catch (error: any) {
-    return { success: false, error: error.message };
+    return { success: false, error: publicError(error) };
   }
 }
 

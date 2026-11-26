@@ -1,22 +1,16 @@
+import { verifyUserToken } from '@/lib/user-session';
 import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
 import { sql } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 const JWT_SECRET = jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET');
 
 async function getSessionUserId(request: NextRequest): Promise<{ userId: string; sessionId: string } | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('user-token')?.value;
-  if (!token) return null;
-  try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    return { userId: (payload as any).userId, sessionId: (payload as any).sessionId };
-  } catch {
-    return null;
-  }
+  // Signature, open account and a sign-in that hasn't been ended (lib/user-session.ts).
+  const ids = await verifyUserToken((await cookies()).get('user-token')?.value);
+  return ids ? { userId: ids.userId, sessionId: ids.sessionId ?? '' } : null;
 }
 
 export async function GET(request: NextRequest) {

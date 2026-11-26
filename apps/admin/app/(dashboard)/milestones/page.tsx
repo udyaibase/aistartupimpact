@@ -1,133 +1,146 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import {
-  Trophy, CheckCircle, Clock, Loader2, Shield, Trash2,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { CheckCircle, Clock, Loader2, Shield, Trash2 } from "lucide-react";
+import DataTable, { type BulkAction, type Column, type TableFilter } from "@/components/ui/DataTable";
+import { ConfirmModal } from "@/components/ConfirmModal";
+import { notify } from "@/components/Toast";
 
-const ICONS: Record<string, string> = {
-  FUNDING: "💰", LAUNCH: "🚀", PARTNERSHIP: "🤝", ACQUISITION: "🏢",
-  AWARD: "🏆", HIRING: "👥", REVENUE: "📈", USER_MILESTONE: "🎯",
-};
+interface Milestone {
+  id: string;
+  title: string;
+  type: string;
+  amount: number | string | null;
+  currency: string | null;
+  date: string;
+  verificationStatus: "FOUNDER_REPORTED" | "PLATFORM_VERIFIED";
+  startup: { name: string } | null;
+  founder: { name: string | null; email?: string | null } | null;
+}
 
-type Filter = "all" | "FOUNDER_REPORTED" | "PLATFORM_VERIFIED";
+const TYPE_LABEL = (t: string) => t.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
+type Action = "verify" | "unverify" | "delete";
 
 export default function AdminMilestonesPage() {
-  const [milestones, setMilestones] = useState<any[]>([]);
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<Filter>("all");
   const [acting, setActing] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<Milestone | null>(null);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = useCallback(async () => {
     try {
-      const res = await fetch(`/api/admin/milestones?verification=${filter}`);
+      const res = await fetch("/api/admin/milestones?verification=all");
+      if (!res.ok) throw new Error();
       const d = await res.json();
       setMilestones(d.milestones || []);
-    } catch {}
-    setLoading(false);
+    } catch {
+      notify("Couldn't load milestones. Check your connection and refresh.", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  /** One request per milestone; returns how many succeeded. */
+  const send = async (ids: string[], action: Action): Promise<number> => {
+    const results = await Promise.all(ids.map((id) =>
+      fetch(`/api/admin/milestones/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) })
+        .then((r) => r.ok).catch(() => false),
+    ));
+    return results.filter(Boolean).length;
   };
 
-  useEffect(() => { fetchData(); }, [filter]);
-
-  const handleAction = async (id: string, action: string) => {
-    setActing(id);
-    try {
-      await fetch(`/api/admin/milestones/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
-      });
-      fetchData();
-    } catch {}
-    setActing(null);
+  const DONE: Record<Action, string> = { verify: "verified", unverify: "marked unverified", delete: "deleted" };
+  const act = async (rows: Milestone[], action: Action) => {
+    const ok = await send(rows.map((r) => r.id), action);
+    const failed = rows.length - ok;
+    if (ok > 0) notify(`${ok} milestone${ok === 1 ? "" : "s"} ${DONE[action]}.`, "success");
+    if (failed > 0) notify(`${failed} milestone${failed === 1 ? "" : "s"} couldn't be ${DONE[action]}. Try again.`, "error");
+    await fetchData();
   };
+  const actOne = async (m: Milestone, action: Action) => { setActing(m.id); await act([m], action); setActing(null); };
 
-  const filters: { key: Filter; label: string }[] = [
-    { key: "all", label: "All" },
-    { key: "FOUNDER_REPORTED", label: "Unverified" },
-    { key: "PLATFORM_VERIFIED", label: "Verified" },
+  const columns = useMemo<Column<Milestone>[]>(() => [
+    {
+      key: "title", header: "Milestone",
+      sortValue: (m) => m.title, searchValue: (m) => `${m.title} ${TYPE_LABEL(m.type)}`,
+      cell: (m) => (
+        <div>
+          <p className="font-medium text-gray-900 dark:text-white">{m.title}</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400">{TYPE_LABEL(m.type)}{m.amount ? ` · ${m.currency ?? ""} ${Number(m.amount).toLocaleString("en-IN")}` : ""}</p>
+        </div>
+      ),
+    },
+    { key: "startup", header: "Startup", sortValue: (m) => m.startup?.name, searchValue: (m) => m.startup?.name ?? "", cell: (m) => m.startup?.name || "–" },
+    { key: "founder", header: "Founder", sortValue: (m) => m.founder?.name || m.founder?.email, searchValue: (m) => `${m.founder?.name ?? ""} ${m.founder?.email ?? ""}`, cell: (m) => m.founder?.name || m.founder?.email || "–" },
+    { key: "date", header: "Date", sortValue: (m) => new Date(m.date), cell: (m) => new Date(m.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) },
+    {
+      key: "status", header: "Status", sortValue: (m) => m.verificationStatus,
+      cell: (m) => m.verificationStatus === "PLATFORM_VERIFIED"
+        ? <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-400"><CheckCircle className="w-3.5 h-3.5" aria-hidden /> Verified</span>
+        : <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-400"><Clock className="w-3.5 h-3.5" aria-hidden /> Unverified</span>,
+    },
+    {
+      key: "actions", header: "Actions", align: "right",
+      cell: (m) => (
+        <div className="flex items-center justify-end gap-1">
+          {m.verificationStatus === "FOUNDER_REPORTED" ? (
+            <button onClick={() => actOne(m, "verify")} disabled={acting === m.id} className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg disabled:opacity-50 inline-flex items-center gap-1">
+              {acting === m.id ? <Loader2 className="w-3 h-3 animate-spin" aria-hidden /> : <Shield className="w-3 h-3" aria-hidden />} Verify
+            </button>
+          ) : (
+            <button onClick={() => actOne(m, "unverify")} disabled={acting === m.id} className="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 text-xs font-medium rounded-lg disabled:opacity-50 hover:bg-gray-200 dark:hover:bg-gray-700">
+              Unverify
+            </button>
+          )}
+          <button onClick={() => setDeleting(m)} disabled={acting === m.id} aria-label={`Delete milestone: ${m.title}`} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg disabled:opacity-50">
+            <Trash2 className="w-3.5 h-3.5" aria-hidden />
+          </button>
+        </div>
+      ),
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the cells call the latest handlers; only `acting` changes how they look
+  ], [acting]);
+
+  const filters = useMemo<TableFilter<Milestone>[]>(() => [
+    { key: "status", label: "Status", options: [{ value: "FOUNDER_REPORTED", label: "Unverified" }, { value: "PLATFORM_VERIFIED", label: "Verified" }], matches: (m, v) => m.verificationStatus === v },
+    { key: "type", label: "Type", options: [...new Set(milestones.map((m) => m.type))].sort().map((t) => ({ value: t, label: TYPE_LABEL(t) })), matches: (m, v) => m.type === v },
+  ], [milestones]);
+
+  const bulkActions: BulkAction<Milestone>[] = [
+    { label: "Verify", run: (rows) => act(rows.filter((r) => r.verificationStatus === "FOUNDER_REPORTED"), "verify"), available: (rows) => rows.some((r) => r.verificationStatus === "FOUNDER_REPORTED") },
+    { label: "Unverify", run: (rows) => act(rows.filter((r) => r.verificationStatus === "PLATFORM_VERIFIED"), "unverify"), available: (rows) => rows.some((r) => r.verificationStatus === "PLATFORM_VERIFIED") },
+    { label: "Delete", danger: true, run: (rows) => act(rows, "delete"), confirm: (n) => `Delete ${n} milestone${n === 1 ? "" : "s"}? They are removed from the startup's public page. This can't be undone.` },
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Milestones</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Verify and manage startup milestones</p>
+        <h1 className="portal-title">Milestones</h1>
+        <p className="portal-subtitle">Verify and manage the milestones founders report for their startups.</p>
       </div>
 
-      <div className="flex gap-2">
-        {filters.map(f => (
-          <button key={f.key} onClick={() => setFilter(f.key)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${filter === f.key ? "bg-brand text-white" : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"}`}>
-            {f.label}
-          </button>
-        ))}
-      </div>
+      <DataTable
+        tableId="milestones"
+        noun="milestones"
+        rows={milestones}
+        rowKey={(m) => m.id}
+        columns={columns}
+        filters={filters}
+        bulkActions={bulkActions}
+        loading={loading}
+        searchPlaceholder="Search milestone, startup or founder"
+        empty={{ title: "No milestones yet", description: "Milestones founders add to their startups will appear here to verify." }}
+      />
 
-      {loading ? (
-        <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
-      ) : milestones.length === 0 ? (
-        <div className="text-center py-16 border border-dashed border-gray-200 dark:border-gray-700 rounded-xl">
-          <Trophy className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-          <p className="text-sm text-gray-500 dark:text-gray-400">No milestones found</p>
-        </div>
-      ) : (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
-                <th className="text-left px-4 py-3 font-semibold text-gray-600 dark:text-gray-400">Milestone</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600 dark:text-gray-400">Startup</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600 dark:text-gray-400">Founder</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600 dark:text-gray-400">Date</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600 dark:text-gray-400">Status</th>
-                <th className="text-right px-4 py-3 font-semibold text-gray-600 dark:text-gray-400">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {milestones.map(m => (
-                <tr key={m.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">{ICONS[m.type] || "📌"}</span>
-                      <div>
-                        <p className="font-medium text-gray-900 dark:text-white">{m.title}</p>
-                        <p className="text-xs text-gray-400">{m.type.replace("_", " ")}{m.amount ? ` · ${m.currency} ${Number(m.amount).toLocaleString()}` : ""}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{m.startup?.name || "-"}</td>
-                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{m.founder?.name || m.founder?.email || "-"}</td>
-                  <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{new Date(m.date).toLocaleDateString()}</td>
-                  <td className="px-4 py-3">
-                    {m.verificationStatus === "PLATFORM_VERIFIED" ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Verified</span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400"><Clock className="w-3.5 h-3.5" /> Unverified</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {m.verificationStatus === "FOUNDER_REPORTED" ? (
-                        <button onClick={() => handleAction(m.id, "verify")} disabled={acting === m.id} className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg disabled:opacity-50 flex items-center gap-1">
-                          {acting === m.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Shield className="w-3 h-3" />} Verify
-                        </button>
-                      ) : (
-                        <button onClick={() => handleAction(m.id, "unverify")} disabled={acting === m.id} className="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs font-medium rounded-lg disabled:opacity-50">
-                          Unverify
-                        </button>
-                      )}
-                      <button onClick={() => { if (confirm("Delete this milestone?")) handleAction(m.id, "delete"); }} disabled={acting === m.id} className="px-2 py-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 text-xs rounded-lg disabled:opacity-50">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <ConfirmModal
+        open={!!deleting}
+        onClose={() => setDeleting(null)}
+        onConfirm={async () => { const m = deleting; setDeleting(null); if (m) await actOne(m, "delete"); }}
+        title="Delete milestone"
+        message={deleting ? `Delete “${deleting.title}”? It is removed from the startup's public page. This can't be undone.` : ""}
+      />
     </div>
   );
 }

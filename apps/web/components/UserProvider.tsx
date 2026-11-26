@@ -14,6 +14,8 @@ export interface UserSession {
   termsAcceptedAt: string | null;
   termsVersion: string | null;
   founderId?: string | null;
+  /** Has a hiring portal account or is an active teammate on one (the portal has its own sign-in). */
+  hasEmployer?: boolean;
   organizerId?: string | null;
 }
 

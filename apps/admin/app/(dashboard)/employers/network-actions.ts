@@ -2,6 +2,7 @@
 
 import { neon } from '@neondatabase/serverless';
 import { requireActionAuth } from '@/lib/api-auth';
+import { logAuditEvent } from '@/lib/audit-log';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -59,6 +60,7 @@ export async function setNetworkPilotAction(employerId: string, on: boolean) {
   if (error) return { success: false, error };
   try {
     await sql`UPDATE "JobBoardEmployer" SET "networkPilot" = ${on}, "updatedAt" = NOW() WHERE id = ${employerId}`;
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'EMPLOYER', resourceId: employerId, resourceName: 'setNetworkPilotAction' });
     return { success: true };
   } catch {
     return { success: false, error: 'Failed to update' };
@@ -71,6 +73,7 @@ export async function resumeNetworkAction(employerId: string) {
   if (error) return { success: false, error };
   try {
     await sql`UPDATE "JobBoardEmployer" SET "networkPausedAt" = NULL, "updatedAt" = NOW() WHERE id = ${employerId}`;
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'EMPLOYER', resourceId: employerId, resourceName: 'resumeNetworkAction' });
     return { success: true };
   } catch {
     return { success: false, error: 'Failed to update' };

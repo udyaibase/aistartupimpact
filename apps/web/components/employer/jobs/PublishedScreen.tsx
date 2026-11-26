@@ -42,7 +42,7 @@ export default function PublishedScreen({ title, slug, companyName, jobId }: { t
           <a className={btn} target="_blank" rel="noopener noreferrer" href={`https://wa.me/?text=${encodeURIComponent(`${shareText} ${url}`)}`}>
             <MessageCircle className="w-4 h-4" aria-hidden /> Share on WhatsApp
           </a>
-          <Link className={btn} href="/employer/careers"><Globe className="w-4 h-4" aria-hidden /> Show on your website</Link>
+          <Link className={btn} href="/employer/widget"><Globe className="w-4 h-4" aria-hidden /> Show on your website</Link>
           <a className={btn} href={`/jobs/${slug}`} target="_blank" rel="noopener noreferrer"><ExternalLink className="w-4 h-4" aria-hidden /> View job</a>
         </div>
 

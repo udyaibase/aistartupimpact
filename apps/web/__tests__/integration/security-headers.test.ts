@@ -105,7 +105,7 @@ describe('Security headers — next.config.mjs', () => {
     // Next.js path patterns are regex-like; test the pattern against sample paths.
     const re = new RegExp(`^${coep!.source.replace(/^\//, '\\/')}$`);
     expect(re.test('/news/some-article')).toBe(true);
-    for (const path of ['/embed/abc', '/events/ai-meetup', '/organizer/billing', '/employer/billing', '/employer/careers']) {
+    for (const path of ['/embed/abc', '/events/ai-meetup', '/organizer/billing', '/employer/billing', '/employer/widget', '/employer/careers-page']) {
       expect(re.test(path), path).toBe(false);
     }
   });

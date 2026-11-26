@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Search, MapPin, X, CheckCircle } from 'lucide-react';
 import { CITY_DATABASE } from '@udyaibase/utils/src/cities';
 import { DeleteButton } from '../india-ai/components/DeleteButton';
+import { notify } from '@/components/Toast';
 
 interface CitiesListProps {
   initialCities: any[];
@@ -27,6 +28,7 @@ export default function CitiesList({ initialCities }: CitiesListProps) {
       }
     } catch (err) {
       console.error('Failed to approve city:', err);
+      notify("Something went wrong. Check your connection and try again.", 'error');
     } finally {
       setApprovingId(null);
     }

@@ -1,6 +1,7 @@
 import { withAuth } from "next-auth/middleware";
 import { NextResponse, type NextRequest } from "next/server";
 import { buildAdminCsp, newNonce } from "@/lib/csp";
+import { canOpen } from "@/lib/section-access";
 
 /** Continue to the page with a strict CSP carrying a fresh nonce (lib/csp.ts). Next.js reads the nonce from the
  *  request header and puts it on its own scripts; the response header is what the browser enforces. */
@@ -32,11 +33,17 @@ export default withAuth(
       return NextResponse.redirect(new URL("/verify-2fa", req.url));
     }
 
+    // The sidebar hides sections a role can't use; this stops the address being typed in instead (lib/section-access.ts).
+    if (!pathname.startsWith("/api/") && !canOpen(typeof token?.role === "string" ? token.role : null, pathname)) {
+      return NextResponse.redirect(new URL("/dashboard?error=unauthorized", req.url));
+    }
+
     return nextWithCsp(req);
   },
   {
     callbacks: {
-      authorized: ({ token }) => !!token,
+      // A revoked token (account deactivated or deleted, see lib/auth.ts) is treated as signed out.
+      authorized: ({ token }) => !!token && token.revoked !== true,
     },
   }
 );

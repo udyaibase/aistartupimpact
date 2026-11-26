@@ -4,8 +4,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@udyaibase/database";
 import { logAuditEvent } from "@/lib/audit-log";
+import { publicError } from '@/lib/public-error';
+import { tooMany } from '@/lib/rate-limit';
+import { sectionRoles } from '@/lib/section-access';
 
-const ALLOWED = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "AD_MANAGER"];
+const ALLOWED = sectionRoles('/advertise/payments');
 
 export async function getPaymentStatsAction() {
   const session: any = await getServerSession(authOptions);
@@ -31,7 +34,7 @@ export async function getPaymentStatsAction() {
       },
     };
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }
 
@@ -65,7 +68,7 @@ export async function getAdvPaymentsAction() {
       })),
     };
   } catch (e: any) {
-    return { success: false, error: e.message, data: [] };
+    return { success: false, error: publicError(e), data: [] };
   }
 }
 
@@ -73,6 +76,8 @@ export async function markRefundAction(paymentId: string, refundAmountPaise: num
   const session: any = await getServerSession(authOptions);
   if (!session?.user || !["SUPER_ADMIN"].includes(session.user.role))
     return { success: false, error: "Only Super Admins can process refunds" };
+  const paused = tooMany(session.user.id, 'refund');
+  if (paused) return { success: false, error: paused };
 
   try {
     const payment = await prisma.$queryRaw<any[]>`
@@ -98,6 +103,6 @@ export async function markRefundAction(paymentId: string, refundAmountPaise: num
 
     return { success: true };
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }

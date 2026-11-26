@@ -6,142 +6,14 @@ import { logAuditEvent } from '@/lib/audit-log';
 import { sendEmailFireAndForget } from '@/lib/email-send';
 import { endPlanNow } from '../plans/actions';
 import { refreshPublic, requestCreditNote } from '@/lib/refresh-public';
+import { tooMany } from '@/lib/rate-limit';
+import { sectionRoles } from '@/lib/section-access';
 
 /**
- * Billing overview and refunds for employer plans, event-host purchases (Pro, Boost) and funding-data downloads.
- * Online payments are refunded through Razorpay; manual (invoice/UPI) grants are only recorded,
+ * Refunds for employer plans, event-host purchases (Pro, Boost, certificates) and funding-data downloads. The billing
+ * pages themselves read through lib/billing. Online payments are refunded through Razorpay; manual (invoice/UPI) grants are only recorded,
  * since that money goes back by bank transfer. Super admins only.
  */
-
-const DAY = 864e5;
-
-export interface BillingPayment {
-  id: string;
-  source: 'EMPLOYER' | 'HOST' | 'FUNDING';
-  accountId: string;
-  account: string;
-  email: string;
-  product: string;
-  totalPaise: number;
-  status: string;
-  online: boolean;
-  invoiceNumber: string | null;
-  createdAt: string;
-  paidAt: string | null;
-  refundedAt: string | null;
-  refundAmountPaise: number | null;
-  refundReason: string | null;
-  creditNoteNumber: string | null;
-}
-
-const PRODUCT: Record<string, string> = { FEATURED: 'Employer · Featured', PREMIUM: 'Employer · Premium', PRO: 'Host · Pro', BOOST: 'Host · Event Boost', CERTIFICATES: 'Host · Certificates' };
-const FUNDING_PACK: Record<string, string> = { STARTER: 'Starter (50)', GROWTH: 'Growth (250)', PRO: 'Pro (500)', SCALE: 'Scale (1,000)', FULL: 'Full Dataset' };
-
-/** Indian financial year start (1 April, IST) for a date. */
-function fyStart(now: Date) {
-  const ist = new Date(now.getTime() + 5.5 * 36e5);
-  const y = ist.getUTCMonth() >= 3 ? ist.getUTCFullYear() : ist.getUTCFullYear() - 1;
-  return new Date(Date.UTC(y, 3, 1) - 5.5 * 36e5);
-}
-function monthStart(now: Date, back = 0) {
-  const ist = new Date(now.getTime() + 5.5 * 36e5);
-  return new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth() - back, 1) - 5.5 * 36e5);
-}
-
-export async function billingOverviewAction() {
-  const { error } = await requireActionAuth(['SUPER_ADMIN']);
-  if (error) return { success: false as const, error };
-  const now = new Date();
-  const ranges = { thisMonth: monthStart(now), lastMonth: monthStart(now, 1), fy: fyStart(now) };
-
-  // Net revenue (paid minus refunded), excluding GST, per range and source.
-  const revenue = async (from: Date, to: Date | null) => {
-    const where = { status: 'SUCCESS' as const, paidAt: { gte: from, ...(to ? { lt: to } : {}) } };
-    const [emp, host, tickets, funding] = await Promise.all([
-      prisma.jobBoardPayment.findMany({ where, select: { amountPaise: true, totalPaise: true, refundAmountPaise: true } }),
-      prisma.organizerPayment.findMany({ where, select: { amountPaise: true, totalPaise: true, refundAmountPaise: true } }),
-      prisma.eventRegistration.aggregate({ where: { paymentStatus: 'PAID', paidAt: { gte: from, ...(to ? { lt: to } : {}) } }, _sum: { platformFeePaise: true } }),
-      prisma.fundingDataPurchase.findMany({ where, select: { amountPaise: true, totalPaise: true, refundAmountPaise: true } }),
-    ]);
-    // A refund is of the GST-inclusive total; take the same share off the pre-GST amount.
-    const net = (rows: { amountPaise: number; totalPaise: number; refundAmountPaise: number | null }[]) =>
-      rows.reduce((n, r) => n + r.amountPaise - Math.round(((r.refundAmountPaise ?? 0) * r.amountPaise) / Math.max(1, r.totalPaise)), 0);
-    return { employer: net(emp), host: net(host), fundingData: net(funding), ticketFees: tickets._sum.platformFeePaise ?? 0 };
-  };
-
-  const soon = new Date(now.getTime() + 7 * DAY);
-  const [thisMonth, lastMonth, fy, activeEmployers, activeHosts, expiringEmployers, expiringHosts, failed, recent] = await Promise.all([
-    revenue(ranges.thisMonth, null),
-    revenue(ranges.lastMonth, ranges.thisMonth),
-    revenue(ranges.fy, null),
-    prisma.jobBoardEmployer.groupBy({ by: ['plan'], where: { plan: { not: 'FREE' }, planExpiresAt: { gt: now }, deletedAt: null }, _count: { _all: true } }),
-    prisma.eventOrganizer.count({ where: { plan: 'PRO', planExpiresAt: { gt: now }, deletedAt: null } }),
-    prisma.jobBoardEmployer.findMany({ where: { plan: { not: 'FREE' }, planExpiresAt: { gt: now, lte: soon }, deletedAt: null }, select: { id: true, companyName: true, email: true, plan: true, planExpiresAt: true }, orderBy: { planExpiresAt: 'asc' } }),
-    prisma.eventOrganizer.findMany({ where: { plan: 'PRO', planExpiresAt: { gt: now, lte: soon }, deletedAt: null }, select: { id: true, name: true, company: true, email: true, planExpiresAt: true }, orderBy: { planExpiresAt: 'asc' } }),
-    Promise.all([
-      prisma.jobBoardPayment.count({ where: { status: 'FAILED', createdAt: { gte: new Date(now.getTime() - 30 * DAY) } } }),
-      prisma.organizerPayment.count({ where: { status: 'FAILED', createdAt: { gte: new Date(now.getTime() - 30 * DAY) } } }),
-      prisma.fundingDataPurchase.count({ where: { status: 'FAILED', createdAt: { gte: new Date(now.getTime() - 30 * DAY) } } }),
-    ]),
-    listPayments(),
-  ]);
-
-  const count = (plans: string[]) => activeEmployers.filter((g) => plans.includes(g.plan)).reduce((n, g) => n + g._count._all, 0);
-  return {
-    success: true as const,
-    revenue: { thisMonth, lastMonth, fy },
-    active: {
-      growth: count(['GROWTH']),
-      pro: count(['PRO', 'FEATURED']),
-      scale: count(['SCALE', 'PREMIUM']),
-      hostPro: activeHosts,
-    },
-    expiring: [
-      ...expiringEmployers.map((e) => ({ kind: 'EMPLOYER' as const, id: e.id, name: e.companyName, email: e.email, plan: e.plan, endsAt: e.planExpiresAt!.toISOString() })),
-      ...expiringHosts.map((h) => ({ kind: 'HOST' as const, id: h.id, name: h.company || h.name, email: h.email, plan: 'PRO', endsAt: h.planExpiresAt!.toISOString() })),
-    ].sort((a, b) => a.endsAt.localeCompare(b.endsAt)),
-    failed30d: failed[0] + failed[1] + failed[2],
-    payments: recent,
-  };
-}
-
-async function listPayments(): Promise<BillingPayment[]> {
-  const [emp, host, funding] = await Promise.all([
-    prisma.jobBoardPayment.findMany({
-      where: { status: { in: ['SUCCESS', 'FAILED'] } }, orderBy: { createdAt: 'desc' }, take: 100,
-      include: { Employer: { select: { id: true, companyName: true, email: true } } },
-    }),
-    prisma.organizerPayment.findMany({
-      where: { status: { in: ['SUCCESS', 'FAILED'] } }, orderBy: { createdAt: 'desc' }, take: 100,
-      include: { organizer: { select: { id: true, name: true, company: true, email: true } } },
-    }),
-    prisma.fundingDataPurchase.findMany({ where: { status: { in: ['SUCCESS', 'FAILED'] } }, orderBy: { createdAt: 'desc' }, take: 100 }),
-  ]);
-  const rows: BillingPayment[] = [
-    ...emp.map((p) => ({
-      id: p.id, source: 'EMPLOYER' as const, accountId: p.Employer.id, account: p.Employer.companyName, email: p.paidByEmail || p.Employer.email,
-      product: PRODUCT[p.plan] ?? p.plan, totalPaise: p.totalPaise, status: p.status, online: !p.razorpayOrderId.startsWith('manual_'),
-      invoiceNumber: p.invoiceNumber, createdAt: p.createdAt.toISOString(), paidAt: p.paidAt?.toISOString() ?? null,
-      refundedAt: p.refundedAt?.toISOString() ?? null, refundAmountPaise: p.refundAmountPaise, refundReason: p.refundReason, creditNoteNumber: p.creditNoteNumber,
-    })),
-    ...host.map((p) => ({
-      id: p.id, source: 'HOST' as const, accountId: p.organizer.id, account: p.organizer.company || p.organizer.name, email: p.paidByEmail || p.organizer.email,
-      product: PRODUCT[p.kind] ?? p.kind, totalPaise: p.totalPaise, status: p.status, online: !p.razorpayOrderId.startsWith('manual_'),
-      invoiceNumber: p.invoiceNumber, createdAt: p.createdAt.toISOString(), paidAt: p.paidAt?.toISOString() ?? null,
-      refundedAt: p.refundedAt?.toISOString() ?? null, refundAmountPaise: p.refundAmountPaise, refundReason: p.refundReason, creditNoteNumber: p.creditNoteNumber,
-    })),
-    ...funding.map((p) => {
-      const bill = (p.billingDetails ?? {}) as { billingName?: string };
-      return {
-        id: p.id, source: 'FUNDING' as const, accountId: p.email, account: bill.billingName || p.email, email: p.email,
-        product: `Funding data · ${FUNDING_PACK[p.pack] ?? p.pack}`, totalPaise: p.totalPaise, status: p.status, online: true,
-        invoiceNumber: p.invoiceNumber, createdAt: p.createdAt.toISOString(), paidAt: p.paidAt?.toISOString() ?? null,
-        refundedAt: p.refundedAt?.toISOString() ?? null, refundAmountPaise: p.refundAmountPaise, refundReason: p.refundReason, creditNoteNumber: p.creditNoteNumber,
-      };
-    }),
-  ];
-  return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 100);
-}
 
 /** `unknown`: the request didn't get an answer (timeout, network), so the refund may or may not have happened. */
 async function razorpayRefund(paymentId: string, amountPaise: number, notes: Record<string, string>): Promise<{ ok: true; id: string } | { ok: false; error: string; unknown?: boolean }> {
@@ -169,8 +41,10 @@ const rupees = (paise: number) => `₹${(paise / 100).toLocaleString('en-IN', { 
  * or the Boost on that event. The customer is emailed. GST: the invoice needs a credit note from accounts.
  */
 export async function refundPaymentAction(input: { source: 'EMPLOYER' | 'HOST' | 'FUNDING'; id: string; amountRupees: number; reason: string; endAccess: boolean }) {
-  const { session, error } = await requireActionAuth(['SUPER_ADMIN']);
+  const { session, error } = await requireActionAuth(sectionRoles('/billing'));
   if (error) return { success: false as const, error };
+  const paused = tooMany(session?.user?.id, 'refund');
+  if (paused) return { success: false as const, error: paused };
   const reason = input.reason.trim().slice(0, 300);
   if (reason.length < 3) return { success: false as const, error: 'Add a short reason (it’s kept in the audit log).' };
 
@@ -293,4 +167,58 @@ async function refundFundingPurchase(input: { id: string; amountRupees: number }
 <p style="margin:0;font-size:13px;color:#6b7280">Questions? Reply to this email.</p></div>`,
   });
   return { success: true as const, refundId: r.id, online: true };
+}
+
+/** How many payments one "Sync Razorpay fees" run looks up. Run again for the rest. */
+const FEE_SYNC_BATCH = 120;
+
+/**
+ * Reads what Razorpay kept (fee, and the GST on it) for captured payments that don't have it stored yet, and saves
+ * it. Read-only at Razorpay; adds rows to RazorpayFee and changes nothing else. Safe to run as often as needed:
+ * a payment is looked up once.
+ */
+export async function syncRazorpayFeesAction() {
+  const { session, error } = await requireActionAuth(sectionRoles('/billing'));
+  if (error) return { success: false as const, error };
+  const paused = tooMany(session?.user?.id, 'feeSync');
+  if (paused) return { success: false as const, error: paused };
+  const keyId = process.env.RAZORPAY_KEY_ID, secret = process.env.RAZORPAY_KEY_SECRET;
+  if (!keyId || !secret) return { success: false as const, error: 'Razorpay keys aren’t set on the admin app (RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET).' };
+
+  const { loadGatewayFees, loadLedger } = await import('@/lib/billing/ledger');
+  const { ready } = await loadGatewayFees();
+  if (!ready) return { success: false as const, error: 'The RazorpayFee table isn’t in the database yet. Apply the pending migration (scripts/prod-migrate.sh), then sync again.' };
+
+  const rows = await loadLedger();
+  const ids = [...new Set(rows.filter((r) => r.online && r.razorpayId && r.state !== 'FAILED' && r.gatewayFeePaise == null).map((r) => r.razorpayId!))];
+  const batch = ids.slice(0, FEE_SYNC_BATCH);
+  const auth = `Basic ${Buffer.from(`${keyId}:${secret}`).toString('base64')}`;
+
+  const found: { paymentId: string; feePaise: number; taxPaise: number; method: string | null; capturedAt: Date | null }[] = [];
+  let failed = 0;
+  let firstError = '';
+  const lookUp = async (paymentId: string) => {
+    try {
+      const res = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, { headers: { Authorization: auth }, signal: AbortSignal.timeout(10000) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d?.error?.description || `HTTP ${res.status}`);
+      // Razorpay fills fee and tax once the payment is captured; until then there is nothing to store.
+      if (d.status !== 'captured' && d.status !== 'refunded') return;
+      const fee = Number(d.fee), tax = Number(d.tax ?? 0);
+      if (!Number.isInteger(fee) || fee < 0 || !Number.isInteger(tax) || tax < 0 || tax > fee) throw new Error('Unexpected fee values');
+      found.push({ paymentId, feePaise: fee, taxPaise: tax, method: typeof d.method === 'string' ? d.method.slice(0, 40) : null, capturedAt: null });
+    } catch (e) {
+      failed += 1;
+      firstError ||= (e as Error).message;
+    }
+  };
+  // A few at a time: quick, and well inside Razorpay's rate limits.
+  for (let i = 0; i < batch.length; i += 6) await Promise.all(batch.slice(i, i + 6).map(lookUp));
+
+  if (found.length > 0) await prisma.razorpayFee.createMany({ data: found, skipDuplicates: true });
+  await logAuditEvent({
+    action: 'UPDATE', resourceType: 'BILLING_PAYMENT', resourceName: 'Razorpay fee sync',
+    after: { saved: found.length, failed, remaining: Math.max(0, ids.length - batch.length) },
+  });
+  return { success: true as const, saved: found.length, failed, remaining: Math.max(0, ids.length - batch.length) + failed, firstError };
 }

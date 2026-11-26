@@ -49,8 +49,8 @@ export default function ListingEditsClient() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Listing Edits</h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+        <h1 className="portal-title">Listing Edits</h1>
+        <p className="portal-subtitle">
           Changes founders made that need approval. The live listing keeps its current value until you approve, and rejecting never takes it offline.
         </p>
       </div>

@@ -3,22 +3,19 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@udyaibase/database";
+import { publicError } from '@/lib/public-error';
+import { sectionRoles } from '@/lib/section-access';
 
-const ALLOWED = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "SENIOR_WRITER", "AD_MANAGER"];
+const ALLOWED = sectionRoles('/analytics');
 
 export async function getAnalyticsDataAction(period: string = '7 days') {
   const session: any = await getServerSession(authOptions);
-  console.log('Analytics session check:', { 
-    hasSession: !!session, 
-    hasUser: !!session?.user, 
-    email: session?.user?.email,
-    role: session?.user?.role 
-  });
+
   
   if (!session?.user || !ALLOWED.includes(session.user.role)) {
-    console.log('Analytics access denied:', { user: session?.user, role: session?.user?.role, allowed: ALLOWED });
-    return { success: false, error: `Unauthorized - Role: ${session?.user?.role || 'none'}` };
+    return { success: false, error: 'Unauthorized' };
   }
+
 
   try {
     // Calculate date range based on period
@@ -44,10 +41,10 @@ export async function getAnalyticsDataAction(period: string = '7 days') {
           COUNT(*) as total_articles,
           AVG("readTimeMinutes") as avg_read_time
         FROM "Article" 
-        WHERE "publishedAt" >= NOW() - INTERVAL '${daysBack} days'
+        WHERE "publishedAt" >= NOW() - ($1::int * INTERVAL '1 day')
           AND status = 'PUBLISHED' 
           AND "deletedAt" IS NULL
-      `),
+      `, daysBack),
       
       // Top performing articles
       prisma.$queryRawUnsafe(`
@@ -58,12 +55,12 @@ export async function getAnalyticsDataAction(period: string = '7 days') {
         FROM "Article" a
         LEFT JOIN "User" u ON u.id = a."authorId"
         LEFT JOIN "Category" c ON c.id = a."categoryId"
-        WHERE a."publishedAt" >= NOW() - INTERVAL '${daysBack} days'
+        WHERE a."publishedAt" >= NOW() - ($1::int * INTERVAL '1 day')
           AND a.status = 'PUBLISHED' 
           AND a."deletedAt" IS NULL
         ORDER BY a."viewCount" DESC
         LIMIT 10
-      `),
+      `, daysBack),
       
       // Placement performance
       prisma.$queryRaw<any[]>`
@@ -82,19 +79,19 @@ export async function getAnalyticsDataAction(period: string = '7 days') {
       prisma.$queryRawUnsafe(`
         SELECT 
           COUNT(*) as total_subscribers,
-          COUNT(*) FILTER (WHERE "subscribedAt" >= NOW() - INTERVAL '${daysBack} days') as new_subscribers
+          COUNT(*) FILTER (WHERE "subscribedAt" >= NOW() - ($1::int * INTERVAL '1 day')) as new_subscribers
         FROM "NewsletterSubscriber"
         WHERE "isActive" = true
-      `),
+      `, daysBack),
       
       // User activity
       prisma.$queryRawUnsafe(`
         SELECT 
           COUNT(*) as total_users,
-          COUNT(*) FILTER (WHERE "lastLoginAt" >= NOW() - INTERVAL '${daysBack} days') as active_users
+          COUNT(*) FILTER (WHERE "lastLoginAt" >= NOW() - ($1::int * INTERVAL '1 day')) as active_users
         FROM "User"
         WHERE "isActive" = true
-      `),
+      `, daysBack),
 
       // PageView analytics
       prisma.$queryRawUnsafe(`
@@ -105,8 +102,8 @@ export async function getAnalyticsDataAction(period: string = '7 days') {
           AVG(CASE WHEN duration IS NOT NULL THEN duration ELSE 0 END) as avg_duration,
           COUNT(*) FILTER (WHERE bounced = true) as bounced_sessions
         FROM "PageView"
-        WHERE "createdAt" >= NOW() - INTERVAL '${daysBack} days'
-      `),
+        WHERE "createdAt" >= NOW() - ($1::int * INTERVAL '1 day')
+      `, daysBack),
     ]);
 
     const stats = (articleStats as any[])[0] || {};
@@ -142,10 +139,10 @@ export async function getAnalyticsDataAction(period: string = '7 days') {
         source,
         COUNT(*) as visits
       FROM "PageView"
-      WHERE "createdAt" >= NOW() - INTERVAL '${daysBack} days'
+      WHERE "createdAt" >= NOW() - ($1::int * INTERVAL '1 day')
       GROUP BY source
       ORDER BY visits DESC
-    `);
+    `, daysBack);
 
     // Calculate traffic source percentages
     const referrers = trafficBySource.map((item: any) => {
@@ -179,10 +176,10 @@ export async function getAnalyticsDataAction(period: string = '7 days') {
         device,
         COUNT(*) as count
       FROM "PageView"
-      WHERE "createdAt" >= NOW() - INTERVAL '${daysBack} days'
+      WHERE "createdAt" >= NOW() - ($1::int * INTERVAL '1 day')
       GROUP BY device
       ORDER BY count DESC
-    `);
+    `, daysBack);
 
     // Calculate device percentages
     const devices = deviceBreakdown.map((item: any) => {
@@ -238,6 +235,6 @@ export async function getAnalyticsDataAction(period: string = '7 days') {
     };
   } catch (e: any) {
     console.error('Analytics query error:', e);
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }

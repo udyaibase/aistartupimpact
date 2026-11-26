@@ -3,6 +3,9 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@udyaibase/database';
 import ToolForm from '../ToolForm';
 import { refreshPublic } from '@/lib/refresh-public';
+import { requireFormAuth } from '@/lib/api-auth';
+import { formFields } from '@/lib/form-fields';
+import { logAuditEvent } from '@/lib/audit-log';
 
 export const metadata: Metadata = {
   title: 'Add Indian AI Tool | Admin',
@@ -12,32 +15,37 @@ export default function NewToolPage() {
   async function createTool(formData: FormData) {
     'use server';
 
-    const features = (formData.get('features') as string).split('\n').filter(Boolean);
-    const useCases = (formData.get('useCases') as string).split('\n').filter(Boolean);
-    const name = formData.get('name') as string;
+    await requireFormAuth();
+    const f = formFields(formData);
+
+    const features = f.lines('features');
+    const useCases = f.lines('useCases');
+    const name = f.required('name', 300);
 
     await prisma.indianAITool.create({
       data: {
         id: `indiatool_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
         name,
         slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
-        tagline: formData.get('tagline') as string,
-        description: formData.get('description') as string,
-        logoUrl: formData.get('logoUrl') as string || null,
-        websiteUrl: formData.get('websiteUrl') as string,
-        category: formData.get('category') as string,
-        foundedYear: parseInt(formData.get('foundedYear') as string) || null,
-        fundingStatus: formData.get('fundingStatus') as string || null,
-        totalFunding: formData.get('totalFunding') as string || null,
-        headquarters: formData.get('headquarters') as string || null,
-        teamSize: formData.get('teamSize') as string || null,
+        tagline: f.text('tagline'),
+        description: f.text('description'),
+        logoUrl: f.optionalUrl('logoUrl'),
+        websiteUrl: f.url('websiteUrl'),
+        category: f.text('category'),
+        foundedYear: f.intOrNull('foundedYear', 1800, 2100),
+        fundingStatus: f.optional('fundingStatus'),
+        totalFunding: f.optional('totalFunding'),
+        headquarters: f.optional('headquarters'),
+        teamSize: f.optional('teamSize'),
         features,
         useCases,
-        isFeatured: formData.get('isFeatured') === 'on',
-        displayOrder: parseInt(formData.get('displayOrder') as string) || 0,
-        isActive: formData.get('isActive') === 'on',
+        isFeatured: f.flag('isFeatured'),
+        displayOrder: f.int('displayOrder'),
+        isActive: f.flag('isActive'),
       },
     });
+
+    await logAuditEvent({ action: 'CREATE', resourceType: 'INDIA_AI_TOOL', resourceName: String(formData.get('name') ?? formData.get('title') ?? formData.get('metricLabel') ?? formData.get('component') ?? '').slice(0, 200) });
 
     await refreshPublic(['india-ai', 'home']);
 
@@ -47,10 +55,10 @@ export default function NewToolPage() {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+        <h1 className="portal-title">
           Add Indian AI Tool
         </h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+        <p className="portal-subtitle">
           Add a new Made in India AI product
         </p>
       </div>

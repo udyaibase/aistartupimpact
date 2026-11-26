@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { neon } from '@neondatabase/serverless';
 import { requireApiAuth } from '@/lib/api-auth';
+import { sectionRoles } from '@/lib/section-access';
 import { withPublicRefresh } from '@/lib/refresh-public';
+import { logAuditEvent } from '@/lib/audit-log';
 
 const sql = neon(process.env.DATABASE_URL!);
 
 // GET - Fetch all highlights
 export async function GET() {
-  const { error } = await requireApiAuth();
+  const { error } = await requireApiAuth(sectionRoles('/newsletter-highlights'));
   if (error) return error;
   try {
     const highlights = await sql`
@@ -28,7 +30,7 @@ export async function GET() {
 
 // POST - Create new highlight
 async function postHandler(request: NextRequest) {
-  const { error } = await requireApiAuth();
+  const { error } = await requireApiAuth(sectionRoles('/newsletter-highlights'));
   if (error) return error;
   try {
     const body = await request.json();
@@ -47,6 +49,7 @@ async function postHandler(request: NextRequest) {
       RETURNING *
     `;
 
+    await logAuditEvent({ action: 'CREATE', resourceType: 'NEWSLETTER', resourceName: 'newsletter-highlights' });
     return NextResponse.json({ success: true, highlight: result[0] });
   } catch (error) {
     console.error('Error creating highlight:', error);
@@ -59,7 +62,7 @@ async function postHandler(request: NextRequest) {
 
 // PUT - Update highlight
 async function putHandler(request: NextRequest) {
-  const { error } = await requireApiAuth();
+  const { error } = await requireApiAuth(sectionRoles('/newsletter-highlights'));
   if (error) return error;
   try {
     const body = await request.json();
@@ -93,6 +96,7 @@ async function putHandler(request: NextRequest) {
       );
     }
 
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'NEWSLETTER', resourceName: 'newsletter-highlights' });
     return NextResponse.json({ success: true, highlight: result[0] });
   } catch (error) {
     console.error('Error updating highlight:', error);
@@ -123,6 +127,7 @@ async function deleteHandler(request: NextRequest) {
       WHERE id = ${id}
     `;
 
+    await logAuditEvent({ action: 'DELETE', resourceType: 'NEWSLETTER', resourceName: 'newsletter-highlights' });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting highlight:', error);

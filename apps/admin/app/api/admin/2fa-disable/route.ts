@@ -4,6 +4,7 @@ import { prisma } from "@udyaibase/database";
 import { logAuditEvent } from "@/lib/audit-log";
 import { verifyTOTPToken, decryptSecret, TwoFactorConfigError } from "@/lib/two-factor";
 import { USER_2FA_SELECT, isLocked, lockedResponse, recordCodeFailure, wrongCodeResponse } from "@/lib/two-factor-guard";
+import { publicError } from '@/lib/public-error';
 
 const STAFF_ROLES = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "SENIOR_WRITER", "WRITER", "AD_MANAGER", "CONTRIBUTOR", "EVENT_ORGANIZER"];
 
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     if (error instanceof TwoFactorConfigError) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 503 });
+      return NextResponse.json({ success: false, error: publicError(error) }, { status: 503 });
     }
     console.error("2FA disable error:", error instanceof Error ? error.message : error);
     return NextResponse.json({ success: false, error: "Failed to disable 2FA" }, { status: 500 });

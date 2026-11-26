@@ -18,14 +18,14 @@ const ALL_TABS: { href: string; icon: typeof Home; label: string; exact?: boolea
 const ALL_MORE: { href: string; icon: typeof Home; label: string; desc: string; perm?: Permission }[] = [
   { href: '/employer/talent', icon: UserCheck, label: 'Talent pool', desc: 'Past applicants open to other roles', perm: 'candidates.view' },
   { href: '/employer/careers-page', icon: LayoutTemplate, label: 'Careers page', desc: 'Your ready-made careers page with open roles', perm: 'company.manage' },
-  { href: '/employer/careers', icon: Globe, label: 'Website widget', desc: 'Show your open roles on your website', perm: 'widget.manage' },
-  { href: '/employer/analytics', icon: BarChart3, label: 'Insights', desc: 'Views, applications and sources', perm: 'insights.view' },
+  { href: '/employer/widget', icon: Globe, label: 'Website widget', desc: 'Show your open roles on your website', perm: 'widget.manage' },
+  { href: '/employer/analytics', icon: BarChart3, label: 'Analytics', desc: 'Views, applications and sources', perm: 'insights.view' },
   { href: '/employer/company', icon: Building2, label: 'Company profile', desc: 'Logo, description, startup claim', perm: 'company.manage' },
   { href: '/employer/team', icon: UserPlus, label: 'Team', desc: 'Invite recruiters and interviewers' },
   { href: '/employer/billing', icon: CreditCard, label: 'Plans & billing', desc: 'Plan, AI reviews and payments', perm: 'account.manage' },
   { href: '/employer/settings', icon: Settings, label: 'Settings', desc: 'Account, notifications, security', perm: 'account.manage' },
   { href: '/employer/activity', icon: History, label: 'Activity log', desc: 'Sign-ins and changes, with who made them', perm: 'account.manage' },
-  { href: '/employer/help', icon: HelpCircle, label: 'Help', desc: 'Guides and contact' },
+  { href: '/employer/help', icon: HelpCircle, label: 'Help & support', desc: 'Guides and contact' },
 ];
 
 export default function EmployerMobileNav({ shell }: { shell: EmployerShell }) {

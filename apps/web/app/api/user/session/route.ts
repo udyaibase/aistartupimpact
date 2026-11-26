@@ -1,7 +1,7 @@
+import { verifyUserToken } from '@/lib/user-session';
 import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
 import { sql } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -16,9 +16,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ user: null });
     }
 
-    // Verify token
-    const verified = await jwtVerify(token, JWT_SECRET);
-    const payload = verified.payload as any;
+    // Verify the token, that the account is open and that this sign-in hasn't been ended.
+    const ids = await verifyUserToken(token);
+    if (!ids) return NextResponse.json({ user: null });
+    const payload = { userId: ids.userId };
 
     // Get web user from database
     const users = await sql`
@@ -72,6 +73,19 @@ export async function GET(request: NextRequest) {
       } catch {}
     }
 
+    // Hiring portal: the workspace's own account, or an active teammate. The portal has its own sign-in, so this
+    // only decides whether the account menu offers the link.
+    let hasEmployer = false;
+    try {
+      const employerRows = await sql`
+        SELECT 1 FROM "JobBoardEmployer" WHERE LOWER(email) = LOWER(${user.email}) AND "deactivatedAt" IS NULL
+        UNION ALL
+        SELECT 1 FROM "JobBoardTeamMember" WHERE LOWER(email) = LOWER(${user.email}) AND status = 'ACTIVE'
+        LIMIT 1
+      `;
+      hasEmployer = employerRows.length > 0;
+    } catch {}
+
     return NextResponse.json({ 
       user: {
         id: user.id,
@@ -90,6 +104,7 @@ export async function GET(request: NextRequest) {
         // Workspace links
         founderId,
         organizerId,
+        hasEmployer,
       }
     });
   } catch (error) {

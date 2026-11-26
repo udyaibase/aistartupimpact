@@ -9,6 +9,7 @@ import { emailInvoice } from '@/lib/billing/invoice';
 import { setListingStatus } from '@/lib/jobs/listing-status';
 import { logEmployerActivity, paiseLabel } from '@/lib/workspace-activity';
 import { aiRerunCount } from '@/lib/employer/ai-usage';
+import { recordRazorpayFee } from '@/lib/billing/razorpay-fee';
 
 /**
  * Plan in force plus AI usage for the current period. During the grace days after a paid plan ends, everything
@@ -63,6 +64,7 @@ export async function activatePayment(orderId: string, paymentId: string): Promi
       data: { status: 'SUCCESS', razorpayPaymentId: paymentId, paidAt: new Date() },
     });
     if (!flipped.count) return 'already';
+    recordRazorpayFee(paymentId); // after the response; never blocks or fails the payment
 
     const emp = await tx.jobBoardEmployer.findUniqueOrThrow({ where: { id: pay.employerId }, select: { plan: true, planExpiresAt: true, planIsTrial: true, foundingMemberAt: true } });
     const now = Date.now();

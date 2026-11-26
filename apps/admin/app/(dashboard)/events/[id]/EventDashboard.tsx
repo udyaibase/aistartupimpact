@@ -104,8 +104,8 @@ export default function EventDashboard({ event, registrations, timeline, stats }
             <ArrowLeft className="w-4 h-4 text-gray-500" />
           </Link>
           <div>
-            <h1 className="text-xl font-sora font-bold text-gray-900 dark:text-white">{event.title}</h1>
-            <p className="text-xs text-gray-400 font-jakarta">
+            <h1 className="portal-title">{event.title}</h1>
+            <p className="portal-subtitle">
               /{event.slug} · {event.category.replace(/_/g, " ")} ·{" "}
               <span className={event.status === "PUBLISHED" ? "text-green-600" : "text-gray-500"}>
                 {event.status}

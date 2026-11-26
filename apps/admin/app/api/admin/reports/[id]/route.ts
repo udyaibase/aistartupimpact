@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@udyaibase/database";
 import { sendEmailFireAndForget } from "@/lib/email-send";
 import { withPublicRefresh } from '@/lib/refresh-public';
+import { logAuditEvent } from '@/lib/audit-log';
 
 async function putHandler(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -60,6 +61,7 @@ ${adminNotes ? `<p style="margin:0 0 16px;font-size:15px;line-height:1.6"><stron
       where: { entityType: 'JOB', entityId: report.entityId, status: { in: ['PENDING', 'REVIEWING'] } },
       data: { status: jobAction === 'close' ? 'RESOLVED' : 'DISMISSED', resolvedAt: now, resolvedBy: session.user.id, adminNotes: adminNotes ?? undefined },
     });
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'CONTENT_REPORT', resourceId: params.id, after: { jobAction } });
     return NextResponse.json({ success: true });
   }
 
@@ -73,6 +75,7 @@ ${adminNotes ? `<p style="margin:0 0 16px;font-size:15px;line-height:1.6"><stron
     },
   });
 
+  await logAuditEvent({ action: 'UPDATE', resourceType: 'CONTENT_REPORT', resourceId: params.id, after: { status } });
   return NextResponse.json({ success: true });
 }
 

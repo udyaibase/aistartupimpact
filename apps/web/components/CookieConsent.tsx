@@ -113,9 +113,9 @@ export default function CookieConsent() {
               <button
                 onClick={handleRejectAll}
                 className={`${styles.button} ${styles.buttonSecondary}`}
-                aria-label="Reject all cookies"
+                aria-label="Use required cookies only"
               >
-                Reject All
+                Required Only
               </button>
               <button
                 onClick={handleCustomize}
@@ -168,7 +168,7 @@ export default function CookieConsent() {
                   <div className={styles.preferenceTextWrapper}>
                     <div className={styles.preferenceTitleRow}>
                       <ShieldCheck size={18} className={styles.preferenceIcon} />
-                      <h3 className={styles.preferenceTitle}>Necessary</h3>
+                      <h3 className={styles.preferenceTitle}>Required</h3>
                       <span className={styles.badge}>Always Active</span>
                     </div>
                     <p className={styles.preferenceDescription}>
@@ -180,7 +180,7 @@ export default function CookieConsent() {
                       type="checkbox"
                       checked={true}
                       disabled
-                      aria-label="Necessary cookies (always enabled)"
+                      aria-label="Required cookies (always on)"
                     />
                     <span className={styles.toggleSlider}></span>
                   </div>
@@ -240,9 +240,9 @@ export default function CookieConsent() {
               <button
                 onClick={handleRejectAll}
                 className={`${styles.button} ${styles.buttonSecondary}`}
-                aria-label="Reject all cookies"
+                aria-label="Use required cookies only"
               >
-                Reject All
+                Required Only
               </button>
               <button
                 onClick={handleSavePreferences}

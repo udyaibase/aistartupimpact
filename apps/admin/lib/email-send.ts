@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { publicError } from '@/lib/public-error';
 
 let resendClient: Resend | null = null;
 
@@ -69,16 +70,16 @@ export async function sendEmail(opts: SendEmailOptions): Promise<SendResult> {
 
     if (error) {
       console.error(`Email send failed [${opts.subject}]:`, error);
-      logEmail({ type: opts.type || 'unknown', to: opts.to, subject: opts.subject, status: 'failed', error: error.message });
-      return { success: false, error: error.message };
+      logEmail({ type: opts.type || 'unknown', to: opts.to, subject: opts.subject, status: 'failed', error: publicError(error) });
+      return { success: false, error: publicError(error) };
     }
 
     logEmail({ type: opts.type || 'unknown', to: opts.to, subject: opts.subject, status: 'sent', resendId: data?.id });
     return { success: true, resendId: data?.id };
   } catch (err: any) {
     console.error(`Email send error [${opts.subject}]:`, err);
-    logEmail({ type: opts.type || 'unknown', to: opts.to, subject: opts.subject, status: 'failed', error: err.message });
-    return { success: false, error: err.message };
+    logEmail({ type: opts.type || 'unknown', to: opts.to, subject: opts.subject, status: 'failed', error: publicError(err) });
+    return { success: false, error: publicError(err) };
   }
 }
 

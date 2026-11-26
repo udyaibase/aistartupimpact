@@ -4,11 +4,14 @@ import { neon } from '@neondatabase/serverless';
 import { revalidatePath } from 'next/cache';
 import { requireActionAuth } from '@/lib/api-auth';
 import { refreshPublic } from '@/lib/refresh-public';
+import { sectionRoles } from '@/lib/section-access';
+import { publicError } from '@/lib/public-error';
+import { logAuditEvent } from '@/lib/audit-log';
 
 const sql = neon(process.env.DATABASE_URL!);
 
 export async function getHeroSlotsAction() {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/hero-slots'));
   if (error) return [];
   try {
     const rows = await sql`
@@ -33,7 +36,7 @@ export async function createHeroSlotAction(data: {
   sortOrder?: number; isActive?: boolean;
   startDate?: string; endDate?: string;
 }) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/hero-slots'));
   if (error) return { success: false, error };
   try {
     await sql`
@@ -50,9 +53,10 @@ export async function createHeroSlotAction(data: {
       )
     `;
     revalidatePath('/hero-slots');
+    await logAuditEvent({ action: 'CREATE', resourceType: 'HERO_SLOT', resourceName: 'createHeroSlotAction' });
     await refreshPublic(['home']); return { success: true };
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }
 
@@ -63,7 +67,7 @@ export async function updateHeroSlotAction(id: string, data: {
   sortOrder?: number; isActive?: boolean;
   startDate?: string; endDate?: string;
 }) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/hero-slots'));
   if (error) return { success: false, error };
   try {
     await sql`
@@ -79,9 +83,10 @@ export async function updateHeroSlotAction(id: string, data: {
       WHERE id = ${id}
     `;
     revalidatePath('/hero-slots');
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'HERO_SLOT', resourceId: id, resourceName: 'updateHeroSlotAction' });
     await refreshPublic(['home']); return { success: true };
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }
 
@@ -91,38 +96,41 @@ export async function deleteHeroSlotAction(id: string) {
   try {
     await sql`DELETE FROM "HeroSlot" WHERE id = ${id}`;
     revalidatePath('/hero-slots');
+    await logAuditEvent({ action: 'DELETE', resourceType: 'HERO_SLOT', resourceId: id, resourceName: 'deleteHeroSlotAction' });
     await refreshPublic(['home']); return { success: true };
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }
 
 export async function toggleHeroSlotAction(id: string, current: boolean) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/hero-slots'));
   if (error) return { success: false, error };
   try {
     await sql`UPDATE "HeroSlot" SET "isActive" = ${!current}, "updatedAt" = NOW() WHERE id = ${id}`;
     revalidatePath('/hero-slots');
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'HERO_SLOT', resourceId: id, resourceName: 'toggleHeroSlotAction' });
     await refreshPublic(['home']); return { success: true };
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }
 
 export async function reorderHeroSlotAction(id: string, sortOrder: number) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/hero-slots'));
   if (error) return { success: false, error };
   try {
     await sql`UPDATE "HeroSlot" SET "sortOrder" = ${sortOrder}, "updatedAt" = NOW() WHERE id = ${id}`;
     revalidatePath('/hero-slots');
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'HERO_SLOT', resourceId: id, resourceName: 'reorderHeroSlotAction' });
     await refreshPublic(['home']); return { success: true };
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }
 
 export async function getPublishedArticlesForHeroAction() {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/hero-slots'));
   if (error) return [];
   try {
     const rows = await sql`

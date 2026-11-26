@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import { redirect } from "next/navigation";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "SENIOR_WRITER"];
 const ALL_ROLES = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "SENIOR_WRITER", "WRITER"];
@@ -27,7 +28,8 @@ export function twoFactorBlock(session: any): { status: 401 | 403; message: stri
 export async function requireApiAuth(allowedRoles: string[] = ADMIN_ROLES, opts: AuthOptions = {}) {
   const session: any = await getServerSession(authOptions);
 
-  if (!session?.user) {
+  // revoked: the account was deactivated or deleted after this session started (lib/auth.ts).
+  if (!session?.user || session.revoked) {
     return { session: null, error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
 
@@ -47,7 +49,8 @@ export async function requireApiAuth(allowedRoles: string[] = ADMIN_ROLES, opts:
 export async function requireActionAuth(allowedRoles: string[] = ADMIN_ROLES) {
   const session: any = await getServerSession(authOptions);
 
-  if (!session?.user) {
+  // revoked: the account was deactivated or deleted after this session started (lib/auth.ts).
+  if (!session?.user || session.revoked) {
     return { session: null, error: "Unauthorized" };
   }
 
@@ -62,6 +65,26 @@ export async function requireActionAuth(allowedRoles: string[] = ADMIN_ROLES) {
   }
 
   return { session, error: null };
+}
+
+/**
+ * For form actions (a <form action={...}> that ends in a redirect): the same session, two-factor and role check as
+ * requireActionAuth, but a caller who fails it is sent away instead of getting a result object. Every server action
+ * is a public POST endpoint, including ones written inside a page file, so each must start with this or
+ * requireActionAuth.
+ */
+export async function requireFormAuth(allowedRoles: string[] = ADMIN_ROLES) {
+  const { session, error } = await requireActionAuth(allowedRoles);
+  if (error || !session) redirect(error === "Unauthorized" ? "/login" : "/dashboard?error=unauthorized");
+  return session;
+}
+
+/**
+ * For server-rendered pages: only these roles may open the page (the sidebar hiding a link is not a check).
+ * Everyone else goes back to the dashboard.
+ */
+export async function requirePageRole(allowedRoles: string[] = ADMIN_ROLES) {
+  return requireFormAuth(allowedRoles);
 }
 
 export { ADMIN_ROLES, ALL_ROLES };

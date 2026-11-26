@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiAuth } from '@/lib/api-auth';
+import { sectionRoles } from '@/lib/section-access';
 import * as cheerio from 'cheerio';
 import { withPublicRefresh } from '@/lib/refresh-public';
+import { publicError } from '@/lib/public-error';
 
 export const maxDuration = 120;
 
@@ -390,7 +392,7 @@ function deduplicateEvents(events: RawEvent[]): RawEvent[] {
 // ─── Main handler ──────────────────────────────────────────────────────
 
 async function postHandler(request: NextRequest) {
-  const { error } = await requireApiAuth();
+  const { error } = await requireApiAuth(sectionRoles('/events'));
   if (error) return NextResponse.json({ success: false, error }, { status: 401 });
 
   try {
@@ -453,7 +455,7 @@ async function postHandler(request: NextRequest) {
     });
   } catch (err: any) {
     console.error('[Event Fetcher] Error:', err);
-    return NextResponse.json({ success: false, error: err.message || 'Failed to fetch events' }, { status: 500 });
+    return NextResponse.json({ success: false, error: publicError(err) || 'Failed to fetch events' }, { status: 500 });
   }
 }
 

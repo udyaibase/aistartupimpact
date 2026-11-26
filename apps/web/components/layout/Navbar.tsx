@@ -324,7 +324,7 @@ export default function Navbar() {
                     <User className="w-[18px] h-[18px] shrink-0 text-gray-400 dark:text-gray-500" />
                     Profile
                   </Link>
-                  <Link href="/profile#saved" onClick={() => setMobileOpen(false)}
+                  <Link href="/profile?tab=saved" onClick={() => setMobileOpen(false)}
                     className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-jakarta font-medium text-gray-600 dark:text-gray-400 active:bg-gray-100 dark:active:bg-gray-800 transition-colors">
                     <Bookmark className="w-[18px] h-[18px] shrink-0 text-gray-400 dark:text-gray-500" />
                     Saved
@@ -351,6 +351,13 @@ export default function Navbar() {
                       className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-jakarta font-medium text-gray-600 dark:text-gray-400 active:bg-gray-100 dark:active:bg-gray-800 transition-colors">
                       <LayoutDashboard className="w-[18px] h-[18px] shrink-0 text-gray-400 dark:text-gray-500" />
                       Organizer Dashboard
+                    </Link>
+                  )}
+                  {user.hasEmployer && (
+                    <Link href="/employer" onClick={() => setMobileOpen(false)}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-jakarta font-medium text-gray-600 dark:text-gray-400 active:bg-gray-100 dark:active:bg-gray-800 transition-colors">
+                      <Briefcase className="w-[18px] h-[18px] shrink-0 text-gray-400 dark:text-gray-500" />
+                      Hiring portal
                     </Link>
                   )}
                 </div>

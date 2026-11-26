@@ -52,6 +52,15 @@ vi.mock('@/lib/organizer-auth', () => ({
 vi.mock('@/lib/user-session', () => ({
   getUserSession: vi.fn(() => Promise.resolve(null)),
   isAuthenticated: vi.fn(() => Promise.resolve(false)),
+  // The shared cookie check: the ids always come from the verified token, never from the request body.
+  verifyUserToken: vi.fn(async (token?: string) => {
+    if (!token) return null;
+    try {
+      const { payload } = await mockJwtVerify(token);
+      return payload?.userId ? { userId: payload.userId, email: payload.email ?? '', sessionId: payload.sessionId ?? null } : null;
+    } catch { return null; }
+  }),
+  getUserIds: vi.fn(() => Promise.resolve(null)),
 }));
 
 vi.mock('@/lib/db', () => ({

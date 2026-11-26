@@ -4,6 +4,8 @@ import { neon } from '@neondatabase/serverless';
 import { revalidatePath } from 'next/cache';
 import { requireActionAuth } from '@/lib/api-auth';
 import { refreshPublic } from '@/lib/refresh-public';
+import { sectionRoles } from '@/lib/section-access';
+import { logAuditEvent } from '@/lib/audit-log';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -12,7 +14,7 @@ const sql = neon(process.env.DATABASE_URL!);
 // ═══════════════════════════════════════════════════════
 
 export async function getBreakingTickersAction() {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/tickers'));
   if (error) return [];
   try {
     const tickers = await sql`
@@ -28,7 +30,7 @@ export async function getBreakingTickersAction() {
 }
 
 export async function createBreakingTickerAction(text: string) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/tickers'));
   if (error) return { success: false, error };
   try {
     // Get the next sort order
@@ -44,6 +46,7 @@ export async function createBreakingTickerAction(text: string) {
     `;
 
     revalidatePath('/tickers');
+    await logAuditEvent({ action: 'CREATE', resourceType: 'TICKER', resourceName: 'createBreakingTickerAction' });
     await refreshPublic(['home']); return { success: true };
   } catch (error) {
     console.error('Error creating breaking ticker:', error);
@@ -52,7 +55,7 @@ export async function createBreakingTickerAction(text: string) {
 }
 
 export async function updateBreakingTickerAction(id: string, text: string, isActive: boolean) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/tickers'));
   if (error) return { success: false, error };
   try {
     await sql`
@@ -62,6 +65,7 @@ export async function updateBreakingTickerAction(id: string, text: string, isAct
     `;
 
     revalidatePath('/tickers');
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'TICKER', resourceId: id, resourceName: 'updateBreakingTickerAction' });
     await refreshPublic(['home']); return { success: true };
   } catch (error) {
     console.error('Error updating breaking ticker:', error);
@@ -78,6 +82,7 @@ export async function deleteBreakingTickerAction(id: string) {
     `;
 
     revalidatePath('/tickers');
+    await logAuditEvent({ action: 'DELETE', resourceType: 'TICKER', resourceId: id, resourceName: 'deleteBreakingTickerAction' });
     await refreshPublic(['home']); return { success: true };
   } catch (error) {
     console.error('Error deleting breaking ticker:', error);
@@ -86,7 +91,7 @@ export async function deleteBreakingTickerAction(id: string) {
 }
 
 export async function reorderBreakingTickersAction(tickerIds: string[]) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/tickers'));
   if (error) return { success: false, error };
   try {
     for (let i = 0; i < tickerIds.length; i++) {
@@ -98,6 +103,7 @@ export async function reorderBreakingTickersAction(tickerIds: string[]) {
     }
 
     revalidatePath('/tickers');
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'TICKER', resourceName: 'reorderBreakingTickersAction' });
     await refreshPublic(['home']); return { success: true };
   } catch (error) {
     console.error('Error reordering breaking tickers:', error);
@@ -110,7 +116,7 @@ export async function reorderBreakingTickersAction(tickerIds: string[]) {
 // ═══════════════════════════════════════════════════════
 
 export async function getLiveTickersAction() {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/tickers'));
   if (error) return [];
   try {
     const tickers = await sql`
@@ -126,7 +132,7 @@ export async function getLiveTickersAction() {
 }
 
 export async function createLiveTickerAction(text: string) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/tickers'));
   if (error) return { success: false, error };
   try {
     // Get the next sort order
@@ -142,6 +148,7 @@ export async function createLiveTickerAction(text: string) {
     `;
 
     revalidatePath('/tickers');
+    await logAuditEvent({ action: 'CREATE', resourceType: 'TICKER', resourceName: 'createLiveTickerAction' });
     await refreshPublic(['home']); return { success: true };
   } catch (error) {
     console.error('Error creating live ticker:', error);
@@ -150,7 +157,7 @@ export async function createLiveTickerAction(text: string) {
 }
 
 export async function updateLiveTickerAction(id: string, text: string, isActive: boolean) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/tickers'));
   if (error) return { success: false, error };
   try {
     await sql`
@@ -160,6 +167,7 @@ export async function updateLiveTickerAction(id: string, text: string, isActive:
     `;
 
     revalidatePath('/tickers');
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'TICKER', resourceId: id, resourceName: 'updateLiveTickerAction' });
     await refreshPublic(['home']); return { success: true };
   } catch (error) {
     console.error('Error updating live ticker:', error);
@@ -176,6 +184,7 @@ export async function deleteLiveTickerAction(id: string) {
     `;
 
     revalidatePath('/tickers');
+    await logAuditEvent({ action: 'DELETE', resourceType: 'TICKER', resourceId: id, resourceName: 'deleteLiveTickerAction' });
     await refreshPublic(['home']); return { success: true };
   } catch (error) {
     console.error('Error deleting live ticker:', error);
@@ -184,7 +193,7 @@ export async function deleteLiveTickerAction(id: string) {
 }
 
 export async function reorderLiveTickersAction(tickerIds: string[]) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/tickers'));
   if (error) return { success: false, error };
   try {
     for (let i = 0; i < tickerIds.length; i++) {
@@ -196,6 +205,7 @@ export async function reorderLiveTickersAction(tickerIds: string[]) {
     }
 
     revalidatePath('/tickers');
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'TICKER', resourceName: 'reorderLiveTickersAction' });
     await refreshPublic(['home']); return { success: true };
   } catch (error) {
     console.error('Error reordering live tickers:', error);

@@ -64,8 +64,8 @@ export default function AnalyticsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Analytics</h1>
-          <p className="text-gray-400 dark:text-gray-500 text-sm font-jakarta mt-1">Traffic and engagement overview</p>
+          <h1 className="portal-title">Analytics</h1>
+          <p className="portal-subtitle">Traffic and engagement overview</p>
         </div>
         <div className="flex items-center gap-1 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-1">
           {periods.map(p => (
