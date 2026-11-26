@@ -250,7 +250,8 @@ export default function ToolsDirPage() {
   const filters = useMemo<TableFilter<Tool>[]>(() => [
     { key: 'status', label: 'Status', options: ['PENDING', 'APPROVED', 'ARCHIVED'].map((v) => ({ value: v, label: label(v) })), matches: (t, v) => t.status === v },
     { key: 'review', label: 'Content review', options: [{ value: 'under_review', label: 'Under review' }, { value: 'reviewed', label: 'Reviewed' }], matches: (t, v) => t.contentReviewed === (v === 'reviewed') },
-    { key: 'category', label: 'Category', options: categories.map((c) => ({ value: c.id, label: c.name })), matches: (t, v) => t.categoryId === v },
+    // Built from the tools themselves, so every category in the list can be picked, whatever level it sits at.
+    { key: 'category', label: 'Category', options: [...new Set(tools.map((t) => t.categoryName).filter((v): v is string => !!v))].sort().map((v) => ({ value: v, label: v })), matches: (t, v) => t.categoryName === v },
     { key: 'tier', label: 'Listing', options: listingTiers.map((v) => ({ value: v, label: label(v) })), matches: (t, v) => t.listingTier === v },
     { key: 'pricing', label: 'Pricing', options: [...new Set(tools.map((t) => t.pricingModel).filter(Boolean))].sort().map((v) => ({ value: v, label: label(v) })), matches: (t, v) => t.pricingModel === v },
   // eslint-disable-next-line react-hooks/exhaustive-deps
