@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Search, Download, ChevronLeft, ChevronRight, X, Shield, Rocket, CalendarDays } from "lucide-react";
+import { useState, useCallback, useMemo, useRef } from "react";
+import { Download, X, Shield, Rocket, CalendarDays } from "lucide-react";
+import DataTable, { type Column, type ServerQuery, type TableFilter } from "@/components/ui/DataTable";
+import { notify } from "@/components/Toast";
 import { ConfirmModal } from '@/components/ConfirmModal';
 
 interface Person {
@@ -25,46 +27,48 @@ interface Person {
   totalRegistrations?: number;
 }
 
-const FILTERS = [
-  { key: "all", label: "All" },
-  { key: "founders", label: "Founders" },
-  { key: "organizers", label: "Organizers" },
-  { key: "community", label: "Community" },
-  { key: "web_users", label: "Web Users" },
-  { key: "2fa", label: "2FA" },
-  { key: "suspended", label: "Suspended" },
+/** Sent to the server as `filter`; the list is searched and paged there. */
+const GROUPS = [
+  { value: "founders", label: "Founders" },
+  { value: "organizers", label: "Organizers" },
+  { value: "community", label: "Community" },
+  { value: "web_users", label: "Website users" },
+  { value: "2fa", label: "Two-factor on" },
+  { value: "suspended", label: "Suspended" },
 ];
+const PAGE_SIZE = 50;
 
 export default function PeopleClient() {
   const [people, setPeople] = useState<Person[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Person | null>(null);
   const [detail, setDetail] = useState<any>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const lastQuery = useRef<ServerQuery | null>(null);
+  const request = useRef(0);
 
-  const fetchPeople = useCallback(async () => {
+  const load = useCallback(async (q: ServerQuery) => {
+    lastQuery.current = q;
+    const mine = ++request.current;
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(page), filter });
-      if (search) params.set("search", search);
+      const params = new URLSearchParams({ page: String(q.page), limit: String(q.pageSize), filter: q.filters.group || "all" });
+      if (q.search.trim()) params.set("search", q.search.trim());
       const res = await fetch(`/api/admin/people?${params}`);
       const data = await res.json();
-      if (data.success) {
-        setPeople(data.people);
-        setTotal(data.total);
-        setTotalPages(data.totalPages);
-      }
-    } catch {}
-    setLoading(false);
-  }, [page, filter, search]);
-
-  useEffect(() => { fetchPeople(); }, [fetchPeople]);
+      if (mine !== request.current) return; // an older answer arriving late
+      if (!res.ok || !data.success) throw new Error();
+      setPeople(data.people);
+      setTotal(data.total);
+    } catch {
+      if (mine === request.current) notify("Couldn't load people. Check your connection and refresh.", "error");
+    } finally {
+      if (mine === request.current) setLoading(false);
+    }
+  }, []);
+  const fetchPeople = () => { if (lastQuery.current) load(lastQuery.current); };
 
   const fetchDetail = async (person: Person) => {
     setSelected(person);
@@ -97,19 +101,51 @@ export default function PeopleClient() {
     setPendingAction(null);
   };
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    setPage(1);
-    fetchPeople();
-  };
+  const columns = useMemo<Column<Person>[]>(() => [
+    {
+      key: "name", header: "Name",
+      cell: (p) => (
+        <button type="button" onClick={() => fetchDetail(p)} className="flex items-center gap-2.5 text-left group" aria-label={`Open ${p.name || p.email}`}>
+          <span className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden shrink-0">
+            {p.avatar
+              // eslint-disable-next-line @next/next/no-img-element
+              ? <img src={p.avatar} alt="" className="w-full h-full object-cover" />
+              : <span className="text-xs font-semibold text-gray-600 dark:text-gray-300" aria-hidden>{(p.name || "?").charAt(0)}</span>}
+          </span>
+          <span className="font-medium text-gray-900 dark:text-white group-hover:underline truncate max-w-[180px]">{p.name || "–"}</span>
+        </button>
+      ),
+    },
+    { key: "email", header: "Email", cell: (p) => <span className="truncate block max-w-[240px]">{p.email}</span> },
+    {
+      key: "workspaces", header: "Workspaces",
+      cell: (p) => {
+        const list = [p.founderId && "Founder", p.organizerId && "Organizer", (p as any).userSource === "web_user" && "Website"].filter(Boolean);
+        return list.length ? list.join(", ") : "–";
+      },
+    },
+    {
+      key: "activity", header: "Activity",
+      cell: (p) => {
+        const parts = [p.startupCount ? `${p.startupCount} startup${p.startupCount > 1 ? "s" : ""}` : "", p.eventCount ? `${p.eventCount} event${p.eventCount > 1 ? "s" : ""}` : ""].filter(Boolean);
+        return <span className="text-xs">{parts.join(", ") || "–"}</span>;
+      },
+    },
+    {
+      key: "joined", header: "Joined",
+      cell: (p) => <span className="text-xs whitespace-nowrap">{p.createdAt ? new Date(p.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }) : "–"}</span>,
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- cells call the latest handlers
+  ], []);
+  const filters = useMemo<TableFilter<Person>[]>(() => [{ key: "group", label: "Group", options: GROUPS, matches: () => true }], []);
 
   return (
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">People</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{total} total users across all workspaces</p>
+          <h1 className="portal-title">People</h1>
+          <p className="portal-subtitle">Everyone with an account, across the portals and the website. Select a name for details.</p>
         </div>
         {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
         <a
@@ -120,120 +156,19 @@ export default function PeopleClient() {
         </a>
       </div>
 
-      {/* Search + Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <form onSubmit={handleSearch} className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name or email..."
-            className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand/30 focus:border-brand"
-          />
-        </form>
-        <div className="flex gap-1 flex-wrap">
-          {FILTERS.map((f) => (
-            <button
-              key={f.key}
-              onClick={() => { setFilter(f.key); setPage(1); }}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                filter === f.key
-                  ? "bg-brand text-white"
-                  : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
-                <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase">Name</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase">Email</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase">Workspaces</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase">Activity</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs uppercase">Joined</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {loading ? (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
-              ) : people.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">No results</td></tr>
-              ) : (
-                people.map((p) => (
-                  <tr
-                    key={p.id}
-                    onClick={() => fetchDetail(p)}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden shrink-0">
-                          {p.avatar ? (
-                            <img src={p.avatar} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <span className="text-xs font-semibold text-gray-500">{(p.name || "?").charAt(0)}</span>
-                          )}
-                        </div>
-                        <span className="font-medium text-gray-900 dark:text-white truncate max-w-[150px]">{p.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400 truncate max-w-[200px]">{p.email}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1">
-                        {p.founderId && (
-                          <span className="px-1.5 py-0.5 text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 rounded">F</span>
-                        )}
-                        {p.organizerId && (
-                          <span className="px-1.5 py-0.5 text-[10px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded">O</span>
-                        )}
-                        {(p as any).userSource === "web_user" && (
-                          <span className="px-1.5 py-0.5 text-[10px] font-bold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded">W</span>
-                        )}
-                        {!p.founderId && !p.organizerId && (p as any).userSource !== "web_user" && (
-                          <span className="text-xs text-gray-400">—</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-500">
-                      {p.startupCount ? `${p.startupCount} startup${p.startupCount > 1 ? "s" : ""}` : ""}
-                      {p.startupCount && p.eventCount ? ", " : ""}
-                      {p.eventCount ? `${p.eventCount} event${p.eventCount > 1 ? "s" : ""}` : ""}
-                      {!p.startupCount && !p.eventCount && "—"}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-500">
-                      {p.createdAt ? new Date(p.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" }) : "—"}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800">
-            <p className="text-xs text-gray-500">Page {page} of {totalPages}</p>
-            <div className="flex gap-1">
-              <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page <= 1} className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30">
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page >= totalPages} className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30">
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      <DataTable
+        tableId="people"
+        noun="people"
+        rows={people}
+        rowKey={(p) => p.id}
+        columns={columns}
+        filters={filters}
+        loading={loading}
+        pageSize={PAGE_SIZE}
+        server={{ total, onQuery: load }}
+        searchPlaceholder="Search name or email"
+        empty={{ title: "No people yet", description: "Everyone with an account on any portal or the website appears here." }}
+      />
 
       {/* Action Confirm Modal */}
       <ConfirmModal

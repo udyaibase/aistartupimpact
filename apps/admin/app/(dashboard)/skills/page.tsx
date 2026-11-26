@@ -6,6 +6,7 @@ import { SKILLS, baseKey, type SkillCategory } from '@udyaibase/utils/skill-dict
 import {
   addAliasAction, addRuleAction, addSkillAction, getSkillsAdminAction, ignoreUnknownAction, mergeSkillAction, removeAdditionAction,
 } from './actions';
+import { ask } from '@/components/Ask';
 
 type Data = Extract<Awaited<ReturnType<typeof getSkillsAdminAction>>, { success: true }>;
 const CATEGORIES: SkillCategory[] = ['language', 'frontend', 'backend', 'mobile', 'data', 'database', 'ml', 'ai', 'cloud', 'devops', 'testing', 'security', 'design', 'product', 'business', 'soft', 'tools'];
@@ -73,8 +74,8 @@ export default function SkillsDictionaryPage() {
       <datalist id="skill-names">{rows.map((r) => <option key={r.key} value={r.name} />)}</datalist>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2"><BookOpen className="w-5 h-5 text-brand" /> Skills dictionary</h1>
-          <p className="text-xs text-gray-500 mt-0.5 max-w-2xl">
+          <h1 className="portal-title flex items-center gap-2"><BookOpen className="w-5 h-5 text-brand" /> Skills dictionary</h1>
+          <p className="portal-subtitle">
             {rows.length} skills ({SKILLS.length} in code, {data.skills.length} added here) · version {data.version}
             {data.version > data.rescoredVersion ? ' · stored AI review scores update in the next daily run (by code, no AI cost)' : ' · all review scores up to date'}.
             Nothing here changes matching until you approve it.
@@ -185,7 +186,7 @@ function SkillRow({ r, nameOf, busy, onAlias, onImplies, onAmbiguous, onMerge }:
         <button disabled={busy || !imp.trim()} onClick={() => { onImplies(imp); setImp(''); }} className={`${btn} border border-gray-300 dark:border-gray-600`}>Add implies</button>
         <button disabled={busy} onClick={() => onAmbiguous(!r.ambiguous)} className={`${btn} border border-gray-300 dark:border-gray-600`}>{r.ambiguous ? 'Count however written' : 'Only as the tool’s name'}</button>
         <input list="skill-names" value={merge} onChange={(e) => setMerge(e.target.value)} placeholder="Merge into…" className={`${input} w-32`} aria-label={`Merge ${r.name} into`} />
-        <button disabled={busy || !merge.trim()} onClick={() => { if (confirm(`Merge ${r.name} into ${merge}? ${r.name} becomes another way to write ${merge}.`)) onMerge(merge); }} className={`${btn} border border-red-300 text-red-700 dark:border-red-800 dark:text-red-300`}>Merge</button>
+        <button disabled={busy || !merge.trim()} onClick={async () => { if (await ask({ title: `Merge ${r.name} into ${merge}`, message: `${r.name} becomes another way to write ${merge}. This can’t be undone.`, confirmLabel: 'Merge', danger: true })) onMerge(merge); }} className={`${btn} border border-red-300 text-red-700 dark:border-red-800 dark:text-red-300`}>Merge</button>
         {busy && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
       </div>
     </li>

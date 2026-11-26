@@ -8,6 +8,7 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import crypto from "crypto";
 import { logAuditEvent } from "@/lib/audit-log";
 import { withPublicRefresh } from '@/lib/refresh-public';
+import { publicError } from '@/lib/public-error';
 
 const SUPER_ROLES = ["SUPER_ADMIN", "EDITOR_IN_CHIEF"];
 
@@ -75,7 +76,7 @@ async function postHandler(request: NextRequest) {
           return NextResponse.json({ success: true });
         } catch (e: any) {
           console.error("Save colors error:", e);
-          return NextResponse.json({ error: e.message || "Failed to save colors" }, { status: 500 });
+          return NextResponse.json({ error: publicError(e) || "Failed to save colors" }, { status: 500 });
         }
       }
 
@@ -106,7 +107,7 @@ async function postHandler(request: NextRequest) {
           return NextResponse.json({ success: true });
         } catch (e: any) {
           console.error("Save fonts error:", e);
-          return NextResponse.json({ error: e.message || "Failed to save fonts" }, { status: 500 });
+          return NextResponse.json({ error: publicError(e) || "Failed to save fonts" }, { status: 500 });
         }
       }
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { notify } from '@/components/Toast';
 import { CityPicker, CountryPicker } from '@/components/LocationFields';
 import { useState, useRef, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
@@ -105,7 +106,7 @@ export default function EditToolPage() {
       const tool = tools.find((t: any) => t.id === toolId);
       
       if (!tool) {
-        alert('Tool not found');
+        notify('Tool not found');
         router.push('/tools-dir');
         return;
       }
@@ -155,11 +156,12 @@ export default function EditToolPage() {
           if (dScreenshots) setScreenshots(dScreenshots);
         } catch (e) {
           console.error('Failed to restore tool draft:', e);
+          notify("Something went wrong. Check your connection and try again.", 'error');
         }
       }
     } catch (error) {
       console.error('Error loading tool:', error);
-      alert('Error loading tool');
+      notify('Error loading tool');
     } finally {
       setLoading(false);
       setLoadingFaqs(false);
@@ -227,7 +229,7 @@ export default function EditToolPage() {
     e.preventDefault();
     
     if (!formData || !formData.name || !formData.tagline || !formData.websiteUrl || !formData.categoryId) {
-      alert('Please fill in all required fields');
+      notify('Please fill in all required fields');
       return;
     }
     
@@ -284,16 +286,16 @@ export default function EditToolPage() {
         if (tagResult && !tagResult.success && tagResult.error) errors.push('Tags: ' + tagResult.error);
         if (prosConsResult && !prosConsResult.success && prosConsResult.error) errors.push('Pros/Cons: ' + prosConsResult.error);
         if (errors.length > 0) {
-          alert('Tool saved but some data failed:\n' + errors.join('\n'));
+          notify('Tool saved but some data failed:\n' + errors.join('\n'));
         }
         localStorage.removeItem(`draft_admin_edit_tool_${toolId}`);
         router.push('/tools-dir');
         router.refresh();
       } else {
-        alert('Error: ' + (result.error || 'Failed to update tool'));
+        notify('Error: ' + (result.error || 'Failed to update tool'));
       }
     } catch (error: any) {
-      alert('Error: ' + error.message);
+      notify('Error: ' + error.message);
     } finally {
       setSaving(false);
     }
@@ -330,8 +332,8 @@ export default function EditToolPage() {
           <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
         </button>
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Edit Tool</h1>
-          <p className="text-gray-400 dark:text-gray-500 text-sm font-jakarta mt-1">
+          <h1 className="portal-title">Edit Tool</h1>
+          <p className="portal-subtitle">
             Update tool information
           </p>
         </div>

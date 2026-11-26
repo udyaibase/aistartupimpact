@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 import { maskEmail } from "@/lib/mask";
 
 interface ProfileDropdownProps {
-  user?: { name?: string; email?: string; avatar?: string | null; founderId?: string | null; organizerId?: string | null } | null;
+  user?: { name?: string; email?: string; avatar?: string | null; founderId?: string | null; organizerId?: string | null; hasEmployer?: boolean } | null;
   onLogout?: () => void;
 }
 
@@ -91,6 +91,7 @@ export default function ProfileDropdown({ user, onLogout }: ProfileDropdownProps
             ) : (
               <>
                 <DropdownItem href={pathname?.startsWith('/founder') ? '/founder/profile' : '/profile'} icon="user" onClick={() => setOpen(false)}>Profile</DropdownItem>
+                <DropdownItem href="/profile?tab=saved" icon="bookmark" onClick={() => setOpen(false)}>Saved</DropdownItem>
                 <DropdownItem href="/my-applications" icon="briefcase" onClick={() => setOpen(false)}>My Applications</DropdownItem>
                 <DropdownItem href="/events/my-events" icon="calendar" onClick={() => setOpen(false)}>My Events</DropdownItem>
               </>
@@ -104,6 +105,9 @@ export default function ProfileDropdown({ user, onLogout }: ProfileDropdownProps
             )}
             {user.organizerId && !pathname?.startsWith('/organizer') && (
               <DropdownItem href="/organizer" icon="layout" onClick={() => setOpen(false)}>Organizer Dashboard</DropdownItem>
+            )}
+            {user.hasEmployer && !pathname?.startsWith('/employer') && (
+              <DropdownItem href="/employer" icon="briefcase" onClick={() => setOpen(false)}>Hiring portal</DropdownItem>
             )}
             {(pathname?.startsWith('/founder') || pathname?.startsWith('/organizer')) && (
               <DropdownItem href="/" icon="home" onClick={() => setOpen(false)}>Back to Home</DropdownItem>

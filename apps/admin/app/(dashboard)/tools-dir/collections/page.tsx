@@ -1,5 +1,6 @@
 'use client';
 
+import { notify } from '@/components/Toast';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, Trash2, Eye, EyeOff, Edit3, X, Save, Loader2 } from 'lucide-react';
@@ -32,7 +33,7 @@ export default function CollectionsPage() {
     setSubmitting(true);
     const result = await createCollectionAction({ title: addTitle.trim(), description: addDesc.trim() || undefined });
     if (result.success) { setShowAdd(false); setAddTitle(''); setAddDesc(''); await loadData(); }
-    else alert(result.error);
+    else notify(result.error);
     setSubmitting(false);
   };
 
@@ -61,8 +62,8 @@ export default function CollectionsPage() {
         <div className="flex items-center gap-4">
           <button onClick={() => router.push('/tools-dir')} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"><ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" /></button>
           <div>
-            <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Curated Collections</h1>
-            <p className="text-gray-400 text-sm font-jakarta mt-1">{collections.length} collections</p>
+            <h1 className="portal-title">Curated Collections</h1>
+            <p className="portal-subtitle">{collections.length} collections</p>
           </div>
         </div>
         <button onClick={() => setShowAdd(true)} className="btn-brand text-sm flex items-center gap-2"><Plus className="w-4 h-4" /> New Collection</button>

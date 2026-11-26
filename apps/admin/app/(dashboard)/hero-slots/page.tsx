@@ -1,5 +1,6 @@
 'use client';
 
+import { notify } from '@/components/Toast';
 import { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit3, Trash2, X, Save, Calendar, Eye, EyeOff, GripVertical, Layers, Search, FileText, ChevronDown } from 'lucide-react';
 import {
@@ -164,7 +165,7 @@ export default function HeroSlotsPage() {
       result = await createHeroSlotAction(payload);
     }
     if (result && !result.success) {
-      alert('Save failed: ' + (result.error || 'Unknown error'));
+      notify('Save failed: ' + (result.error || 'Unknown error'));
       return;
     }
     setModalOpen(false);
@@ -193,10 +194,10 @@ export default function HeroSlotsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white flex items-center gap-2">
+          <h1 className="portal-title flex items-center gap-2">
             <Layers className="w-6 h-6 text-brand" /> Hero Slots
           </h1>
-          <p className="text-gray-400 text-sm font-jakarta mt-1">
+          <p className="portal-subtitle">
             Schedule up to 5 stories/brands for the homepage hero · {liveCount} live now
           </p>
         </div>

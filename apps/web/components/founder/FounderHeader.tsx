@@ -27,7 +27,7 @@ const PAGES: SearchResult[] = [
   { id: 'profile', label: 'Profile', description: 'Your public founder profile', href: '/founder/profile', icon: <User className="w-4 h-4" />, category: 'page' },
   { id: 'settings', label: 'Settings', description: 'Notifications, privacy and security', href: '/founder/settings', icon: <Settings className="w-4 h-4" />, category: 'page' },
   { id: 'activity', label: 'Activity log', description: 'Sign-ins and changes on your account', href: '/founder/activity', icon: <History className="w-4 h-4" />, category: 'page' },
-  { id: 'support', label: 'Support', description: 'Get help from our team', href: '/founder/support', icon: <HelpCircle className="w-4 h-4" />, category: 'page' },
+  { id: 'support', label: 'Help & support', description: 'Get help from our team', href: '/founder/support', icon: <HelpCircle className="w-4 h-4" />, category: 'page' },
 ];
 
 const ACTIONS: SearchResult[] = [

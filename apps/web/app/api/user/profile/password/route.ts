@@ -1,8 +1,8 @@
+import { verifyUserToken } from '@/lib/user-session';
 import { jwtSecret } from '@/lib/jwt-secret';
 import { passwordProblem } from "@/lib/password-rules";
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
 import { sql } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import { setFounderSession } from '@/lib/founder-auth';
@@ -19,9 +19,10 @@ export async function PUT(request: NextRequest) {
     const token = cookieStore.get('user-token')?.value;
     if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const verified = await jwtVerify(token, JWT_SECRET);
-    const userId = (verified.payload as any).userId;
-    const email = (verified.payload as any).email;
+    // Not just a valid signature: the sign-in must still be live, or a signed-out device could change the password.
+    const ids = await verifyUserToken(token);
+    if (!ids) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { userId, email } = ids;
     if (!email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { currentPassword, newPassword } = await request.json();
@@ -48,7 +49,7 @@ export async function PUT(request: NextRequest) {
     // Hash and update
     const newHash = await bcrypt.hash(newPassword, 12);
 
-    const currentSessionId = (verified.payload as any).sessionId;
+    const currentSessionId = ids.sessionId ?? undefined;
 
     // Everywhere it's stored; this device stays signed in, every other one is signed out.
     const founder = await setAccountPassword(email, newHash, { keepWebSessionId: currentSessionId });

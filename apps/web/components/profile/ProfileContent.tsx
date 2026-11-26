@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState, useEffect, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Loader2, Camera, Check, Shield, Monitor, Smartphone, Globe, X } from 'lucide-react';
@@ -12,8 +12,8 @@ import SavedItems from '@/components/profile/SavedItems';
 import TwoFactorSetup from '@/components/TwoFactorSetup';
 import EmailChangeModal from '@/components/EmailChangeModal';
 import EmailCodeField, { NO_CODE, type EmailCode } from '@/components/ui/EmailCodeField';
-import PreferencesClient from '@/app/settings/preferences/PreferencesClient';
-import { getPreferencesForm } from '@/app/settings/preferences/actions';
+import PreferencesClient from '@/components/profile/PreferencesClient';
+import { getPreferencesForm } from '@/lib/profile/preferences-actions';
 
 interface UserProfile {
   id: string;
@@ -27,16 +27,38 @@ interface UserProfile {
   createdAt: string;
   founderId?: string | null;
   organizerId?: string | null;
+  hasEmployer?: boolean;
 }
 
-type Tab = 'overview' | 'security' | 'workspaces' | 'preferences';
+const TABS = [
+  { key: 'overview', label: 'Profile' },
+  { key: 'saved', label: 'Saved' },
+  { key: 'preferences', label: 'Preferences' },
+  { key: 'security', label: 'Security' },
+  { key: 'workspaces', label: 'Workspaces' },
+] as const;
+type Tab = (typeof TABS)[number]['key'];
+const isTab = (v: string | null | undefined): v is Tab => TABS.some((t) => t.key === v);
+
+/** The tab named in the address: ?tab=security, or the older #security links. */
+function tabFromLocation(): Tab {
+  const fromQuery = new URLSearchParams(window.location.search).get('tab');
+  if (isTab(fromQuery)) return fromQuery;
+  const fromHash = window.location.hash.replace('#', '');
+  return isTab(fromHash) ? fromHash : 'overview';
+}
 
 interface ProfileContentProps {
   /** Show back button */
   showBack?: boolean;
 }
 
-export default function ProfileContent({ showBack = true }: ProfileContentProps) {
+/** Reads the open tab from the address, which needs a Suspense boundary on pages that can be prerendered. */
+export default function ProfileContent(props: ProfileContentProps) {
+  return <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-brand" /></div>}><ProfileContentInner {...props} /></Suspense>;
+}
+
+function ProfileContentInner({ showBack = true }: ProfileContentProps) {
   const router = useRouter();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,12 +66,25 @@ export default function ProfileContent({ showBack = true }: ProfileContentProps)
 
   useEffect(() => {
     fetchProfile();
-    if (typeof window !== 'undefined') {
-      if (window.location.hash === '#security') setTab('security');
-      if (window.location.hash === '#workspaces') setTab('workspaces');
-      if (window.location.hash === '#preferences') setTab('preferences');
-    }
+    // The open tab lives in the address, so it can be linked, bookmarked and survives a refresh; Back and Forward
+    // (and menu links to another tab while this page is open) move between tabs.
+    const sync = () => setTab(tabFromLocation());
+    sync();
+    window.addEventListener('popstate', sync);
+    return () => window.removeEventListener('popstate', sync);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once
   }, []);
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  useEffect(() => { if (isTab(tabParam)) setTab(tabParam); }, [tabParam]);
+
+  const openTab = (next: Tab) => {
+    setTab(next);
+    const url = new URL(window.location.href);
+    if (next === 'overview') url.searchParams.delete('tab'); else url.searchParams.set('tab', next);
+    url.hash = '';
+    window.history.pushState(null, '', url);
+  };
 
   const fetchProfile = async () => {
     try {
@@ -66,13 +101,6 @@ export default function ProfileContent({ showBack = true }: ProfileContentProps)
   if (loading) return <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-brand" /></div>;
   if (!profile) return null;
 
-  const tabs: { key: Tab; label: string }[] = [
-    { key: 'overview', label: 'Overview' },
-    { key: 'security', label: 'Security' },
-    { key: 'workspaces', label: 'Workspaces' },
-    { key: 'preferences', label: 'Preferences' },
-  ];
-
   return (
     // showBack means it's inside a portal, which sets the page width; the public page has no sidebar, so stays narrow.
     <div className={showBack ? undefined : 'max-w-3xl mx-auto'}>
@@ -84,13 +112,13 @@ export default function ProfileContent({ showBack = true }: ProfileContentProps)
       )}
 
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Profile</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Manage your account and preferences</p>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white">My account</h1>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">Your profile, saved items, preferences and security.</p>
       </div>
 
-      <div className="flex gap-1 border-b border-gray-200 dark:border-gray-800 mb-6 overflow-x-auto">
-        {tabs.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)} className={`shrink-0 px-4 py-2.5 text-sm font-medium transition-colors relative ${tab === t.key ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
+      <div role="tablist" aria-label="Account sections" className="flex gap-1 border-b border-gray-200 dark:border-gray-800 mb-6 overflow-x-auto">
+        {TABS.map((t) => (
+          <button key={t.key} role="tab" aria-selected={tab === t.key} onClick={() => openTab(t.key)} className={`shrink-0 px-4 py-2.5 text-sm font-medium transition-colors relative ${tab === t.key ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
             {t.label}
             {tab === t.key && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand rounded-t" />}
           </button>
@@ -98,6 +126,7 @@ export default function ProfileContent({ showBack = true }: ProfileContentProps)
       </div>
 
       {tab === 'overview' && <OverviewTab profile={profile} setProfile={setProfile} />}
+      {tab === 'saved' && <Section title="Saved items"><SavedItems /></Section>}
       {tab === 'security' && <SecurityTab />}
       {tab === 'workspaces' && <WorkspacesTab profile={profile} />}
       {tab === 'preferences' && <PreferencesTab />}
@@ -193,7 +222,6 @@ function OverviewTab({ profile, setProfile }: { profile: UserProfile; setProfile
         {/* The result next to the button (the message at the top is off screen on a phone). */}
         {(success || error) && <p role="status" className={`text-sm font-semibold ${error ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>{error || (success === 'Saved' ? 'Saved ✓' : success)}</p>}
       </div>
-      <Section title="Saved items"><SavedItems /></Section>
     </div>
   );
 }
@@ -459,6 +487,7 @@ function WorkspacesTab({ profile }: { profile: UserProfile }) {
           <WorkspaceRow label="Community" description="Stories, tools, startups, events" active={true} href="/" />
           <WorkspaceRow label="Founder" description={profile.founderId ? "Startups, tools, team" : "Submit a startup to activate"} active={!!profile.founderId} href="/founder/dashboard" />
           <WorkspaceRow label="Organizer" description={profile.organizerId ? "Events, attendees, check-in" : "Create an event to activate"} active={!!profile.organizerId} href="/organizer" />
+          <WorkspaceRow label="Hiring" description={profile.hasEmployer ? "Jobs, candidates, careers page (separate sign-in)" : "Post a job to activate"} active={!!profile.hasEmployer} href="/employer" />
         </div>
       </Section>
       <Section title="Account">

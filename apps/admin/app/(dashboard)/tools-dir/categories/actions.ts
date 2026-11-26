@@ -4,6 +4,8 @@ import { neon } from '@neondatabase/serverless';
 import { revalidatePath } from 'next/cache';
 import { requireActionAuth } from '@/lib/api-auth';
 import { refreshPublic } from '@/lib/refresh-public';
+import { publicError } from '@/lib/public-error';
+import { logAuditEvent } from '@/lib/audit-log';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -78,10 +80,11 @@ export async function createParentCategoryAction(data: {
     `;
 
     revalidatePath('/tools-dir/categories');
+    await logAuditEvent({ action: 'CREATE', resourceType: 'TOOL_TAXONOMY', resourceName: 'createParentCategoryAction' });
     await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('createParentCategoryAction error:', error);
-    return { success: false, error: error.message || 'Failed to create category' };
+    return { success: false, error: publicError(error) || 'Failed to create category' };
   }
 }
 
@@ -112,10 +115,11 @@ export async function updateParentCategoryAction(id: string, data: {
     }
 
     revalidatePath('/tools-dir/categories');
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'TOOL_TAXONOMY', resourceId: id, resourceName: 'updateParentCategoryAction' });
     await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('updateParentCategoryAction error:', error);
-    return { success: false, error: error.message || 'Failed to update category' };
+    return { success: false, error: publicError(error) || 'Failed to update category' };
   }
 }
 
@@ -161,10 +165,11 @@ export async function createSubcategoryAction(data: {
     `;
 
     revalidatePath('/tools-dir/categories');
+    await logAuditEvent({ action: 'CREATE', resourceType: 'TOOL_TAXONOMY', resourceName: 'createSubcategoryAction' });
     await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('createSubcategoryAction error:', error);
-    return { success: false, error: error.message || 'Failed to create subcategory' };
+    return { success: false, error: publicError(error) || 'Failed to create subcategory' };
   }
 }
 
@@ -195,10 +200,11 @@ export async function updateSubcategoryAction(id: string, data: {
     }
 
     revalidatePath('/tools-dir/categories');
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'TOOL_TAXONOMY', resourceId: id, resourceName: 'updateSubcategoryAction' });
     await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('updateSubcategoryAction error:', error);
-    return { success: false, error: error.message || 'Failed to update subcategory' };
+    return { success: false, error: publicError(error) || 'Failed to update subcategory' };
   }
 }
 
@@ -217,10 +223,11 @@ export async function deleteSubcategoryAction(id: string) {
     await sql`DELETE FROM "ToolCategory" WHERE id = ${id} AND level = 1`;
 
     revalidatePath('/tools-dir/categories');
+    await logAuditEvent({ action: 'DELETE', resourceType: 'TOOL_TAXONOMY', resourceId: id, resourceName: 'deleteSubcategoryAction' });
     await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('deleteSubcategoryAction error:', error);
-    return { success: false, error: error.message || 'Failed to delete subcategory' };
+    return { success: false, error: publicError(error) || 'Failed to delete subcategory' };
   }
 }
 
@@ -239,10 +246,11 @@ export async function deleteParentCategoryAction(id: string) {
     await sql`DELETE FROM "ToolCategory" WHERE id = ${id} AND level = 0`;
 
     revalidatePath('/tools-dir/categories');
+    await logAuditEvent({ action: 'DELETE', resourceType: 'TOOL_TAXONOMY', resourceId: id, resourceName: 'deleteParentCategoryAction' });
     await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('deleteParentCategoryAction error:', error);
-    return { success: false, error: error.message || 'Failed to delete category' };
+    return { success: false, error: publicError(error) || 'Failed to delete category' };
   }
 }
 
@@ -271,9 +279,10 @@ export async function refreshCategoryCountsAction() {
     `;
 
     revalidatePath('/tools-dir/categories');
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'TOOL_TAXONOMY', resourceName: 'refreshCategoryCountsAction' });
     await refreshPublic(['tools', 'home']); return { success: true };
   } catch (error: any) {
     console.error('refreshCategoryCountsAction error:', error);
-    return { success: false, error: error.message || 'Failed to refresh counts' };
+    return { success: false, error: publicError(error) || 'Failed to refresh counts' };
   }
 }

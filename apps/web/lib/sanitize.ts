@@ -7,7 +7,14 @@ export { isOwnMediaUrl };
  * Sanitizes editorial HTML (articles, stories, opinions) from the database before rendering.
  * Strips XSS vectors while preserving safe article markup: images, figures, tables and class names.
  */
+/** A caption left as the editor's placeholder, or left empty, is not a caption. */
+const EMPTY_CAPTION = /<figcaption>(?:\s|&nbsp;|<br\s*\/?>)*(?:Add a caption(?:…|\.\.\.|&hellip;))?(?:\s|&nbsp;|<br\s*\/?>)*<\/figcaption>/gi;
+
 export function sanitizeHtml(dirty: string): string {
+  return sanitizeHtmlRaw(dirty).replace(EMPTY_CAPTION, '');
+}
+
+function sanitizeHtmlRaw(dirty: string): string {
   return sanitizeHtmlLib(dirty, {
     allowedTags: [
       'p', 'br', 'b', 'i', 'em', 'strong', 'u', 's', 'del',

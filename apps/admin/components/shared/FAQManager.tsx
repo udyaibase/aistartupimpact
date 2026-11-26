@@ -1,7 +1,9 @@
 'use client';
 
+import { notify } from '@/components/Toast';
 import { useState } from 'react';
 import { Plus, Edit3, Trash2, Save, X, GripVertical, ChevronUp, ChevronDown } from 'lucide-react';
+import { ask } from '@/components/Ask';
 
 export interface FAQ {
   id?: string;
@@ -46,7 +48,7 @@ export function FAQManager({ faqs, onChange, maxFaqs = 10, readonly = false }: F
     
     // Validate
     if (!editingFAQ.question.trim() || !editingFAQ.answer.trim()) {
-      alert('Question and answer are required');
+      notify('Question and answer are required');
       return;
     }
 
@@ -76,8 +78,8 @@ export function FAQManager({ faqs, onChange, maxFaqs = 10, readonly = false }: F
     setOriginalFAQ(null);
   };
 
-  const deleteFAQ = (index: number) => {
-    if (!confirm('Delete this FAQ?')) return;
+  const deleteFAQ = async (index: number) => {
+    if (!(await ask({ title: 'Delete this FAQ', confirmLabel: 'Delete', danger: true }))) return;
     const updated = faqs.filter((_, i) => i !== index);
     // Reorder
     onChange(updated.map((faq, i) => ({ ...faq, order: i })));

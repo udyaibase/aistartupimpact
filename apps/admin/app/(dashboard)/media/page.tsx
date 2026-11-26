@@ -1,5 +1,6 @@
 'use client';
 
+import { notify } from '@/components/Toast';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Image as ImageIcon, Upload, Trash2, Search, X, Copy, Check, Loader2,
@@ -156,10 +157,10 @@ export default function MediaPage() {
           setFiles(prev => [res.data as MediaFile, ...prev]);
           setTotal(prev => prev + 1);
         } else {
-          alert(`Failed to upload ${file.name}: ${res.error || 'Unknown error'}`);
+          notify(`Failed to upload ${file.name}: ${res.error || 'Unknown error'}`);
         }
       } catch {
-        alert(`Failed to upload ${file.name}`);
+        notify(`Failed to upload ${file.name}`);
       }
     }
 
@@ -177,10 +178,10 @@ export default function MediaPage() {
         setTotal(prev => prev - 1);
         if (detailFile?.id === id) setDetailFile(null);
       } else {
-        alert(res.error || 'Delete failed');
+        notify(res.error || 'Delete failed');
       }
     } catch {
-      alert('Delete failed');
+      notify('Delete failed');
     } finally {
       setDeleteConfirm(null);
     }
@@ -238,8 +239,8 @@ export default function MediaPage() {
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Media Library</h1>
-          <p className="text-gray-400 text-sm font-jakarta mt-0.5">
+          <h1 className="portal-title">Media Library</h1>
+          <p className="portal-subtitle">
             {loading ? 'Loading...' : `${total.toLocaleString()} file${total === 1 ? '' : 's'}`}
             {stats ? ` · ${stats.totalSize}` : ''}
             {stats && stats.unusedCount > 0 ? ` · ${stats.unusedCount} unused` : ''}

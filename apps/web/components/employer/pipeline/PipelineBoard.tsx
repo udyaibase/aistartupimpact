@@ -602,7 +602,7 @@ export default function PipelineBoard({
           <div className="flex flex-wrap justify-center gap-2 mt-4">
             {canMove && currentJob && !currentJob.isGeneral && <button type="button" onClick={() => setAdding(true)} className="btn-brand gap-2"><UserPlus className="w-4 h-4" aria-hidden /> Add candidates</button>}
             <Link href="/employer/jobs/new" className="btn-brand gap-2"><Plus className="w-4 h-4" aria-hidden /> Post a job</Link>
-            <Link href="/employer/careers" className="inline-flex items-center min-h-[44px] px-4 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:underline">Add jobs to your website</Link>
+            <Link href="/employer/widget" className="inline-flex items-center min-h-[44px] px-4 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:underline">Add jobs to your website</Link>
           </div>
         </div>
       ) : view === 'board' ? (

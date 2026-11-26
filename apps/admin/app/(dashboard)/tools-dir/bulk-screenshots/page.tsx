@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Camera, Loader2, CheckCircle2, XCircle, AlertTriangle, Play, Square, RotateCcw, Image, Search } from 'lucide-react';
 import Link from 'next/link';
 import { getToolsForBulkScreenshotsAction } from '../actions';
+import { notify } from '@/components/Toast';
 
 type ToolStatus = 'pending' | 'capturing' | 'done' | 'failed' | 'needs_review';
 type FilterMode = 'no_screenshots' | 'under_max' | 'all';
@@ -50,6 +51,7 @@ export default function BulkScreenshotsPage() {
       }
     } catch (err) {
       console.error('Failed to load tools:', err);
+      notify("Couldn't load this. Check your connection and refresh.", 'error');
     } finally {
       setLoading(false);
     }
@@ -236,10 +238,10 @@ export default function BulkScreenshotsPage() {
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div>
-          <h1 className="font-sora font-bold text-2xl text-navy dark:text-white">
+          <h1 className="portal-title">
             Bulk Screenshot Capture
           </h1>
-          <p className="text-sm text-gray-500 font-jakarta mt-1">
+          <p className="portal-subtitle">
             Auto-capture screenshots for AI tools • Up to 5 per tool
           </p>
         </div>

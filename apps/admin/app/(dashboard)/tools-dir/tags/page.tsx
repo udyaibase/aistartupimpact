@@ -1,5 +1,6 @@
 'use client';
 
+import { notify } from '@/components/Toast';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -114,7 +115,7 @@ export default function TagsManagementPage() {
         setAddGroupId('');
         await loadData();
       } else {
-        alert(result.error || 'Failed to create tag');
+        notify(result.error || 'Failed to create tag');
       }
     } else {
       const result = await createTagsBulkAction({
@@ -126,14 +127,14 @@ export default function TagsManagementPage() {
           (result.failed && result.failed.length > 0
             ? `. Skipped: ${result.failed.map((f: any) => `${f.name} (${f.error})`).join(', ')}`
             : '');
-        alert(msg);
+        notify(msg);
         setShowAddModal(false);
         setAddName('');
         setAddEmoji('');
         setAddGroupId('');
         await loadData();
       } else {
-        alert(result.error || 'Failed to create tags');
+        notify(result.error || 'Failed to create tags');
       }
     }
     setAddSubmitting(false);
@@ -192,8 +193,8 @@ export default function TagsManagementPage() {
             <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
           </button>
           <div>
-            <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Tag System</h1>
-            <p className="text-gray-400 dark:text-gray-500 text-sm font-jakarta mt-1">
+            <h1 className="portal-title">Tag System</h1>
+            <p className="portal-subtitle">
               {groups.length} groups • {totalTags} total tags • {activeTags} active
             </p>
           </div>

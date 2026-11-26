@@ -22,7 +22,7 @@ export default function BreakingTicker() {
   }, []);
 
   return (
-    <div className="bg-navy dark:bg-gray-900 h-9 flex items-center overflow-hidden border-b border-white/5">
+    <div className="public-preview bg-navy dark:bg-gray-900 h-9 flex items-center overflow-hidden border-b border-white/5">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex items-center gap-3">
         <span className="flex items-center gap-1 bg-brand text-white text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded shrink-0">
           <Zap className="w-2.5 h-2.5" /> Live

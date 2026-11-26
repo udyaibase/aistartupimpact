@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { neon } from '@neondatabase/serverless';
 import { requireApiAuth } from '@/lib/api-auth';
+import { sectionRoles } from '@/lib/section-access';
 import { logAuditEvent } from '@/lib/audit-log';
 import { withPublicRefresh } from '@/lib/refresh-public';
 
@@ -8,7 +9,7 @@ const sql = neon(process.env.DATABASE_URL!);
 
 // GET - Fetch all testimonials
 export async function GET() {
-  const { error } = await requireApiAuth();
+  const { error } = await requireApiAuth(sectionRoles('/testimonials'));
   if (error) return error;
   try {
     const testimonials = await sql`
@@ -29,7 +30,7 @@ export async function GET() {
 
 // POST - Create new testimonial
 async function postHandler(request: NextRequest) {
-  const { error } = await requireApiAuth();
+  const { error } = await requireApiAuth(sectionRoles('/testimonials'));
   if (error) return error;
   try {
     const body = await request.json();
@@ -62,7 +63,7 @@ async function postHandler(request: NextRequest) {
 
 // PUT - Update testimonial
 async function putHandler(request: NextRequest) {
-  const { error } = await requireApiAuth();
+  const { error } = await requireApiAuth(sectionRoles('/testimonials'));
   if (error) return error;
   try {
     const body = await request.json();

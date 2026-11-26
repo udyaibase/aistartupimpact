@@ -6,6 +6,7 @@ import { Users, Search, Mail, Calendar, CheckCircle, XCircle, Eye, Trash2, Shiel
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { Pagination } from '@/components/Pagination';
 import { EmptyState } from '@/components/EmptyState';
+import { notify } from '@/components/Toast';
 
 const PAGE_SIZE = 20;
 
@@ -55,6 +56,7 @@ export default function WebUsersPage() {
       }
     } catch (error) {
       console.error('❌ Error fetching web users:', error);
+      notify("Couldn't load this. Check your connection and refresh.", 'error');
     } finally {
       setLoading(false);
     }
@@ -73,6 +75,7 @@ export default function WebUsersPage() {
       }
     } catch (error) {
       console.error('Error updating user status:', error);
+      notify("Couldn't save. Check your connection and try again.", 'error');
     }
   };
 
@@ -87,6 +90,7 @@ export default function WebUsersPage() {
       }
     } catch (error) {
       console.error('Error deleting user:', error);
+      notify("Couldn't delete. Check your connection and try again.", 'error');
     }
   };
 
@@ -160,7 +164,7 @@ export default function WebUsersPage() {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <Users className="w-6 h-6 text-brand" />
-            <h1 className="text-2xl font-sora font-bold text-navy dark:text-white">
+            <h1 className="portal-title">
               Web Users
             </h1>
           </div>

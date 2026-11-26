@@ -3,8 +3,9 @@ import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@udyaibase/database";
 import EventCreateForm from "./EventCreateForm";
+import { sectionRoles } from '@/lib/section-access';
 
-const EVENT_ROLES = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "EVENT_ORGANIZER"];
+const EVENT_ROLES = sectionRoles('/events');
 
 export default async function CreateEventPage() {
   const session = await getServerSession(authOptions);

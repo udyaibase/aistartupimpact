@@ -10,6 +10,7 @@ import { requireActionAuth, twoFactorBlock } from '@/lib/api-auth';
 import { logAuditEvent } from '@/lib/audit-log';
 import { r2, R2_BUCKET } from '@/lib/media';
 import { refreshPublic } from '@/lib/refresh-public';
+import { publicError } from '@/lib/public-error';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -135,7 +136,7 @@ export async function getFounderByIdAction(founderId: string) {
     return { success: true, data: result };
   } catch (error: any) {
     console.error('Get founder by ID error:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: publicError(error) };
   }
 }
 
@@ -193,6 +194,6 @@ export async function updateFounderStatusAction(founderId: string, newStatus: st
     return { success: true };
   } catch (error: any) {
     console.error('Update founder status error:', error);
-    return { success: false, error: error.message || 'Failed to update status' };
+    return { success: false, error: publicError(error) || 'Failed to update status' };
   }
 }

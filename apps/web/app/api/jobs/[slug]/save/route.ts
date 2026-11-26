@@ -1,7 +1,7 @@
+import { verifyUserToken } from '@/lib/user-session';
 import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
-import { jwtVerify } from 'jose';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { jobSaveRateLimit } from '@/lib/event-rate-limit';
 
@@ -10,14 +10,7 @@ export const dynamic = 'force-dynamic';
 const JWT_SECRET = jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET');
 
 async function getUserId(request: NextRequest): Promise<string | null> {
-  const token = request.cookies.get('user-token')?.value;
-  if (!token) return null;
-  try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    return (payload as any).userId || null;
-  } catch {
-    return null;
-  }
+  return (await verifyUserToken(request.cookies.get('user-token')?.value))?.userId ?? null;
 }
 
 // POST: Toggle save/unsave a job

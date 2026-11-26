@@ -1,8 +1,8 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
-import { Plus, Edit, ExternalLink } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { neon } from '@neondatabase/serverless';
-import { DeleteButton } from '../components/DeleteButton';
+import InstitutionsTable, { type InstitutionRow } from './InstitutionsTable';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -20,111 +20,26 @@ export default async function ResearchHubsPage() {
     ORDER BY "displayOrder" ASC, "createdAt" DESC
   `;
 
+  const rows: InstitutionRow[] = institutions.map((i) => ({
+    id: i.id, name: i.name, city: i.city, state: i.state, tag: i.tag, category: i.category, aiCentre: i.aiCentre,
+    displayOrder: Number(i.displayOrder), link: i.link, isActive: !!i.isActive,
+  }));
+  const count = (category: string) => rows.filter((i) => i.category === category).length;
+
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-5">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            AI Research Institutions
-          </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Manage research hubs, institutions, and talent centres
+          <h1 className="portal-title">AI research institutions</h1>
+          <p className="portal-subtitle">
+            Research hubs and talent centres on the India AI pages: {rows.length.toLocaleString('en-IN')} in all, {count('AI Centre')} AI centres and {count('Dedicated AI Dept')} dedicated AI departments.
           </p>
         </div>
-        <Link
-          href="/india-ai/research-hubs/new"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add Institution
+        <Link href="/india-ai/research-hubs/new" className="btn-brand text-sm inline-flex items-center gap-2 shrink-0">
+          <Plus className="w-4 h-4" aria-hidden /> Add institution
         </Link>
       </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-          <div className="text-2xl font-bold text-gray-900 dark:text-white">{institutions.length}</div>
-          <div className="text-sm text-gray-600 dark:text-gray-400">Total Institutions</div>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-          <div className="text-2xl font-bold text-blue-600">
-            {institutions.filter(i => i.category === 'AI Centre').length}
-          </div>
-          <div className="text-sm text-gray-600 dark:text-gray-400">AI Centres</div>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-          <div className="text-2xl font-bold text-purple-600">
-            {institutions.filter(i => i.category === 'Dedicated AI Dept').length}
-          </div>
-          <div className="text-sm text-gray-600 dark:text-gray-400">Dedicated AI Depts</div>
-        </div>
-      </div>
-
-      {institutions.length === 0 ? (
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-12 text-center">
-          <p className="text-gray-600 dark:text-gray-400 mb-4">No institutions found.</p>
-          <Link
-            href="/india-ai/research-hubs/new"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            <Plus className="w-4 h-4" />
-            Add First Institution
-          </Link>
-        </div>
-      ) : (
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Institution</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Category</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">AI Centre</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {institutions.map((inst) => (
-                <tr key={inst.id} className="hover:bg-gray-50 dark:hover:bg-gray-900">
-                  <td className="px-6 py-4">
-                    <div className="font-medium text-gray-900 dark:text-white">{inst.name}</div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400">{inst.city}, {inst.state}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">{inst.tag}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      inst.category === 'AI Centre' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
-                    }`}>
-                      {inst.category}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                    {inst.aiCentre || '—'}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      inst.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
-                      {inst.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <a href={inst.link} target="_blank" rel="noopener noreferrer" className="text-gray-600 hover:text-gray-900 dark:text-gray-400">
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-                      <Link href={`/india-ai/research-hubs/${inst.id}/edit`} className="text-blue-600 hover:text-blue-900">
-                        <Edit className="w-4 h-4" />
-                      </Link>
-                      <DeleteButton itemId={inst.id} itemName={inst.name} deleteEndpoint={`/api/india-ai/research-hubs/${inst.id}/delete`} />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <InstitutionsTable rows={rows} />
     </div>
   );
 }

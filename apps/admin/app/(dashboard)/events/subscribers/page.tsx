@@ -3,8 +3,9 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@udyaibase/database";
 import { redirect } from "next/navigation";
 import SubscriberDashboard from "./SubscriberDashboard";
+import { sectionRoles } from '@/lib/section-access';
 
-const ADMIN_ROLES = ["SUPER_ADMIN", "EDITOR_IN_CHIEF"];
+const ADMIN_ROLES = sectionRoles('/events/subscribers');
 
 export default async function EventSubscribersPage() {
   const session = await getServerSession(authOptions);

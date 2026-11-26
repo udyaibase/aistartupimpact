@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { neon } from '@neondatabase/serverless';
 import { requireApiAuth } from '@/lib/api-auth';
+import { sectionRoles } from '@/lib/section-access';
 
 const sql = neon(process.env.DATABASE_URL!);
 
 export async function GET(request: NextRequest) {
-  const { error } = await requireApiAuth();
+  const { error } = await requireApiAuth(sectionRoles('/web-users'));
   if (error) return error;
 
   try {

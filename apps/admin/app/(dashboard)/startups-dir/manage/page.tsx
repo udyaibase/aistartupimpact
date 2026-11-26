@@ -1,5 +1,6 @@
 'use client';
 
+import { notify } from '@/components/Toast';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -91,7 +92,7 @@ export default function ManageStartupMetaPage() {
       setAddName('');
       await loadData();
     } else {
-      alert(result.error);
+      notify(result.error);
     }
     setAddSubmitting(false);
   };
@@ -105,7 +106,7 @@ export default function ManageStartupMetaPage() {
       setAddName('');
       await loadData();
     } else {
-      alert(result.error);
+      notify(result.error);
     }
     setAddSubmitting(false);
   };
@@ -120,7 +121,7 @@ export default function ManageStartupMetaPage() {
       setEditingItem(null);
       await loadData();
     } else {
-      alert(result.error);
+      notify(result.error);
     }
   };
 
@@ -138,7 +139,7 @@ export default function ManageStartupMetaPage() {
     if (result.success) {
       await loadData();
     } else {
-      alert(result.error);
+      notify(result.error);
     }
   };
 
@@ -178,8 +179,8 @@ export default function ManageStartupMetaPage() {
           <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
         </button>
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Startup Metadata</h1>
-          <p className="text-gray-400 dark:text-gray-500 text-sm font-jakarta mt-1">
+          <h1 className="portal-title">Startup Metadata</h1>
+          <p className="portal-subtitle">
             Manage business categories and types used across startups
           </p>
         </div>

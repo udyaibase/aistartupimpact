@@ -4,6 +4,7 @@ import { neon } from '@neondatabase/serverless';
 import { revalidatePath } from 'next/cache';
 import { requireActionAuth } from '@/lib/api-auth';
 import { refreshPublic } from '@/lib/refresh-public';
+import { logAuditEvent } from '@/lib/audit-log';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -69,6 +70,7 @@ export async function createFundingRoundAction(data: {
     `;
 
     revalidatePath('/funding-rounds');
+    await logAuditEvent({ action: 'CREATE', resourceType: 'FUNDING_ROUND', resourceName: 'createFundingRoundAction' });
     await refreshPublic(['funding', 'startups', 'india-ai', 'home']); return { success: true };
   } catch (error) {
     console.error('Error creating funding round:', error);
@@ -99,6 +101,7 @@ export async function updateFundingRoundAction(id: string, data: {
     `;
 
     revalidatePath('/funding-rounds');
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'FUNDING_ROUND', resourceId: id, resourceName: 'updateFundingRoundAction' });
     await refreshPublic(['funding', 'startups', 'india-ai', 'home']); return { success: true };
   } catch (error) {
     console.error('Error updating funding round:', error);
@@ -115,6 +118,7 @@ export async function deleteFundingRoundAction(id: string) {
     `;
 
     revalidatePath('/funding-rounds');
+    await logAuditEvent({ action: 'DELETE', resourceType: 'FUNDING_ROUND', resourceId: id, resourceName: 'deleteFundingRoundAction' });
     await refreshPublic(['funding', 'startups', 'india-ai', 'home']); return { success: true };
   } catch (error) {
     console.error('Error deleting funding round:', error);

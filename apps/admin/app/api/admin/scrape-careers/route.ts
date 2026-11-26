@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiAuth } from '@/lib/api-auth';
+import { sectionRoles } from '@/lib/section-access';
 import { withBrowser } from '@/lib/scraper/browser';
 import { isPublicUrl, isWebUrl } from '@/lib/scraper/fetch';
 import { scrapeDetail, scrapeList } from '@/lib/scraper';
@@ -12,7 +13,7 @@ import { scrapeDetail, scrapeList } from '@/lib/scraper';
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
-  const { error } = await requireApiAuth();
+  const { error } = await requireApiAuth(sectionRoles('/jobs-board'));
   if (error) return error;
 
   const body = await req.json().catch(() => null);

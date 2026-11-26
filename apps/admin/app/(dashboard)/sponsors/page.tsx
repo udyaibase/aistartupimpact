@@ -1,7 +1,10 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
-import { Plus, Edit3, Trash2, ExternalLink, Eye, EyeOff, X, Save, Calendar } from 'lucide-react';
+import { useState, useEffect, useMemo, useTransition } from 'react';
+import { Plus, Edit3, Trash2, ExternalLink, Eye, EyeOff, X, Save } from 'lucide-react';
+import DataTable, { type Column, type TableFilter } from '@/components/ui/DataTable';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { notify } from '@/components/Toast';
 import {
   getSponsorsAction, createSponsorAction, updateSponsorAction,
   deleteSponsorAction, toggleSponsorStatusAction,
@@ -29,7 +32,7 @@ export default function SponsorsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Sponsor | null>(null);
   const [form, setForm] = useState(empty);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<Sponsor | null>(null);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState('');
 
@@ -39,6 +42,7 @@ export default function SponsorsPage() {
     setLoading(true);
     const r = await getSponsorsAction();
     if (r.success) setSponsors(r.data as Sponsor[]);
+    else notify((r as { error?: string }).error || "Couldn't load sponsors. Refresh to try again.", 'error');
     setLoading(false);
   };
 
@@ -68,107 +72,101 @@ export default function SponsorsPage() {
     });
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = (sp: Sponsor) => {
+    setDeleteConfirm(null);
     startTransition(async () => {
-      await deleteSponsorAction(id);
-      setSponsors(s => s.filter(x => x.id !== id));
-      setDeleteConfirm(null);
+      const r = await deleteSponsorAction(sp.id);
+      if (!r.success) { notify((r as { error?: string }).error || `Couldn't delete ${sp.brand}. Try again.`, 'error'); return; }
+      setSponsors((list) => list.filter((x) => x.id !== sp.id));
+      notify(`${sp.brand} deleted.`, 'success');
     });
   };
 
-  const handleToggle = (s: Sponsor) => {
+  const handleToggle = (sp: Sponsor) => {
     startTransition(async () => {
-      await toggleSponsorStatusAction(s.id, s.isActive);
-      setSponsors(prev => prev.map(x => x.id === s.id ? { ...x, isActive: !x.isActive } : x));
+      const r = await toggleSponsorStatusAction(sp.id, sp.isActive);
+      if (!r.success) { notify((r as { error?: string }).error || `Couldn't change ${sp.brand}. Try again.`, 'error'); return; }
+      setSponsors((prev) => prev.map((x) => (x.id === sp.id ? { ...x, isActive: !x.isActive } : x)));
     });
   };
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand" /></div>;
+  const day = (iso: string) => new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  const columns = useMemo<Column<Sponsor>[]>(() => [
+    {
+      key: 'brand', header: 'Brand', sortValue: (sp) => sp.brand, searchValue: (sp) => `${sp.brand} ${sp.ctaUrl}`,
+      cell: (sp) => (
+        <div className="flex items-center gap-3 min-w-0">
+          {sp.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={sp.logoUrl} alt="" className="w-8 h-8 rounded object-contain shrink-0" />
+          ) : (
+            <div className="w-8 h-8 rounded bg-brand/10 flex items-center justify-center text-brand font-semibold text-xs shrink-0" aria-hidden>{sp.brand.charAt(0)}</div>
+          )}
+          <div className="min-w-0">
+            <p className="font-semibold text-gray-900 dark:text-white truncate">{sp.brand}</p>
+            <a href={sp.ctaUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-brand hover:underline inline-flex items-center gap-0.5">
+              {sp.ctaUrl.replace(/^https?:\/\//, '')} <ExternalLink className="w-3 h-3" aria-hidden /><span className="sr-only"> (opens in a new tab)</span>
+            </a>
+          </div>
+        </div>
+      ),
+    },
+    { key: 'tagline', header: 'Tagline', searchValue: (sp) => sp.tagline, cell: (sp) => <p className="line-clamp-1 max-w-xs">{sp.tagline}</p> },
+    {
+      key: 'schedule', header: 'Schedule', sortValue: (sp) => (sp.startDate ? new Date(sp.startDate) : null),
+      cell: (sp) => <span className="text-xs whitespace-nowrap">{sp.startDate ? day(sp.startDate) : 'Any time'} to {sp.endDate ? day(sp.endDate) : 'no end'}</span>,
+    },
+    { key: 'order', header: 'Order', align: 'right', sortValue: (sp) => sp.sortOrder, cell: (sp) => sp.sortOrder },
+    {
+      key: 'status', header: 'Status', sortValue: (sp) => statusLabel(sp).label,
+      cell: (sp) => { const { label, cls } = statusLabel(sp); return <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${cls}`}>{label}</span>; },
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'right',
+      cell: (sp) => (
+        <div className="flex justify-end gap-1">
+          <button onClick={() => handleToggle(sp)} aria-label={sp.isActive ? `Turn off ${sp.brand}` : `Turn on ${sp.brand}`} title={sp.isActive ? 'Turn off' : 'Turn on'} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
+            {sp.isActive ? <Eye className="w-4 h-4 text-gray-600 dark:text-gray-300" aria-hidden /> : <EyeOff className="w-4 h-4 text-gray-500" aria-hidden />}
+          </button>
+          <button onClick={() => openEdit(sp)} aria-label={`Edit ${sp.brand}`} title="Edit" className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
+            <Edit3 className="w-4 h-4 text-gray-600 dark:text-gray-300" aria-hidden />
+          </button>
+          <button onClick={() => setDeleteConfirm(sp)} aria-label={`Delete ${sp.brand}`} title="Delete" className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20">
+            <Trash2 className="w-4 h-4 text-red-600" aria-hidden />
+          </button>
+        </div>
+      ),
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- cells call the latest handlers
+  ], []);
+
+  const filters = useMemo<TableFilter<Sponsor>[]>(() => [
+    { key: 'status', label: 'Status', options: ['Live', 'Scheduled', 'Expired', 'Inactive'].map((v) => ({ value: v, label: v })), matches: (sp, v) => statusLabel(sp).label === v },
+  ], []);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Powered By / Sponsors</h1>
-          <p className="text-gray-400 text-sm font-jakarta mt-1">
-            Manage the "Powered by" strip on the homepage. Schedule by date range.
-          </p>
+          <h1 className="portal-title">Sponsors</h1>
+          <p className="portal-subtitle">The &ldquo;Powered by&rdquo; strip on the homepage. Each sponsor can run for a set date range.</p>
         </div>
         <button onClick={openCreate} className="btn-brand text-sm flex items-center gap-2">
-          <Plus className="w-4 h-4" /> Add Sponsor
+          <Plus className="w-4 h-4" aria-hidden /> Add sponsor
         </button>
       </div>
 
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-gray-50 dark:bg-gray-800/50 text-left">
-              <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta">Brand</th>
-              <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta hidden md:table-cell">Tagline</th>
-              <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta hidden lg:table-cell">Schedule</th>
-              <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta">Status</th>
-              <th className="px-6 py-3 w-24" />
-            </tr>
-          </thead>
-          <tbody>
-            {sponsors.map(s => {
-              const { label, cls } = statusLabel(s);
-              return (
-                <tr key={s.id} className="border-t border-gray-50 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      {s.logoUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={s.logoUrl} alt={s.brand} className="w-8 h-8 rounded object-contain" />
-                      ) : (
-                        <div className="w-8 h-8 rounded bg-brand/10 flex items-center justify-center text-brand font-bold text-xs">{s.brand.charAt(0)}</div>
-                      )}
-                      <div>
-                        <p className="font-sora font-semibold text-sm text-navy dark:text-white">{s.brand}</p>
-                        <a href={s.ctaUrl} target="_blank" rel="noopener noreferrer"
-                          className="text-xs text-brand hover:underline flex items-center gap-0.5">
-                          {s.ctaUrl.replace('https://', '')} <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 hidden md:table-cell">
-                    <p className="text-sm text-gray-500 font-jakarta line-clamp-1 max-w-xs">{s.tagline}</p>
-                  </td>
-                  <td className="px-6 py-4 hidden lg:table-cell">
-                    <div className="flex items-center gap-1 text-xs text-gray-400 font-jakarta">
-                      <Calendar className="w-3 h-3" />
-                      {s.startDate ? new Date(s.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Any'}
-                      {' → '}
-                      {s.endDate ? new Date(s.endDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No end'}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <button onClick={() => handleToggle(s)}
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold cursor-pointer transition-colors ${cls}`}>
-                      {s.isActive ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                      {label}
-                    </button>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex gap-1">
-                      <button onClick={() => openEdit(s)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
-                        <Edit3 className="w-3.5 h-3.5 text-gray-400" />
-                      </button>
-                      <button onClick={() => setDeleteConfirm(s.id)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20">
-                        <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-500" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-            {sponsors.length === 0 && (
-              <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-400 font-jakarta text-sm">No sponsors yet. Add one to show on the homepage.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        tableId="sponsors"
+        noun="sponsors"
+        rows={sponsors}
+        rowKey={(sp) => sp.id}
+        columns={columns}
+        filters={filters}
+        loading={loading}
+        searchPlaceholder="Search brand, link or tagline"
+        empty={{ title: 'No sponsors yet', description: 'Add one to show it in the "Powered by" strip on the homepage.' }}
+      />
 
       {/* Modal */}
       {modalOpen && (
@@ -235,19 +233,13 @@ export default function SponsorsPage() {
         </div>
       )}
 
-      {deleteConfirm && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-sm shadow-2xl border border-gray-200 dark:border-gray-800 p-6 text-center">
-            <Trash2 className="w-10 h-10 text-red-500 mx-auto mb-3" />
-            <h3 className="font-sora font-bold text-lg text-navy dark:text-white">Delete Sponsor?</h3>
-            <p className="text-sm text-gray-500 font-jakarta mt-1">This will remove it from the homepage immediately.</p>
-            <div className="flex gap-3 mt-5">
-              <button onClick={() => setDeleteConfirm(null)} className="flex-1 px-4 py-2.5 text-sm font-medium border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300">Cancel</button>
-              <button onClick={() => handleDelete(deleteConfirm)} className="flex-1 px-4 py-2.5 text-sm font-medium bg-red-500 hover:bg-red-600 text-white rounded-xl">Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        open={!!deleteConfirm}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={() => { if (deleteConfirm) handleDelete(deleteConfirm); }}
+        title="Delete sponsor"
+        message={deleteConfirm ? `Delete ${deleteConfirm.brand}? It is removed from the homepage straight away. This can't be undone.` : ''}
+      />
     </div>
   );
 }

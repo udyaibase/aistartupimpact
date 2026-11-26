@@ -3,6 +3,9 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@udyaibase/database';
 import SchemeForm from '../SchemeForm';
 import { refreshPublic } from '@/lib/refresh-public';
+import { requireFormAuth } from '@/lib/api-auth';
+import { formFields } from '@/lib/form-fields';
+import { logAuditEvent } from '@/lib/audit-log';
 
 export const metadata: Metadata = {
   title: 'Add Government Scheme | Admin',
@@ -12,27 +15,32 @@ export default function NewSchemePage() {
   async function createScheme(formData: FormData) {
     'use server';
 
-    const eligibility = formData.get('eligibility') as string;
-    const benefits = formData.get('benefits') as string;
+    await requireFormAuth();
+    const f = formFields(formData);
+
+    const eligibility = f.text('eligibility');
+    const benefits = f.text('benefits');
 
     await prisma.governmentScheme.create({
       data: {
         id: `scheme_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-        name: formData.get('name') as string,
-        shortName: formData.get('shortName') as string,
-        fundingAmount: formData.get('fundingAmount') as string,
+        name: f.required('name', 300),
+        shortName: f.text('shortName'),
+        fundingAmount: f.text('fundingAmount'),
         eligibility: eligibility.split('\n').filter(Boolean),
-        applicationDeadline: formData.get('applicationDeadline') as string,
-        status: formData.get('status') as string,
-        applyLink: formData.get('applyLink') as string,
-        description: formData.get('description') as string,
+        applicationDeadline: f.text('applicationDeadline'),
+        status: f.text('status'),
+        applyLink: f.url('applyLink'),
+        description: f.text('description'),
         benefits: benefits.split('\n').filter(Boolean),
-        category: formData.get('category') as string,
-        state: formData.get('state') as string || null,
-        displayOrder: parseInt(formData.get('displayOrder') as string) || 0,
-        isActive: formData.get('isActive') === 'on',
+        category: f.text('category'),
+        state: f.optional('state'),
+        displayOrder: f.int('displayOrder'),
+        isActive: f.flag('isActive'),
       },
     });
+
+    await logAuditEvent({ action: 'CREATE', resourceType: 'INDIA_AI_SCHEME', resourceName: String(formData.get('name') ?? formData.get('title') ?? formData.get('metricLabel') ?? formData.get('component') ?? '').slice(0, 200) });
 
     await refreshPublic(['india-ai', 'home']);
 
@@ -42,10 +50,10 @@ export default function NewSchemePage() {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+        <h1 className="portal-title">
           Add Government Scheme
         </h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+        <p className="portal-subtitle">
           Create a new AI funding scheme or program
         </p>
       </div>

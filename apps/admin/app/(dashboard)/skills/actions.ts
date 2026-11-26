@@ -3,9 +3,11 @@
 import { neon } from '@neondatabase/serverless';
 import { requireActionAuth } from '@/lib/api-auth';
 import { SKILLS, baseKey, type SkillCategory } from '@udyaibase/utils/skill-dictionary';
+import { logAuditEvent } from '@/lib/audit-log';
+import { sectionRoles } from '@/lib/section-access';
 
 const sql = neon(process.env.DATABASE_URL!);
-const ROLES = ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'];
+const ROLES = sectionRoles('/skills');
 const CATEGORIES: SkillCategory[] = ['language', 'frontend', 'backend', 'mobile', 'data', 'database', 'ml', 'ai', 'cloud', 'devops', 'testing', 'security', 'design', 'product', 'business', 'soft', 'tools'];
 const id = () => `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 
@@ -68,6 +70,7 @@ export async function addAliasAction(alias: string, skillKey: string) {
             ON CONFLICT ("aliasKey") DO UPDATE SET alias = EXCLUDED.alias, "skillKey" = EXCLUDED."skillKey", "createdBy" = EXCLUDED."createdBy", "createdAt" = NOW()`;
   await sql`UPDATE "SkillDictionaryUnknown" SET status = 'MAPPED', "decidedBy" = ${email}, "decidedAt" = NOW() WHERE key = ${k} AND status = 'PENDING'`;
   await bump();
+  await logAuditEvent({ action: 'CREATE', resourceType: 'SKILL', resourceName: 'addAliasAction' });
   return { success: true as const };
 }
 
@@ -83,6 +86,7 @@ export async function addSkillAction(name: string, category: string) {
   await sql`INSERT INTO "SkillDictionarySkill" (id, key, name, category, "createdBy") VALUES (${id()}, ${k}, ${n}, ${category}, ${email})`;
   await sql`UPDATE "SkillDictionaryUnknown" SET status = 'ADDED', "decidedBy" = ${email}, "decidedAt" = NOW() WHERE key = ${k} AND status = 'PENDING'`;
   await bump();
+  await logAuditEvent({ action: 'CREATE', resourceType: 'SKILL', resourceName: 'addSkillAction' });
   return { success: true as const };
 }
 
@@ -101,6 +105,7 @@ export async function addRuleAction(kind: 'implies' | 'ambiguous' | 'not_ambiguo
   await sql`INSERT INTO "SkillDictionaryRule" (id, kind, "fromKey", "toKey", "createdBy") VALUES (${id()}, ${kind}, ${fromKey}, ${toKey}, ${email})
             ON CONFLICT (kind, "fromKey", "toKey") DO NOTHING`;
   await bump();
+  await logAuditEvent({ action: 'CREATE', resourceType: 'SKILL', resourceName: 'addRuleAction' });
   return { success: true as const };
 }
 
@@ -119,6 +124,7 @@ export async function removeAdditionAction(table: 'alias' | 'rule' | 'skill', ro
     }
   }
   await bump();
+  await logAuditEvent({ action: 'DELETE', resourceType: 'SKILL', resourceName: 'removeAdditionAction' });
   return { success: true as const };
 }
 
@@ -137,6 +143,7 @@ export async function mergeSkillAction(fromKey: string, intoKey: string) {
   await sql`DELETE FROM "SkillDictionaryRule" WHERE "fromKey" = ${fromKey} OR ("toKey" = ${fromKey})`;
   await sql`DELETE FROM "SkillDictionarySkill" WHERE key = ${fromKey}`;
   await bump();
+  await logAuditEvent({ action: 'UPDATE', resourceType: 'SKILL', resourceName: 'mergeSkillAction' });
   return { success: true as const };
 }
 
@@ -145,5 +152,6 @@ export async function ignoreUnknownAction(key: string) {
   const email = emailOf(session);
   if (error) return { success: false as const, error };
   await sql`UPDATE "SkillDictionaryUnknown" SET status = 'IGNORED', "decidedBy" = ${email}, "decidedAt" = NOW() WHERE key = ${key}`;
+  await logAuditEvent({ action: 'UPDATE', resourceType: 'SKILL', resourceName: 'ignoreUnknownAction' });
   return { success: true as const };
 }

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { getToolClickAnalyticsAction, exportToolClicksAction } from './actions';
 import Link from 'next/link';
+import { notify } from '@/components/Toast';
 
 const periods = ['7 days', '30 days', '90 days', 'This year'];
 
@@ -124,6 +125,7 @@ export default function ToolAnalyticsPage() {
       }
     } catch (err) {
       console.error('Export error:', err);
+      notify("Something went wrong. Check your connection and try again.", 'error');
     }
     setExporting(false);
   };
@@ -172,8 +174,8 @@ export default function ToolAnalyticsPage() {
       {/* Header */}
       <div className="flex items-center justify-between pointer-events-auto">
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Tool Click Analytics</h1>
-          <p className="text-gray-400 dark:text-gray-500 text-sm font-jakarta mt-1">
+          <h1 className="portal-title">Tool Click Analytics</h1>
+          <p className="portal-subtitle">
             Track tool clicks across all sources
           </p>
         </div>

@@ -6,11 +6,13 @@ import { canDelete, logAuditEvent } from '@/lib/audit-log';
 import { revalidatePath } from 'next/cache';
 import { refreshPublic } from '@/lib/refresh-public';
 import { checkLocation } from '@/lib/locations';
+import { sectionRoles } from '@/lib/section-access';
+import { publicError } from '@/lib/public-error';
 
 const sql = neon(process.env.DATABASE_URL!);
 
 export async function getJobsAction() {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/jobs-board'));
   if (error) return { success: false, error };
 
   try {
@@ -35,7 +37,7 @@ export async function getJobsAction() {
 }
 
 export async function toggleJobActiveAction(id: string, isActive: boolean) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/jobs-board'));
   if (error) return { success: false, error };
 
   try {
@@ -150,7 +152,7 @@ export async function bulkJobAction(ids: string[], op: BulkJobOp) {
 // ─── Job CRUD Actions ─────────────────────────────────────────────────────────
 
 export async function getJobByIdAction(id: string) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/jobs-board'));
   if (error) return { success: false, error };
 
   try {
@@ -168,12 +170,12 @@ export async function getJobByIdAction(id: string) {
     return { success: true, job: rows[0] };
   } catch (err: any) {
     console.error('[getJobByIdAction]', err);
-    return { success: false, error: err.message };
+    return { success: false, error: publicError(err) };
   }
 }
 
 export async function getStartupByIdForSelectAction(id: string) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/jobs-board'));
   if (error) return { success: false, error };
   try {
     const rows = await sql`
@@ -183,12 +185,12 @@ export async function getStartupByIdForSelectAction(id: string) {
     if (rows.length === 0) return { success: false, error: 'Not found' };
     return { success: true, startup: rows[0] };
   } catch (err: any) {
-    return { success: false, error: err.message };
+    return { success: false, error: publicError(err) };
   }
 }
 
 export async function getStartupsForSelectAction(search: string) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/jobs-board'));
   if (error) return { success: false, error };
 
   try {
@@ -204,7 +206,7 @@ export async function getStartupsForSelectAction(search: string) {
     return { success: true, startups };
   } catch (err: any) {
     console.error('[getStartupsForSelectAction]', err);
-    return { success: false, error: err.message };
+    return { success: false, error: publicError(err) };
   }
 }
 
@@ -280,7 +282,7 @@ export interface JobFormData {
 }
 
 export async function checkDuplicateJobAction(title: string, startupId: string) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/jobs-board'));
   if (error) return { isDuplicate: false };
 
   if (!title?.trim() || !startupId?.trim()) return { isDuplicate: false };
@@ -315,7 +317,7 @@ async function standardJobLocation<T extends Partial<JobFormData>>(data: T): Pro
 }
 
 export async function createJobAction(data: JobFormData) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/jobs-board'));
   if (error) return { success: false, error };
   const loc = await standardJobLocation(data);
   if (!loc.ok) return { success: false, error: loc.error };
@@ -381,12 +383,12 @@ export async function createJobAction(data: JobFormData) {
     await refreshPublic(['jobs', 'home']); return { success: true, id: result[0].id, slug: result[0].slug };
   } catch (err: any) {
     console.error('[createJobAction]', err);
-    return { success: false, error: err.message || 'Failed to create job' };
+    return { success: false, error: publicError(err) || 'Failed to create job' };
   }
 }
 
 export async function updateJobAction(id: string, data: Partial<JobFormData>) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/jobs-board'));
   if (error) return { success: false, error };
   const loc = await standardJobLocation(data);
   if (!loc.ok) return { success: false, error: loc.error };
@@ -443,12 +445,12 @@ export async function updateJobAction(id: string, data: Partial<JobFormData>) {
     await refreshPublic(['jobs', 'home']); return { success: true };
   } catch (err: any) {
     console.error('[updateJobAction]', err);
-    return { success: false, error: err.message || 'Failed to update job' };
+    return { success: false, error: publicError(err) || 'Failed to update job' };
   }
 }
 
 export async function getStartupJobsAction(startupId: string) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/jobs-board'));
   if (error) return { success: false, error };
 
   try {
@@ -465,6 +467,6 @@ export async function getStartupJobsAction(startupId: string) {
     return { success: true, jobs };
   } catch (err: any) {
     console.error('[getStartupJobsAction]', err);
-    return { success: false, error: err.message };
+    return { success: false, error: publicError(err) };
   }
 }

@@ -75,7 +75,7 @@ export default function StepPreview({ formData, tags }: Props) {
           </div>
 
           {/* Title */}
-          <h1 className="text-2xl font-sora font-bold text-gray-900 dark:text-white">
+          <h1 className="portal-title">
             {formData.title || "Untitled Event"}
           </h1>
           {formData.subtitle && (

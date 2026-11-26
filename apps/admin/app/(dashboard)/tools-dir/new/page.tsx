@@ -1,5 +1,6 @@
 'use client';
 
+import { notify } from '@/components/Toast';
 import { CityPicker, CountryPicker } from '@/components/LocationFields';
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -54,6 +55,7 @@ export default function NewToolPage() {
         if (dSocial) setSocialLinks(dSocial);
       } catch (e) {
         console.error('Failed to restore tool draft:', e);
+        notify("Something went wrong. Check your connection and try again.", 'error');
       }
     }
     setDraftLoaded(true);
@@ -108,6 +110,7 @@ export default function NewToolPage() {
       setTagGroups(tagGroupsData as any[]);
     } catch (error) {
       console.error('Error loading categories:', error);
+      notify("Couldn't load this. Check your connection and refresh.", 'error');
     }
   };
 
@@ -167,7 +170,7 @@ export default function NewToolPage() {
     e.preventDefault();
     
     if (!formData.name || !formData.slug || !formData.tagline || !formData.websiteUrl || !formData.categoryId) {
-      alert('Please fill in all required fields');
+      notify('Please fill in all required fields');
       return;
     }
 
@@ -231,16 +234,16 @@ export default function NewToolPage() {
           if (pcResult && !pcResult.success && pcResult.error) errors.push('Pros/Cons: ' + pcResult.error);
         }
         if (errors.length > 0) {
-          alert('Tool created but some data failed:\n' + errors.join('\n'));
+          notify('Tool created but some data failed:\n' + errors.join('\n'));
         }
         localStorage.removeItem('draft_admin_new_tool');
         router.push('/tools-dir');
         router.refresh();
       } else {
-        alert('Error: ' + (result.error || 'Failed to create tool'));
+        notify('Error: ' + (result.error || 'Failed to create tool'));
       }
     } catch (error: any) {
-      alert('Error: ' + error.message);
+      notify('Error: ' + error.message);
     } finally {
       setSaving(false);
     }
@@ -257,8 +260,8 @@ export default function NewToolPage() {
           <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
         </button>
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Add New Tool</h1>
-          <p className="text-gray-400 dark:text-gray-500 text-sm font-jakarta mt-1">
+          <h1 className="portal-title">Add New Tool</h1>
+          <p className="portal-subtitle">
             Add a new AI tool to the directory
           </p>
         </div>

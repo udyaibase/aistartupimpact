@@ -3,6 +3,7 @@ import { getToken } from "next-auth/jwt";
 import { prisma } from "@udyaibase/database";
 import { verifyTOTPToken, decryptSecret, verifyBackupCode, createTwoFactorProof, TwoFactorConfigError } from "@/lib/two-factor";
 import { USER_2FA_SELECT, clearCodeFailures, isLocked, lockedResponse, recordCodeFailure, wrongCodeResponse } from "@/lib/two-factor-guard";
+import { publicError } from '@/lib/public-error';
 
 /**
  * Second step of sign-in. A correct code (or unused backup code) returns a signed proof; the page passes it to
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, proof: createTwoFactorProof(user.id, sid) });
   } catch (error) {
     if (error instanceof TwoFactorConfigError) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 503 });
+      return NextResponse.json({ success: false, error: publicError(error) }, { status: 503 });
     }
     console.error("2FA verify error:", error instanceof Error ? error.message : error);
     return NextResponse.json({ success: false, error: "Verification failed" }, { status: 500 });

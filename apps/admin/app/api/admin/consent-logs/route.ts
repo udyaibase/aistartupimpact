@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { neon } from '@neondatabase/serverless';
 import { requireApiAuth } from '@/lib/api-auth';
+import { sectionRoles } from '@/lib/section-access';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -13,7 +14,7 @@ function getDateThreshold(dateRange: string): Date | null {
 }
 
 export async function GET(request: NextRequest) {
-  const { error } = await requireApiAuth();
+  const { error } = await requireApiAuth(sectionRoles('/consent-logs'));
   if (error) return error;
 
   try {
@@ -25,23 +26,23 @@ export async function GET(request: NextRequest) {
     let logs;
     if (dateThreshold) {
       if (filter === 'accepted') {
-        logs = await sql`SELECT id, consent_id, timestamp, categories, method, policy_version, schema_version, ip_hash, user_agent, country, created_at FROM consent_logs WHERE timestamp >= ${dateThreshold.toISOString()} AND categories->>'analytics' = 'true' AND categories->>'marketing' = 'true' ORDER BY created_at DESC LIMIT 100`;
+        logs = await sql`SELECT id, consent_id, timestamp, categories, method, policy_version, schema_version, ip_hash, user_agent, country, created_at FROM consent_logs WHERE timestamp >= ${dateThreshold.toISOString()} AND categories->>'analytics' = 'true' AND categories->>'marketing' = 'true' ORDER BY created_at DESC LIMIT 500`;
       } else if (filter === 'rejected') {
-        logs = await sql`SELECT id, consent_id, timestamp, categories, method, policy_version, schema_version, ip_hash, user_agent, country, created_at FROM consent_logs WHERE timestamp >= ${dateThreshold.toISOString()} AND categories->>'analytics' = 'false' AND categories->>'marketing' = 'false' ORDER BY created_at DESC LIMIT 100`;
+        logs = await sql`SELECT id, consent_id, timestamp, categories, method, policy_version, schema_version, ip_hash, user_agent, country, created_at FROM consent_logs WHERE timestamp >= ${dateThreshold.toISOString()} AND categories->>'analytics' = 'false' AND categories->>'marketing' = 'false' ORDER BY created_at DESC LIMIT 500`;
       } else if (filter === 'customized') {
-        logs = await sql`SELECT id, consent_id, timestamp, categories, method, policy_version, schema_version, ip_hash, user_agent, country, created_at FROM consent_logs WHERE timestamp >= ${dateThreshold.toISOString()} AND NOT ((categories->>'analytics' = 'true' AND categories->>'marketing' = 'true') OR (categories->>'analytics' = 'false' AND categories->>'marketing' = 'false')) ORDER BY created_at DESC LIMIT 100`;
+        logs = await sql`SELECT id, consent_id, timestamp, categories, method, policy_version, schema_version, ip_hash, user_agent, country, created_at FROM consent_logs WHERE timestamp >= ${dateThreshold.toISOString()} AND NOT ((categories->>'analytics' = 'true' AND categories->>'marketing' = 'true') OR (categories->>'analytics' = 'false' AND categories->>'marketing' = 'false')) ORDER BY created_at DESC LIMIT 500`;
       } else {
-        logs = await sql`SELECT id, consent_id, timestamp, categories, method, policy_version, schema_version, ip_hash, user_agent, country, created_at FROM consent_logs WHERE timestamp >= ${dateThreshold.toISOString()} ORDER BY created_at DESC LIMIT 100`;
+        logs = await sql`SELECT id, consent_id, timestamp, categories, method, policy_version, schema_version, ip_hash, user_agent, country, created_at FROM consent_logs WHERE timestamp >= ${dateThreshold.toISOString()} ORDER BY created_at DESC LIMIT 500`;
       }
     } else {
       if (filter === 'accepted') {
-        logs = await sql`SELECT id, consent_id, timestamp, categories, method, policy_version, schema_version, ip_hash, user_agent, country, created_at FROM consent_logs WHERE categories->>'analytics' = 'true' AND categories->>'marketing' = 'true' ORDER BY created_at DESC LIMIT 100`;
+        logs = await sql`SELECT id, consent_id, timestamp, categories, method, policy_version, schema_version, ip_hash, user_agent, country, created_at FROM consent_logs WHERE categories->>'analytics' = 'true' AND categories->>'marketing' = 'true' ORDER BY created_at DESC LIMIT 500`;
       } else if (filter === 'rejected') {
-        logs = await sql`SELECT id, consent_id, timestamp, categories, method, policy_version, schema_version, ip_hash, user_agent, country, created_at FROM consent_logs WHERE categories->>'analytics' = 'false' AND categories->>'marketing' = 'false' ORDER BY created_at DESC LIMIT 100`;
+        logs = await sql`SELECT id, consent_id, timestamp, categories, method, policy_version, schema_version, ip_hash, user_agent, country, created_at FROM consent_logs WHERE categories->>'analytics' = 'false' AND categories->>'marketing' = 'false' ORDER BY created_at DESC LIMIT 500`;
       } else if (filter === 'customized') {
-        logs = await sql`SELECT id, consent_id, timestamp, categories, method, policy_version, schema_version, ip_hash, user_agent, country, created_at FROM consent_logs WHERE NOT ((categories->>'analytics' = 'true' AND categories->>'marketing' = 'true') OR (categories->>'analytics' = 'false' AND categories->>'marketing' = 'false')) ORDER BY created_at DESC LIMIT 100`;
+        logs = await sql`SELECT id, consent_id, timestamp, categories, method, policy_version, schema_version, ip_hash, user_agent, country, created_at FROM consent_logs WHERE NOT ((categories->>'analytics' = 'true' AND categories->>'marketing' = 'true') OR (categories->>'analytics' = 'false' AND categories->>'marketing' = 'false')) ORDER BY created_at DESC LIMIT 500`;
       } else {
-        logs = await sql`SELECT id, consent_id, timestamp, categories, method, policy_version, schema_version, ip_hash, user_agent, country, created_at FROM consent_logs ORDER BY created_at DESC LIMIT 100`;
+        logs = await sql`SELECT id, consent_id, timestamp, categories, method, policy_version, schema_version, ip_hash, user_agent, country, created_at FROM consent_logs ORDER BY created_at DESC LIMIT 500`;
       }
     }
 

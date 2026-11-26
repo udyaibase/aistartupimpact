@@ -1,9 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import {
-  Plus, Search, IndianRupee, Calendar, Edit3, Trash2, X, Save, Building2,
-} from 'lucide-react';
+import { Plus, Edit3, Trash2, X, Save, ExternalLink } from 'lucide-react';
 import {
   getFundingRoundsAction,
   getStartupsForDropdownAction,
@@ -11,10 +9,9 @@ import {
   updateFundingRoundAction,
   deleteFundingRoundAction,
 } from './actions';
-import { Pagination } from '@/components/Pagination';
-import { TableEmptyState } from '@/components/EmptyState';
-
-const PAGE_SIZE = 20;
+import DataTable, { type Column, type TableFilter } from '@/components/ui/DataTable';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { notify } from '@/components/Toast';
 
 interface FundingRound {
   id: string;
@@ -38,13 +35,11 @@ const roundTypes = ['Pre-Seed', 'Angle', 'Seed', 'Pre-Series A', 'Series A', 'Pr
 export default function FundingRoundsPage() {
   const [fundingRounds, setFundingRounds] = useState<FundingRound[]>([]);
   const [startups, setStartups] = useState<Startup[]>([]);
-  const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<FundingRound | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<FundingRound | null>(null);
   const [loading, setLoading] = useState(true);
   const [investorInput, setInvestorInput] = useState('');
-  const [page, setPage] = useState(1);
 
   useEffect(() => {
     loadData();
@@ -59,24 +54,12 @@ export default function FundingRoundsPage() {
       ]);
       setFundingRounds(roundsData as FundingRound[]);
       setStartups(startupsData as Startup[]);
-    } catch (error) {
-      console.error('Error loading data:', error);
+    } catch {
+      notify("Couldn't load funding rounds. Check your connection and refresh.", 'error');
     } finally {
       setLoading(false);
     }
   };
-
-  const filtered = fundingRounds.filter(round =>
-    round.startupName.toLowerCase().includes(search.toLowerCase()) ||
-    round.roundType.toLowerCase().includes(search.toLowerCase())
-  );
-
-  // Reset page when search changes
-  useMemo(() => { setPage(1); }, [search]);
-
-  const totalFiltered = filtered.length;
-  const totalPages = Math.ceil(totalFiltered / PAGE_SIZE);
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const openCreate = () => {
     setEditing({
@@ -101,145 +84,121 @@ export default function FundingRoundsPage() {
 
   const handleSave = async () => {
     if (!editing) return;
+    const crores = parseFloat(editing.amountInr);
+    if (!editing.startupId) { notify('Choose the startup this round belongs to.', 'error'); return; }
+    if (!Number.isFinite(crores) || crores <= 0) { notify('Enter the amount in crores, for example 12.5.', 'error'); return; }
 
     try {
-      const investors = investorInput.split(',').map(inv => inv.trim()).filter(inv => inv);
-      const amountInPaise = (parseFloat(editing.amountInr) * 1000000000).toString(); // Convert Cr to paise
-
       const data = {
         startupId: editing.startupId,
         roundType: editing.roundType,
-        amountInr: amountInPaise,
+        amountInr: (crores * 1000000000).toString(), // crores to paise
         announcedAt: editing.announcedAt,
-        leadInvestors: investors,
+        leadInvestors: investorInput.split(',').map((inv) => inv.trim()).filter(Boolean),
         sourceUrl: editing.sourceUrl,
       };
-
-      if (editing.id && fundingRounds.find(r => r.id === editing.id)) {
-        // Update existing
-        const result = await updateFundingRoundAction(editing.id, data);
-        if (result.success) {
-          await loadData();
-        }
-      } else {
-        // Create new
-        const result = await createFundingRoundAction(data);
-        if (result.success) {
-          await loadData();
-        }
+      const isEdit = !!editing.id && fundingRounds.some((r) => r.id === editing.id);
+      const result = isEdit ? await updateFundingRoundAction(editing.id, data) : await createFundingRoundAction(data);
+      if (!result.success) {
+        notify((result as { error?: string }).error || "Couldn't save the funding round. Try again.", 'error');
+        return; // keep the form open so nothing typed is lost
       }
+      notify(isEdit ? 'Funding round updated.' : 'Funding round added.', 'success');
       setModalOpen(false);
       setEditing(null);
       setInvestorInput('');
-    } catch (error) {
-      console.error('Error saving funding round:', error);
+      await loadData();
+    } catch {
+      notify("Couldn't save the funding round. Check your connection and try again.", 'error');
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (round: FundingRound) => {
+    setDeleteConfirm(null);
     try {
-      const result = await deleteFundingRoundAction(id);
-      if (result.success) {
-        await loadData();
-      }
-      setDeleteConfirm(null);
-    } catch (error) {
-      console.error('Error deleting funding round:', error);
+      const result = await deleteFundingRoundAction(round.id);
+      if (!result.success) { notify((result as { error?: string }).error || "Couldn't delete the funding round. Try again.", 'error'); return; }
+      setFundingRounds((list) => list.filter((r) => r.id !== round.id));
+      notify(`${round.startupName} ${round.roundType} round deleted.`, 'success');
+    } catch {
+      notify("Couldn't delete the funding round. Check your connection and try again.", 'error');
     }
   };
 
-  const formatAmount = (amountInr: string) => {
-    const crores = Number(amountInr) / 1000000000;
-    return `₹${crores.toFixed(0)}Cr`;
-  };
+  const crores = (amountInr: string) => Number(amountInr) / 1000000000;
+  const formatAmount = (amountInr: string) => `₹${crores(amountInr).toLocaleString('en-IN', { maximumFractionDigits: 2 })} Cr`;
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand"></div>
-      </div>
-    );
-  }
+  const columns = useMemo<Column<FundingRound>[]>(() => [
+    {
+      key: 'startup', header: 'Startup', sortValue: (r) => r.startupName, searchValue: (r) => r.startupName,
+      cell: (r) => (
+        <div className="min-w-0">
+          <p className="font-semibold text-gray-900 dark:text-white truncate">{r.startupName}</p>
+          {r.sourceUrl && (
+            <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-brand hover:underline inline-flex items-center gap-0.5">
+              Source <ExternalLink className="w-3 h-3" aria-hidden /><span className="sr-only"> (opens in a new tab)</span>
+            </a>
+          )}
+        </div>
+      ),
+    },
+    { key: 'round', header: 'Round', sortValue: (r) => r.roundType, searchValue: (r) => r.roundType, cell: (r) => <span className="whitespace-nowrap">{r.roundType}</span> },
+    { key: 'amount', header: 'Amount', align: 'right', sortValue: (r) => crores(r.amountInr), cell: (r) => <span className="font-semibold text-gray-900 dark:text-white tabular-nums whitespace-nowrap">{formatAmount(r.amountInr)}</span> },
+    {
+      key: 'investors', header: 'Lead investors', searchValue: (r) => r.leadInvestors.join(' '),
+      cell: (r) => r.leadInvestors.length
+        ? <span title={r.leadInvestors.join(', ')}>{r.leadInvestors.slice(0, 2).join(', ')}{r.leadInvestors.length > 2 && ` +${r.leadInvestors.length - 2}`}</span>
+        : '–',
+    },
+    {
+      key: 'date', header: 'Announced', sortValue: (r) => new Date(r.announcedAt),
+      cell: (r) => <span className="whitespace-nowrap">{new Date(r.announcedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>,
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'right',
+      cell: (r) => (
+        <div className="flex items-center justify-end gap-1">
+          <button onClick={() => openEdit(r)} aria-label={`Edit the ${r.roundType} round of ${r.startupName}`} title="Edit" className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
+            <Edit3 className="w-4 h-4 text-gray-600 dark:text-gray-300" aria-hidden />
+          </button>
+          <button onClick={() => setDeleteConfirm(r)} aria-label={`Delete the ${r.roundType} round of ${r.startupName}`} title="Delete" className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20">
+            <Trash2 className="w-4 h-4 text-red-600" aria-hidden />
+          </button>
+        </div>
+      ),
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- cells call the latest handlers
+  ], []);
+
+  const filters = useMemo<TableFilter<FundingRound>[]>(() => [
+    { key: 'round', label: 'Round', options: [...new Set(fundingRounds.map((r) => r.roundType))].sort().map((t) => ({ value: t, label: t })), matches: (r, v) => r.roundType === v },
+    { key: 'year', label: 'Year', options: [...new Set(fundingRounds.map((r) => String(new Date(r.announcedAt).getFullYear())))].sort().reverse().map((y) => ({ value: y, label: y })), matches: (r, v) => String(new Date(r.announcedAt).getFullYear()) === v },
+  ], [fundingRounds]);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Funding Rounds</h1>
-          <p className="text-gray-400 dark:text-gray-500 text-sm font-jakarta mt-1">
-            Manage individual funding rounds shown on homepage
-          </p>
+          <h1 className="portal-title">Funding rounds</h1>
+          <p className="portal-subtitle">Individual rounds shown on the homepage and on each startup&rsquo;s page.</p>
         </div>
         <button onClick={openCreate} className="btn-brand text-sm flex items-center gap-2">
-          <Plus className="w-4 h-4" /> Add Funding Round
+          <Plus className="w-4 h-4" aria-hidden /> Add funding round
         </button>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <input type="text" placeholder="Search funding rounds..." value={search} onChange={(e) => setSearch(e.target.value)} className="input-field pl-10" />
-      </div>
-
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-gray-50 dark:bg-gray-800/50 text-left">
-              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Startup</th>
-              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden md:table-cell">Round</th>
-              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Amount</th>
-              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden lg:table-cell">Investors</th>
-              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden sm:table-cell">Date</th>
-              <th className="px-6 py-3 w-24"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((round) => (
-              <tr key={round.id} className="border-t border-gray-50 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-brand/10 flex items-center justify-center">
-                      <Building2 className="w-4 h-4 text-brand" />
-                    </div>
-                    <div>
-                      <h4 className="font-sora font-semibold text-sm text-navy dark:text-white">{round.startupName}</h4>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 hidden md:table-cell">
-                  <span className="badge-category text-[10px]">{round.roundType}</span>
-                </td>
-                <td className="px-6 py-4">
-                  <span className="text-sm font-bold text-brand font-sora">{formatAmount(round.amountInr)}</span>
-                </td>
-                <td className="px-6 py-4 hidden lg:table-cell">
-                  <span className="text-sm text-gray-600 dark:text-gray-400 font-jakarta">
-                    {round.leadInvestors.slice(0, 2).join(', ')}
-                    {round.leadInvestors.length > 2 && ` +${round.leadInvestors.length - 2}`}
-                  </span>
-                </td>
-                <td className="px-6 py-4 hidden sm:table-cell">
-                  <span className="text-sm text-gray-600 dark:text-gray-400 font-jakarta">
-                    {new Date(round.announcedAt).toLocaleDateString()}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => openEdit(round)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
-                      <Edit3 className="w-3.5 h-3.5 text-gray-400" />
-                    </button>
-                    <button onClick={() => setDeleteConfirm(round.id)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20">
-                      <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-500" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <TableEmptyState colSpan={6} icon={IndianRupee} title="No funding rounds found" description="Try adjusting your search or add a new round" action={{ label: "Add Funding Round", onClick: openCreate }} />
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        tableId="funding-rounds"
+        noun="funding rounds"
+        rows={fundingRounds}
+        rowKey={(r) => r.id}
+        columns={columns}
+        filters={filters}
+        loading={loading}
+        pageSize={20}
+        searchPlaceholder="Search startup, round or investor"
+        empty={{ title: 'No funding rounds yet', description: 'Add a round to show it on the homepage and the startup page.' }}
+      />
 
       {/* Create/Edit Modal */}
       {modalOpen && editing && (
@@ -299,20 +258,13 @@ export default function FundingRoundsPage() {
         </div>
       )}
 
-      {/* Delete Confirmation */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-sm shadow-2xl border border-gray-200 dark:border-gray-800 p-6 text-center">
-            <Trash2 className="w-10 h-10 text-red-500 mx-auto mb-3" />
-            <h3 className="font-sora font-bold text-lg text-navy dark:text-white">Delete Funding Round?</h3>
-            <p className="text-sm text-gray-500 font-jakarta mt-1">This action cannot be undone.</p>
-            <div className="flex gap-3 mt-5">
-              <button onClick={() => setDeleteConfirm(null)} className="flex-1 px-4 py-2.5 text-sm font-medium border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300">Cancel</button>
-              <button onClick={() => handleDelete(deleteConfirm)} className="flex-1 px-4 py-2.5 text-sm font-medium bg-red-500 hover:bg-red-600 text-white rounded-xl">Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        open={!!deleteConfirm}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={() => { if (deleteConfirm) handleDelete(deleteConfirm); }}
+        title="Delete funding round"
+        message={deleteConfirm ? `Delete the ${deleteConfirm.roundType} round of ${deleteConfirm.startupName}? It is removed from the website. This can't be undone.` : ''}
+      />
     </div>
   );
 }

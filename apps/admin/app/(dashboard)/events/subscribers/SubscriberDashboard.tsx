@@ -94,8 +94,8 @@ export default function SubscriberDashboard({ totalCount, events, topCities, top
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Promote Events</h1>
-        <p className="mt-1 text-sm text-gray-500">Select event → choose channel → target audience → preview → send</p>
+        <h1 className="portal-title">Promote Events</h1>
+        <p className="portal-subtitle">Select event → choose channel → target audience → preview → send</p>
       </div>
 
       {/* Stats Row */}

@@ -1,5 +1,6 @@
 'use client';
 
+import { notify } from '@/components/Toast';
 import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 
@@ -32,7 +33,7 @@ export default function SocialLinksManager({ links = [], onChange }: SocialLinks
     
     // Check if platform is already added
     if (links.some(l => l.platform === selectedPlatform)) {
-      alert(`A link for ${PLATFORM_OPTIONS.find(p => p.value === selectedPlatform)?.label} already exists.`);
+      notify(`A link for ${PLATFORM_OPTIONS.find(p => p.value === selectedPlatform)?.label} already exists.`);
       return;
     }
 

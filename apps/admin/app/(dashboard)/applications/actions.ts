@@ -4,8 +4,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@udyaibase/database";
 import { careersResumeKey, deleteCareersResume } from '@/lib/careers-resume';
+import { publicError } from '@/lib/public-error';
+import { logAuditEvent } from '@/lib/audit-log';
+import { sectionRoles } from '@/lib/section-access';
 
-const ALLOWED_ROLES = ["SUPER_ADMIN", "EDITOR_IN_CHIEF"] as const;
+const ALLOWED_ROLES = sectionRoles('/applications');
 
 const VALID_STATUSES = ["NEW", "REVIEWED", "SHORTLISTED", "INTERVIEW", "OFFERED", "HIRED", "REJECTED"] as const;
 
@@ -77,7 +80,7 @@ export async function listApplicationsAction(options: ListOptions = {}) {
     return { success: true as const, data, total, nextCursor };
   } catch (e: any) {
     console.error("listApplicationsAction error:", e);
-    return { success: false as const, error: e.message, data: [], total: 0, nextCursor: null };
+    return { success: false as const, error: publicError(e), data: [], total: 0, nextCursor: null };
   }
 }
 
@@ -98,9 +101,10 @@ export async function updateApplicationStatusAction(id: string, status: string, 
     if (notes !== undefined) update.notes = notes;
 
     await prisma.jobApplication.update({ where: { id }, data: update });
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'APPLICATION', resourceId: id, after: { status } });
     return { success: true as const };
   } catch (e: any) {
-    return { success: false as const, error: e.message };
+    return { success: false as const, error: publicError(e) };
   }
 }
 
@@ -118,9 +122,10 @@ export async function deleteApplicationAction(id: string) {
     // The applicant's file goes with the record.
     const key = careersResumeKey(app?.resumeUrl) ?? careersResumeKey(app?.resumeLink);
     if (key) await deleteCareersResume(key).catch((e) => console.error('[applications] resume delete', e instanceof Error ? e.message : e));
+    await logAuditEvent({ action: 'DELETE', resourceType: 'APPLICATION', resourceId: id });
     return { success: true as const };
   } catch (e: any) {
-    return { success: false as const, error: e.message };
+    return { success: false as const, error: publicError(e) };
   }
 }
 
@@ -151,7 +156,7 @@ export async function getApplicationStatsAction() {
 
     return { success: true as const, data: { total, byStatus, byType, byRole } };
   } catch (e: any) {
-    return { success: false as const, error: e.message };
+    return { success: false as const, error: publicError(e) };
   }
 }
 
@@ -171,6 +176,6 @@ export async function getApplicationRolesAction() {
     });
     return { success: true as const, data: all.map((a: any) => a.role) };
   } catch (e: any) {
-    return { success: false as const, error: e.message, data: [] };
+    return { success: false as const, error: publicError(e), data: [] };
   }
 }

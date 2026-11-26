@@ -7,8 +7,64 @@
    ═══════════════════════════════════════════════════ */
 
 @layer base {
+  /* Primary colour (Tailwind "brand"): black, as in the portals. Primary buttons, links and active marks are
+     black on light and near-white on dark. Red is kept for destructive actions and errors, so a red button
+     always means "this removes something"; green stays for approve/verify. */
+  :root {
+    --brand-50: 246 246 247;
+    --brand-100: 236 236 238;
+    --brand-200: 217 217 222;
+    --brand-300: 184 184 192;
+    --brand-400: 113 113 122;
+    --brand-500: 17 19 24;
+    --brand-600: 39 42 50;
+    --brand-700: 55 59 69;
+    --brand-800: 12 14 18;
+    --brand-900: 8 9 12;
+    /* Text on a primary-coloured surface. */
+    --on-brand: 255 255 255;
+  }
+
+  /* On dark surfaces (dark mode, and the always-dark sidebar) the primary colour flips to near-white. */
+  .dark,
+  .on-dark {
+    --brand-50: 39 42 50;
+    --brand-100: 55 59 69;
+    --brand-200: 82 86 97;
+    --brand-300: 130 134 145;
+    --brand-400: 190 193 201;
+    --brand-500: 240 241 244;
+    --brand-600: 222 224 229;
+    --brand-700: 203 206 213;
+    --brand-800: 248 248 250;
+    --brand-900: 255 255 255;
+    --on-brand: 17 19 24;
+  }
+
+  /* Previews of public pages (article body, breaking ticker) keep the public site's red. */
+  .public-preview,
+  .article-content {
+    --brand-50: 255 240 240;
+    --brand-100: 255 224 224;
+    --brand-200: 255 194 194;
+    --brand-300: 255 148 148;
+    --brand-400: 255 94 94;
+    --brand-500: 255 49 49;
+    --brand-600: 229 26 26;
+    --brand-700: 192 16 16;
+    --brand-800: 156 16 16;
+    --brand-900: 130 20 20;
+    --on-brand: 255 255 255;
+  }
+
   * {
     -webkit-tap-highlight-color: transparent;
+  }
+
+  /* A clear keyboard focus mark everywhere, in the accent colour. */
+  :focus-visible {
+    outline: 2px solid rgb(var(--brand-500));
+    outline-offset: 2px;
   }
 
   html {
@@ -21,17 +77,17 @@
     overflow-x: hidden;
   }
 
-  /* Headings — mobile-first sizes */
+  /* Headings: sized for a working tool, not a landing page */
   h1 {
-    @apply text-2xl sm:text-3xl md:text-4xl font-sora font-extrabold;
-  }
-
-  h2 {
     @apply text-xl sm:text-2xl font-sora font-bold;
   }
 
+  h2 {
+    @apply text-lg font-sora font-semibold;
+  }
+
   h3 {
-    @apply text-lg sm:text-xl font-sora font-bold;
+    @apply text-base font-sora font-semibold;
   }
 
   /* Selection color */
@@ -77,17 +133,18 @@
   /* ─── Buttons ──────────────────────────────── */
 
   .btn-brand {
-    @apply inline-flex items-center justify-center bg-brand hover:bg-brand-600 active:bg-brand-700 text-white font-bold font-jakarta px-5 py-3 sm:px-6 sm:py-2.5 text-sm rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-brand/25 active:scale-[0.97] min-h-[44px] sm:min-h-0;
+    color: rgb(var(--on-brand));
+    @apply inline-flex items-center justify-center bg-brand hover:bg-brand-600 active:bg-brand-700 font-semibold font-jakarta px-4 py-2.5 sm:py-2 text-sm rounded-lg transition-colors duration-150 min-h-[44px] sm:min-h-0;
   }
 
   .btn-outline {
-    @apply inline-flex items-center justify-center border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 active:bg-gray-100 dark:active:bg-gray-700 font-medium font-jakarta px-5 py-3 sm:px-5 sm:py-2.5 text-sm rounded-xl transition-all duration-200 active:scale-[0.97] min-h-[44px] sm:min-h-0;
+    @apply inline-flex items-center justify-center border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 active:bg-gray-100 dark:active:bg-gray-700 font-medium font-jakarta px-4 py-2.5 sm:py-2 text-sm rounded-lg transition-colors duration-150 min-h-[44px] sm:min-h-0;
   }
 
   /* ─── Cards ────────────────────────────────── */
 
   .card {
-    @apply bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl transition-all duration-300 hover:shadow-lg hover:border-brand/20 dark:hover:border-brand/30;
+    @apply bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl;
   }
 
   .card-featured {
@@ -97,7 +154,8 @@
   /* ─── Badges ───────────────────────────────── */
 
   .badge-brand {
-    @apply inline-flex items-center gap-1 bg-brand text-white text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-sm;
+    color: rgb(var(--on-brand));
+    @apply inline-flex items-center gap-1 bg-brand text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-sm;
   }
 
   .badge-category {
@@ -107,7 +165,7 @@
   /* ─── Inputs ───────────────────────────────── */
 
   .input-field {
-    @apply w-full px-4 py-3 sm:py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-charcoal dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand font-jakarta text-sm transition-all min-h-[44px] sm:min-h-0;
+    @apply w-full px-4 py-3 sm:py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-charcoal dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand font-jakarta text-sm transition-colors min-h-[44px] sm:min-h-0;
   }
 
   /* ─── Pills (tags) ─────────────────────────── */
@@ -119,7 +177,7 @@
   /* ─── Section title ────────────────────────── */
 
   .section-title {
-    @apply font-sora font-extrabold text-xl sm:text-2xl text-navy dark:text-white flex items-center gap-2;
+    @apply font-sora font-semibold text-lg text-navy dark:text-white flex items-center gap-2;
   }
 
   /* ─── Article content ──────────────────────── */
@@ -157,4 +215,80 @@
   .dark .text-charcoal\/70 {
     color: rgba(209, 213, 219, 0.8);
   }
+}
+
+/* ═══════════════════════════════════════════════════
+   COMFORT — for people who keep this open all day.
+   Each rule is a hair stronger than a plain utility class (it adds "html") and weaker than a hover, focus or
+   active utility, so it changes the resting look of existing screens and leaves their interactions alone.
+   They match on the class attribute ([class~="…"]) rather than on .class names: Tailwind refuses to @apply a
+   utility that the stylesheet also defines as a class.
+   ═══════════════════════════════════════════════════ */
+
+/* Page headings and labels shared with the portals (apps/web), so a new admin screen can use the same names. */
+.portal-title { @apply font-sora font-bold text-xl sm:text-2xl text-navy dark:text-white; }
+.portal-subtitle { @apply text-sm text-gray-600 dark:text-gray-400 mt-1; }
+.portal-section-title { @apply font-sora font-semibold text-base text-navy dark:text-white; }
+
+/* Grey text that was too faint to read on a light background (2.5:1). Now 4.8:1, the accessibility minimum is 4.5:1.
+   Text sitting on a dark surface in light mode (the menu, navy panels) keeps its lighter grey. */
+html:where(:not(.dark)) [class~="text-gray-400"]:where(:not(.on-dark, .on-dark *, .bg-navy, .bg-navy *)) { color: #6b7280; }
+html:where(:not(.dark)) [class~="text-gray-300"]:where(:not(.on-dark, .on-dark *, .bg-navy, .bg-navy *)) { color: #9ca3af; }
+
+/* The same problem in dark mode: mid greys on dark surfaces. */
+html.dark [class~="dark:text-gray-500"] { color: #9ca3af; }
+html.dark [class~="dark:text-gray-600"] { color: #8d96a3; }
+
+/* Pure white on dark is harsh for long reading; body text in dark mode is a soft off-white. */
+html.dark [class~="dark:text-white"] { color: #e8ebf0; }
+html.dark [class~="text-brand"]:where(:not(.public-preview *, .article-content *)) { color: rgb(var(--brand-300)); }
+
+/* No text smaller than 12px (badges and counters); ordinary small labels are 13px via the "xs" size. */
+html [class~="text-[9px]"],
+html [class~="text-[10px]"],
+html [class~="text-[11px]"] {
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+/* People who ask their device for less motion get none: no slide-ins, no animated transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════
+   PRIMARY BUTTONS — one black primary everywhere
+   ═══════════════════════════════════════════════════ */
+
+/* Anything filled with the primary colour takes its matching text colour (white on black; dark on the near-white
+   used in dark mode), including icons that inherit it. */
+html [class~="bg-brand"][class~="text-white"],
+html [class~="bg-brand"][class~="text-white"] svg,
+html [class~="bg-brand"] [class~="text-white"] {
+  color: rgb(var(--on-brand));
+}
+
+/* Older screens built their primary buttons in blue, indigo or purple: they are the same black primary now. */
+html :is(button, a, [role="button"], input[type="submit"]):is(
+    [class~="bg-blue-500"], [class~="bg-blue-600"], [class~="bg-blue-700"],
+    [class~="bg-indigo-500"], [class~="bg-indigo-600"], [class~="bg-indigo-700"],
+    [class~="bg-purple-500"], [class~="bg-purple-600"], [class~="bg-purple-700"]
+  )[class~="text-white"]:where(:not(.public-preview *)) {
+  background-color: rgb(var(--brand-500));
+  color: rgb(var(--on-brand));
+}
+html :is(button, a, [role="button"], input[type="submit"]):is(
+    [class~="bg-blue-500"], [class~="bg-blue-600"], [class~="bg-blue-700"],
+    [class~="bg-indigo-500"], [class~="bg-indigo-600"], [class~="bg-indigo-700"],
+    [class~="bg-purple-500"], [class~="bg-purple-600"], [class~="bg-purple-700"]
+  )[class~="text-white"]:where(:not(.public-preview *)):hover {
+  background-color: rgb(var(--brand-600));
 }

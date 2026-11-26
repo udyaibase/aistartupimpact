@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, BadgeCheck, Check, ChevronDown, ExternalLink, Loader2, ShieldCheck, ShieldOff, X } from 'lucide-react';
 import EventReviewDetails from './EventReviewDetails';
 import { approveEventAction, declineEventAction, listReviewQueueAction, suspendOrganizerAction, type ReviewItem } from './actions';
+import { askText } from '@/components/Ask';
 
 const fmt = (iso: string) => new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 const card = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl';
@@ -36,20 +37,20 @@ export default function EventReviewPage() {
     if (r.success) { setNotice(ok); load(); } else setError(r.error ?? 'Something went wrong.');
   }
 
-  const decline = (e: ReviewItem) => {
-    const note = prompt(`Why can't "${e.title}" be published? The organizer sees this note.`);
+  const decline = async (e: ReviewItem) => {
+    const note = await askText({ title: 'Send back to the organizer', message: `Why can't “${e.title}” be published? The organizer sees this note.`, label: 'Note for the organizer', required: true, multiline: true, confirmLabel: 'Send back' });
     if (note) run(e.id, () => declineEventAction(e.id, note), `Sent "${e.title}" back to the organizer.`);
   };
-  const suspend = (e: ReviewItem) => {
-    const reason = prompt(`Suspend ${e.organizer.name}? Their upcoming events are cancelled, attendees are told and paid tickets refunded. Reason (kept in the audit log):`);
+  const suspend = async (e: ReviewItem) => {
+    const reason = await askText({ title: `Suspend ${e.organizer.name}`, message: 'Their upcoming events are cancelled, attendees are told and paid tickets are refunded.', label: 'Reason (kept in the audit log)', required: true, multiline: true, confirmLabel: 'Suspend', danger: true });
     if (reason) run(`s:${e.organizer.id}`, () => suspendOrganizerAction(e.organizer.id, reason), `${e.organizer.name} is suspended.`);
   };
 
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-brand" /> Event review</h1>
-        <p className="text-sm text-gray-500 mt-0.5">First events from new organizers, and events hidden after 3 reports. Nothing here is public until you approve it.</p>
+        <h1 className="portal-title flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-brand" /> Event review</h1>
+        <p className="portal-subtitle">First events from new organizers, and events hidden after 3 reports. Nothing here is public until you approve it.</p>
       </div>
 
       {notice && <p role="status" className="text-sm rounded-lg px-3 py-2 bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-300">{notice}</p>}

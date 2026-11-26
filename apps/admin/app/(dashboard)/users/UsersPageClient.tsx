@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { notify } from '@/components/Toast';
+import { useState, useTransition, useEffect, useMemo } from "react";
+import DataTable, { type Column, type TableFilter } from "@/components/ui/DataTable";
 import { UserPlus, Shield, Mail, X, Save, Trash2, Edit3, Key, Clock, ShieldCheck, ShieldOff } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { inviteUser, updateUserMode, toggleUserStatus, resetUserTwoFactorAction, deleteUser, grantDeleteAccessAction, revokeDeleteAccessAction, getDeletePermissionsAction } from "./actions";
+import { ask } from '@/components/Ask';
 
 interface User {
   id: string;
@@ -96,7 +99,7 @@ export default function UsersPageClient({ initialUsers }: { initialUsers: User[]
       }
 
       if (res?.error) {
-        alert(res.error);
+        notify(res.error);
       } else {
         setModalOpen(false);
         setEditing(null);
@@ -107,35 +110,99 @@ export default function UsersPageClient({ initialUsers }: { initialUsers: User[]
   const handleDelete = async (id: string) => {
     startTransition(async () => {
       const res = await deleteUser(id);
-      if (res.error) alert(res.error);
+      if (res.error) notify(res.error);
       setDeleteConfirm(null);
     });
   };
 
-  const handleResetTwoFactor = (u: User) => {
-    if (!confirm(`Reset two-factor authentication for ${u.name || u.email}?\n\nUse this only if they lost their authenticator. They can sign in with Google and set up 2FA again.`)) return;
+  const handleResetTwoFactor = async (u: User) => {
+    if (!(await ask({ title: 'Reset two-factor authentication', message: `Reset it for ${u.name || u.email}? Use this only if they lost their authenticator. They can sign in with Google alone until they set it up again.`, confirmLabel: 'Reset', danger: true }))) return;
     startTransition(async () => {
       const res = await resetUserTwoFactorAction(u.id);
-      if (res.error) alert(res.error);
+      if (res.error) notify(res.error);
     });
   };
 
   const handleToggleStatus = async (id: string, currentStatus: string) => {
     startTransition(async () => {
       const res = await toggleUserStatus(id, currentStatus);
-      if (res.error) alert(res.error);
+      if (res.error) notify(res.error);
     });
   };
+
+  const myId = session?.user?.id;
+  const roleLabel = (r: string) => r.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
+  const columns = useMemo<Column<User>[]>(() => [
+    {
+      key: "member", header: "Member", sortValue: (u) => u.name, searchValue: (u) => `${u.name} ${u.email}`,
+      cell: (u) => (
+        <div className="flex items-center gap-3 min-w-0">
+          <span aria-hidden className="w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-700 dark:text-gray-300 text-sm font-semibold shrink-0">{u.name ? u.name.charAt(0) : "?"}</span>
+          <div className="min-w-0">
+            <p className="font-semibold text-gray-900 dark:text-white truncate">{u.name}{u.id === myId && <span className="ml-1.5 text-xs font-normal text-gray-600 dark:text-gray-400">(you)</span>}</p>
+            <p className="text-xs text-gray-600 dark:text-gray-400 truncate">{u.email}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "role", header: "Role", sortValue: (u) => u.role,
+      cell: (u) => <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${roleColors[u.role] || roleColors["CONTRIBUTOR"]}`}><Shield className="w-3 h-3" aria-hidden /> {roleLabel(u.role)}</span>,
+    },
+    {
+      key: "twoFactor", header: "Two-factor", sortValue: (u) => (u.locked ? 2 : u.twoFactorEnabled ? 0 : 1),
+      cell: (u) => (
+        <span className="whitespace-nowrap">
+          {u.twoFactorEnabled
+            ? <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400"><ShieldCheck className="w-3.5 h-3.5" aria-hidden /> On</span>
+            : <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-400"><ShieldOff className="w-3.5 h-3.5" aria-hidden /> Off</span>}
+          {u.locked && <span className="block text-xs font-semibold text-red-700 dark:text-red-400">Locked (wrong codes)</span>}
+        </span>
+      ),
+    },
+    { key: "articles", header: "Articles", align: "right", sortValue: (u) => u.articles, cell: (u) => u.articles },
+    {
+      key: "status", header: "Status", sortValue: (u) => u.status,
+      cell: (u) => {
+        const pill = `text-xs font-semibold px-2.5 py-0.5 rounded-full ${u.status === "ACTIVE" ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300" : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"}`;
+        const label = u.status === "ACTIVE" ? "Active" : "Deactivated";
+        return isSuperAdmin && u.id !== myId
+          ? <button onClick={() => handleToggleStatus(u.id, u.status)} className={`${pill} hover:ring-2 hover:ring-gray-300 dark:hover:ring-gray-600`} title={u.status === "ACTIVE" ? "Deactivate this account" : "Reactivate this account"} aria-label={`${label}. ${u.status === "ACTIVE" ? "Deactivate" : "Reactivate"} ${u.name || u.email}`}>{label}</button>
+          : <span className={pill}>{label}</span>;
+      },
+    },
+    ...(isSuperAdmin ? [{
+      key: "actions", header: "Actions", align: "right" as const,
+      cell: (u: User) => (
+        <div className="flex items-center justify-end gap-1">
+          <button onClick={() => openEdit(u)} aria-label={`Edit ${u.name || u.email}`} title="Edit" className="p-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"><Edit3 className="w-4 h-4" aria-hidden /></button>
+          {(u.twoFactorEnabled || u.locked) && u.id !== myId && (
+            <button onClick={() => handleResetTwoFactor(u)} title="Reset two-factor (lost authenticator)" aria-label={`Reset two-factor for ${u.name || u.email}`} className="p-1.5 rounded-lg text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20"><ShieldOff className="w-4 h-4" aria-hidden /></button>
+          )}
+          <button onClick={() => setDeleteConfirm(u.id)} disabled={u.id === myId} aria-label={`Delete ${u.name || u.email}`} title={u.id === myId ? "You can't delete your own account" : "Delete"}
+            className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"><Trash2 className="w-4 h-4" aria-hidden /></button>
+        </div>
+      ),
+    }] : []),
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- cells call the latest handlers
+  ], [isSuperAdmin, myId]);
+
+  const filters = useMemo<TableFilter<User>[]>(() => [
+    { key: "role", label: "Role", options: roles.map((r) => ({ value: r, label: roleLabel(r) })), matches: (u, v) => u.role === v },
+    { key: "status", label: "Status", options: [{ value: "ACTIVE", label: "Active" }, { value: "OFF", label: "Deactivated" }], matches: (u, v) => (u.status === "ACTIVE") === (v === "ACTIVE") },
+    { key: "twoFactor", label: "Two-factor", options: [{ value: "on", label: "On" }, { value: "off", label: "Off" }, { value: "locked", label: "Locked" }], matches: (u, v) => (v === "locked" ? !!u.locked : !!u.twoFactorEnabled === (v === "on")) },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], []);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">
+          <h1 className="portal-title">
             Team
           </h1>
-          <p className="text-gray-400 dark:text-gray-500 text-sm font-jakarta mt-1">
-            Manage editorial team members and roles
+          <p className="portal-subtitle">
+            Staff who can sign in to this admin, their roles and two-factor status.
           </p>
         </div>
         {isSuperAdmin && (
@@ -144,128 +211,22 @@ export default function UsersPageClient({ initialUsers }: { initialUsers: User[]
             className="btn-brand text-sm flex items-center gap-2"
             disabled={isPending}
           >
-            <UserPlus className="w-4 h-4" /> Invite Member
+            <UserPlus className="w-4 h-4" aria-hidden /> Invite member
           </button>
         )}
       </div>
 
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-gray-50 dark:bg-gray-800/50 text-left">
-              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                Member
-              </th>
-              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden md:table-cell">
-                Role
-              </th>
-              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden sm:table-cell">
-                Articles
-              </th>
-              <th className="px-6 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden lg:table-cell">
-                Status
-              </th>
-              {isSuperAdmin && <th className="px-6 py-3 w-24"></th>}
-            </tr>
-          </thead>
-          <tbody className={isPending ? "opacity-50 pointer-events-none" : ""}>
-            {initialUsers.map((u) => (
-              <tr
-                key={u.id}
-                className="border-t border-gray-50 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors"
-              >
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-brand/10 flex items-center justify-center text-brand text-sm font-bold">
-                      {u.name ? u.name.charAt(0) : "?"}
-                    </div>
-                    <div>
-                      <h4 className="font-sora font-semibold text-sm text-navy dark:text-white">
-                        {u.name}
-                      </h4>
-                      <p className="text-xs text-gray-400 font-jakarta flex items-center gap-1">
-                        <Mail className="w-3 h-3" /> {u.email}
-                      </p>
-                      <p className="mt-1 flex items-center gap-1.5">
-                        {u.twoFactorEnabled ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-700 dark:text-green-400"><ShieldCheck className="w-3 h-3" /> 2FA on</span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400"><ShieldOff className="w-3 h-3" /> 2FA off</span>
-                        )}
-                        {u.locked && <span className="text-[10px] font-semibold text-red-600 dark:text-red-400">· Locked (wrong codes)</span>}
-                      </p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 hidden md:table-cell">
-                  <span
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${roleColors[u.role] || roleColors["CONTRIBUTOR"]
-                      }`}
-                  >
-                    <Shield className="w-3 h-3" />
-                    {u.role.replace(/_/g, " ")}
-                  </span>
-                </td>
-                <td className="px-6 py-4 hidden sm:table-cell">
-                  <span className="text-sm text-gray-600 dark:text-gray-400 font-jakarta">
-                    {u.articles}
-                  </span>
-                </td>
-                <td className="px-6 py-4 hidden lg:table-cell">
-                  <button
-                    disabled={!isSuperAdmin}
-                    onClick={() => handleToggleStatus(u.id, u.status)}
-                    className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${u.status === "ACTIVE"
-                      ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                      : "bg-gray-100 dark:bg-gray-800 text-gray-500"
-                      } ${isSuperAdmin && session?.user?.id !== u.id ? "cursor-pointer" : "cursor-default opacity-80"}`}
-                  >
-                    {u.status}
-                  </button>
-                </td>
-                {isSuperAdmin && (
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => openEdit(u)}
-                        className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
-                      >
-                        <Edit3 className="w-3.5 h-3.5 text-gray-400" />
-                      </button>
-                      {(u.twoFactorEnabled || u.locked) && session?.user?.id !== u.id && (
-                        <button
-                          onClick={() => handleResetTwoFactor(u)}
-                          className="p-1.5 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20"
-                          title="Reset 2FA (lost authenticator)"
-                          aria-label={`Reset 2FA for ${u.name || u.email}`}
-                        >
-                          <ShieldOff className="w-3.5 h-3.5 text-gray-400 hover:text-amber-600" />
-                        </button>
-                      )}
-                      <button
-                        onClick={() => setDeleteConfirm(u.id)}
-                        disabled={session?.user?.id === u.id}
-                        className={`p-1.5 rounded-lg ${session?.user?.id === u.id
-                          ? "opacity-30 cursor-not-allowed"
-                          : "hover:bg-red-50 dark:hover:bg-red-900/20"
-                          }`}
-                      >
-                        <Trash2 className={`w-3.5 h-3.5 text-gray-400 ${session?.user?.id !== u.id && "hover:text-red-500"}`} />
-                      </button>
-                    </div>
-                  </td>
-                )}
-              </tr>
-            ))}
-            {initialUsers.length === 0 && (
-              <tr>
-                <td colSpan={5} className="py-8 text-center text-gray-500 text-sm font-jakarta">
-                  No team members found.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <div className={isPending ? "opacity-60 pointer-events-none" : undefined}>
+        <DataTable
+          tableId="team"
+          noun="team members"
+          rows={initialUsers}
+          rowKey={(u) => u.id}
+          columns={columns}
+          filters={filters}
+          searchPlaceholder="Search name or email"
+          empty={{ title: "No team members yet", description: "Invite someone to give them access to the admin." }}
+        />
       </div>
 
       {/* Delete Access Management — SUPER_ADMIN only */}
@@ -399,7 +360,7 @@ export default function UsersPageClient({ initialUsers }: { initialUsers: User[]
                       const updated = await getDeletePermissionsAction();
                       setActivePermissions(updated);
                     } else {
-                      alert(result.error);
+                      notify(result.error);
                     }
                     setGrantSubmitting(false);
                   }}

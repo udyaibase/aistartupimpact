@@ -4,11 +4,14 @@ import { neon } from '@neondatabase/serverless';
 import { revalidatePath } from 'next/cache';
 import { requireActionAuth } from '@/lib/api-auth';
 import { refreshPublic } from '@/lib/refresh-public';
+import { sectionRoles } from '@/lib/section-access';
+import { publicError } from '@/lib/public-error';
+import { logAuditEvent } from '@/lib/audit-log';
 
 const sql = neon(process.env.DATABASE_URL!);
 
 export async function getSponsorsAction() {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/sponsors'));
   if (error) return { success: false, error };
   try {
     const sponsors = await sql`
@@ -20,7 +23,7 @@ export async function getSponsorsAction() {
     `;
     return { success: true, data: sponsors };
   } catch (error: any) {
-    return { success: false, error: error.message };
+    return { success: false, error: publicError(error) };
   }
 }
 
@@ -28,7 +31,7 @@ export async function createSponsorAction(data: {
   brand: string; tagline: string; ctaUrl: string; logoUrl?: string;
   isActive: boolean; sortOrder: number; startDate?: string; endDate?: string;
 }) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/sponsors'));
   if (error) return { success: false, error };
   try {
     await sql`
@@ -42,9 +45,10 @@ export async function createSponsorAction(data: {
       )
     `;
     revalidatePath('/sponsors');
+    await logAuditEvent({ action: 'CREATE', resourceType: 'SPONSOR', resourceName: 'createSponsorAction' });
     await refreshPublic(['all']); return { success: true };
   } catch (error: any) {
-    return { success: false, error: error.message };
+    return { success: false, error: publicError(error) };
   }
 }
 
@@ -52,7 +56,7 @@ export async function updateSponsorAction(id: string, data: {
   brand: string; tagline: string; ctaUrl: string; logoUrl?: string;
   isActive: boolean; sortOrder: number; startDate?: string; endDate?: string;
 }) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/sponsors'));
   if (error) return { success: false, error };
   try {
     await sql`
@@ -66,9 +70,10 @@ export async function updateSponsorAction(id: string, data: {
       WHERE id = ${id}
     `;
     revalidatePath('/sponsors');
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'SPONSOR', resourceId: id, resourceName: 'updateSponsorAction' });
     await refreshPublic(['all']); return { success: true };
   } catch (error: any) {
-    return { success: false, error: error.message };
+    return { success: false, error: publicError(error) };
   }
 }
 
@@ -78,20 +83,22 @@ export async function deleteSponsorAction(id: string) {
   try {
     await sql`DELETE FROM "Sponsor" WHERE id = ${id}`;
     revalidatePath('/sponsors');
+    await logAuditEvent({ action: 'DELETE', resourceType: 'SPONSOR', resourceId: id, resourceName: 'deleteSponsorAction' });
     await refreshPublic(['all']); return { success: true };
   } catch (error: any) {
-    return { success: false, error: error.message };
+    return { success: false, error: publicError(error) };
   }
 }
 
 export async function toggleSponsorStatusAction(id: string, current: boolean) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/sponsors'));
   if (error) return { success: false, error };
   try {
     await sql`UPDATE "Sponsor" SET "isActive" = ${!current}, "updatedAt" = NOW() WHERE id = ${id}`;
     revalidatePath('/sponsors');
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'SPONSOR', resourceId: id, resourceName: 'toggleSponsorStatusAction' });
     await refreshPublic(['all']); return { success: true };
   } catch (error: any) {
-    return { success: false, error: error.message };
+    return { success: false, error: publicError(error) };
   }
 }

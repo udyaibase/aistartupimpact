@@ -1,5 +1,6 @@
 'use client';
 
+import { notify } from '@/components/Toast';
 import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { ConfirmModal } from '@/components/ConfirmModal';
@@ -22,11 +23,11 @@ export function DeleteButton({ itemId, itemName, deleteEndpoint }: DeleteButtonP
       if (response.ok) {
         window.location.reload();
       } else {
-        alert('Failed to delete. Please try again.');
+        notify(`Couldn't delete ${itemName}. Try again.`, 'error');
       }
     } catch (error) {
       console.error('Delete error:', error);
-      alert('An error occurred. Please try again.');
+      notify(`Couldn't delete ${itemName}. Check your connection and try again.`, 'error');
     }
   };
 
@@ -35,9 +36,11 @@ export function DeleteButton({ itemId, itemName, deleteEndpoint }: DeleteButtonP
       <button
         type="button"
         onClick={() => setConfirmDelete(true)}
-        className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+        aria-label={`Delete ${itemName}`}
+        title="Delete"
+        className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
       >
-        <Trash2 className="w-4 h-4" />
+        <Trash2 className="w-4 h-4" aria-hidden />
       </button>
 
       <ConfirmModal
@@ -47,8 +50,8 @@ export function DeleteButton({ itemId, itemName, deleteEndpoint }: DeleteButtonP
           handleDelete();
           setConfirmDelete(false);
         }}
-        title="Delete Item"
-        message={`Are you sure you want to delete ${itemName}?`}
+        title="Delete item"
+        message={`Delete ${itemName}? It is removed from the India AI pages. This can't be undone.`}
         confirmLabel="Delete"
         variant="danger"
         requireTyping={true}

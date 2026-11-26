@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import {
-  CreditCard, CheckCircle, AlertCircle, IndianRupee, Clock, Search, Filter,
-  Loader2, XCircle, RefreshCw, ExternalLink, X,
-} from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Loader2, RefreshCw, X } from 'lucide-react';
+import DataTable, { type Column, type TableFilter } from '@/components/ui/DataTable';
+import { notify } from '@/components/Toast';
 import { getPaymentStatsAction, getAdvPaymentsAction, markRefundAction } from './actions';
 
 const statusStyle: Record<string, string> = {
@@ -24,9 +23,11 @@ const purposeStyle: Record<string, string> = {
 const purposeLabel: Record<string, string> = {
   PACKAGE_PURCHASE: 'Package',
   PACKAGE_UPGRADE: 'Upgrade',
-  ZONE_EXTENSION: 'Zone Ext.',
-  SOCIAL_POST: 'Social Post',
+  ZONE_EXTENSION: 'Zone extension',
+  SOCIAL_POST: 'Social post',
 };
+const statusLabel: Record<string, string> = { SUCCESS: 'Paid', PENDING: 'Pending', FAILED: 'Failed', REFUNDED: 'Refunded' };
+const optionsOf = (labels: Record<string, string>) => Object.entries(labels).map(([value, label]) => ({ value, label }));
 
 const fmt = (d: string) => d ? new Date(d).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 const fmtAmount = (paise: number) => paise ? `₹${(paise / 100).toLocaleString('en-IN')}` : '₹0';
@@ -45,25 +46,18 @@ export default function AdvPaymentsPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [refundModal, setRefundModal] = useState<Payment | null>(null);
   const [refundAmount, setRefundAmount] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const [filterStatus, setFilterStatus] = useState('ALL');
-  const [filterPurpose, setFilterPurpose] = useState('ALL');
-  const [search, setSearch] = useState('');
-
-  const showToast = (msg: string, ok: boolean) => {
-    setToast({ msg, ok });
-    setTimeout(() => setToast(null), 3500);
-  };
+  const showToast = (msg: string, ok: boolean) => notify(msg, ok ? 'success' : 'error');
 
   const load = useCallback(async () => {
     setLoading(true);
     const [statsRes, paymentsRes] = await Promise.all([getPaymentStatsAction(), getAdvPaymentsAction()]);
     if (statsRes.success) setStats(statsRes.data as Stats);
     if (paymentsRes.success) setPayments(paymentsRes.data as Payment[]);
+    else notify((paymentsRes as { error?: string }).error || "Couldn't load payments. Refresh to try again.", 'error');
     setLoading(false);
   }, []);
 
@@ -84,181 +78,89 @@ export default function AdvPaymentsPage() {
     else showToast(res.error || 'Failed', false);
   };
 
-  const filtered = payments.filter((p) => {
-    if (filterStatus !== 'ALL' && p.status !== filterStatus) return false;
-    if (filterPurpose !== 'ALL' && p.purpose !== filterPurpose) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      if (
-        !p.founderName?.toLowerCase().includes(q) &&
-        !p.founderEmail?.toLowerCase().includes(q) &&
-        !p.razorpayOrderId?.toLowerCase().includes(q) &&
-        !p.razorpayPaymentId?.toLowerCase().includes(q)
-      ) return false;
-    }
-    return true;
-  });
+  const columns = useMemo<Column<Payment>[]>(() => [
+    { key: 'date', header: 'Date', sortValue: (p) => new Date(p.createdAt), cell: (p) => <span className="whitespace-nowrap">{fmt(p.createdAt)}</span> },
+    {
+      key: 'founder', header: 'Founder', sortValue: (p) => p.founderName, searchValue: (p) => `${p.founderName ?? ''} ${p.founderEmail ?? ''}`,
+      cell: (p) => <><span className="font-semibold text-gray-900 dark:text-white">{p.founderName || '–'}</span><span className="block text-xs text-gray-600 dark:text-gray-400">{p.founderEmail}</span></>,
+    },
+    {
+      key: 'purpose', header: 'For', sortValue: (p) => p.purpose,
+      cell: (p) => (
+        <span className="whitespace-nowrap">
+          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${purposeStyle[p.purpose] || ''}`}>{purposeLabel[p.purpose] || p.purpose}</span>
+          {p.packageTier && <span className="text-xs text-gray-600 dark:text-gray-400 ml-1.5">{p.packageTier}</span>}
+        </span>
+      ),
+    },
+    { key: 'amount', header: 'Amount', align: 'right', sortValue: (p) => p.amountPaise, cell: (p) => <span className="tabular-nums whitespace-nowrap">{fmtAmount(p.amountPaise)}</span> },
+    { key: 'gst', header: 'GST', align: 'right', sortValue: (p) => p.gstPaise, cell: (p) => <span className="tabular-nums whitespace-nowrap">{fmtAmount(p.gstPaise)}</span> },
+    { key: 'total', header: 'Total', align: 'right', sortValue: (p) => p.totalPaise, cell: (p) => <span className="font-semibold text-gray-900 dark:text-white tabular-nums whitespace-nowrap">{fmtAmount(p.totalPaise)}</span> },
+    {
+      key: 'razorpay', header: 'Razorpay ID', searchValue: (p) => `${p.razorpayPaymentId ?? ''} ${p.razorpayOrderId ?? ''}`,
+      cell: (p) => { const id = p.razorpayPaymentId || p.razorpayOrderId; return id ? <span className="text-xs font-mono select-all" title={id}>{id}</span> : '–'; },
+    },
+    {
+      key: 'status', header: 'Status', sortValue: (p) => p.status,
+      cell: (p) => (
+        <>
+          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${statusStyle[p.status] || ''}`}>{statusLabel[p.status] ?? p.status}</span>
+          {p.refundAmountPaise ? <span className="block text-xs text-gray-600 dark:text-gray-400 mt-0.5 whitespace-nowrap">{fmtAmount(p.refundAmountPaise)} refunded</span> : null}
+        </>
+      ),
+    },
+    {
+      key: 'actions', header: 'Actions', align: 'right',
+      cell: (p) => p.status === 'SUCCESS' ? (
+        <button onClick={() => { setRefundModal(p); setRefundAmount(String(p.totalPaise / 100)); }} aria-label={`Mark the payment from ${p.founderName || p.founderEmail} as refunded`}
+          className="text-xs text-purple-700 dark:text-purple-400 hover:underline font-semibold inline-flex items-center gap-1">
+          <RefreshCw className="w-3 h-3" aria-hidden /> Refund
+        </button>
+      ) : null,
+    },
+  ], []);
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <Loader2 className="w-6 h-6 animate-spin text-brand" />
-    </div>
-  );
+  const filters = useMemo<TableFilter<Payment>[]>(() => [
+    { key: 'status', label: 'Status', options: optionsOf(statusLabel), matches: (p, v) => p.status === v },
+    { key: 'purpose', label: 'For', options: optionsOf(purposeLabel), matches: (p, v) => p.purpose === v },
+  ], []);
 
   return (
-    <div className="space-y-6">
-      {/* Toast */}
-      {toast && (
-        <div className={`fixed top-4 right-4 z-[100] px-4 py-3 rounded-xl shadow-lg text-sm font-jakarta font-medium flex items-center gap-2 ${toast.ok ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
-          {toast.ok ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />} {toast.msg}
-        </div>
-      )}
-
+    <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Advertise Payments</h1>
-          <p className="text-gray-400 text-sm font-jakarta mt-1">Track all advertise system payments, refunds, and revenue</p>
+          <h1 className="portal-title">Advertising payments</h1>
+          <p className="portal-subtitle">Payments, refunds and revenue from founder advertising.</p>
         </div>
-        <button onClick={load} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" title="Refresh">
-          <RefreshCw className="w-4 h-4 text-gray-400" />
+        <button onClick={load} aria-label="Refresh payments" className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" title="Refresh">
+          <RefreshCw className="w-4 h-4 text-gray-600 dark:text-gray-300" aria-hidden />
         </button>
       </div>
 
-      {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[
-            { label: 'Total Payments', value: stats.total, icon: CreditCard, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-900/30' },
-            { label: 'Successful', value: stats.success, icon: CheckCircle, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-100 dark:bg-green-900/30' },
-            { label: 'Pending', value: stats.pending, icon: Clock, color: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-100 dark:bg-yellow-900/30' },
-            { label: 'Total Revenue', value: fmtAmount(stats.revenue), icon: IndianRupee, color: 'text-brand', bg: 'bg-red-100 dark:bg-red-900/30' },
-          ].map((s) => (
-            <div key={s.label} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 font-jakarta">{s.label}</p>
-                  <p className={`text-2xl font-bold font-sora mt-1 ${s.color}`}>{s.value}</p>
-                </div>
-                <div className={`w-12 h-12 rounded-xl ${s.bg} flex items-center justify-center`}>
-                  <s.icon className={`w-6 h-6 ${s.color}`} />
-                </div>
-              </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {([['Payments', stats.total.toLocaleString('en-IN')], ['Paid', stats.success.toLocaleString('en-IN')], ['Pending', stats.pending.toLocaleString('en-IN')], ['Revenue', fmtAmount(stats.revenue)]] as const).map(([label, value]) => (
+            <div key={label} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+              <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">{label}</p>
+              <p className="text-2xl font-semibold text-gray-900 dark:text-white mt-1 tabular-nums">{value}</p>
             </div>
           ))}
         </div>
       )}
 
-      {/* Filters */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search founder, Razorpay order/payment ID..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="input-field text-sm pl-10 w-full"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-gray-400" />
-            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="input-field text-sm">
-              <option value="ALL">All Status</option>
-              <option value="SUCCESS">Success</option>
-              <option value="PENDING">Pending</option>
-              <option value="FAILED">Failed</option>
-              <option value="REFUNDED">Refunded</option>
-            </select>
-            <select value={filterPurpose} onChange={(e) => setFilterPurpose(e.target.value)} className="input-field text-sm">
-              <option value="ALL">All Purpose</option>
-              <option value="PACKAGE_PURCHASE">Package Purchase</option>
-              <option value="PACKAGE_UPGRADE">Package Upgrade</option>
-              <option value="ZONE_EXTENSION">Zone Extension</option>
-              <option value="SOCIAL_POST">Social Post</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50 dark:bg-gray-800/50 text-left">
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta">Date</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta">Founder</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta">Purpose</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta hidden md:table-cell">Amount</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta hidden lg:table-cell">GST</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta">Total</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta hidden lg:table-cell">Razorpay ID</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta">Status</th>
-                <th className="px-6 py-3 w-24 text-xs font-semibold text-gray-500 uppercase tracking-wide font-jakarta">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="px-6 py-12 text-center text-gray-400 font-jakarta">
-                    <CreditCard className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-                    No payments found
-                  </td>
-                </tr>
-              )}
-              {filtered.map((pay) => (
-                <tr key={pay.id} className="border-t border-gray-50 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
-                  <td className="px-6 py-4 text-sm text-gray-500 font-jakarta whitespace-nowrap">{fmt(pay.createdAt)}</td>
-                  <td className="px-6 py-4">
-                    <div className="font-sora font-semibold text-sm text-navy dark:text-white">{pay.founderName || '—'}</div>
-                    <div className="text-xs text-gray-400 font-jakarta">{pay.founderEmail}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold ${purposeStyle[pay.purpose] || ''}`}>
-                      {purposeLabel[pay.purpose] || pay.purpose}
-                    </span>
-                    {pay.packageTier && (
-                      <span className="text-[10px] text-gray-400 font-jakarta ml-1">{pay.packageTier}</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500 font-jakarta hidden md:table-cell">{fmtAmount(pay.amountPaise)}</td>
-                  <td className="px-6 py-4 text-sm text-gray-500 font-jakarta hidden lg:table-cell">{fmtAmount(pay.gstPaise)}</td>
-                  <td className="px-6 py-4 text-sm font-semibold text-navy dark:text-white font-jakarta">{fmtAmount(pay.totalPaise)}</td>
-                  <td className="px-6 py-4 hidden lg:table-cell">
-                    {pay.razorpayPaymentId ? (
-                      <span className="text-xs text-gray-400 font-mono">{pay.razorpayPaymentId.slice(0, 18)}...</span>
-                    ) : pay.razorpayOrderId ? (
-                      <span className="text-xs text-gray-400 font-mono">{pay.razorpayOrderId.slice(0, 18)}...</span>
-                    ) : (
-                      <span className="text-xs text-gray-400">—</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold ${statusStyle[pay.status] || ''}`}>
-                      {pay.status}
-                    </span>
-                    {pay.refundAmountPaise && (
-                      <div className="text-[10px] text-purple-500 font-jakarta mt-0.5">{fmtAmount(pay.refundAmountPaise)} refunded</div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    {pay.status === 'SUCCESS' && (
-                      <button
-                        onClick={() => { setRefundModal(pay); setRefundAmount(String(pay.totalPaise / 100)); }}
-                        className="text-xs text-purple-500 hover:underline font-jakarta font-semibold flex items-center gap-1"
-                      >
-                        <RefreshCw className="w-3 h-3" /> Refund
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable
+        tableId="advertise-payments"
+        noun="payments"
+        rows={payments}
+        rowKey={(p) => p.id}
+        columns={columns}
+        filters={filters}
+        loading={loading}
+        pageSize={25}
+        searchPlaceholder="Search founder, email or Razorpay ID"
+        empty={{ title: 'No advertising payments yet', description: 'Payments founders make for packages, upgrades and social posts appear here.' }}
+      />
 
       {/* Refund Modal */}
       {refundModal && (

@@ -3,6 +3,10 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@udyaibase/database';
 import { generateSlug } from '@udyaibase/utils';
 import CityForm from '../CityForm';
+import { requireFormAuth } from '@/lib/api-auth';
+import { formFields } from '@/lib/form-fields';
+import { logAuditEvent } from '@/lib/audit-log';
+import { sectionRoles } from '@/lib/section-access';
 
 export const metadata: Metadata = {
   title: 'Add City | Admin',
@@ -12,21 +16,22 @@ export default function NewCityPage() {
   async function createCity(formData: FormData) {
     'use server';
 
-    const cityName = formData.get('cityName') as string;
+    await requireFormAuth(sectionRoles('/cities'));
+    const f = formFields(formData);
+
+    const cityName = f.required('cityName', 300);
     if (!cityName) throw new Error('City Name is required');
 
     const slug = generateSlug(cityName);
-    const state = formData.get('state') as string || null;
+    const state = f.optional('state');
     
     // Parse coordinates if provided
-    const latInput = formData.get('latitude');
-    const lngInput = formData.get('longitude');
-    const latitude = latInput ? Number(latInput) : 0;
-    const longitude = lngInput ? Number(lngInput) : 0;
+    const latitude = f.number('latitude', -90, 90);
+    const longitude = f.number('longitude', -180, 180);
 
-    const isActive = formData.get('isActive') === 'on';
+    const isActive = f.flag('isActive');
 
-    const aliases = (formData.get('aliases') as string)
+    const aliases = f.text('aliases')
       ?.split(',')
       ?.map(a => a.trim())
       ?.filter(Boolean) || [];
@@ -83,16 +88,18 @@ export default function NewCityPage() {
       }
     }
 
+    await logAuditEvent({ action: 'CREATE', resourceType: 'CITY', resourceName: String(formData.get('name') ?? '').slice(0, 200) });
+
     redirect('/cities');
   }
 
   return (
     <div className="p-6">
       <div className="mb-6 font-jakarta">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white font-sora">
+        <h1 className="portal-title">
           Add Custom City
         </h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+        <p className="portal-subtitle">
           Register a standard city name and state to make it selectable across forms.
         </p>
       </div>

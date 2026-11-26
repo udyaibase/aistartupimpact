@@ -4,10 +4,11 @@ import { prisma } from '@udyaibase/database';
 import { CRON_JOBS, aiSpendUsd, emailUsage } from '@udyaibase/database/ops';
 import { aiBudgets } from '@udyaibase/utils/ai-cost';
 import { requireActionAuth } from '@/lib/api-auth';
+import { sectionRoles } from '@/lib/section-access';
 
 /** Scheduled jobs, email usage against the Resend plan, and OpenAI spend and failures. Super admins only. */
 export async function monitoringAction() {
-  const { error } = await requireActionAuth(['SUPER_ADMIN']);
+  const { error } = await requireActionAuth(sectionRoles('/monitoring'));
   if (error) return { success: false as const, error };
   const now = new Date();
   const week = new Date(now.getTime() - 7 * 864e5);

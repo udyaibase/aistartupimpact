@@ -51,10 +51,10 @@ export default async function CitiesPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white font-sora">
+          <h1 className="portal-title">
             Cities Registry
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-jakarta">
+          <p className="portal-subtitle">
             Manage system-wide cities registry, aliases, and locations
           </p>
         </div>

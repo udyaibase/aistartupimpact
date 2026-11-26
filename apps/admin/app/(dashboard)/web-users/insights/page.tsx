@@ -50,8 +50,8 @@ export default async function AudienceInsightsPage({ searchParams }: { searchPar
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <Link href="/web-users" className="text-sm text-gray-500 hover:underline">← Web users</Link>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">Audience insights</h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">What new website users told us during onboarding. Counts only, no names.</p>
+          <h1 className="portal-title mt-1">Audience insights</h1>
+          <p className="portal-subtitle">What new website users told us during onboarding. Counts only, no names.</p>
         </div>
         <nav className="flex gap-1 rounded-lg border border-gray-200 dark:border-gray-800 p-1" aria-label="Time range">
           {(['30', '90', 'all'] as RangeKey[]).map((r) => (

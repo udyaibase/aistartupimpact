@@ -10,6 +10,8 @@ import { logAuditEvent } from '@/lib/audit-log';
 import { requireActionAuth } from '@/lib/api-auth';
 import { userInvitationHtml } from '@udyaibase/utils';
 import { sendEmail } from '@/lib/email-send';
+import { publicError } from '@/lib/public-error';
+import { sectionRoles } from '@/lib/section-access';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -116,7 +118,7 @@ export async function inviteUser(data: { name: string; email: string; role: stri
     return { success: true };
   } catch (error: any) {
     console.error("Error inviting user:", error);
-    return { success: false, error: error.message || "Failed to invite user" };
+    return { success: false, error: publicError(error) || "Failed to invite user" };
   }
 }
 
@@ -184,7 +186,7 @@ export async function toggleUserStatus(id: string, currentStatus: string) {
  * your own 2FA is turned off from Settings with a current code.
  */
 export async function resetUserTwoFactorAction(id: string) {
-  const { session, error } = await requireActionAuth(["SUPER_ADMIN"]);
+  const { session, error } = await requireActionAuth(sectionRoles('/users'));
   if (error || !session) return { success: false, error: error || "Unauthorized" };
   if (session.user.id === id) {
     return { success: false, error: "Turn off your own 2FA from Settings (it needs a current code)." };
@@ -273,7 +275,7 @@ export async function grantDeleteAccessAction(userId: string, hours: number) {
     revalidatePath("/users");
     return { success: true, expiresAt: expiresAt.toISOString() };
   } catch (error: any) {
-    return { success: false, error: error.message || 'Failed to grant access' };
+    return { success: false, error: publicError(error) || 'Failed to grant access' };
   }
 }
 
@@ -303,7 +305,7 @@ export async function revokeDeleteAccessAction(userId: string) {
     revalidatePath("/users");
     return { success: true };
   } catch (error: any) {
-    return { success: false, error: error.message || 'Failed to revoke access' };
+    return { success: false, error: publicError(error) || 'Failed to revoke access' };
   }
 }
 

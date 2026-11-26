@@ -1,13 +1,11 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  Plus, Search, Wrench, Edit3, Trash2, Crown, CheckCircle, XCircle, Calendar, X, Clock, Camera,
-} from 'lucide-react';
-import { ConfirmModal } from '@/components/ConfirmModal';
-import { Pagination } from '@/components/Pagination';
-import { TableEmptyState } from '@/components/EmptyState';
+import { Plus, Wrench, Edit3, Trash2, Crown, CheckCircle, XCircle, X, Camera } from 'lucide-react';
+import DataTable, { type BulkAction, type Column, type TableFilter } from '@/components/ui/DataTable';
+import { ask } from '@/components/Ask';
 import RejectToolDialog from '@/components/RejectToolDialog';
 import {
   getToolsAction,
@@ -23,6 +21,7 @@ import {
   bulkDeleteToolsAction,
   toggleToolContentReviewedAction,
 } from './actions';
+import { notify } from '@/components/Toast';
 
 interface Tool {
   id: string;
@@ -60,22 +59,13 @@ interface Category {
 
 const listingTiers = ['STANDARD', 'PRIORITY', 'FEATURED'];
 
-const PAGE_SIZE = 20;
 
 export default function ToolsDirPage() {
   const router = useRouter();
   const [tools, setTools] = useState<Tool[]>([]);
   const [rejecting, setRejecting] = useState<{ id: string; name: string } | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  const [deleteTyped, setDeleteTyped] = useState('');
-  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
-  const [bulkDeleteTyped, setBulkDeleteTyped] = useState('');
   const [loading, setLoading] = useState(true);
-  const [permissionError, setPermissionError] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [featureModal, setFeatureModal] = useState<Tool | null>(null);
   const [featureTier, setFeatureTier] = useState<'FEATURED' | 'PRIORITY' | 'FREE'>('PRIORITY');
   const [featureStart, setFeatureStart] = useState('');
@@ -84,9 +74,6 @@ export default function ToolsDirPage() {
   const [featurePrice, setFeaturePrice] = useState('');
   const [featureError, setFeatureError] = useState('');
   const [featureSubmitting, setFeatureSubmitting] = useState(false);
-  const [bulkAction, setBulkAction] = useState<'approve' | 'archive' | null>(null);
-  const [filterReview, setFilterReview] = useState<'all' | 'reviewed' | 'under_review'>('all');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'PENDING' | 'APPROVED' | 'ARCHIVED'>('all');
 
   useEffect(() => {
     loadData();
@@ -103,64 +90,36 @@ export default function ToolsDirPage() {
       setCategories(catsData as Category[]);
     } catch (error) {
       console.error('Error loading data:', error);
+      notify("Couldn't load this. Check your connection and refresh.", 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const filtered = tools.filter(t =>
-    t.name.toLowerCase().includes(search.toLowerCase()) ||
-    (t.tagline || '').toLowerCase().includes(search.toLowerCase()) ||
-    (t.categoryName || '').toLowerCase().includes(search.toLowerCase())
-  ).filter(t => {
-    if (filterReview === 'reviewed') return t.contentReviewed;
-    if (filterReview === 'under_review') return !t.contentReviewed;
-    return true;
-  }).filter(t => {
-    if (filterStatus !== 'all') return t.status === filterStatus;
-    return true;
-  });
-
-  const totalFiltered = filtered.length;
-  const totalPages = Math.ceil(totalFiltered / PAGE_SIZE);
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
   const pendingCount = tools.filter(t => t.status === 'PENDING').length;
   const featuredCount = tools.filter(t => t.listingTier === 'FEATURED').length;
   const underReviewCount = tools.filter(t => !t.contentReviewed).length;
 
-  const openCreate = () => {
-    router.push('/tools-dir/new');
-  };
-
-  const openEdit = (tool: Tool) => {
-    router.push(`/tools-dir/${tool.id}/edit`);
-  };
-
-  const handleDelete = async (id: string) => {
+  /** Runs one change, says what happened, and reloads the list. */
+  const run = async (work: () => Promise<{ success: boolean; error?: string }>, done: string, failed: string) => {
     try {
-      const result = await deleteToolAction(id);
-      if (result.success) {
-        await loadData();
-      } else if (result.error) {
-        setPermissionError(result.error);
-      }
-      setDeleteConfirm(null);
-    } catch (error) {
-      console.error('Error deleting tool:', error);
+      const result = await work();
+      if (!result.success) { notify(result.error || failed, 'error'); return false; }
+      notify(done, 'success');
+      await loadData();
+      return true;
+    } catch {
+      notify(`${failed} Check your connection and try again.`, 'error');
+      return false;
     }
   };
 
-  const handleApprove = async (id: string) => {
-    try {
-      const result = await approveToolAction(id);
-      if (result.success) {
-        await loadData();
-      }
-    } catch (error) {
-      console.error('Error approving tool:', error);
-    }
+  const handleDelete = async (tool: Tool) => {
+    if (!(await ask({ title: 'Delete tool', message: `Delete ${tool.name}? Its page, reviews and analytics are removed for good.${tool.status === 'APPROVED' ? ' It is live on the website now.' : ''}`, confirmLabel: 'Delete', danger: true }))) return;
+    await run(() => deleteToolAction(tool.id), `${tool.name} deleted.`, `Couldn't delete ${tool.name}.`);
   };
+  const handleApprove = (tool: Tool) => run(() => approveToolAction(tool.id), `${tool.name} approved and live.`, `Couldn't approve ${tool.name}.`);
+  const handleToggleReview = (tool: Tool) => run(() => toggleToolContentReviewedAction(tool.id, tool.contentReviewed), tool.contentReviewed ? `${tool.name} is back under review.` : `${tool.name} marked as reviewed.`, `Couldn't change the review status.`);
 
   const handleReject = async (reason: string) => {
     if (!rejecting) return;
@@ -168,28 +127,6 @@ export default function ToolsDirPage() {
     if (!result.success) return result.error || 'Couldn’t reject this tool. Try again.';
     setRejecting(null);
     await loadData();
-  };
-
-  const handleTierChange = async (id: string, tier: string) => {
-    try {
-      const result = await setListingTierAction(id, tier);
-      if (result.success) {
-        await loadData();
-      }
-    } catch (error) {
-      console.error('Error changing tier:', error);
-    }
-  };
-
-  const handleToggleReview = async (id: string, current: boolean) => {
-    try {
-      const result = await toggleToolContentReviewedAction(id, current);
-      if (result.success) {
-        await loadData();
-      }
-    } catch (error) {
-      console.error('Error toggling review:', error);
-    }
   };
 
   const openFeatureModal = (tool: Tool) => {
@@ -234,21 +171,109 @@ export default function ToolsDirPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand"></div>
-      </div>
-    );
-  }
+  const label = (v: string | null | undefined) => (v ? v.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase()) : '–');
+  const STATUS_STYLE: Record<string, string> = {
+    APPROVED: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
+    PENDING: 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300',
+  };
+  const neutral = 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300';
+  const small = 'px-2.5 py-1 text-xs font-semibold rounded-lg whitespace-nowrap';
+
+  const columns = useMemo<Column<Tool>[]>(() => [
+    {
+      key: 'tool', header: 'Tool', sortValue: (t) => t.name, searchValue: (t) => `${t.name} ${t.tagline ?? ''} ${t.categoryName ?? ''} ${t.ownerEmail ?? ''}`,
+      cell: (t) => (
+        <div className="flex items-center gap-2.5 min-w-[200px] max-w-xs">
+          <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden shrink-0">
+            {t.logoUrl
+              // eslint-disable-next-line @next/next/no-img-element
+              ? <img src={t.logoUrl} alt="" className="w-full h-full object-contain p-0.5" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              : <Wrench className="w-3.5 h-3.5 text-gray-500" aria-hidden />}
+          </div>
+          <div className="min-w-0">
+            <Link href={`/tools-dir/${t.id}/edit`} className="font-semibold text-gray-900 dark:text-white hover:underline flex items-center gap-1.5">
+              <span className="truncate">{t.name}</span>
+              {t.listingTier === 'FEATURED' && <Crown className="w-3 h-3 text-amber-500 shrink-0" aria-label="Featured" />}
+            </Link>
+            <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-1">{t.tagline}</p>
+          </div>
+        </div>
+      ),
+    },
+    { key: 'category', header: 'Category', sortValue: (t) => t.categoryName, cell: (t) => <span className="whitespace-nowrap">{t.categoryName || '–'}</span> },
+    { key: 'pricing', header: 'Pricing', sortValue: (t) => t.pricingModel, cell: (t) => <span className="whitespace-nowrap">{label(t.pricingModel)}</span> },
+    {
+      key: 'review', header: 'Content review', sortValue: (t) => (t.contentReviewed ? 1 : 0),
+      cell: (t) => (
+        <button onClick={() => handleToggleReview(t)} title={t.contentReviewed ? 'Put back under review' : 'Mark as reviewed'} aria-label={`${t.name}: ${t.contentReviewed ? 'reviewed. Put back under review' : 'under review. Mark as reviewed'}`}
+          className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap hover:ring-2 hover:ring-gray-300 dark:hover:ring-gray-600 ${t.contentReviewed ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' : 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300'}`}>
+          {t.contentReviewed ? 'Reviewed' : 'Under review'}
+        </button>
+      ),
+    },
+    {
+      key: 'status', header: 'Status', sortValue: (t) => t.status,
+      cell: (t) => (
+        <div className="flex items-center gap-1.5">
+          <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_STYLE[t.status] ?? neutral}`}>{label(t.status)}</span>
+          {t.status === 'PENDING' && (
+            <>
+              <button onClick={() => handleApprove(t)} title="Approve" aria-label={`Approve ${t.name}`} className="p-1 rounded-lg text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20"><CheckCircle className="w-4 h-4" aria-hidden /></button>
+              <button onClick={() => setRejecting({ id: t.id, name: t.name })} title="Reject" aria-label={`Reject ${t.name}`} className="p-1 rounded-lg text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"><XCircle className="w-4 h-4" aria-hidden /></button>
+            </>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'tier', header: 'Listing', sortValue: (t) => listingTiers.indexOf(t.listingTier),
+      cell: (t) => (
+        <button onClick={() => openFeatureModal(t)} aria-label={`${t.name}: ${label(t.listingTier)} listing. Schedule featuring`} title="Schedule featuring"
+          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap hover:ring-2 hover:ring-gray-300 dark:hover:ring-gray-600 ${t.listingTier === 'FEATURED' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300' : t.listingTier === 'PRIORITY' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300' : neutral}`}>
+          {t.listingTier !== 'STANDARD' && <Crown className="w-3 h-3" aria-hidden />}{t.listingTier === 'STANDARD' ? 'Standard · schedule' : label(t.listingTier)}
+        </button>
+      ),
+    },
+    { key: 'added', header: 'Added', sortValue: (t) => new Date(t.createdAt), cell: (t) => <span className="text-xs whitespace-nowrap">{new Date(t.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}</span> },
+    {
+      key: 'actions', header: 'Actions', align: 'right',
+      cell: (t) => (
+        <div className="flex items-center justify-end gap-1">
+          <Link href={`/tools-dir/${t.id}/edit`} aria-label={`Edit ${t.name}`} title="Edit" className="p-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"><Edit3 className="w-4 h-4" aria-hidden /></Link>
+          <button onClick={() => handleDelete(t)} aria-label={`Delete ${t.name}`} title="Delete" className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 className="w-4 h-4" aria-hidden /></button>
+        </div>
+      ),
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- cells call the latest handlers
+  ], []);
+
+  const filters = useMemo<TableFilter<Tool>[]>(() => [
+    { key: 'status', label: 'Status', options: ['PENDING', 'APPROVED', 'ARCHIVED'].map((v) => ({ value: v, label: label(v) })), matches: (t, v) => t.status === v },
+    { key: 'review', label: 'Content review', options: [{ value: 'under_review', label: 'Under review' }, { value: 'reviewed', label: 'Reviewed' }], matches: (t, v) => t.contentReviewed === (v === 'reviewed') },
+    // Built from the tools themselves, so every category in the list can be picked, whatever level it sits at.
+    { key: 'category', label: 'Category', options: [...new Set(tools.map((t) => t.categoryName).filter((v): v is string => !!v))].sort().map((v) => ({ value: v, label: v })), matches: (t, v) => t.categoryName === v },
+    { key: 'tier', label: 'Listing', options: listingTiers.map((v) => ({ value: v, label: label(v) })), matches: (t, v) => t.listingTier === v },
+    { key: 'pricing', label: 'Pricing', options: [...new Set(tools.map((t) => t.pricingModel).filter(Boolean))].sort().map((v) => ({ value: v, label: label(v) })), matches: (t, v) => t.pricingModel === v },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [tools, categories]);
+
+  const bulk = (work: (ids: string[]) => Promise<{ success: boolean; error?: string }>, done: string) => async (rows: Tool[]) => {
+    await run(() => work(rows.map((r) => r.id)), `${rows.length} tool${rows.length === 1 ? '' : 's'} ${done}.`, `Couldn't update the selected tools.`);
+  };
+  const bulkActions = useMemo<BulkAction<Tool>[]>(() => [
+    { label: 'Approve', run: bulk(bulkApproveToolsAction, 'approved'), confirm: (n) => `Approve ${n} tool${n === 1 ? '' : 's'}? They go live on the website.` },
+    { label: 'Archive', run: bulk(bulkArchiveToolsAction, 'archived'), confirm: (n) => `Archive ${n} tool${n === 1 ? '' : 's'}? They leave the website but are kept here.` },
+    { label: 'Delete', danger: true, run: bulk(bulkDeleteToolsAction, 'deleted'), confirm: (n) => `Delete ${n} tool${n === 1 ? '' : 's'} for good? Only super admins can do this. This can't be undone.` },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], []);
 
   return (
     <div className="space-y-6">
       {rejecting && <RejectToolDialog toolName={rejecting.name} onCancel={() => setRejecting(null)} onReject={handleReject} />}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">AI Tools Directory</h1>
-          <p className="text-gray-400 dark:text-gray-500 text-sm font-jakarta mt-1">
+          <h1 className="portal-title">AI tools directory</h1>
+          <p className="portal-subtitle">
             Manage AI tools • {pendingCount > 0 ? <span className="text-amber-500 font-semibold">{pendingCount} pending</span> : 'All approved'} • {featuredCount} featured • {underReviewCount > 0 ? <span className="text-orange-400 font-semibold">{underReviewCount} under review</span> : 'All reviewed'}
           </p>
         </div>
@@ -265,331 +290,22 @@ export default function ToolsDirPage() {
           <button onClick={() => router.push('/tools-dir/tags')} className="btn-outline text-xs flex items-center gap-1.5 px-3 py-2">
             Tags
           </button>
-          <button onClick={openCreate} className="btn-brand text-sm flex items-center gap-2">
-            <Plus className="w-4 h-4" /> Add Tool
-          </button>
+          <Link href="/tools-dir/new" className="btn-brand text-sm gap-2"><Plus className="w-4 h-4" aria-hidden /> Add tool</Link>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input type="text" placeholder="Search tools..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="input-field pl-10" />
-        </div>
-        <select
-          value={filterReview}
-          onChange={(e) => { setFilterReview(e.target.value as any); setPage(1); }}
-          className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-jakarta text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-brand"
-        >
-          <option value="all">All Reviews</option>
-          <option value="under_review">Under Review</option>
-          <option value="reviewed">Reviewed</option>
-        </select>
-        <select
-          value={filterStatus}
-          onChange={(e) => { setFilterStatus(e.target.value as any); setPage(1); }}
-          className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-jakarta text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-brand"
-        >
-          <option value="all">All Statuses</option>
-          <option value="PENDING">Pending</option>
-          <option value="APPROVED">Approved</option>
-          <option value="ARCHIVED">Archived</option>
-        </select>
-      </div>
-
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-gray-50 dark:bg-gray-800/50 text-left">
-              <th className="px-3 py-3 w-10">
-                <input
-                  type="checkbox"
-                  checked={selectedIds.size === filtered.length && filtered.length > 0}
-                  onChange={(e) => {
-                    if (e.target.checked) setSelectedIds(new Set(filtered.map(t => t.id)));
-                    else setSelectedIds(new Set());
-                  }}
-                  className="w-4 h-4 text-brand border-gray-300 rounded focus:ring-brand"
-                />
-              </th>
-              <th className="px-4 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Tool</th>
-              <th className="px-4 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden md:table-cell">Category</th>
-              <th className="px-4 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden lg:table-cell">Pricing</th>
-              <th className="px-4 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Review</th>
-              <th className="px-4 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Status</th>
-              <th className="px-4 py-3 font-jakarta font-semibold text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Tier</th>
-              <th className="px-4 py-3 w-20"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {paginated.map((tool) => (
-              <tr key={tool.id} className="border-t border-gray-50 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
-                <td className="px-3 py-3">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(tool.id)}
-                    onChange={(e) => {
-                      const next = new Set(selectedIds);
-                      if (e.target.checked) next.add(tool.id);
-                      else next.delete(tool.id);
-                      setSelectedIds(next);
-                    }}
-                    className="w-4 h-4 text-brand border-gray-300 rounded focus:ring-brand"
-                  />
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center overflow-hidden shrink-0">
-                      {tool.logoUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={tool.logoUrl} alt={tool.name} className="w-full h-full object-contain p-0.5" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                      ) : (
-                        <Wrench className="w-3.5 h-3.5 text-brand" />
-                      )}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <h4 className="font-sora font-semibold text-xs text-navy dark:text-white">{tool.name}</h4>
-                        {tool.listingTier === 'FEATURED' && <Crown className="w-3 h-3 text-yellow-500" />}
-                      </div>
-                      <p className="text-[10px] text-gray-400 font-jakarta line-clamp-1 max-w-[160px]">{tool.tagline}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-4 py-3 hidden md:table-cell whitespace-nowrap">
-                  <span className="badge-category text-[9px] px-2 py-0.5">{tool.categoryName || '—'}</span>
-                </td>
-                <td className="px-4 py-3 hidden lg:table-cell whitespace-nowrap">
-                  <span className="text-xs text-gray-600 dark:text-gray-400 font-jakarta">{tool.pricingModel}</span>
-                </td>
-                {/* Content Review chip */}
-                <td className="px-4 py-3 whitespace-nowrap">
-                  <button
-                    onClick={() => handleToggleReview(tool.id, tool.contentReviewed)}
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide cursor-pointer transition-colors ${
-                      tool.contentReviewed
-                        ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
-                        : 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400'
-                    }`}
-                    title={tool.contentReviewed ? 'Mark as Under Review' : 'Mark as Reviewed'}
-                  >
-                    {tool.contentReviewed
-                      ? <><CheckCircle className="w-2.5 h-2.5" /> Reviewed</>
-                      : <><Clock className="w-2.5 h-2.5" /> Under Review</>
-                    }
-                  </button>
-                </td>
-                {/* Status */}
-                <td className="px-4 py-3 whitespace-nowrap">
-                  {tool.status === 'PENDING' ? (
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleApprove(tool.id)}
-                        className="p-1 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20"
-                        title="Approve"
-                      >
-                        <CheckCircle className="w-3.5 h-3.5 text-green-500" />
-                      </button>
-                      <button
-                        onClick={() => setRejecting({ id: tool.id, name: tool.name })}
-                        className="p-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
-                        title="Reject"
-                      >
-                        <XCircle className="w-3.5 h-3.5 text-red-500" />
-                      </button>
-                      <span className="text-[9px] text-orange-500 font-bold ml-0.5">PENDING</span>
-                    </div>
-                  ) : (
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                      tool.status === 'APPROVED'
-                        ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
-                    }`}>
-                      {tool.status === 'APPROVED' && <CheckCircle className="w-2.5 h-2.5" />}
-                      {tool.status}
-                    </span>
-                  )}
-                </td>
-                {/* Tier */}
-                <td className="px-4 py-3 whitespace-nowrap">
-                  <button
-                    onClick={() => openFeatureModal(tool)}
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold cursor-pointer transition-colors ${
-                      tool.listingTier === 'FEATURED'
-                        ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
-                        : tool.listingTier === 'PRIORITY'
-                        ? 'bg-brand/10 dark:bg-brand/20 text-brand'
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-yellow-50'
-                    }`}
-                  >
-                    {tool.listingTier === 'FEATURED' ? (
-                      <><Crown className="w-2.5 h-2.5 fill-current" /> Featured</>
-                    ) : tool.listingTier === 'PRIORITY' ? (
-                      <><Crown className="w-2.5 h-2.5" /> Priority</>
-                    ) : (
-                      <><Calendar className="w-2.5 h-2.5" /> Schedule</>
-                    )}
-                  </button>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => openEdit(tool)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
-                      <Edit3 className="w-3.5 h-3.5 text-gray-400" />
-                    </button>
-                    <button onClick={() => setDeleteConfirm(tool.id)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20">
-                      <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-500" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {paginated.length === 0 && (
-              <TableEmptyState colSpan={8} icon={Wrench} title="No tools found" description="Try adjusting your search or filters" />
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <Pagination page={page} totalPages={totalPages} total={totalFiltered} pageSize={PAGE_SIZE} onPageChange={setPage} />
-
-      {/* Bulk Action Bar */}
-      {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-gray-900 dark:bg-gray-800 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-4 border border-gray-700">
-          <span className="text-sm font-semibold font-jakarta">{selectedIds.size} selected</span>
-          <div className="w-px h-6 bg-gray-700" />
-          <button
-            onClick={() => setBulkAction('approve')}
-            className="px-3 py-1.5 text-xs font-semibold bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
-          >
-            Approve All
-          </button>
-          <button
-            onClick={() => setBulkAction('archive')}
-            className="px-3 py-1.5 text-xs font-semibold bg-orange-600 hover:bg-orange-700 rounded-lg transition-colors"
-          >
-            Archive All
-          </button>
-          <button
-            onClick={() => setBulkDeleteConfirm(true)}
-            className="px-3 py-1.5 text-xs font-semibold bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
-          >
-            Delete All
-          </button>
-          <button onClick={() => setSelectedIds(new Set())} className="p-1.5 text-gray-400 hover:text-white">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Delete Confirmation */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-sm shadow-2xl border border-gray-200 dark:border-gray-800 p-6 text-center">
-            <Trash2 className="w-10 h-10 text-red-500 mx-auto mb-3" />
-            <h3 className="font-sora font-bold text-lg text-navy dark:text-white">Delete Tool?</h3>
-            <p className="text-sm text-gray-500 font-jakarta mt-2">This action is permanent and cannot be undone.</p>
-            <p className="text-xs text-gray-400 font-jakarta mt-3">Type <span className="font-bold text-red-500">DELETE</span> to confirm:</p>
-            <input
-              type="text"
-              value={deleteTyped}
-              onChange={(e) => setDeleteTyped(e.target.value)}
-              placeholder="Type DELETE"
-              className="w-full mt-2 px-4 py-2 text-center text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500 focus:border-transparent font-mono tracking-widest"
-              autoFocus
-            />
-            <div className="flex gap-3 mt-4">
-              <button onClick={() => { setDeleteConfirm(null); setDeleteTyped(''); }} className="flex-1 px-4 py-2.5 text-sm font-medium border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300">Cancel</button>
-              <button onClick={() => { handleDelete(deleteConfirm); setDeleteTyped(''); }} disabled={deleteTyped !== 'DELETE'} className="flex-1 px-4 py-2.5 text-sm font-medium bg-red-500 hover:bg-red-600 text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-opacity">Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk Delete Confirmation */}
-      {bulkDeleteConfirm && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-sm shadow-2xl border border-gray-200 dark:border-gray-800 p-6 text-center">
-            <Trash2 className="w-10 h-10 text-red-500 mx-auto mb-3" />
-            <h3 className="font-sora font-bold text-lg text-navy dark:text-white">Delete {selectedIds.size} Tools?</h3>
-            <p className="text-sm text-gray-500 font-jakarta mt-2">This will permanently delete all selected tools. Only Super Admins can perform this action.</p>
-            <p className="text-xs text-gray-400 font-jakarta mt-3">Type <span className="font-bold text-red-500">DELETE</span> to confirm:</p>
-            <input
-              type="text"
-              value={bulkDeleteTyped}
-              onChange={(e) => setBulkDeleteTyped(e.target.value)}
-              placeholder="Type DELETE"
-              className="w-full mt-2 px-4 py-2 text-center text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500 focus:border-transparent font-mono tracking-widest"
-              autoFocus
-            />
-            <div className="flex gap-3 mt-4">
-              <button onClick={() => { setBulkDeleteConfirm(false); setBulkDeleteTyped(''); }} className="flex-1 px-4 py-2.5 text-sm font-medium border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300">Cancel</button>
-              <button
-                onClick={async () => {
-                  const result = await bulkDeleteToolsAction([...selectedIds]);
-                  if (!result.success) setPermissionError(result.error || 'Permission denied');
-                  else { setSelectedIds(new Set()); await loadData(); }
-                  setBulkDeleteConfirm(false);
-                  setBulkDeleteTyped('');
-                }}
-                disabled={bulkDeleteTyped !== 'DELETE'}
-                className="flex-1 px-4 py-2.5 text-sm font-medium bg-red-500 hover:bg-red-600 text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
-              >
-                Delete All
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Permission Denied Modal */}
-      {permissionError && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-sm shadow-2xl border border-gray-200 dark:border-gray-800 p-6 text-center">
-            <div className="w-14 h-14 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-7 h-7 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-              </svg>
-            </div>
-            <h3 className="font-sora font-bold text-lg text-navy dark:text-white">Permission Denied</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 font-jakarta mt-2 leading-relaxed">{permissionError}</p>
-            <button
-              onClick={() => setPermissionError(null)}
-              className="mt-5 w-full px-4 py-2.5 text-sm font-medium bg-gray-900 dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-100 text-white dark:text-gray-900 rounded-xl transition-colors"
-            >
-              Understood
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk Approve/Archive Confirm Modal */}
-      <ConfirmModal
-        open={bulkAction === 'approve'}
-        onClose={() => setBulkAction(null)}
-        onConfirm={async () => {
-          setBulkAction(null);
-          await bulkApproveToolsAction([...selectedIds]);
-          setSelectedIds(new Set());
-          await loadData();
-        }}
-        title="Approve Tools"
-        message={`Approve ${selectedIds.size} tools?`}
-        confirmLabel="Approve"
-        variant="warning"
-      />
-      <ConfirmModal
-        open={bulkAction === 'archive'}
-        onClose={() => setBulkAction(null)}
-        onConfirm={async () => {
-          setBulkAction(null);
-          await bulkArchiveToolsAction([...selectedIds]);
-          setSelectedIds(new Set());
-          await loadData();
-        }}
-        title="Archive Tools"
-        message={`Archive ${selectedIds.size} tools?`}
-        confirmLabel="Archive"
-        variant="warning"
+      <DataTable
+        tableId="tools-dir"
+        noun="tools"
+        rows={tools}
+        rowKey={(t) => t.id}
+        columns={columns}
+        filters={filters}
+        bulkActions={bulkActions}
+        loading={loading}
+        pageSize={20}
+        searchPlaceholder="Search tool, tagline, category or owner email"
+        empty={{ title: 'No tools yet', description: 'Tools submitted by founders, or added by you, appear here.' }}
       />
 
       {/* Tool Featured Campaign Scheduling Modal */}

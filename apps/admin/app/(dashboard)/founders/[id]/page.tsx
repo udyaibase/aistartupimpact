@@ -1,5 +1,6 @@
 'use client';
 
+import { notify } from '@/components/Toast';
 import RejectToolDialog from '@/components/RejectToolDialog';
 import FounderActivityPanel from '@/components/FounderActivityPanel';
 import { useState, useEffect, use } from 'react';
@@ -111,10 +112,10 @@ Directory listings they only claimed stay public, without an owner. Paid invoice
       onConfirm: async () => {
         const result = await deleteFounderAction(params.id);
         if (result.success) {
-          alert('Founder deleted successfully');
+          notify('Founder deleted successfully');
           router.push('/founders');
         } else {
-          alert(`Failed to delete: ${result.error}`);
+          notify(`Failed to delete: ${result.error}`);
         }
         setConfirmAction(null);
       },
@@ -137,10 +138,10 @@ Directory listings they only claimed stay public, without an owner. Paid invoice
       onConfirm: async () => {
         const result = await updateFounderStatusAction(params.id, newStatus);
         if (result.success) {
-          alert('Status updated successfully');
+          notify('Status updated successfully');
           loadFounder();
         } else {
-          alert(`Failed to update status: ${result.error}`);
+          notify(`Failed to update status: ${result.error}`);
         }
         setConfirmAction(null);
       },
@@ -248,7 +249,7 @@ Directory listings they only claimed stay public, without an owner. Paid invoice
             <div className="flex-1 mt-4">
               <div className="flex items-start justify-between">
                 <div>
-                  <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">{founder.name}</h1>
+                  <h1 className="portal-title">{founder.name}</h1>
                   {founder.role && (
                     <p className="text-gray-600 dark:text-gray-400 font-jakarta mt-1">{founder.role}</p>
                   )}
@@ -593,13 +594,13 @@ Directory listings they only claimed stay public, without an owner. Paid invoice
                                     try {
                                       const res = await fetch(`/api/admin/tools/${tool.id}/approve`, { method: 'POST' });
                                       if (res.ok) {
-                                        alert('Tool approved!');
+                                        notify('Tool approved!');
                                         loadFounder();
                                       } else {
-                                        alert('Failed to approve');
+                                        notify('Failed to approve');
                                       }
                                     } catch (err) {
-                                      alert('Error approving tool');
+                                      notify('Error approving tool');
                                     }
                                     setConfirmAction(null);
                                   },
@@ -887,7 +888,7 @@ Directory listings they only claimed stay public, without an owner. Paid invoice
                     <button
                       onClick={async () => {
                         if (!rejectReason.trim()) {
-                          alert('Rejection reason is required');
+                          notify('Rejection reason is required');
                           return;
                         }
                         setActionLoading(true);
@@ -898,15 +899,15 @@ Directory listings they only claimed stay public, without an owner. Paid invoice
                             body: JSON.stringify({ reason: rejectReason.trim() })
                           });
                           if (res.ok) {
-                            alert('Startup rejected successfully');
+                            notify('Startup rejected successfully');
                             setViewingStartup(null);
                             loadFounder();
                           } else {
                             const data = await res.json();
-                            alert(`Failed to reject: ${data.error || 'Unknown error'}`);
+                            notify(`Failed to reject: ${data.error || 'Unknown error'}`);
                           }
                         } catch (err) {
-                          alert('Error rejecting startup');
+                          notify('Error rejecting startup');
                         } finally {
                           setActionLoading(false);
                         }
@@ -966,15 +967,15 @@ Directory listings they only claimed stay public, without an owner. Paid invoice
                             try {
                               const res = await fetch(`/api/founder/startups/${viewingStartup.id}/approve`, { method: 'POST' });
                               if (res.ok) {
-                                alert('Startup approved successfully!');
+                                notify('Startup approved successfully!');
                                 setViewingStartup(null);
                                 loadFounder();
                               } else {
                                 const data = await res.json();
-                                alert(`Failed to approve: ${data.error || 'Unknown error'}`);
+                                notify(`Failed to approve: ${data.error || 'Unknown error'}`);
                               }
                             } catch (err) {
-                              alert('Error approving startup');
+                              notify('Error approving startup');
                             } finally {
                               setActionLoading(false);
                             }

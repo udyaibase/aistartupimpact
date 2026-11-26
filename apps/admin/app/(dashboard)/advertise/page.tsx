@@ -159,8 +159,8 @@ export default function AdvPackagesPage() {
 
       {/* Header */}
       <div>
-        <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Advertise Packages</h1>
-        <p className="text-gray-400 text-sm font-jakarta mt-1">Manage founder advertising packages, zone activations, and social posts</p>
+        <h1 className="portal-title">Advertise Packages</h1>
+        <p className="portal-subtitle">Manage founder advertising packages, zone activations, and social posts</p>
       </div>
 
       {/* Stats */}

@@ -4,6 +4,7 @@ import { button, esc, shell } from '@/lib/jobs/apply-emails';
 import { emailInvoice } from '@/lib/billing/invoice';
 import { purchaseToken, subscribeWithConsent } from '@/lib/funding/access';
 import { CONSENT_TEXT, isPackKey, PACKS, rupees } from '@/lib/funding/packs';
+import { recordRazorpayFee } from '@/lib/billing/razorpay-fee';
 
 const SITE = () => (process.env.NEXT_PUBLIC_SITE_URL || 'https://udyaibase.com').replace(/\/$/, '');
 const DAY = 864e5;
@@ -25,6 +26,7 @@ export async function activateFundingPurchase(orderId: string, paymentId: string
     data: { status: 'SUCCESS', razorpayPaymentId: paymentId, paidAt: now, failedAt: null, accessExpiresAt: new Date(now.getTime() + days * DAY) },
   });
   if (!flipped.count) return 'already';
+  recordRazorpayFee(paymentId); // after the response; never blocks or fails the payment
 
   // Only buyers who ticked the optional newsletter box at checkout are subscribed.
   if (p.consentText === CONSENT_TEXT) await subscribeWithConsent(p.email, 'funding_paid', p.consentAt).catch((e) => console.error('[funding-data] subscribe', e instanceof Error ? e.message : e));

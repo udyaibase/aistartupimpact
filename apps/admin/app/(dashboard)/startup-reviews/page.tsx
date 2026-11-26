@@ -1,26 +1,31 @@
 import { neon } from "@neondatabase/serverless";
 import StartupReviewsClient from "./StartupReviewsClient";
+import { requirePageRole } from "@/lib/api-auth";
+import { sectionRoles } from "@/lib/section-access";
+import type { Review } from "@/components/reviews/ReviewsTable";
 
 export const metadata = {
-  title: "Startup Reviews | Udyaibase Admin",
+  title: "Startup reviews | Udyaibase Admin",
 };
 
 export default async function StartupReviewsPage() {
+  // This page reads reviews (with reviewers' emails) directly, so it checks the role itself.
+  await requirePageRole(sectionRoles("/startup-reviews"));
   const sql = neon(process.env.DATABASE_URL!);
-  
-  const rawReviews = await sql`
-     SELECT 
+
+  // Reviews are written by website users (WebUser), not staff accounts.
+  const rows = await sql`
+     SELECT
        r.id, r.rating, r.title, r.body, r.status, r."proofImageUrl", r."createdAt"::text AS "createdAt", r."helpfulCount",
        u.name AS user_name, u.email AS user_email, u.avatar AS user_avatar,
-       s.name AS startup_name, s.slug AS startup_slug
+       s.name AS subject_name, s.slug AS subject_slug
      FROM "StartupReview" r
      LEFT JOIN "WebUser" u ON u.id = r."userId"
      LEFT JOIN "Startup" s ON s.id = r."startupId"
      ORDER BY r."createdAt" DESC
   `;
 
-  // Map to match the expected formatting
-  const reviews = rawReviews.map((r: any) => ({
+  const reviews: Review[] = rows.map((r: any) => ({
     id: r.id,
     rating: r.rating,
     title: r.title,
@@ -30,19 +35,18 @@ export default async function StartupReviewsPage() {
     createdAt: r.createdAt,
     helpfulCount: r.helpfulCount || 0,
     user: { name: r.user_name, email: r.user_email, avatar: r.user_avatar },
-    startup: { name: r.startup_name, slug: r.startup_slug }
+    subject: { name: r.subject_name, slug: r.subject_slug },
   }));
 
-  return (
-    <div className="p-6 md:p-10 space-y-8 max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-sora font-bold text-navy dark:text-white">Startup Reviews Moderation</h1>
-          <p className="text-gray-500 font-jakarta mt-1">Manage, approve, or flag user reviews written across all Startups.</p>
-        </div>
-      </div>
+  const site = (process.env.NEXT_PUBLIC_SITE_URL || "https://udyaibase.com").replace(/\/$/, "");
 
-      <StartupReviewsClient initialReviews={reviews} />
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="portal-title">Startup reviews</h1>
+        <p className="portal-subtitle">Approve, flag or delete the reviews people write about startups.</p>
+      </div>
+      <StartupReviewsClient initialReviews={reviews} publicBase={`${site}/startups`} />
     </div>
   );
 }

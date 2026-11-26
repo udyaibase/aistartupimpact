@@ -22,7 +22,7 @@ const MORE: { href: string; icon: typeof Rocket; label: string; desc: string }[]
   { href: '/founder/profile', icon: User, label: 'Profile', desc: 'Your public founder profile' },
   { href: '/founder/settings', icon: Settings, label: 'Settings', desc: 'Notifications, privacy and security' },
   { href: '/founder/activity', icon: History, label: 'Activity log', desc: 'Sign-ins and changes on your account' },
-  { href: '/founder/support', icon: HelpCircle, label: 'Support', desc: 'Get help from our team' },
+  { href: '/founder/support', icon: HelpCircle, label: 'Help & support', desc: 'Get help from our team' },
 ];
 
 /** Phone navigation: same tabs-and-More pattern as the employer and host portals. */

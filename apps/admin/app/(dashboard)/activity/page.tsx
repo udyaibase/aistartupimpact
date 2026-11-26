@@ -1,7 +1,8 @@
 import { requireRole } from '@/lib/role-guard';
 import ActivityDashboard from './ActivityDashboard';
+import { sectionRoles } from '@/lib/section-access';
 
 export default async function ActivityPage() {
-  await requireRole(['SUPER_ADMIN', 'EDITOR_IN_CHIEF']);
+  await requireRole(sectionRoles('/activity'));
   return <ActivityDashboard />;
 }

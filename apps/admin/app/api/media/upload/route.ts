@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { ALLOWED_ROLES, uploadToMediaLibrary } from "@/lib/media";
+import { publicError } from '@/lib/public-error';
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,6 +26,6 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("API media upload error:", error);
     const status = error.message?.includes("not allowed") || error.message?.includes("too large") ? 400 : 500;
-    return NextResponse.json({ error: error.message || "Upload failed" }, { status });
+    return NextResponse.json({ error: publicError(error) || "Upload failed" }, { status });
   }
 }

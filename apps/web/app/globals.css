@@ -600,6 +600,31 @@
   .dark .article-content blockquote {
     background-color: color-mix(in srgb, var(--brand-color) 10%, transparent);
   }
+  /* Picture captions and credits: small and quiet under the picture, never body-sized. Sized in rem so they stay
+     small where the article text is larger (stories, wide screens). */
+  .article-content figure {
+    margin-top: 1.75em;
+    margin-bottom: 1.75em;
+  }
+  .article-content figure > img {
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+  .article-content figcaption {
+    margin-top: 0.5rem;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    font-style: normal;
+    font-weight: 400;
+    text-align: center;
+    color: #6b7280;
+  }
+  .dark .article-content figcaption {
+    color: #9ca3af;
+  }
+  .article-content figcaption:empty {
+    display: none;
+  }
   /* Links are plain (underline on hover); editors can underline one link (class set in the admin editor). */
   .article-content a.link-underline {
     text-decoration: underline;

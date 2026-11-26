@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isPaidPlan, PLANS, type PlanKey } from '@udyaibase/utils/employer-plans';
 import { neon } from '@neondatabase/serverless';
 import { requireApiAuth } from '@/lib/api-auth';
+import { sectionRoles } from '@/lib/section-access';
 import { logAuditEvent } from '@/lib/audit-log';
 import { withPublicRefresh } from '@/lib/refresh-public';
 
@@ -9,7 +10,7 @@ const sql = neon(process.env.DATABASE_URL!);
 
 async function putHandler(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
-  const { session, error } = await requireApiAuth();
+  const { session, error } = await requireApiAuth(sectionRoles('/employers')); // same roles as the screen that calls it
   if (error) return error;
 
   try {

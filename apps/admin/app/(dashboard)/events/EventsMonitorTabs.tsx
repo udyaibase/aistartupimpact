@@ -53,7 +53,7 @@ export default function EventsMonitorTabs({ data }: Props) {
     <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Events Monitor</h1>
+        <h1 className="portal-title">Events Monitor</h1>
         <a href="/api/events/export" download className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors">
           <Download className="w-3.5 h-3.5" /> Export CSV
         </a>

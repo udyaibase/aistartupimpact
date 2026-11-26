@@ -8,7 +8,7 @@ import { join, relative } from 'path';
  */
 
 const ROOT = join(__dirname, '..', '..');
-const GUARD = /\b(requireActionAuth|requireApiAuth|getServerSession|verifyAdmin|viewer|requireRole|canDelete)\s*\(/;
+const GUARD = /\b(requireActionAuth|requireFormAuth|requireApiAuth|getServerSession|verifyAdmin|viewer|requireRole|canDelete)\s*\(/;
 
 /** Exports that touch no data and need no session. Keep this list short and explain each entry. */
 const ALLOWED: Record<string, string[]> = {
@@ -42,8 +42,31 @@ function unguarded(): string[] {
   return missing;
 }
 
+/**
+ * Actions written inside a page file: `async function save(formData) { 'use server'; ... }`.
+ * The check has to be the first thing the action does, so it must appear within a few lines of the directive.
+ */
+function unguardedInline(): string[] {
+  const missing: string[] = [];
+  for (const file of [...walk(join(ROOT, 'app')), ...walk(join(ROOT, 'lib')), ...walk(join(ROOT, 'components'))]) {
+    const src = readFileSync(file, 'utf8');
+    if (/^\s*['"]use server['"]/.test(src)) continue; // whole-file actions are covered above
+    const lines = src.split('\n');
+    lines.forEach((line, i) => {
+      if (!/^\s+['"]use server['"];?\s*$/.test(line)) return;
+      const start = lines.slice(i + 1, i + 6).join('\n');
+      if (!GUARD.test(start)) missing.push(`${relative(ROOT, file)}: line ${i + 1}`);
+    });
+  }
+  return missing;
+}
+
 describe('admin server actions', () => {
   it('every exported action checks the session', () => {
     expect(unguarded()).toEqual([]);
+  });
+
+  it('every action written inside a page checks the session first', () => {
+    expect(unguardedInline()).toEqual([]);
   });
 });

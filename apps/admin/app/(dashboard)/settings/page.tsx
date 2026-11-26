@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { Settings, Globe, Palette, Bell, Shield, Save, Check, Database, Loader2, Smartphone, Copy, CheckCircle2, XCircle, AlertTriangle, Upload, Type, X } from 'lucide-react';
 import { getSettingsAction, saveSettingsAction } from './actions';
 import SystemInfoSection from './SystemInfoSection';
+import { notify } from '@/components/Toast';
 
 const sections = [
   { id: 'general', label: 'General', icon: Settings },
@@ -47,6 +48,7 @@ export default function SettingsPage() {
         }
       } catch (error) {
         console.error('Error loading settings:', error);
+        notify("Couldn't load this. Check your connection and refresh.", 'error');
       }
       setLoading(false);
     };
@@ -92,8 +94,8 @@ export default function SettingsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Settings</h1>
-          <p className="text-gray-400 dark:text-gray-500 text-sm font-jakarta mt-1">Configure site-wide settings</p>
+          <h1 className="portal-title">Settings</h1>
+          <p className="portal-subtitle">Configure site-wide settings</p>
         </div>
         <button onClick={handleSave} disabled={saving}
           className={`text-sm flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold transition-all disabled:opacity-50 ${saved ? 'bg-green-500 text-white' : 'btn-brand'}`}>

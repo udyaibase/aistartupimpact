@@ -85,9 +85,14 @@ export const authOptions: NextAuthOptions = {
       if (emailToLookup && (user || trigger === "update" || due)) {
         const dbUser = await prisma.user.findUnique({
           where: { email: emailToLookup as string },
-          select: { id: true, role: true, slug: true, twoFactorEnabled: true },
+          select: { id: true, role: true, slug: true, twoFactorEnabled: true, isActive: true },
         });
-        if (dbUser) {
+        // Access ends within one refresh (5 minutes) when the account is deactivated or deleted, not when the
+        // 8-hour session runs out. A revoked token carries no role, so every role check fails too.
+        token.revoked = !dbUser || dbUser.isActive === false;
+        if (token.revoked) {
+          (token as Record<string, unknown>).role = undefined;
+        } else if (dbUser) {
           const wasEnabled = token.twoFactorEnabled === true;
           token.id = dbUser.id;
           token.role = dbUser.role;
@@ -117,6 +122,7 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (token && session.user) {
+        (session as any).revoked = token.revoked === true;
         session.user.id = token.id as string;
         session.user.role = token.role as UserRole;
         session.user.slug = token.slug as string;

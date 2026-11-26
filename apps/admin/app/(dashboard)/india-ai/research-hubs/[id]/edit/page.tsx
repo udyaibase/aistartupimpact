@@ -3,6 +3,9 @@ import { notFound, redirect } from 'next/navigation';
 import { prisma } from '@udyaibase/database';
 import ResearchHubForm from '../../ResearchHubForm';
 import { refreshPublic } from '@/lib/refresh-public';
+import { requireFormAuth } from '@/lib/api-auth';
+import { formFields } from '@/lib/form-fields';
+import { logAuditEvent } from '@/lib/audit-log';
 
 export const metadata: Metadata = {
   title: 'Edit Research Institution | Admin',
@@ -21,8 +24,11 @@ export default async function EditResearchHubPage(props: { params: Promise<{ id:
   async function updateInstitution(formData: FormData) {
     'use server';
 
-    const researchAreas = (formData.get('researchAreas') as string).split('\n').filter(Boolean);
-    const labsRaw = (formData.get('labs') as string).split('\n').filter(Boolean);
+    await requireFormAuth();
+    const f = formFields(formData);
+
+    const researchAreas = f.lines('researchAreas');
+    const labsRaw = f.lines('labs');
     const parsedLabs = labsRaw.map(line => {
       const [name, ...descParts] = line.split('|');
       return { name: name.trim(), description: descParts.join('|').trim() };
@@ -31,27 +37,29 @@ export default async function EditResearchHubPage(props: { params: Promise<{ id:
     await prisma.aIResearchInstitution.update({
       where: { id: params.id },
       data: {
-        name: formData.get('name') as string,
-        city: formData.get('city') as string,
-        state: formData.get('state') as string,
-        tag: formData.get('tag') as string,
-        category: formData.get('category') as string,
-        aiCentre: (formData.get('aiCentre') as string) || null,
-        dept: (formData.get('dept') as string) || null,
-        faculty: (formData.get('faculty') as string) || null,
-        students: (formData.get('students') as string) || null,
-        programs: (formData.get('programs') as string) || null,
-        fundedBy: (formData.get('fundedBy') as string) || null,
-        bharatGen: (formData.get('bharatGen') as string) || null,
-        appliedAI: (formData.get('appliedAI') as string) || null,
+        name: f.required('name', 300),
+        city: f.text('city'),
+        state: f.text('state'),
+        tag: f.text('tag'),
+        category: f.text('category'),
+        aiCentre: f.optional('aiCentre'),
+        dept: f.optional('dept'),
+        faculty: f.optional('faculty'),
+        students: f.optional('students'),
+        programs: f.optional('programs'),
+        fundedBy: f.optional('fundedBy'),
+        bharatGen: f.optional('bharatGen'),
+        appliedAI: f.optional('appliedAI'),
         researchAreas,
         labs: parsedLabs,
-        link: formData.get('link') as string,
-        linkLabel: formData.get('linkLabel') as string,
-        displayOrder: parseInt(formData.get('displayOrder') as string) || 0,
-        isActive: formData.get('isActive') === 'on',
+        link: f.url('link'),
+        linkLabel: f.text('linkLabel'),
+        displayOrder: f.int('displayOrder'),
+        isActive: f.flag('isActive'),
       },
     });
+
+    await logAuditEvent({ action: 'UPDATE', resourceType: 'AI_RESEARCH_INSTITUTION', resourceId: params.id, resourceName: String(formData.get('name') ?? formData.get('title') ?? formData.get('metricLabel') ?? formData.get('component') ?? '').slice(0, 200) });
 
     await refreshPublic(['india-ai', 'home']);
 
@@ -61,8 +69,8 @@ export default async function EditResearchHubPage(props: { params: Promise<{ id:
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Edit: {institution.name}</h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Update institution details</p>
+        <h1 className="portal-title">Edit: {institution.name}</h1>
+        <p className="portal-subtitle">Update institution details</p>
       </div>
       <ResearchHubForm
         action={updateInstitution}

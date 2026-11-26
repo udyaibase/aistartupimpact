@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
 import { prisma } from "@udyaibase/database";
+import { logAuditEvent } from '@/lib/audit-log';
 
 export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -42,5 +43,6 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
     data,
   });
 
+  await logAuditEvent({ action: 'UPDATE', resourceType: 'SUPPORT', resourceId: params.id, resourceName: 'support-tickets/[id]' });
   return NextResponse.json({ success: true, ticket });
 }

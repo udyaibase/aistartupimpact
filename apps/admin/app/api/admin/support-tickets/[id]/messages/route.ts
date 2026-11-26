@@ -5,6 +5,7 @@ import { notifyOrganizer } from "@/lib/organizer-notify";
 import { requireApiAuth } from "@/lib/api-auth";
 import { prisma } from "@udyaibase/database";
 import { sendEmailFireAndForget } from "@/lib/email-send";
+import { logAuditEvent } from '@/lib/audit-log';
 
 const SITE = (process.env.NEXT_PUBLIC_SITE_URL || "https://udyaibase.com").replace(/\/$/, "");
 const PORTAL_PATH: Record<string, string> = { EMPLOYER: "/employer/support", FOUNDER: "/founder/support", ORGANIZER: "/organizer/support" };
@@ -63,5 +64,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     }
   }
 
+  await logAuditEvent({ action: 'CREATE', resourceType: 'SUPPORT', resourceId: params.id, resourceName: 'support-tickets/[id]/messages' });
   return NextResponse.json({ success: true, message });
 }

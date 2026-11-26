@@ -1,7 +1,7 @@
+import { verifyUserToken } from '@/lib/user-session';
 import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
-import { jwtVerify } from 'jose';
 import { refreshPaths } from '@/lib/revalidate';
 
 export const dynamic = 'force-dynamic';
@@ -11,13 +11,11 @@ const DAILY_UPVOTE_CAP = 20;
 const MIN_ACCOUNT_AGE_HOURS = 24;
 
 async function getUserFromRequest(request: NextRequest): Promise<{ id: string; createdAt: Date } | null> {
-  const token = request.cookies.get('user-token')?.value;
-  if (!token) return null;
+  const ids = await verifyUserToken(request.cookies.get('user-token')?.value);
+  if (!ids) return null;
 
   try {
-    const verified = await jwtVerify(token, JWT_SECRET);
-    const payload = verified.payload as any;
-    const users = await sql`SELECT id, "createdAt" FROM "WebUser" WHERE id = ${payload.userId} AND "isActive" = true LIMIT 1`;
+    const users = await sql`SELECT id, "createdAt" FROM "WebUser" WHERE id = ${ids.userId} AND "isActive" = true LIMIT 1`;
     if (users.length === 0) return null;
     return { id: users[0].id, createdAt: new Date(users[0].createdAt) };
   } catch {

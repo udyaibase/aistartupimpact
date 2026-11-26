@@ -1,5 +1,6 @@
 'use client';
 
+import { notify } from '@/components/Toast';
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Upload, Loader2, Save, Crown } from 'lucide-react';
@@ -53,6 +54,7 @@ export default function NewStartupPage() {
         if (dSocialLinks) setSocialLinks(dSocialLinks);
       } catch (e) {
         console.error('Failed to restore startup draft:', e);
+        notify("Something went wrong. Check your connection and try again.", 'error');
       }
     }
     setDraftLoaded(true);
@@ -109,10 +111,10 @@ export default function NewStartupPage() {
       if (result.success && result.url) {
         setFormData(prev => ({ ...prev, logoUrl: result.url! }));
       } else {
-        alert('Upload failed: ' + (result.error || 'Unknown error'));
+        notify('Upload failed: ' + (result.error || 'Unknown error'));
       }
     } catch (err: any) {
-      alert('Upload error: ' + err.message);
+      notify('Upload error: ' + err.message);
     } finally {
       setLogoUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -134,7 +136,7 @@ export default function NewStartupPage() {
     if (!formData.employeeCount) missingFields.push('Employee Count');
     if (!foundersDetails.some(f => f.name.trim())) missingFields.push('At least 1 Founder');
     if (missingFields.length > 0) {
-      alert('Required fields missing: ' + missingFields.join(', '));
+      notify('Required fields missing: ' + missingFields.join(', '));
       return;
     }
     
@@ -156,10 +158,10 @@ export default function NewStartupPage() {
         router.push('/startups-dir');
         router.refresh();
       } else {
-        alert('Error: ' + (result.error || 'Failed to create startup'));
+        notify('Error: ' + (result.error || 'Failed to create startup'));
       }
     } catch (error: any) {
-      alert('Error: ' + error.message);
+      notify('Error: ' + error.message);
     } finally {
       setSaving(false);
     }
@@ -176,8 +178,8 @@ export default function NewStartupPage() {
           <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
         </button>
         <div>
-          <h1 className="font-sora font-extrabold text-2xl text-navy dark:text-white">Add New Startup</h1>
-          <p className="text-gray-400 dark:text-gray-500 text-sm font-jakarta mt-1">
+          <h1 className="portal-title">Add New Startup</h1>
+          <p className="portal-subtitle">
             Fill in the details to add a new startup to the directory
           </p>
         </div>

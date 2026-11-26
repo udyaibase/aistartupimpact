@@ -4,7 +4,7 @@ import { requirePagePermission } from '@/lib/employer/page-guard';
 import { loadInsights, type Insights } from '@/lib/employer/insights';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Insights' };
+export const metadata = { title: 'Analytics' };
 
 const RANGES = [30, 90] as const;
 const card = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px]';
@@ -30,7 +30,7 @@ export default async function InsightsPage(props: { searchParams: Promise<{ rang
     <div className="font-jakarta space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="portal-title">Insights</h1>
+          <h1 className="portal-title">Analytics</h1>
           <p className="portal-subtitle">Where candidates come from, how far they get, and how fast your team replies.</p>
         </div>
         <nav aria-label="Time range" className="inline-flex p-1 rounded-[12px] bg-gray-100 dark:bg-gray-800">

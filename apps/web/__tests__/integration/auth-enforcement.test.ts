@@ -34,6 +34,9 @@ vi.mock('@/lib/organizer-auth', () => ({
 vi.mock('@/lib/user-session', () => ({
   getUserSession: vi.fn(() => Promise.resolve(null)),
   isAuthenticated: vi.fn(() => Promise.resolve(false)),
+  // Nobody is signed in: the shared cookie check finds no live sign-in.
+  verifyUserToken: vi.fn(() => Promise.resolve(null)),
+  getUserIds: vi.fn(() => Promise.resolve(null)),
 }));
 
 vi.mock('@/lib/rate-limit', () => ({

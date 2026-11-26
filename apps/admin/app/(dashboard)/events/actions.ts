@@ -10,8 +10,10 @@ import { revalidatePath } from "next/cache";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { logAuditEvent, canDelete } from '@/lib/audit-log';
 import { refreshPublic } from '@/lib/refresh-public';
+import { sectionRoles } from '@/lib/section-access';
+import { publicError } from '@/lib/public-error';
 
-const EVENT_ROLES = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "EVENT_ORGANIZER"];
+const EVENT_ROLES = sectionRoles('/events');
 const adminSql = neon(process.env.DATABASE_URL!);
 
 const s3Client = new S3Client({
@@ -61,7 +63,7 @@ export async function uploadEventImageAction(formData: FormData) {
     return { success: true, data: { url } };
   } catch (error: any) {
     console.error("Event image upload error:", error);
-    return { success: false, error: error.message || "Upload failed" };
+    return { success: false, error: publicError(error) || "Upload failed" };
   }
 }
 
@@ -239,7 +241,7 @@ export async function saveEventAction(data: any) {
     if (error.code === "P2002" && error.meta?.target?.includes("slug")) {
       return { success: false, error: "This slug is already taken. Choose a different one." };
     }
-    return { success: false, error: error.message || "Failed to save event" };
+    return { success: false, error: publicError(error) || "Failed to save event" };
   }
 }
 
@@ -278,7 +280,7 @@ export async function publishEventAction(eventId: string) {
     await refreshPublic(['events', 'home']); return { success: true };
   } catch (error: any) {
     console.error("Publish event error:", error);
-    return { success: false, error: error.message || "Failed to publish" };
+    return { success: false, error: publicError(error) || "Failed to publish" };
   }
 }
 
@@ -318,7 +320,7 @@ export async function deleteEventAction(eventId: string) {
     await refreshPublic(['events', 'home']); return { success: true };
   } catch (error: any) {
     console.error("Delete event error:", error);
-    return { success: false, error: error.message || "Failed to delete" };
+    return { success: false, error: publicError(error) || "Failed to delete" };
   }
 }
 
@@ -327,7 +329,7 @@ export async function deleteEventAction(eventId: string) {
 // ─────────────────────────────────────────────────────────
 
 export async function getEventTagsAction() {
-  const { error: authError } = await requireActionAuth();
+  const { error: authError } = await requireActionAuth(sectionRoles('/events'));
   if (authError) return { success: false, error: authError };
   try {
     const tags = await prisma.eventTag.findMany({
@@ -335,7 +337,7 @@ export async function getEventTagsAction() {
     });
     return { success: true, data: tags };
   } catch (error: any) {
-    return { success: false, error: error.message };
+    return { success: false, error: publicError(error) };
   }
 }
 
@@ -344,7 +346,7 @@ export async function getEventTagsAction() {
 // ─────────────────────────────────────────────────────────
 
 export async function checkSlugAction(slug: string, excludeId?: string) {
-  const { error: authError } = await requireActionAuth();
+  const { error: authError } = await requireActionAuth(sectionRoles('/events'));
   if (authError) return { available: false };
   try {
     const existing = await prisma.event.findUnique({
@@ -503,7 +505,7 @@ export async function importScrapedEventsAction(events: {
 // ─────────────────────────────────────────────────────────
 
 export async function getEventsAction() {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/events'));
   if (error) return { success: false, error };
 
   try {
@@ -531,7 +533,7 @@ export async function getEventsAction() {
 // ─────────────────────────────────────────────────────────
 
 export async function toggleEventStatusAction(id: string, newStatus: "PUBLISHED" | "DRAFT") {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/events'));
   if (error) return { success: false, error };
 
   try {

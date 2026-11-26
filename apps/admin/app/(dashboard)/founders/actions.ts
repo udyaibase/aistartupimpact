@@ -2,11 +2,13 @@
 
 import { neon } from '@neondatabase/serverless';
 import { requireActionAuth } from '@/lib/api-auth';
+import { sectionRoles } from '@/lib/section-access';
+import { publicError } from '@/lib/public-error';
 
 const sql = neon(process.env.DATABASE_URL!);
 
 export async function getFoundersAction() {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(sectionRoles('/founders'));
   if (error) return { success: false, error };
   try {
     const founders = await sql`
@@ -44,6 +46,6 @@ export async function getFoundersAction() {
     return { success: true, data: formatted };
   } catch (error: any) {
     console.error('Get founders error:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: publicError(error) };
   }
 }

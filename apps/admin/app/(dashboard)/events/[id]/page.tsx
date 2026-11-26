@@ -3,8 +3,9 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@udyaibase/database";
 import { redirect, notFound } from "next/navigation";
 import EventDashboard from "./EventDashboard";
+import { sectionRoles } from '@/lib/section-access';
 
-const EVENT_ROLES = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "EVENT_ORGANIZER"];
+const EVENT_ROLES = sectionRoles('/events');
 
 export default async function EventManagePage(
   props: {

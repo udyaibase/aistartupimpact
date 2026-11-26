@@ -17,6 +17,8 @@ const { queries, sql, me } = vi.hoisted(() => {
   const rows = (text: string): unknown[] => {
     if (text.includes('"WebUserInteraction"')) return [{ entityType: 'tool', entityId: 't9', categoryId: 'cat9' }];
     if (text.includes('"WebUserInterest"')) return [{ categoryId: 'cat1' }];
+    // The shared sign-in check (account open, sign-in not ended).
+    if (text.includes('FROM "WebUser" u')) return [{ id: 'u1', email: 'u1@example.com' }];
     if (text.includes('SELECT "onboardingCompleted" FROM "WebUser"')) return [{ onboardingCompleted: true }];
     if (text.includes('FROM "WebUser" w')) return [{ ...me, primaryIntent: me.intents[0] ?? null }];
     if (text.includes('FROM "Article"')) return [

@@ -8,6 +8,9 @@ import { generateNewsletterHtml } from "@/lib/newsletter-templates";
 import { logAuditEvent, canDelete } from '@/lib/audit-log';
 import { signEventUnsubscribeToken } from "@udyaibase/utils/event-campaigns";
 import { createHmac } from 'crypto';
+import { sectionRoles } from '@/lib/section-access';
+import { publicError } from '@/lib/public-error';
+import { tooMany } from '@/lib/rate-limit';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -17,7 +20,7 @@ const FROM_NAME = process.env.RESEND_NEWSLETTER_NAME || "Udyaibase Weekly";
 const REPLY_TO = process.env.RESEND_REPLY_TO || "hello@udyaibase.com";
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || process.env.WEB_URL || "https://udyaibase.com";
 
-const ALLOWED = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "SENIOR_WRITER"];
+const ALLOWED = sectionRoles('/newsletter-admin');
 
 // ── Stats ────────────────────────────────────────────────────────────────────
 
@@ -59,7 +62,7 @@ export async function getNewsletterStatsAction() {
       data: { total, active, sentCount, openRate, ctr },
     };
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }
 
@@ -80,7 +83,7 @@ export async function getCampaignsAction() {
     `;
     return { success: true, data: rows };
   } catch (e: any) {
-    return { success: false, error: e.message, data: [] };
+    return { success: false, error: publicError(e), data: [] };
   }
 }
 
@@ -93,7 +96,7 @@ export async function saveCampaignAction(payload: {
   templateId?: string;
 }) {
   const session: any = await getServerSession(authOptions);
-  if (!session?.user || !["SUPER_ADMIN", "EDITOR_IN_CHIEF"].includes(session.user.role))
+  if (!session?.user || !sectionRoles('/newsletter-admin').includes(session.user.role))
     return { success: false, error: "Unauthorized" };
 
   const { id, subject, previewText, body, scheduledAt, templateId } = payload;
@@ -137,7 +140,7 @@ export async function saveCampaignAction(payload: {
       return { success: true, id: rows[0]?.id };
     }
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }
 
@@ -165,7 +168,7 @@ export async function deleteCampaignAction(id: string) {
 
     return { success: true };
   } catch (e: any) {
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }
 
@@ -173,8 +176,10 @@ export async function deleteCampaignAction(id: string) {
 
 export async function sendCampaignAction(id: string) {
   const session: any = await getServerSession(authOptions);
-  if (!session?.user || !["SUPER_ADMIN", "EDITOR_IN_CHIEF"].includes(session.user.role))
+  if (!session?.user || !sectionRoles('/newsletter-admin').includes(session.user.role))
     return { success: false, error: "Unauthorized" };
+  const paused = tooMany(session.user.id, 'bulkEmail');
+  if (paused) return { success: false, error: paused };
 
   try {
     const campaigns = await prisma.$queryRaw<any[]>`
@@ -287,14 +292,16 @@ export async function sendCampaignAction(id: string) {
     await prisma.$executeRaw`
       UPDATE "NewsletterCampaign" SET status = 'FAILED', "updatedAt" = NOW() WHERE id = ${id}
     `;
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }
 
 export async function sendTestEmailAction(id: string, testEmail: string) {
   const session: any = await getServerSession(authOptions);
-  if (!session?.user || !["SUPER_ADMIN", "EDITOR_IN_CHIEF"].includes(session.user.role))
+  if (!session?.user || !sectionRoles('/newsletter-admin').includes(session.user.role))
     return { success: false, error: "Unauthorized" };
+  const paused = tooMany(session.user.id, 'testEmail');
+  if (paused) return { success: false, error: paused };
 
   try {
     const campaigns = await prisma.$queryRaw<any[]>`
@@ -326,6 +333,6 @@ export async function sendTestEmailAction(id: string, testEmail: string) {
     return { success: true };
   } catch (e: any) {
     console.error('Test email error:', e);
-    return { success: false, error: e.message };
+    return { success: false, error: publicError(e) };
   }
 }

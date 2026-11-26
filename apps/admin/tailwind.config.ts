@@ -12,18 +12,26 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // The admin accent. Values live in app/globals.css as CSS variables, so the calm admin colour and the public
+        // site's red (used only inside previews of public pages) come from one place.
         brand: {
-          DEFAULT: '#FF3131',
-          50: '#FFF0F0',
-          100: '#FFE0E0',
-          200: '#FFC2C2',
-          300: '#FF9494',
-          400: '#FF5E5E',
-          500: '#FF3131',
-          600: '#E51A1A',
-          700: '#C01010',
-          800: '#9C1010',
-          900: '#821414',
+          DEFAULT: 'rgb(var(--brand-500) / <alpha-value>)',
+          50: 'rgb(var(--brand-50) / <alpha-value>)',
+          100: 'rgb(var(--brand-100) / <alpha-value>)',
+          200: 'rgb(var(--brand-200) / <alpha-value>)',
+          300: 'rgb(var(--brand-300) / <alpha-value>)',
+          400: 'rgb(var(--brand-400) / <alpha-value>)',
+          500: 'rgb(var(--brand-500) / <alpha-value>)',
+          600: 'rgb(var(--brand-600) / <alpha-value>)',
+          700: 'rgb(var(--brand-700) / <alpha-value>)',
+          800: 'rgb(var(--brand-800) / <alpha-value>)',
+          900: 'rgb(var(--brand-900) / <alpha-value>)',
+        },
+        // Dark mode surfaces: soft slate instead of near-black, which glares against white text over long sessions.
+        gray: {
+          800: '#232B36',
+          900: '#161C24',
+          950: '#0E1319',
         },
         navy: {
           DEFAULT: '#0D1B2A',
@@ -39,6 +47,14 @@ const config: Config = {
           900: '#08111B',
         },
         charcoal: '#2C2C2C',
+      },
+      // Smallest label size is 13px (Tailwind's default "xs" is 12px); see globals.css for the 12px floor on badges.
+      fontSize: {
+        xs: ['0.8125rem', { lineHeight: '1.125rem' }],
+      },
+      // A data tool reads better with bold than with extra-bold headings.
+      fontWeight: {
+        extrabold: '700',
       },
       fontFamily: {
         sora: ['var(--font-sora)', 'sans-serif'],

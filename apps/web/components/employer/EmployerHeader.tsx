@@ -27,13 +27,13 @@ const PAGES: SearchResult[] = [
   { id: 'jobs', label: 'Jobs', description: 'Open, draft, paused and closed', href: '/employer/jobs', icon: <Briefcase className="w-4 h-4" />, category: 'page' },
   { id: 'candidates', label: 'Candidates', description: 'Review applications', href: '/employer/applications', icon: <Users className="w-4 h-4" />, category: 'page' },
   { id: 'talent', label: 'Talent pool', description: 'Past applicants open to other roles', href: '/employer/talent', icon: <UserCheck className="w-4 h-4" />, category: 'page' },
-  { id: 'careers', label: 'Website widget', description: 'Show jobs on your website', href: '/employer/careers', icon: <Globe className="w-4 h-4" />, category: 'page' },
-  { id: 'insights', label: 'Insights', description: 'Views and applications', href: '/employer/analytics', icon: <BarChart3 className="w-4 h-4" />, category: 'page' },
+  { id: 'careers', label: 'Website widget', description: 'Show jobs on your website', href: '/employer/widget', icon: <Globe className="w-4 h-4" />, category: 'page' },
+  { id: 'insights', label: 'Analytics', description: 'Views and applications', href: '/employer/analytics', icon: <BarChart3 className="w-4 h-4" />, category: 'page' },
   { id: 'company', label: 'Company profile', description: 'Logo, description, startup claim', href: '/employer/company', icon: <Building2 className="w-4 h-4" />, category: 'page' },
   { id: 'team', label: 'Team', description: 'Invite recruiters and interviewers', href: '/employer/team', icon: <Users className="w-4 h-4" />, category: 'page' },
   { id: 'billing', label: 'Plans & billing', description: 'Plan, AI reviews and payments', href: '/employer/billing', icon: <CreditCard className="w-4 h-4" />, category: 'page' },
   { id: 'settings', label: 'Settings', description: 'Account and security', href: '/employer/settings', icon: <Settings className="w-4 h-4" />, category: 'page' },
-  { id: 'help', label: 'Help', description: 'Guides and support', href: '/employer/help', icon: <HelpCircle className="w-4 h-4" />, category: 'page' },
+  { id: 'help', label: 'Help & support', description: 'Guides and support', href: '/employer/help', icon: <HelpCircle className="w-4 h-4" />, category: 'page' },
 ];
 
 const ACTIONS: SearchResult[] = [
