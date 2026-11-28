@@ -1,3 +1,5 @@
+import { ensureCatalog } from '@/lib/catalog/server';
+import { confirmDiscount } from '@/lib/offers/discount';
 import { prisma } from '@udyaibase/database';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 import { button, esc, shell } from '@/lib/jobs/apply-emails';
@@ -45,6 +47,7 @@ export async function hostPlanStatus(organizerId: string) {
  * Either way the registration limit rises, so waitlisted people move into the new spots afterwards.
  */
 export async function activateOrganizerPayment(orderId: string, paymentId: string): Promise<'activated' | 'already' | 'unknown'> {
+  await ensureCatalog({ fresh: true }); // the limits switched on are today's
   let applied: { kind: string; organizerId: string; eventId: string | null; paymentId: string; cycle: string; totalPaise: number; by: string | null } | null = null;
   let boostVoid: { id: string; organizerId: string; totalPaise: number } | null = null;
   const result = await prisma.$transaction(async (tx) => {
@@ -98,6 +101,8 @@ export async function activateOrganizerPayment(orderId: string, paymentId: strin
   }
   const done = applied as { kind: string; organizerId: string; eventId: string | null; paymentId: string; cycle: string; totalPaise: number; by: string | null } | null;
   if (result === 'activated' && done) {
+    // A discount code used at this checkout is now spent (before the invoice, which prints it).
+    await confirmDiscount(orderId);
     await emailInvoice('organizer', done.paymentId).catch((e) => console.error('[invoice] organizer', e));
     // Recorded once, after the payment is committed (checkout callback or webhook, whichever is first).
     const actor = done.by ? { email: done.by } : null;
@@ -168,6 +173,7 @@ export async function featuredUntilFor(organizerId: string, endAt: Date): Promis
 
 /** Daily: remind 3 days before Pro ends, email when it ends (3 grace days), then drop to Free. Featured dates stop on their own. */
 export async function runHostPlanMaintenance(now = new Date(), opts: { onlyOrganizerId?: string } = {}) {
+  await ensureCatalog();
   const only = opts.onlyOrganizerId ? { id: opts.onlyOrganizerId } : {};
   const due = await prisma.eventOrganizer.findMany({
     where: { plan: 'PRO', planExpiresAt: { gt: now, lte: new Date(now.getTime() + 3 * 864e5) }, planReminderSentAt: null, deletedAt: null, ...only },

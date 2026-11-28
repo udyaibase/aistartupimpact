@@ -33,7 +33,7 @@ export async function getArticleBySlugDirect(slug: string) {
       SELECT
         a.id, a.title, a.slug, a.type, a.excerpt, a.content,
         a."coverImage", a."thumbnailImage", a."readTimeMinutes", a."viewCount", a."isFeatured",
-        a."likeCount", a."seoTitle", a."seoDescription", a."canonicalUrl", a."ogImage", a."noIndex",
+        a."likeCount", a."seoTitle", a."seoDescription", a."canonicalUrl", a."ogImage", a."noIndex", a."isSponsored",
         a."publishedAt"::text AS "publishedAt",
         a."createdAt"::text AS "createdAt",
         a."updatedAt"::text AS "updatedAt",
@@ -253,7 +253,7 @@ export async function getOpinionBySlugDirect(slug: string) {
       SELECT
         a.id, a.title, a.slug, a.type, a.excerpt, a.content,
         a."coverImage", a."thumbnailImage", a."readTimeMinutes", a."viewCount", a."isFeatured",
-        a."likeCount", a."agreeCount", a."disagreeCount", a."keyTakeaways",
+        a."likeCount", a."agreeCount", a."disagreeCount", a."keyTakeaways", a."isSponsored",
         a."seoTitle", a."seoDescription", a."canonicalUrl", a."ogImage", a."noIndex",
         a."publishedAt"::text AS "publishedAt",
         a."createdAt"::text AS "createdAt",
@@ -630,7 +630,7 @@ export async function getAiToolBySlugDirect(slug: string) {
         LEFT JOIN "ToolCategory" c ON c.id = t."categoryId"
         LEFT JOIN "ToolCategory" pc ON pc.id = c."parentId"
         LEFT JOIN "Startup" s ON s.id = t."startupId"
-        WHERE t.slug = ${slug} AND t."deletedAt" IS NULL
+        WHERE t.slug = ${slug} AND t."deletedAt" IS NULL AND t.status IN ('APPROVED', 'FEATURED')
         LIMIT 1
       `;
       if (!rows.length) return null;
@@ -1072,7 +1072,7 @@ export async function getRelatedArticlesDirect(articleId: string, types: string[
       ), curtags AS (
         SELECT "tagId" FROM "ArticleTag" WHERE "articleId" = ${articleId}
       )
-      SELECT a.id, a.title, a.slug, a.type, a."readTimeMinutes", a."coverImage", a."thumbnailImage",
+      SELECT a.id, a.title, a.slug, a.type, a."isSponsored", a."readTimeMinutes", a."coverImage", a."thumbnailImage",
              a."publishedAt"::text AS "publishedAt", c.name AS "categoryName",
              (a."founderAuthorId" IS NOT NULL) AS "founderWritten",
              rst.name AS "startupName", rst."logoUrl" AS "startupLogo", ru.name AS "authorName",
@@ -1107,7 +1107,7 @@ export async function getRelatedArticlesDirect(articleId: string, types: string[
   }
 }
 
-export async function getArticlesDirect(params: { type?: string; limit?: number; isFeatured?: boolean } = {}) {
+export async function getArticlesDirect(params: { type?: string; types?: string[]; limit?: number; isFeatured?: boolean } = {}) {
   try {
     const limit = params.limit || 10;
 
@@ -1115,7 +1115,7 @@ export async function getArticlesDirect(params: { type?: string; limit?: number;
       const rows: any[] = await sql`
         SELECT
           a.id, a.title, a.slug, a.type, a.excerpt, a."coverImage", a."thumbnailImage",
-          a."readTimeMinutes", a."isFeatured",
+          a."readTimeMinutes", a."isFeatured", a."isSponsored",
           a."publishedAt"::text AS "publishedAt",
           -- A founder's own story is stored under one shared system author ("Founder Content"). Show who wrote it:
           -- the founder, or their startup when they've chosen not to be named.
@@ -1138,11 +1138,12 @@ export async function getArticlesDirect(params: { type?: string; limit?: number;
         author: { name: a.authorName },
         category: { name: a.categoryName },
       }));
-    } else if (params.type) {
+    } else if (params.type || params.types?.length) {
+      const types = params.types?.length ? params.types : [params.type as string];
       const rows: any[] = await sql`
         SELECT
           a.id, a.title, a.slug, a.type, a.excerpt, a."coverImage", a."thumbnailImage",
-          a."readTimeMinutes", a."isFeatured",
+          a."readTimeMinutes", a."isFeatured", a."isSponsored",
           a."publishedAt"::text AS "publishedAt",
           -- A founder's own story is stored under one shared system author ("Founder Content"). Show who wrote it:
           -- the founder, or their startup when they've chosen not to be named.
@@ -1160,7 +1161,7 @@ export async function getArticlesDirect(params: { type?: string; limit?: number;
         LEFT JOIN "FounderUser" fu ON fu.id = a."founderAuthorId" AND fu."deletedAt" IS NULL
         LEFT JOIN "Startup" st ON st.id = a."startupId"
         LEFT JOIN "Category" c ON c.id = a."categoryId"
-        WHERE a.status = 'PUBLISHED' AND a."deletedAt" IS NULL AND a.type = ${params.type}
+        WHERE a.status = 'PUBLISHED' AND a."deletedAt" IS NULL AND a.type::text = ANY(${types}::text[])
         ORDER BY a."publishedAt" DESC NULLS LAST
         LIMIT ${limit}
       `;
@@ -1173,7 +1174,7 @@ export async function getArticlesDirect(params: { type?: string; limit?: number;
       const rows: any[] = await sql`
         SELECT
           a.id, a.title, a.slug, a.type, a.excerpt, a."coverImage", a."thumbnailImage",
-          a."readTimeMinutes", a."isFeatured",
+          a."readTimeMinutes", a."isFeatured", a."isSponsored",
           a."publishedAt"::text AS "publishedAt",
           -- A founder's own story is stored under one shared system author ("Founder Content"). Show who wrote it:
           -- the founder, or their startup when they've chosen not to be named.
@@ -1200,7 +1201,7 @@ export async function getArticlesDirect(params: { type?: string; limit?: number;
       const rows: any[] = await sql`
         SELECT
           a.id, a.title, a.slug, a.type, a.excerpt, a."coverImage", a."thumbnailImage",
-          a."readTimeMinutes", a."isFeatured",
+          a."readTimeMinutes", a."isFeatured", a."isSponsored",
           a."publishedAt"::text AS "publishedAt",
           -- A founder's own story is stored under one shared system author ("Founder Content"). Show who wrote it:
           -- the founder, or their startup when they've chosen not to be named.
@@ -1779,5 +1780,52 @@ export async function getUpcomingEventsDirect(limit = 4) {
     return (rows as any[]).map(withoutAddress) as any[];
   } catch {
     return [];
+  }
+}
+
+// ─── Article categories (public pages at /news/category/<slug>) ──────────────
+
+export type ArticleCategory = { id: string; name: string; slug: string; description: string | null; articles: number; updatedAt: string | null };
+
+/** Categories with at least one published, indexable article, busiest first. Empty ones have no public page worth listing. */
+export async function getArticleCategoriesDirect(): Promise<ArticleCategory[]> {
+  try {
+    const rows = await sql`
+      SELECT c.id, c.name, c.slug, c.description, COUNT(a.id)::int AS articles, MAX(a."updatedAt")::text AS "updatedAt"
+      FROM "Category" c
+      JOIN "Article" a ON a."categoryId" = c.id AND a.status = 'PUBLISHED' AND a."deletedAt" IS NULL
+        AND a."noIndex" = false AND a.type NOT IN ('STARTUP_UPDATE')
+      GROUP BY c.id
+      ORDER BY articles DESC, c.name ASC`;
+    return rows as ArticleCategory[];
+  } catch (e) {
+    console.error('getArticleCategoriesDirect error:', e);
+    return [];
+  }
+}
+
+/** One category and its published articles, newest first. Null when there is no such category. */
+export async function getArticleCategoryPageDirect(slug: string, limit = 100) {
+  try {
+    const cats = (await sql`SELECT id, name, slug, description FROM "Category" WHERE slug = ${slug} LIMIT 1`) as any[];
+    const category = cats[0] as { id: string; name: string; slug: string; description: string | null } | undefined;
+    if (!category) return null;
+    const articles = (await sql`
+      SELECT a.id, a.title, a.slug, a.type::text AS type, a.excerpt, a."coverImage", a."thumbnailImage",
+             a."readTimeMinutes", a."isSponsored", a."publishedAt"::text AS "publishedAt",
+             COALESCE(CASE WHEN a."founderAuthorId" IS NOT NULL THEN COALESCE(
+               CASE WHEN COALESCE((SELECT public_profile FROM founder_settings WHERE user_id = fu.id), true) THEN fu.name END, st.name) END,
+               u.name) AS "authorName"
+      FROM "Article" a
+      LEFT JOIN "User" u ON u.id = a."authorId"
+      LEFT JOIN "FounderUser" fu ON fu.id = a."founderAuthorId" AND fu."deletedAt" IS NULL
+      LEFT JOIN "Startup" st ON st.id = a."startupId"
+      WHERE a."categoryId" = ${category.id} AND a.status = 'PUBLISHED' AND a."deletedAt" IS NULL AND a.type NOT IN ('STARTUP_UPDATE')
+      ORDER BY a."publishedAt" DESC NULLS LAST
+      LIMIT ${limit}`) as any[];
+    return { category, articles };
+  } catch (e) {
+    console.error('getArticleCategoryPageDirect error:', e);
+    return null;
   }
 }

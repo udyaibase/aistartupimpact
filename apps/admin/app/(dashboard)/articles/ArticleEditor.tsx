@@ -4,12 +4,7 @@ import { notify } from '@/components/Toast';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import {
-  ArrowLeft, Save, ChevronDown, ChevronUp, Image as ImageIcon, Hash, Clock, Globe,
-  Settings2, X, CheckCircle, Upload, AlertCircle, Lock,
-  Heading1, Heading2, Quote, List, ListOrdered, Code, Minus, Type, Eye,
-  Plus, ImagePlus, Lightbulb, Trash2,
-} from 'lucide-react';
+import { ArrowLeft, Save, ChevronDown, Image as ImageIcon, Hash, Clock, Settings2, X, CheckCircle, Upload, AlertCircle, Lock, Heading1, Heading2, Quote, List, ListOrdered, Code, Minus, Type, Eye, Plus, ImagePlus, Lightbulb, Trash2 } from 'lucide-react';
 import { sanitizePastedHtml, textToHtml } from '@/lib/editor-html';
 import SelectionToolbar from '@/components/SelectionToolbar';
 import { useEditorMentions } from '@/components/useEditorMentions';
@@ -18,58 +13,10 @@ import SEOScorePanel from '@/components/SEOScorePanel';
 import ImageAltTextManager from '@/components/ImageAltTextManager';
 import { shrinkImage, MAX_UPLOAD_BYTES } from '@/lib/shrink-image';
 import { uploadMediaAction, saveArticleAction, getArticleByIdAction, getCategoriesAction, type ArticlePayload } from './actions';
-
-/**
- * The article editor, for new articles and existing ones. Drafts autosave every 30 seconds; live and scheduled
- * articles only save when you press Save/Update. Writers submit for review; editors publish or schedule.
- */
-
-const PUBLISHER_ROLES = ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'];
-const TYPES = ['NEWS', 'STORY', 'OPINION', 'GUIDE', 'COMPARISON', 'REPORT', 'SPONSORED'];
-const AUTOSAVE_MS = 30_000;
-const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
-const LIVE = ['PUBLISHED', 'SCHEDULED'];
-
-const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 120);
-const escAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-/** ISO time ↔ the browser's local time in a datetime-local input (the editor's own time zone, e.g. IST). */
-const toLocalInput = (iso?: string | null) => {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-};
-const fromLocalInput = (v: string) => (v ? new Date(v).toISOString() : null);
-
-function Toggle({ value, onChange, disabled }: { value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
-  return (
-    <button type="button" role="switch" aria-checked={value} disabled={disabled} onClick={() => onChange(!value)}
-      className={`w-10 h-6 rounded-full relative transition-colors disabled:opacity-40 ${value ? 'bg-brand' : 'bg-gray-200 dark:bg-gray-700'}`}>
-      <span className={`w-4 h-4 bg-white rounded-full absolute top-1 shadow-sm transition-all ${value ? 'left-5' : 'left-1'}`} />
-    </button>
-  );
-}
-
-const editorClasses = `min-h-[500px] focus:outline-none font-jakarta text-[18px] text-charcoal dark:text-gray-200 leading-[1.8] selection:bg-brand/20
-  [&:empty]:before:content-[attr(data-placeholder)] [&:empty]:before:text-gray-200 dark:[&:empty]:before:text-gray-700 [&:empty]:before:pointer-events-none
-  [&_h2]:font-sora [&_h2]:font-bold [&_h2]:text-[28px] [&_h2]:text-navy dark:[&_h2]:text-white [&_h2]:mt-10 [&_h2]:mb-4 [&_h2]:leading-tight
-  [&_h3]:font-sora [&_h3]:font-bold [&_h3]:text-[22px] [&_h3]:text-navy dark:[&_h3]:text-white [&_h3]:mt-8 [&_h3]:mb-3 [&_h3]:leading-tight
-  [&_blockquote]:border-l-4 [&_blockquote]:border-brand [&_blockquote]:pl-5 [&_blockquote]:py-2 [&_blockquote]:my-6 [&_blockquote]:italic [&_blockquote]:text-gray-500 dark:[&_blockquote]:text-gray-400 [&_blockquote]:text-xl
-  [&_a]:text-brand [&_a]:no-underline hover:[&_a]:underline [&_a.link-underline]:underline [&_a]:decoration-brand/40 [&_a]:underline-offset-2 [&_a_u]:no-underline
-  [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:my-4 [&_ul]:space-y-1
-  [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:my-4 [&_ol]:space-y-1
-  [&_pre]:bg-gray-100 dark:[&_pre]:bg-gray-800 [&_pre]:p-4 [&_pre]:rounded-xl [&_pre]:text-sm [&_pre]:font-mono [&_pre]:text-brand [&_pre]:my-4 [&_pre]:overflow-x-auto
-  [&_code]:bg-gray-100 dark:[&_code]:bg-gray-800 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_code]:text-brand
-  [&_hr]:my-8 [&_hr]:border-gray-200 dark:[&_hr]:border-gray-700
-  [&_figure]:my-6 [&_figcaption]:text-center [&_figcaption]:!text-[13px] [&_figcaption]:leading-snug [&_figcaption]:text-gray-500 dark:[&_figcaption]:text-gray-400 [&_figcaption]:mt-2 [&_figcaption]:min-h-[1.25rem]
-  [&_figcaption:empty]:before:content-['Add_a_caption_or_image_credit…'] [&_figcaption:empty]:before:text-gray-400
-  [&_img]:cursor-pointer [&_img[alt='']]:outline [&_img[alt='']]:outline-2 [&_img[alt='']]:outline-dashed [&_img[alt='']]:outline-amber-400 [&_img:not([alt])]:outline [&_img:not([alt])]:outline-2 [&_img:not([alt])]:outline-dashed [&_img:not([alt])]:outline-amber-400
-  [&_img]:rounded-xl [&_img]:w-full [&_p]:mb-4 [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic
-  [&_.mention]:bg-brand/10 [&_.mention]:text-brand [&_.mention]:font-semibold [&_.mention]:no-underline [&_.mention]:px-1 [&_.mention]:py-0.5 [&_.mention]:rounded [&_.mention]:text-[16px] [&_.mention]:cursor-default`;
-
-const sideLabel = 'text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta';
-const seoInput = 'w-full px-4 py-3 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:border-brand focus:ring-1 focus:ring-brand rounded-xl text-sm font-jakarta text-navy dark:text-white outline-none transition-all';
-const seoLabel = 'text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2 flex items-center justify-between font-jakarta';
+import { TYPE_PLACE } from './article-types';
+import { PUBLISHER_ROLES, TYPES, TYPE_LABEL, AUTOSAVE_MS, IMAGE_TYPES, LIVE, slugify, escAttr, toLocalInput, fromLocalInput, Toggle, editorClasses, sideLabel } from './editor-bits';
+import ArticlePreview from './ArticlePreview';
+import ArticleSeoFields from './ArticleSeoFields';
 
 export default function ArticleEditor({ articleId }: { articleId?: string }) {
   const { data: session } = useSession();
@@ -640,70 +587,7 @@ export default function ArticleEditor({ articleId }: { articleId?: string }) {
               {!LIVE.includes(savedStatus) && <span className="text-xs">Drafts save automatically</span>}
             </div>
 
-            {/* SEO */}
-            <div className="mt-12 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden shadow-sm">
-              <button onClick={() => setSeoPanelOpen(!seoPanelOpen)} className="w-full flex items-center justify-between p-5 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                <div className="flex items-center gap-3">
-                  <Globe className="w-5 h-5 text-brand" />
-                  <div>
-                    <h3 className="font-sora font-bold text-navy dark:text-white text-left text-[15px]">Search Engine Optimization</h3>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 font-jakarta text-left mt-0.5">Title, meta description, social image and canonical link</p>
-                  </div>
-                </div>
-                {seoPanelOpen ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
-              </button>
-
-              {seoPanelOpen && (
-                <div className="p-6 space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className={seoLabel}>SEO Title<span className={`normal-case font-medium ${seoTitle.length > 60 ? 'text-red-500' : 'text-gray-400'}`}>{seoTitle.length}/60</span></label>
-                      <input type="text" className={seoInput} placeholder="Defaults to the article title" maxLength={120} value={seoTitle} onChange={(e) => setSeoTitle(e.target.value)} />
-                      <p className="text-[11px] text-gray-400 mt-1.5 font-jakarta">The title shown in Google results.</p>
-                    </div>
-                    <div>
-                      <label className={seoLabel}>Canonical URL</label>
-                      <input type="url" className={seoInput} placeholder="https://..." value={canonicalUrl} onChange={(e) => setCanonicalUrl(e.target.value)} />
-                      <p className="text-[11px] text-gray-400 mt-1.5 font-jakarta">Only if this was first published elsewhere.</p>
-                    </div>
-                  </div>
-                  <div>
-                    <label className={seoLabel}>Meta Description<span className={`normal-case font-medium ${metaDesc.length > 160 ? 'text-red-500' : 'text-gray-400'}`}>{metaDesc.length}/160</span></label>
-                    <textarea className={`${seoInput} resize-none`} rows={3} maxLength={320} placeholder="Defaults to the subtitle" value={metaDesc} onChange={(e) => setMetaDesc(e.target.value)} />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-                    <div>
-                      <label className={`${seoLabel} block`}>Social Preview (OG Image)</label>
-                      {ogImage ? (
-                        <div className="relative group rounded-xl overflow-hidden aspect-video bg-gray-100 dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-800">
-                          <img src={ogImage} className="w-full h-full object-cover" alt="Social preview" />
-                          <button onClick={() => setOgImage('')} aria-label="Remove social image" className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-red-600 text-white rounded-lg transition-colors"><X className="w-4 h-4" /></button>
-                        </div>
-                      ) : (
-                        <button onClick={() => setPicker('og')} className="w-full py-8 border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-brand dark:hover:border-brand/60 rounded-xl text-center group transition-colors">
-                          <ImageIcon className="w-6 h-6 text-gray-300 dark:text-gray-600 mx-auto group-hover:text-brand/60 mb-2 transition-colors" />
-                          <span className="text-sm font-medium text-gray-500 font-jakarta group-hover:text-brand transition-colors">Select from Media Library</span>
-                        </button>
-                      )}
-                      <p className="text-[11px] text-gray-400 mt-2 font-jakarta">Shown when shared on X, LinkedIn, WhatsApp. Defaults to the cover image (1200×630 recommended).</p>
-                    </div>
-                    <div className="space-y-6">
-                      <div>
-                        <label className={`${seoLabel} block`}>Focus Keyword</label>
-                        <input type="text" className={seoInput} placeholder="e.g. AI startup tools in India" maxLength={100} value={focusKeyword} onChange={(e) => setFocusKeyword(e.target.value)} />
-                      </div>
-                      <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
-                        <div>
-                          <span className="block text-sm font-bold text-navy dark:text-white font-jakarta">No Index</span>
-                          <span className="block text-xs text-gray-500 font-jakarta mt-0.5">Hide this article from search engines</span>
-                        </div>
-                        <Toggle value={noIndex} onChange={setNoIndex} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+            <ArticleSeoFields canEditCanonical={canPublish} metaDesc={metaDesc} seoPanelOpen={seoPanelOpen} seoTitle={seoTitle} ogImage={ogImage} canonicalUrl={canonicalUrl} focusKeyword={focusKeyword} noIndex={noIndex} setCanonicalUrl={setCanonicalUrl} setFocusKeyword={setFocusKeyword} setMetaDesc={setMetaDesc} setNoIndex={setNoIndex} setOgImage={setOgImage} setPicker={setPicker} setSeoPanelOpen={setSeoPanelOpen} setSeoTitle={setSeoTitle} />
 
             <div className="mt-8">
               <SEOScorePanel title={title} seoTitle={seoTitle} metaDescription={metaDesc} focusKeyword={focusKeyword} content={bodyHtml} slug={slug} subtitle={subtitle} coverImage={coverImage} />
@@ -760,7 +644,7 @@ export default function ArticleEditor({ articleId }: { articleId?: string }) {
                       {panel.id === 'category' && (<>
                         <div><label className={sideLabel}>Category</label><select className="input-field text-sm" value={category} onChange={(e) => setCategory(e.target.value)}><option value="">Select…</option>{categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}</select></div>
                         <div><label className={sideLabel}>Tags</label><input type="text" className="input-field text-sm" placeholder="AI, LLM, India…" value={tags} onChange={(e) => setTags(e.target.value)} />{tags && <div className="flex flex-wrap gap-1 mt-2">{tags.split(',').filter(t => t.trim()).map(t => <span key={t} className="px-2 py-0.5 bg-brand/10 text-brand text-[10px] font-semibold rounded-full">{t.trim()}</span>)}</div>}</div>
-                        <div><label className={sideLabel}>Type</label><select className="input-field text-sm" value={articleType} onChange={(e) => setArticleType(e.target.value)}>{TYPES.map(t => <option key={t} value={t}>{t.charAt(0) + t.slice(1).toLowerCase()}</option>)}</select></div>
+                        <div><label className={sideLabel}>Type</label><select className="input-field text-sm" value={articleType} onChange={(e) => setArticleType(e.target.value)}>{(TYPES.includes(articleType) ? TYPES : [articleType, ...TYPES]).map(t => <option key={t} value={t}>{TYPE_LABEL[t] ?? t}</option>)}</select><p className="text-[11px] text-gray-400 mt-1.5 font-jakarta">{TYPE_PLACE[articleType] ?? ''}</p></div>
                       </>)}
                       {panel.id === 'cover' && (
                         <div className="space-y-4">
@@ -832,7 +716,7 @@ export default function ArticleEditor({ articleId }: { articleId?: string }) {
                           <label className={sideLabel}>URL Slug</label>
                           <input type="text" className="input-field text-sm" placeholder="article-url-slug" value={slug}
                             onChange={(e) => { slugEdited.current = true; setSlug(slugify(e.target.value)); }} />
-                          {isLive && <p className="text-[11px] text-amber-600 mt-1.5 font-jakarta">Changing the slug of a live article breaks links already shared.</p>}
+                          {isLive && <p className="text-[11px] text-amber-600 mt-1.5 font-jakarta">The old link keeps working: it redirects to the new one after you save.</p>}
                         </div>
                       </>)}
                     </div>
@@ -844,38 +728,7 @@ export default function ArticleEditor({ articleId }: { articleId?: string }) {
         )}
       </div>
 
-      {/* Preview */}
-      {showPreview && (
-        <div className="fixed inset-0 z-50 bg-white dark:bg-gray-950 overflow-y-auto">
-          <div className="sticky top-0 z-10 bg-white/80 dark:bg-gray-950/80 backdrop-blur-md border-b border-gray-100 dark:border-gray-800">
-            <div className="max-w-[720px] mx-auto flex items-center justify-between py-3 px-6">
-              <span className="text-sm text-gray-500 font-jakarta">Preview</span>
-              <div className="flex items-center gap-3">
-                {canEdit && <button onClick={() => doSave(primaryIntent)} disabled={!title.trim() || saving} className="px-4 py-1.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-sm font-semibold rounded-full transition-colors">{primaryLabel}</button>}
-                <button onClick={() => setShowPreview(false)} aria-label="Close preview" className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"><X className="w-5 h-5 text-gray-400" /></button>
-              </div>
-            </div>
-          </div>
-          <div className="max-w-[720px] mx-auto py-12 px-6">
-            {coverImage && (
-              <div className="w-full overflow-hidden rounded-xl mb-8 aspect-video bg-gray-100 dark:bg-gray-800">
-                <img src={coverImage} alt="Cover" className="w-full h-full object-cover" />
-              </div>
-            )}
-            <h1 className="font-sora font-extrabold text-[42px] text-navy dark:text-white leading-[1.15] tracking-tight">{title || 'Untitled'}</h1>
-            {subtitle && <p className="font-jakarta text-xl text-gray-400 dark:text-gray-500 mt-4 leading-relaxed">{subtitle}</p>}
-            <div className="flex items-center gap-3 mt-6 text-sm text-gray-400 font-jakarta">
-              {category && <span className="px-2.5 py-0.5 bg-brand/10 text-brand rounded-full text-xs font-semibold">{category}</span>}
-              <span>{wordCount.toLocaleString()} words</span>
-              <span>·</span>
-              <span>{readTime} min read</span>
-            </div>
-            <div className="my-8 h-px bg-gray-100 dark:bg-gray-800" />
-            {/* The editor's own content (pasted HTML is already cleaned on the way in). */}
-            <div className={`${editorClasses} [&_img]:!outline-none [&_img]:!cursor-default [&_figcaption:empty]:hidden`} dangerouslySetInnerHTML={{ __html: bodyHtml || '<p style="color:#ccc;font-style:italic">No content yet…</p>' }} />
-          </div>
-        </div>
-      )}
+      <ArticlePreview category={category} coverImage={coverImage} subtitle={subtitle} title={title} bodyHtml={bodyHtml} canEdit={canEdit} doSave={doSave} primaryIntent={primaryIntent} primaryLabel={primaryLabel} readTime={readTime} saving={saving} setShowPreview={setShowPreview} showPreview={showPreview} wordCount={wordCount} />
     </div>
   );
 }

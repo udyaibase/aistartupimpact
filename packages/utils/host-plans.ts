@@ -24,9 +24,11 @@ export interface HostPlan {
 export const HOST_PERIOD_DAYS = 30;
 export const HOST_ANNUAL_PERIOD_DAYS = 365;
 /** Founding hosts: the first HOST_FOUNDING_LIMIT on yearly Pro get HOST_FOUNDING_DISCOUNT off, for HOST_FOUNDING_LOCK_MONTHS. */
-export const HOST_FOUNDING_LIMIT = 20;
-export const HOST_FOUNDING_DISCOUNT = 0.3;
-export const HOST_FOUNDING_LOCK_MONTHS = 24;
+// `let`, not `const`: Admin → Billing → Plans & prices can change these (catalog.ts calls setHostRules). Read them
+// inside a function, where they are used.
+export let HOST_FOUNDING_LIMIT = 20;
+export let HOST_FOUNDING_DISCOUNT = 0.3;
+export let HOST_FOUNDING_LOCK_MONTHS = 24;
 
 export const HOST_PLANS: Record<HostPlanKey, HostPlan> = {
   FREE: {
@@ -85,7 +87,22 @@ export function hostFoundingEligible(o: { foundingMemberAt: Date | string | null
 }
 
 /** Pro keeps working this many days after it ends (promo emails pause), like employer plans. */
-export const HOST_GRACE_DAYS = 3;
+export let HOST_GRACE_DAYS = 3;
+
+export interface HostRules { graceDays: number; foundingLimit: number; foundingDiscountPct: number; foundingLockMonths: number }
+export const hostRules = (): HostRules => ({ graceDays: HOST_GRACE_DAYS, foundingLimit: HOST_FOUNDING_LIMIT, foundingDiscountPct: Math.round(HOST_FOUNDING_DISCOUNT * 100), foundingLockMonths: HOST_FOUNDING_LOCK_MONTHS });
+export function setHostRules(r: HostRules): void {
+  HOST_GRACE_DAYS = r.graceDays; HOST_FOUNDING_LIMIT = r.foundingLimit; HOST_FOUNDING_DISCOUNT = r.foundingDiscountPct / 100; HOST_FOUNDING_LOCK_MONTHS = r.foundingLockMonths;
+}
+
+/** One-time, per event: certificates for attendees of an event whose host is not on Pro. Price before GST. */
+export const EVENT_CERTIFICATES = { pricePaise: 49_900 };
+
+/**
+ * Our share of each paid ticket, in percent. Null means "use the server setting" (TICKET_PLATFORM_FEE_PCT, default 5),
+ * which is what applies until a percentage is saved in Admin → Billing → Plans & prices.
+ */
+export const TICKET_FEE: { pct: number | null } = { pct: null };
 
 export function hostPlanPhase(o: { plan: string; planExpiresAt: Date | string | null }, now = Date.now()): { phase: 'free' | 'active' | 'grace'; endsAt: Date | null; graceEndsAt: Date | null } {
   if (o.plan !== 'PRO' || !o.planExpiresAt) return { phase: 'free', endsAt: null, graceEndsAt: null };

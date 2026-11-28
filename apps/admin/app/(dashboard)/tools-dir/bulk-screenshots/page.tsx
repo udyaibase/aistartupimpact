@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Camera, Loader2, CheckCircle2, XCircle, AlertTriangle, Play, Square, RotateCcw, Image, Search } from 'lucide-react';
 import Link from 'next/link';
-import { getToolsForBulkScreenshotsAction } from '../actions';
+import { getToolsForBulkScreenshotsAction } from '../tool-bulk-actions';
 import { notify } from '@/components/Toast';
 
 type ToolStatus = 'pending' | 'capturing' | 'done' | 'failed' | 'needs_review';

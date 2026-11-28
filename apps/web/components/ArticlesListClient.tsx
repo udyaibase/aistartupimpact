@@ -1,5 +1,6 @@
 'use client';
 
+import SponsoredTag from '@/components/article/SponsoredTag';
 import { useState, useMemo } from 'react';
 import IntentLink from '@/components/IntentLink';
 import { Clock, ArrowRight, Search, X, ChevronDown } from 'lucide-react';
@@ -14,6 +15,8 @@ interface Article {
   coverImage?: string;
   author?: { name?: string };
   category?: { name?: string };
+  type?: string;
+  isSponsored?: boolean;
   publishedAt?: string;
   readTimeMinutes?: number;
 }
@@ -235,6 +238,7 @@ export default function ArticlesListClient({ articles }: { articles: Article[] }
                       <span className="text-xs font-bold uppercase tracking-wider text-brand">
                         {article.category?.name || 'News'}
                       </span>
+                      {(article.type === 'SPONSORED' || article.isSponsored) && <SponsoredTag />}
                       {article.readTimeMinutes && (
                         <>
                           <span className="text-gray-300 dark:text-gray-600">·</span>

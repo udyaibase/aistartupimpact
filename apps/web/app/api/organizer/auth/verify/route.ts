@@ -1,3 +1,4 @@
+import { claimHostAutoOffers } from '@/lib/offers/claim';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
 import { storedVerifyToken, verifyTokenIssuedAt } from "@/lib/organizer-auth/verify-token";
@@ -47,6 +48,8 @@ export async function GET(request: NextRequest) {
         status: "ACTIVE",
       },
     });
+    // The email is now confirmed: a running offer for new hosts or verified founders is granted here.
+    await claimHostAutoOffers(organizer.id);
 
     return NextResponse.redirect(new URL("/organizer/login?verified=1", request.url));
   } catch (error) {

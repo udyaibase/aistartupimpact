@@ -33,17 +33,31 @@ export interface PlanDef {
 export const GST_RATE = 0.18;
 export const PLAN_PERIOD_DAYS = 30;
 export const ANNUAL_PERIOD_DAYS = 365;
+// The rules below are `let`, not `const`: Admin → Billing → Plans & prices can change them (catalog.ts calls
+// setEmployerRules). Read them where they are used, inside a function; a value copied into a module-level constant
+// would keep the built-in number.
+
 /** A paid plan keeps working this many days after it ends (renew without losing anything). Not after a trial. */
-export const GRACE_DAYS = 3;
-/** Free trial of TRIAL_PLAN for a new workspace, from its first published job. */
-export const TRIAL_DAYS = 14;
-export const TRIAL_PLAN: PlanKey = 'PRO';
+export let GRACE_DAYS = 3;
+/** Free trial of TRIAL_PLAN for a new workspace, from its first published job. 0 switches the trial off. */
+export let TRIAL_DAYS = 14;
+export let TRIAL_PLAN: PlanKey = 'PRO';
 /** AI reviews included in the trial. */
-export const TRIAL_AI_SCREENS = 100;
+export let TRIAL_AI_SCREENS = 100;
 /** Founding members: the first FOUNDING_LIMIT workspaces on an annual plan get FOUNDING_DISCOUNT off, for FOUNDING_LOCK_MONTHS. */
-export const FOUNDING_LIMIT = 50;
-export const FOUNDING_DISCOUNT = 0.3;
-export const FOUNDING_LOCK_MONTHS = 24;
+export let FOUNDING_LIMIT = 50;
+export let FOUNDING_DISCOUNT = 0.3;
+export let FOUNDING_LOCK_MONTHS = 24;
+
+export interface EmployerRules { graceDays: number; trialDays: number; trialPlan: PlanKey; trialAiScreens: number; foundingLimit: number; foundingDiscountPct: number; foundingLockMonths: number }
+export const employerRules = (): EmployerRules => ({
+  graceDays: GRACE_DAYS, trialDays: TRIAL_DAYS, trialPlan: TRIAL_PLAN, trialAiScreens: TRIAL_AI_SCREENS,
+  foundingLimit: FOUNDING_LIMIT, foundingDiscountPct: Math.round(FOUNDING_DISCOUNT * 100), foundingLockMonths: FOUNDING_LOCK_MONTHS,
+});
+export function setEmployerRules(r: EmployerRules): void {
+  GRACE_DAYS = r.graceDays; TRIAL_DAYS = r.trialDays; TRIAL_PLAN = r.trialPlan; TRIAL_AI_SCREENS = r.trialAiScreens;
+  FOUNDING_LIMIT = r.foundingLimit; FOUNDING_DISCOUNT = r.foundingDiscountPct / 100; FOUNDING_LOCK_MONTHS = r.foundingLockMonths;
+}
 const DAY_MS = 864e5;
 
 const plan = (d: Omit<PlanDef, 'annualPricePaise'>): PlanDef => ({ ...d, annualPricePaise: d.pricePaise * 10 });

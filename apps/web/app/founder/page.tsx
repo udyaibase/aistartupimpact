@@ -1,12 +1,10 @@
-import { jwtSecret } from '@/lib/jwt-secret';
 import { redirect } from 'next/navigation';
 import { getFounderSession } from '@/lib/founder-auth';
 import { getUnifiedSession } from '@/lib/unified-auth';
 import { prisma } from '@udyaibase/database';
 import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
+import { verifyUserTokenSession } from '@/lib/user-session';
 
-const USER_JWT_SECRET = jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET');
 
 export default async function FounderRootPage() {
   let founderId: string | null = null;
@@ -25,12 +23,12 @@ export default async function FounderRootPage() {
     try {
       const cookieStore = await cookies();
       const userToken = cookieStore.get('user-token')?.value;
-      if (userToken) {
-        const { payload } = await jwtVerify(userToken, USER_JWT_SECRET);
-        const email = (payload as any).email;
-        if (email) {
+      // Only a site sign-in whose session still exists (see verifyUserTokenSession).
+      const live = await verifyUserTokenSession(userToken);
+      if (live) {
+        {
           const founder = await prisma.founderUser.findUnique({
-            where: { email: email.toLowerCase() },
+            where: { email: live.email },
             select: { id: true, onboardingCompleted: true },
           });
           if (founder) {

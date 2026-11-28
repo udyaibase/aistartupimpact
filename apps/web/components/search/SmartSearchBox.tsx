@@ -29,6 +29,8 @@ interface Props {
   onRemoveChip?: (chip: SearchChip) => void;
   /** Notifies the parent while the dropdown is open (e.g. so a sticky bar doesn't hide). */
   onOpenChange?: (open: boolean) => void;
+  /** 'filled': a grey box with small corners, the same look as the AI Jobs search bar. */
+  look?: 'outline' | 'filled';
 }
 
 /**
@@ -36,7 +38,7 @@ interface Props {
  * understanding and ranking and passes back suggestions + recognised filters (chips).
  */
 export default function SmartSearchBox({
-  value, onChange, examples, noun, suggestions = [], loading, resultCount, chips = [], relaxed, onRemoveChip, onOpenChange,
+  value, onChange, examples, noun, suggestions = [], loading, resultCount, chips = [], relaxed, onRemoveChip, onOpenChange, look = 'outline',
 }: Props) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -88,10 +90,12 @@ export default function SmartSearchBox({
   return (
     <div className="relative w-full">
       <div
-        className={`group flex items-center gap-2 sm:gap-2.5 h-10 sm:h-12 pl-3 sm:pl-4 pr-1.5 sm:pr-2 rounded-md sm:rounded-2xl border bg-white dark:bg-gray-900 transition-all ${
-          focused
-            ? 'border-brand ring-4 ring-brand/10 shadow-md'
-            : 'border-gray-200 dark:border-gray-700 shadow-sm hover:border-gray-300 dark:hover:border-gray-600'
+        className={`group flex items-center gap-2 sm:gap-2.5 h-10 ${look === 'filled' ? 'sm:h-11' : 'sm:h-12'} pl-3 sm:pl-4 pr-1.5 sm:pr-2 transition-all ${
+          look === 'filled'
+            ? `rounded-md border bg-white sm:bg-gray-100 dark:bg-gray-800 ${focused ? 'border-brand ring-2 ring-brand/15' : 'border-gray-200 dark:border-gray-700 sm:border-transparent'}`
+            : `rounded-md sm:rounded-2xl border bg-white dark:bg-gray-900 ${focused
+              ? 'border-brand ring-4 ring-brand/10 shadow-md'
+              : 'border-gray-200 dark:border-gray-700 shadow-sm hover:border-gray-300 dark:hover:border-gray-600'}`
         }`}
       >
         {loading ? (
@@ -139,7 +143,7 @@ export default function SmartSearchBox({
         <div
           id={listId}
           role="listbox"
-          className="absolute left-0 right-0 top-full mt-2 z-50 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl overflow-hidden animate-scale-in"
+          className={`absolute left-0 right-0 top-full mt-2 z-50 ${look === 'filled' ? 'rounded-lg' : 'rounded-2xl'} border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl overflow-hidden animate-scale-in`}
         >
           {showExamples && (
             <div className="p-3">

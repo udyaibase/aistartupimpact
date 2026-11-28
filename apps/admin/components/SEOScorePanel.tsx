@@ -6,7 +6,8 @@ import {
   Target, FileText, Image, BookOpen, Code, Zap
 } from 'lucide-react';
 import { generateSlug } from '@udyaibase/utils/slug';
-import { analyzeSEO, analyzeContentImages, analyzeCoverImage, type SEOAnalysis, type SEOIssue, type SEORecommendation } from '../lib/seo-analyzer';
+import { analyzeSEO, analyzeContentImages, analyzeCoverImage } from '../lib/seo-analyzer';
+import { type SEOAnalysis, type SEOIssue, type SEORecommendation } from '../lib/seo-types';
 
 interface SEOScorePanelProps {
   title: string;

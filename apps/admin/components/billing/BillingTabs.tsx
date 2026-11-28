@@ -13,6 +13,10 @@ const TABS = [
   { href: '/billing/failed', label: 'Failed' },
   { href: '/billing/refunds', label: 'Refunds' },
   { href: '/billing/reconciliation', label: 'Reconciliation' },
+  { href: '/billing/plan-prices', label: 'Plans & prices' },
+  { href: '/billing/offers', label: 'Offers' },
+  { href: '/billing/payouts', label: 'Host payouts' },
+  { href: '/billing/invoice-settings', label: 'Invoice settings' },
 ];
 
 /** The billing section's tabs. Each is its own page, so a tab can be bookmarked and Back works. */

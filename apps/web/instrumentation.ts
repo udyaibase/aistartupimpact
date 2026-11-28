@@ -20,6 +20,14 @@ export async function register() {
     }
   }
 
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    // Plan prices and limits set in the admin (lib/catalog/server.ts): applied before the first request, then kept
+    // current. unref so the timer never holds a process open.
+    const { ensureCatalog } = await import("./lib/catalog/server");
+    await ensureCatalog();
+    setInterval(() => { void ensureCatalog({ fresh: true }); }, 60_000).unref?.();
+  }
+
   if (process.env.NEXT_RUNTIME === "edge") {
     await import("./sentry.edge.config");
   }

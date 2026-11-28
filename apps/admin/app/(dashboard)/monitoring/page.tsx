@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Activity, CheckCircle2, Loader2, RefreshCw, XCircle } from 'lucide-react';
 import { monitoringAction } from './actions';
 
@@ -56,7 +57,7 @@ export default function MonitoringPage() {
 
   if (error) return <p role="alert" className={`text-sm ${BAD}`}>{error}</p>;
   if (!data) return <Loader2 className="w-5 h-5 animate-spin text-gray-400" aria-label="Loading" />;
-  const { jobs, email, ai, alerts } = data;
+  const { systems, jobs, email, ai, alerts } = data;
   const jobsBad = jobs.filter((j) => j.lastOk === false || j.overdue).length;
   const jobsRun = jobs.filter((j) => j.lastRunAt != null).length;
 
@@ -65,10 +66,42 @@ export default function MonitoringPage() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="portal-title">Monitoring</h1>
-          <p className="portal-subtitle">Scheduled jobs, email sending limits and OpenAI spend. Problems are emailed to ADMIN_DIGEST_EMAIL (at most once every few hours per issue).</p>
+          <p className="portal-subtitle">Payments, invoices and payouts, scheduled jobs, email sending limits and OpenAI spend. Problems are emailed to ADMIN_DIGEST_EMAIL (at most once every few hours per issue).</p>
         </div>
         <button onClick={load} disabled={loading} className="inline-flex items-center gap-1.5 min-h-[36px] px-3 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-semibold"><RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh</button>
       </div>
+
+      <section className={card} aria-labelledby="systems-title">
+        <div className="px-4 pt-4 pb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 id="systems-title" className="text-sm font-semibold text-gray-900 dark:text-white">Payments, invoices and payouts</h2>
+          {systems.length > 0 && (() => {
+            const bad = systems.filter((s) => s.ok === false).length;
+            return (
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${bad > 0 ? PILL_BAD : PILL_GOOD}`}>
+                {bad > 0 ? <XCircle className="w-3.5 h-3.5" aria-hidden /> : <CheckCircle2 className="w-3.5 h-3.5" aria-hidden />}
+                {bad > 0 ? `${bad} of ${systems.length} need attention` : 'Everything is working'}
+              </span>
+            );
+          })()}
+        </div>
+        {systems.length === 0 ? <p className={`px-4 pb-4 text-sm ${BAD}`}>These checks could not be run. Refresh to try again.</p> : (
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+            {systems.map((s) => (
+              <li key={s.key} className="px-4 py-3 flex items-start gap-3">
+                {s.ok === null ? <Activity className="w-4 h-4 mt-0.5 text-gray-500" aria-hidden /> : s.ok ? <CheckCircle2 className="w-4 h-4 mt-0.5 text-green-600" aria-hidden /> : <XCircle className="w-4 h-4 mt-0.5 text-red-600" aria-hidden />}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white flex flex-wrap items-center gap-2">
+                    {s.label}
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${s.ok === null ? PILL_IDLE : s.ok ? PILL_GOOD : PILL_BAD}`}>{s.ok === null ? 'For information' : s.ok ? 'Working' : 'Needs attention'}</span>
+                  </p>
+                  <p className={`text-xs mt-0.5 ${s.ok === false ? BAD : 'text-gray-600 dark:text-gray-400'}`}>{s.detail}</p>
+                </div>
+                {s.href && <Link href={s.href} className="shrink-0 text-xs font-semibold text-brand hover:underline whitespace-nowrap">{s.action}</Link>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section className={card} aria-labelledby="jobs-title">
         <div className="px-4 pt-4 pb-2 flex flex-wrap items-center justify-between gap-2">

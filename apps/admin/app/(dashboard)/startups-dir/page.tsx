@@ -5,20 +5,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Plus, Building2, Edit3, Trash2, Crown, ShieldCheck, X } from 'lucide-react';
 import DataTable, { type BulkAction, type Column, type TableFilter } from '@/components/ui/DataTable';
-import { ask } from '@/components/Ask';
-import {
-  getStartupsAction,
-  deleteStartupAction,
-  toggleFeaturedAction,
-  approveStartupAction,
-  getFeaturedCampaignsAction,
-  scheduleFeaturedCampaignAction,
-  cancelFeaturedCampaignAction,
-  toggleContentReviewedAction,
-  bulkApproveStartupsAction,
-  bulkArchiveStartupsAction,
-  bulkDeleteStartupsAction,
-} from './actions';
+import { ask, askText } from '@/components/Ask';
+import { getStartupsAction, deleteStartupAction, approveStartupAction, takeDownStartupAction, toggleContentReviewedAction, bulkApproveStartupsAction, bulkArchiveStartupsAction, bulkDeleteStartupsAction } from './actions';
+import { toggleFeaturedAction, getFeaturedCampaignsAction, scheduleFeaturedCampaignAction, cancelFeaturedCampaignAction } from './startup-featured-actions';
 import { notify } from '@/components/Toast';
 
 interface Startup {
@@ -143,6 +132,17 @@ export default function StartupsDirPage() {
     }
   };
 
+  /** Remove a live startup from the site. The founder is told why and can fix it and send it for review again. */
+  const handleTakeDown = async (st: Startup) => {
+    const reason = await askText({
+      title: `Take down ${st.name}`, label: 'Reason (sent to the founder)', required: true, multiline: true, danger: true, confirmLabel: 'Take down',
+      message: 'It disappears from the directory, search and its own page straight away. Nothing is deleted, and it can be approved again from Submissions.',
+      placeholder: 'For example: Udyaibase lists companies whose product is built on AI, and we could not see how AI is used in yours.',
+    });
+    if (!reason) return;
+    await run(() => takeDownStartupAction(st.id, 'OTHER', reason), `${st.name} was taken down.`, `Couldn't take down ${st.name}.`);
+  };
+
   const handleApprove = (st: Startup) => run(() => approveStartupAction(st.id), `${st.name} approved and live.`, `Couldn't approve ${st.name}.`);
   const handleToggleReview = (st: Startup) => run(() => toggleContentReviewedAction(st.id, st.contentReviewed), st.contentReviewed ? `${st.name} is back under review.` : `${st.name} marked as reviewed.`, `Couldn't change the review status.`);
 
@@ -196,9 +196,9 @@ export default function StartupsDirPage() {
     {
       key: 'approval', header: 'Approval', sortValue: (st) => approvalOf(st),
       cell: (st) => approvalOf(st) === 'APPROVED'
-        ? <span className={`${pill} ${good}`}>Approved</span>
+        ? <span className="inline-flex items-center gap-1.5"><span className={`${pill} ${good}`}>Approved</span><button type="button" onClick={() => handleTakeDown(st)} aria-label={`Take down ${st.name}`} className="text-xs text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:underline">Take down</button></span>
         : approvalOf(st) === 'FOUNDER'
-          ? <span className={`${pill} ${neutral}`} title="Submitted by a founder. Approve it from the Founders section.">Founder submission</span>
+          ? <Link href="/startups-dir/review" className={`${pill} ${neutral} hover:ring-2 hover:ring-gray-300`} title="Submitted by a founder. Review it in Submissions.">Founder submission · review</Link>
           : <button onClick={() => handleApprove(st)} aria-label={`Approve ${st.name}`} className={`${pill} ${warn} hover:ring-2 hover:ring-amber-300`}>Pending · approve</button>,
     },
     {

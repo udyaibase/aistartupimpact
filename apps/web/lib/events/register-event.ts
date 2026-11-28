@@ -1,3 +1,4 @@
+import { ensureCatalog } from '@/lib/catalog/server';
 import { prisma } from "@udyaibase/database";
 import { effectiveHostPlan, registrationLimit, waitlistReason } from "@/lib/events/plans";
 import { notifyHostPlanLimit, sendRegistrationStatusEmail } from "@/lib/events/waitlist";
@@ -49,6 +50,7 @@ export interface RegisterForEventResult {
 export async function registerForEvent(
   params: RegisterForEventParams
 ): Promise<RegisterForEventResult> {
+  await ensureCatalog(); // registration limits come from the host's plan
   const {
     eventId, role, ticketTierId, newsletterConsent, whatsappConsent,
     locationCity, registrationSource, referrerUrl, embedWidgetId, utmSource, utmMedium, utmCampaign,

@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Upload, X, Loader2, Plus } from 'lucide-react';
 import { submitToolAction, updateToolAction, getTagGroupsForFounderAction, getToolTagIdsAction } from '@/app/founder/tools/actions';
+import { toolRequiredError, toolMissingList, founderMustHaveError } from '@udyaibase/utils/tool-required';
 import { FormProblemList, useFormProblems } from '@/components/ui/FormProblems';
 import { TOOL_DESCRIPTION_MAX, TOOL_TAGLINE_MAX } from '@/lib/founder/listing-validation';
 import { FAQManager, type FAQ } from '@/components/shared/FAQManager';
@@ -246,6 +247,8 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
 
 
   const formProblems = useFormProblems();
+  const lineList = (v: string) => v.split('\n').map((l) => l.replace(/^[•\-*]\s*/, '').trim()).filter(Boolean);
+  const stillMissing = toolMissingList({ ...formData, features: lineList(formData.features), useCases: lineList(formData.useCases) });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -266,6 +269,15 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
         .split('\n')
         .map((u: string) => u.trim())
         .filter(Boolean);
+
+      // The logo and the country are not plain inputs, so the browser's own "required" check cannot see them.
+      const bare = (lines: string[]) => lines.map((l) => l.replace(/^[•\-*]\s*/, '').trim()).filter(Boolean); // a lone bullet is not a feature
+      // Only a new listing must be complete here; for an edit the server allows details that were already missing.
+      // The LinkedIn page and the headquarters are asked for on every save.
+      const incomplete = isNew
+        ? toolRequiredError({ ...formData, features: bare(featuresArray), useCases: bare(useCasesArray) })
+        : founderMustHaveError({ linkedinUrl: formData.linkedinUrl, headquarters: formData.headquartersCountry });
+      if (incomplete) throw new Error(incomplete);
 
       const founderNamesArray = formData.founderNames
         .split(',')
@@ -354,10 +366,16 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
       )}
       <FormProblemList problems={formProblems.problems} onJump={formProblems.jumpTo} />
 
+      {!isNew && stillMissing.length > 0 && (
+        <p role="status" className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+          Your listing is still missing: {stillMissing.join(', ')}. The LinkedIn page and headquarters are needed to save; add the rest when you can, since complete listings get more attention.
+        </p>
+      )}
+
       {/* Logo Upload */}
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Logo
+          Logo <span className="text-red-500">*</span>
         </label>
         <div className="flex items-center gap-4">
           {logoPreview ? (
@@ -533,7 +551,7 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
             />
           </div>
           <div>
-            <label htmlFor="tool-linkedin" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">LinkedIn</label>
+            <label htmlFor="tool-linkedin" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">LinkedIn <span className="text-red-500">*</span></label>
             <input id="tool-linkedin"
               type="url"
               name="linkedinUrl"
@@ -541,6 +559,7 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
               onChange={handleChange}
               className="input-field text-sm"
               placeholder="https://linkedin.com/company/..."
+              required
             />
           </div>
         </div>
@@ -702,7 +721,7 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <label htmlFor="launchYear" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Launch Year
+            Launch Year <span className="text-red-500">*</span>
           </label>
           <input
             type="number"
@@ -710,8 +729,9 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
             name="launchYear"
             value={formData.launchYear}
             onChange={handleChange}
-            min="1900"
+            min="1950"
             max={new Date().getFullYear()}
+            required={isNew}
             className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent"
           />
         </div>
@@ -736,7 +756,7 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
 
         <div>
           <label htmlFor="headquartersCountry" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Headquarters
+            Headquarters <span className="text-red-500">*</span>
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <CountryPicker id="headquartersCountry" value={formData.headquartersCountry ?? ''} clearable
@@ -750,7 +770,7 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
       {/* Key Features */}
       <div>
         <label htmlFor="features" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Key Features
+          Key Features <span className="text-red-500">*</span>
         </label>
         <textarea
           id="features"
@@ -758,6 +778,7 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
           value={formData.features}
           onChange={handleChange}
           onPaste={(e) => handleBulletPointPaste(e, 'features')}
+          required={isNew}
           maxLength={500}
           rows={6}
           className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent resize-none font-mono text-sm"
@@ -771,7 +792,7 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
       {/* Use Cases */}
       <div>
         <label htmlFor="useCases" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Use Cases
+          Use Cases <span className="text-red-500">*</span>
         </label>
         <textarea
           id="useCases"
@@ -779,6 +800,7 @@ export default function ToolForm({ tool: existing }: { tool?: ToolFormTool }) {
           value={formData.useCases}
           onChange={handleChange}
           onPaste={(e) => handleBulletPointPaste(e, 'useCases')}
+          required={isNew}
           maxLength={500}
           rows={6}
           className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand focus:border-transparent resize-none font-mono text-sm"

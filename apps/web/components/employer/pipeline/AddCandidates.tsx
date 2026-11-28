@@ -20,8 +20,8 @@ interface PoolPerson {
   id: string; fullName: string; currentTitle: string | null; city: string | null; experienceYears: number | null; appliedFor: string; score: number;
   appliedAt: string; stage: string; stageRank: number; skills: string[]; matchedSkills: string[]; missingMustHaves: string[];
 }
-interface Draft { key: string; file: File | null; fullName: string; email: string; phone: string; linkedinUrl: string; currentTitle: string; currentCompany: string; city: string; experienceYears: string; note: string; status: 'reading' | 'ready' | 'saving' | 'saved' | 'error'; error: string; usedAi: boolean; duplicates: number }
-const blank = (file: File | null = null): Draft => ({ key: Math.random().toString(36).slice(2), file, fullName: '', email: '', phone: '', linkedinUrl: '', currentTitle: '', currentCompany: '', city: '', experienceYears: '', note: '', status: file ? 'reading' : 'ready', error: '', usedAi: false, duplicates: 0 });
+interface Draft { key: string; file: File | null; fullName: string; email: string; phone: string; linkedinUrl: string; currentTitle: string; currentCompany: string; city: string; experienceYears: string; note: string; status: 'reading' | 'ready' | 'saving' | 'saved' | 'error'; error: string; usedAi: boolean; duplicates: number; skills: string[] }
+const blank = (file: File | null = null): Draft => ({ key: Math.random().toString(36).slice(2), file, fullName: '', email: '', phone: '', linkedinUrl: '', currentTitle: '', currentCompany: '', city: '', experienceYears: '', note: '', status: file ? 'reading' : 'ready', error: '', usedAi: false, duplicates: 0, skills: [] });
 
 const FIELDS = [['fullName', 'Name *'], ['email', 'Email *'], ['phone', 'Phone'], ['linkedinUrl', 'LinkedIn or profile link'], ['currentTitle', 'Current role'], ['currentCompany', 'Current company'], ['city', 'City'], ['experienceYears', 'Years of experience']] as const;
 const PAGE = 8;
@@ -85,6 +85,7 @@ export default function AddCandidates({ jobId, jobTitle, onClose, onAdded, onInv
         set(d.key, {
           status: 'ready', usedAi: !!data.usedAi, fullName: f.fullName ?? '', email: f.email ?? '', phone: f.phone ?? '', linkedinUrl: f.linkedinUrl ?? '',
           currentTitle: f.currentTitle ?? '', currentCompany: f.currentCompany ?? '', city: f.city ?? '', experienceYears: f.experienceYears != null ? String(f.experienceYears) : '',
+          skills: Array.isArray(f.skills) ? f.skills : [],
         });
       } catch { set(d.key, { status: 'ready', error: 'Couldn’t read it; fill in by hand.' }); }
     }
@@ -99,7 +100,7 @@ export default function AddCandidates({ jobId, jobTitle, onClose, onAdded, onInv
     for (const r of pending) {
       if (r.status === 'reading') continue;
       set(r.key, { status: 'saving', error: '' });
-      const body = { fullName: r.fullName, email: r.email, phone: r.phone, linkedinUrl: r.linkedinUrl, currentTitle: r.currentTitle, currentCompany: r.currentCompany, city: r.city, experienceYears: r.experienceYears, note: r.note, channel, channelOther: other };
+      const body = { fullName: r.fullName, email: r.email, phone: r.phone, linkedinUrl: r.linkedinUrl, currentTitle: r.currentTitle, currentCompany: r.currentCompany, city: r.city, experienceYears: r.experienceYears, note: r.note, channel, channelOther: other, skills: r.skills };
       let res: Response | null = null;
       if (r.file) {
         const form = new FormData();

@@ -1,3 +1,4 @@
+import { toCsv } from "@/lib/csv";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
       p.createdAt ? new Date(p.createdAt).toLocaleDateString("en-GB") : "",
     ]);
 
-    const csv = [headers.join(","), ...rows.map((r: any) => r.map((c: any) => `"${String(c).replace(/"/g, '""')}"`).join(","))].join("\n");
+    const csv = toCsv(headers, rows); // cells that look like formulas are made plain text (lib/csv.ts)
 
     logAuditEvent({
       action: 'EXPORT',

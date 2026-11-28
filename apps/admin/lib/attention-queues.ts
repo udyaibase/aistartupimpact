@@ -14,7 +14,7 @@ export interface AttentionQueue {
 
 export const ATTENTION_QUEUES: readonly AttentionQueue[] = [
   { href: '/articles', one: 'article to review', many: 'articles to review', roles: ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'] },
-  { href: '/startups-dir', one: 'startup to approve', many: 'startups to approve' },
+  { href: '/startups-dir/review', one: 'startup to review', many: 'startups to review' },
   { href: '/tools-dir', one: 'AI tool to approve', many: 'AI tools to approve' },
   { href: '/tool-reviews', one: 'tool review to moderate', many: 'tool reviews to moderate' },
   { href: '/startup-reviews', one: 'startup review to moderate', many: 'startup reviews to moderate' },

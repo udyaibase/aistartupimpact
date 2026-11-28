@@ -107,6 +107,7 @@ export const startupSubmissionSchema = z.object({
   foundedYear: year('Founded year'),
   employeeCount: z.number().int().min(0, 'Team size can’t be negative').max(10_000_000, 'Team size looks too large').optional().nullable(),
   headquartersCity: optionalText('City', 200),
+  aiUseCase: optionalText('How your product uses AI', 600),
   category: optionalText('Category', 200),
   businessType: optionalText('Business type', 200),
   totalFundingInr: amount('Total funding').optional().nullable(),

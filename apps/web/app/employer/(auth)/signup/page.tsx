@@ -2,6 +2,7 @@
 
 import { Briefcase, Building2, Globe, Users, BarChart3, Zap, UserPlus } from 'lucide-react';
 import SignupFlow from '@/components/employer/signup/SignupFlow';
+import OfferNote from '@/components/employer/signup/OfferNote';
 
 const benefits = [
   {
@@ -55,6 +56,7 @@ export default function EmployerSignupPage() {
               <span className="font-sora font-bold text-white text-xs lg:text-sm tracking-wide uppercase">Employer portal</span>
             </div>
 
+            <OfferNote />
             <h2 className="font-sora font-extrabold text-xl lg:text-3xl text-white leading-tight mb-2 lg:mb-3">
               Hire AI Talent Faster
             </h2>

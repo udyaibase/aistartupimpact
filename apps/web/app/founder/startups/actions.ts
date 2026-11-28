@@ -1,10 +1,20 @@
 'use server';
 
+import { onStartupVerified } from '@/lib/offers/claim';
 import { requireFounderAuth } from '@/lib/founder-auth';
 import { sendAdminReviewAlert, sendSubmissionReceivedEmail } from '@/lib/founder-email';
 import { prisma, readListingFields, saveListingEdit } from '@udyaibase/database';
 import { revalidatePath } from 'next/cache';
 import { validateInput } from '@/lib/validation';
+import { founderMustHaveError } from '@udyaibase/utils/tool-required';
+import { aiUseProblem } from '@udyaibase/utils/startup-review';
+import { after } from 'next/server';
+import { runStartupAiCheck } from '@/lib/startups/ai-check';
+
+/** Run something once the response has gone out. Outside a request (scripts, tests) there is no "after", so run it now. */
+function later(work: () => Promise<unknown>) {
+  try { after(work); } catch { void work().catch(() => {}); }
+}
 import { startupSubmissionSchema, overFormLimit, STARTUP_TAGLINE_MAX } from '@/lib/founder/listing-validation';
 import { listingFieldLabel } from '@udyaibase/utils';
 import { listingAccess } from '@/lib/founder/listing-access';
@@ -24,6 +34,8 @@ interface StartupSubmission {
   name: string;
   tagline: string;
   description: string;
+  /** "How does your product use AI?": for our reviewers, never shown publicly. */
+  aiUseCase?: string | null;
   websiteUrl: string;
   linkedinUrl?: string;
   twitterUrl?: string;
@@ -112,6 +124,12 @@ export async function submitStartupAction(data: StartupSubmission): Promise<Subm
     const checked = validateInput(startupSubmissionSchema, data);
     if (!checked.success) return { success: false, error: checked.error };
     data = checked.data as unknown as StartupSubmission;
+    // Every startup lists its LinkedIn page and its headquarters.
+    const mustHave = founderMustHaveError({ linkedinUrl: data.linkedinUrl, headquarters: data.headquartersCity });
+    if (mustHave) return { success: false, error: mustHave };
+    // Udyaibase lists AI companies: every new submission says how its product uses AI, for the reviewer.
+    const aiProblem = aiUseProblem(data.aiUseCase);
+    if (aiProblem) return { success: false, error: aiProblem };
     const taglineProblem = overFormLimit('Tagline', data.tagline, STARTUP_TAGLINE_MAX);
     if (taglineProblem) return { success: false, error: taglineProblem };
     // Headquarters only from the standard city list.
@@ -227,6 +245,7 @@ export async function submitStartupAction(data: StartupSubmission): Promise<Subm
       const id = inserted[0]?.id;
       if (id) {
         await tx.$executeRaw`UPDATE "Startup" SET "contactEmail" = ${contactEmail}, "contactEmailVerifiedAt" = NOW() WHERE id = ${id}`;
+        await tx.$executeRaw`UPDATE "Startup" SET "aiUseCase" = ${String(data.aiUseCase).trim()}, "reviewStatus" = 'IN_REVIEW', "submittedForReviewAt" = NOW() WHERE id = ${id}`;
       }
       return { kind: 'created', id: id ?? null } as const;
     }, { maxWait: 10_000, timeout: 20_000 });
@@ -296,6 +315,9 @@ export async function submitStartupAction(data: StartupSubmission): Promise<Subm
 
     await logFounderActivity(session.userId, 'startup_submitted', { metadata: { name: data.name } });
 
+    // The automatic first look for the reviewer runs once the founder has their answer, so it never slows the submit.
+    later(() => runStartupAiCheck(startupId));
+
     // A contact email on the website's own domain proves control of it (same check as the work-email method).
     const companyDomain = emailVerificationDomain(data.websiteUrl);
     let verified = false;
@@ -303,6 +325,7 @@ export async function submitStartupAction(data: StartupSubmission): Promise<Subm
       await markStartupVerified(prisma, startupId, companyDomain, session.userId, { method: 'EMAIL', email: contactEmail });
       await refreshPublicListing('startup', startupId);
       await logFounderActivity(session.userId, 'startup_claim_verified', { metadata: { startupId, method: 'email' } });
+      await onStartupVerified(startupId, session.userId); // a running verified-founder offer
       verified = true;
     }
 
@@ -332,6 +355,9 @@ export async function updateStartupAction(id: string, data: StartupSubmission) {
     const checked = validateInput(startupSubmissionSchema, data);
     if (!checked.success) return { success: false, error: checked.error };
     data = checked.data as unknown as StartupSubmission;
+    // Every startup lists its LinkedIn page and its headquarters.
+    const mustHave = founderMustHaveError({ linkedinUrl: data.linkedinUrl, headquarters: data.headquartersCity });
+    if (mustHave) return { success: false, error: mustHave };
     // Headquarters only from the standard city list.
     if (data.headquartersCity) {
       const loc = await checkLocation({ city: data.headquartersCity });
@@ -346,7 +372,16 @@ export async function updateStartupAction(id: string, data: StartupSubmission) {
     }
 
     // The form's limit applies to what the founder changes; a longer tagline already on the listing may stay.
-    const stored = await prisma.startup.findUnique({ where: { id }, select: { tagline: true } });
+    const stored = await prisma.startup.findUnique({ where: { id }, select: { tagline: true, isApproved: true, aiUseCase: true } });
+    // A startup still going through review must say how it uses AI. One that is already live may add it any time.
+    const aiAnswer = typeof data.aiUseCase === 'string' ? data.aiUseCase.trim() : '';
+    if (!stored?.isApproved || aiAnswer) {
+      const aiProblem = aiUseProblem(aiAnswer);
+      if (aiProblem) return { success: false, error: aiProblem };
+    }
+    if (aiAnswer && aiAnswer !== (stored?.aiUseCase ?? '')) {
+      await prisma.startup.update({ where: { id }, data: { aiUseCase: aiAnswer }, select: { id: true } });
+    }
     const taglineProblem = overFormLimit('Tagline', data.tagline, STARTUP_TAGLINE_MAX, stored?.tagline ?? null);
     if (taglineProblem) return { success: false, error: taglineProblem };
 
@@ -413,6 +448,14 @@ export async function updateStartupAction(id: string, data: StartupSubmission) {
       await logFounderActivity(access.ownerId, 'edit_submitted', { metadata: { fields, ...by } });
       if (access.role !== 'OWNER') await logFounderActivity(session.userId, 'edit_submitted', { metadata: { fields } });
       sendAdminReviewAlert({ entityType: 'startup', entityName: access.name, founderEmail: session.email, reason: 'edited' });
+    }
+    // Sent for another review, or the AI answer changed: look again, after the founder has their answer.
+    // A waiting startup that changed is no longer what the first look judged: forget the label and any fast-approval
+    // slot, then look again. Otherwise a founder could pass the check and swap the text before it goes live.
+    const aiChanged = !!aiAnswer && aiAnswer !== (stored?.aiUseCase ?? '');
+    if (!stored?.isApproved && (result.published.length > 0 || aiChanged || result.resubmitted)) {
+      await prisma.startup.update({ where: { id }, data: { aiCheckLabel: null, aiCheckReason: null, aiCheckedAt: null, autoApproveAt: null }, select: { id: true } });
+      later(() => runStartupAiCheck(id));
     }
     if (result.resubmitted) sendAdminReviewAlert({ entityType: 'startup', entityName: data.name, founderEmail: session.email, reason: 'resubmitted' });
 

@@ -1,5 +1,7 @@
 'use client';
 
+import { aiUseProblem, AI_USE_MIN, AI_USE_MAX } from '@udyaibase/utils/startup-review';
+import { founderMustHaveError } from '@udyaibase/utils/tool-required';
 import { useState, useEffect, useRef } from 'react';
 import { StatusNote } from './Guidance';
 import { useRouter } from 'next/navigation';
@@ -24,6 +26,8 @@ interface Startup {
   slug: string;
   tagline: string;
   description: string;
+  aiUseCase?: string | null;
+  isApproved?: boolean | null;
   websiteUrl?: string | null;
   logoUrl?: string | null;
   stage?: string | null;
@@ -194,6 +198,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
     name: startup.name,
     tagline: startup.tagline,
     description: startup.description,
+    aiUseCase: startup.aiUseCase || '',
     websiteUrl: startup.websiteUrl || '',
     linkedinUrl: startup.linkedinUrl || '',
     twitterUrl: startup.twitterUrl || '',
@@ -281,8 +286,8 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
     if (!isNew || !draftLoaded || phase !== 'form') return;
     // Browser storage is readable by anyone using this computer, so the draft holds public company details only:
     // never people's details or team size.
-    const { name, tagline, description, websiteUrl, linkedinUrl, twitterUrl, foundedYear, headquartersCity, stage, status, logoUrl, category, businessType } = formData;
-    const companyDetails = { name, tagline, description, websiteUrl, linkedinUrl, twitterUrl, foundedYear, headquartersCity, stage, status, logoUrl, category, businessType };
+    const { name, tagline, description, aiUseCase, websiteUrl, linkedinUrl, twitterUrl, foundedYear, headquartersCity, stage, status, logoUrl, category, businessType } = formData;
+    const companyDetails = { name, tagline, description, aiUseCase, websiteUrl, linkedinUrl, twitterUrl, foundedYear, headquartersCity, stage, status, logoUrl, category, businessType };
     localStorage.setItem(NEW_DRAFT_KEY, JSON.stringify({ formData: companyDetails, faqs, fundingRounds, socialLinks, step }));
   }, [isNew, formData, faqs, fundingRounds, socialLinks, draftLoaded, step, phase]);
 
@@ -360,6 +365,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
       name: formData.name,
       tagline: formData.tagline,
       description: formData.description,
+      aiUseCase: formData.aiUseCase,
       websiteUrl: formData.websiteUrl,
       linkedinUrl: formData.linkedinUrl || undefined,
       twitterUrl: formData.twitterUrl || undefined,
@@ -396,6 +402,8 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
       if (formData.name.trim().length < 2) return 'Add your startup’s name.';
       if (!formData.tagline.trim()) return 'Add a tagline.';
       if (!formData.description.trim()) return 'Add a description.';
+      const aiProblem = aiUseProblem(formData.aiUseCase);
+      if (aiProblem) return aiProblem;
     }
     if (n === 2) {
       if (!formData.category) return 'Choose a category.';
@@ -406,6 +414,8 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
       if (!formData.employeeCount || parseInt(formData.employeeCount) < 1) return 'Enter your team size.';
       if (!isEmail(contactEmail)) return 'Add a contact email.';
       if (!contactConfirmed) return 'Confirm your contact email with the 6-digit code.';
+      const mustHave = founderMustHaveError({ linkedinUrl: formData.linkedinUrl, headquarters: formData.headquartersCity });
+      if (mustHave) return mustHave;
     }
     if (n === 3 && !foundersDetails.some(f => f.name.trim())) return 'Add at least one founder.';
     return null;
@@ -625,6 +635,8 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
       </div>
     </>
   );
+  // Asked of every new startup and every one still in review; a live startup may add it any time.
+  const aiRequired = isNew || !startup.isApproved;
   const descriptionBlock = (
     <>
       {/* Description */}
@@ -656,6 +668,29 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
             {formData.description.length} / {descriptionCharLimit}
           </p>
         </div>
+      </div>
+
+      {/* How the product uses AI: for our reviewers */}
+      <div>
+        <label htmlFor="aiUseCase" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          How does your product use AI?{aiRequired && <span className="text-red-500"> *</span>}
+        </label>
+        <textarea
+          id="aiUseCase"
+          name="aiUseCase"
+          value={formData.aiUseCase}
+          onChange={handleChange}
+          required={aiRequired}
+          minLength={AI_USE_MIN}
+          maxLength={AI_USE_MAX}
+          rows={3}
+          aria-describedby="aiUseCase-help"
+          className="w-full min-h-[44px] px-3.5 py-2 border border-gray-300 dark:border-gray-700 rounded-[10px] bg-white dark:bg-gray-950 text-gray-900 dark:text-white placeholder:text-gray-400 focus:ring-2 focus:ring-brand focus:border-transparent"
+          placeholder="For example: our product reads medical scans with our own vision model and flags likely fractures for the radiologist."
+        />
+        <p id="aiUseCase-help" className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          Udyaibase lists companies whose product is built on AI. This answer is only for our review team and is not shown on your page. A clear answer gets you approved faster. {formData.aiUseCase.length} / {AI_USE_MAX}
+        </p>
       </div>
     </>
   );
@@ -747,7 +782,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label htmlFor="linkedinUrl" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            LinkedIn URL
+            LinkedIn URL <span className="text-red-500">*</span>
           </label>
           <input
             type="url"
@@ -757,6 +792,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
             onChange={handleChange}
             className="w-full min-h-[44px] px-3.5 py-2 border border-gray-300 dark:border-gray-700 rounded-[10px] bg-white dark:bg-gray-950 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900/15 dark:focus:ring-white/20 focus:border-gray-900 dark:focus:border-gray-300"
             placeholder="https://linkedin.com/company/..."
+            required
           />
         </div>
 
@@ -864,7 +900,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
     <>
       <div>
         <label htmlFor="headquartersCity" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Headquarters
+          Headquarters <span className="text-red-500">*</span>
         </label>
         <CityCombobox
           id="headquartersCity"
@@ -909,7 +945,7 @@ export default function StartupForm({ startup: existing, existingFaqs = [], exis
         const form = e.currentTarget;
         if (!formProblems.check(form)) { e.preventDefault(); return; }
         // Required parts that aren't plain fields (a button group, an upload, a list).
-        const missing = !formData.logoUrl ? 'Upload your logo.' : !formData.stage ? 'Choose a funding stage.' : !foundersDetails.some((f) => f.name.trim()) ? 'Add at least one founder.' : null;
+        const missing = !formData.logoUrl ? 'Upload your logo.' : !formData.stage ? 'Choose a funding stage.' : !foundersDetails.some((f) => f.name.trim()) ? 'Add at least one founder.' : founderMustHaveError({ linkedinUrl: formData.linkedinUrl, headquarters: formData.headquartersCity });
         if (missing) { e.preventDefault(); setError(missing); form.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
         handleSubmit(e);
       }} className="bg-white dark:bg-gray-900 -mx-4 sm:mx-0 rounded-none sm:rounded-2xl border-y sm:border border-gray-200 dark:border-gray-800 px-4 py-5 sm:p-6 space-y-6">

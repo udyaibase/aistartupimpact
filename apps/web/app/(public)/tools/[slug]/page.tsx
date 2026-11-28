@@ -146,7 +146,7 @@ export default async function ToolDetailPage(props: { params: Promise<{ slug: st
     try {
       const redirectCheck = await sql`
         SELECT slug FROM "AiTool"
-        WHERE ${params.slug} = ANY("previousSlugs") AND "deletedAt" IS NULL
+        WHERE ${params.slug} = ANY("previousSlugs") AND "deletedAt" IS NULL AND status IN ('APPROVED', 'FEATURED')
         LIMIT 1
       `;
       if (redirectCheck.length > 0) {

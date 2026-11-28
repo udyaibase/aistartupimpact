@@ -1,7 +1,6 @@
-import { jwtSecret } from '@/lib/jwt-secret';
 import bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
+import { verifyUserTokenSession } from '@/lib/user-session';
 import { prisma } from '@udyaibase/database';
 import { verifyFounderToken } from '@/lib/founder-auth';
 import { getUnifiedSession } from '@/lib/unified-auth';
@@ -80,12 +79,9 @@ export async function founderFromCookies() {
   }
 
   const userToken = store.get('user-token')?.value;
-  if (userToken) {
-    try {
-      const { payload } = await jwtVerify(userToken, jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET'));
-      const email = typeof payload.email === 'string' ? payload.email.toLowerCase() : null;
-      if (email) return prisma.founderUser.findUnique({ where: { email }, select });
-    } catch { /* expired or invalid: not signed in */ }
-  }
+  // A site sign-in counts only while its session record exists: a password change or sign-out removes it, and an old
+  // copy of the cookie must not be able to reactivate the account or pass the portal's account check.
+  const live = await verifyUserTokenSession(userToken);
+  if (live) return prisma.founderUser.findUnique({ where: { email: live.email }, select });
   return null;
 }

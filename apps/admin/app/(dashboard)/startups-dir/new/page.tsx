@@ -4,7 +4,7 @@ import { notify } from '@/components/Toast';
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Upload, Loader2, Save, Crown } from 'lucide-react';
-import { createStartupAction } from '../actions';
+import { createStartupAction } from '../startup-form-actions';
 import { uploadLogoAction } from '../../media/actions';
 import { FAQManager, type FAQ } from '@/components/shared/FAQManager';
 import FundingRoundsManager, { FundingRound, convertToSaveFormat } from '@/components/shared/FundingRoundsManager';

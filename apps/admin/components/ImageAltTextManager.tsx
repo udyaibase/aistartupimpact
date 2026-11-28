@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { Image as ImageIcon, AlertCircle, CheckCircle, Edit3, Save, X } from 'lucide-react';
-import { analyzeContentImages, type ImageAnalysis } from '../lib/seo-analyzer';
+import { analyzeContentImages } from '../lib/seo-analyzer';
+import { type ImageAnalysis } from '../lib/seo-types';
 
 interface ImageAltTextManagerProps {
   content: string;

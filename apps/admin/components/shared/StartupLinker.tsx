@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Search, X, Link2, Building2 } from 'lucide-react';
-import { searchStartupsForLinkAction, linkToolToStartupAction, getLinkedStartupAction } from '@/app/(dashboard)/tools-dir/actions';
+import { searchStartupsForLinkAction, linkToolToStartupAction, getLinkedStartupAction } from '@/app/(dashboard)/tools-dir/tool-content-actions';
 
 interface StartupLinkerProps {
   toolId: string;

@@ -20,17 +20,16 @@ export async function POST(request: NextRequest) {
 
     await prisma.$transaction(async (tx) => {
       await tx.founderUser.update({ where: { id: founder.id }, data: { deactivatedAt: null, lastLoginAt: new Date() } });
-      // Show again what deactivating hid: never a listing that was rejected or still waiting for its first approval.
+      // Show again what deactivating hid: only listings our team had approved (they carry an approval date).
+      // Proving ownership of the domain is not approval, so a verified startup still waiting for review stays hidden.
       await tx.startup.updateMany({
-        where: {
-          ownerId: founder.id,
-          deletedAt: null,
-          OR: [{ claimStatus: { in: ['CLAIMED', 'VERIFIED'] } }, { claimStatus: 'PENDING', approvedAt: { not: null } }],
-        },
+        where: { ownerId: founder.id, deletedAt: null, approvedAt: { not: null }, claimStatus: { not: 'REJECTED' } },
         data: { isApproved: true },
       });
       await tx.aiTool.updateMany({
-        where: { ownerId: founder.id, deletedAt: null, status: 'ARCHIVED', claimStatus: { in: ['CLAIMED', 'VERIFIED'] } },
+        // Only tools our team had approved. Proving ownership is not approval, so a tool that was turned down and
+        // verified afterwards stays hidden.
+        where: { ownerId: founder.id, deletedAt: null, status: 'ARCHIVED', reviewStatus: 'APPROVED', approvedAt: { not: null }, claimStatus: { not: 'REJECTED' } },
         data: { status: 'APPROVED' },
       });
     });

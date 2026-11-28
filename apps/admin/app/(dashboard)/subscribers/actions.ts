@@ -19,8 +19,9 @@ export async function getSubscribersAction(page = 1, limit = 20, search = "") {
   try {
     const offset = (page - 1) * limit;
     const searchPattern = `%${search}%`;
-    const limitInt = Number(limit);
-    const offsetInt = Number(offset);
+    // Bounded: an unbounded page size is an easy way to dump the whole list or stall the database.
+    const limitInt = Math.min(200, Math.max(1, Math.floor(Number(limit)) || 20));
+    const offsetInt = Math.max(0, Math.floor(Number(offset)) || 0);
 
     const rows: any[] = search
       ? await prisma.$queryRawUnsafe(

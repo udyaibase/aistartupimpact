@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Search, X, Repeat2 } from 'lucide-react';
-import { getToolAlternativesAction, addToolAlternativeAction, removeToolAlternativeAction, searchToolsForAlternativeAction } from '@/app/(dashboard)/tools-dir/actions';
+import { getToolAlternativesAction, addToolAlternativeAction, removeToolAlternativeAction, searchToolsForAlternativeAction } from '@/app/(dashboard)/tools-dir/tool-content-actions';
 
 interface AlternativeToolsManagerProps {
   toolId: string;

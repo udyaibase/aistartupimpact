@@ -1,3 +1,4 @@
+import { onStartupVerified } from '@/lib/offers/claim';
 import { NextRequest, NextResponse } from 'next/server';
 import { clientIp } from '@/lib/client-ip';
 import { founderApi, tooMany } from '@/lib/founder/api-session';
@@ -112,6 +113,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
       });
       await refreshPublicListing('startup', id); // verified badge
       await logFounderActivity(session.userId, 'startup_claim_verified', { request, metadata: { startupId: id, method: 'dns' } });
+      await onStartupVerified(id, session.userId); // a running verified-founder offer
       if (takeover && previousOwnerId) {
         await recordTakeover({ startupId: id, startupName: startup.name, domain, previousOwnerId, newOwnerId: session.userId, previousMethod: startup.verificationMethod === 'DNS' ? 'DNS' : 'EMAIL' });
       }

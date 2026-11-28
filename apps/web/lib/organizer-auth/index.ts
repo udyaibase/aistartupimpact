@@ -1,3 +1,4 @@
+import { ensureCatalog } from '@/lib/catalog/server';
 import { cache } from "react";
 import { jwtSecret } from '@/lib/jwt-secret';
 import { SignJWT, jwtVerify } from "jose";
@@ -102,6 +103,7 @@ export const getOrganizerSession = cache(readOrganizerSession);
 
 /** Looked up once per request: the layout, the page and its guards all ask, and each ask was three queries. */
 async function readOrganizerSession(): Promise<OrganizerSession | null> {
+  await ensureCatalog(); // every host-portal request reads plans: make sure the admin's prices and limits are in force
   const cookieStore = await cookies();
 
   // 1. organizer_session cookie

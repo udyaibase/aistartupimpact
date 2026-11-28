@@ -507,7 +507,7 @@ export default function CandidatePanel({
                       </li>
                     ))}
                   </ul>
-                  <p className="mt-1.5 text-xs text-gray-500">Rules-based, not AI: compares your requirements with what the candidate entered. Use it to prioritise, not to decide.</p>
+                  <p className="mt-1.5 text-xs text-gray-500">Rules-based, not AI: compares your requirements with {data.sourcedState ? 'what your team added and the skills found in their resume' : 'what the candidate entered'}. Use it to prioritise, not to decide.</p>
                 </section>
               )}
 
@@ -522,7 +522,7 @@ export default function CandidatePanel({
                       </li>
                     ))}
                   </ul>
-                  <p className="mt-1.5 text-xs text-gray-500">Skills the candidate ticked as having. A plain match, not a score.</p>
+                  <p className="mt-1.5 text-xs text-gray-500">{data.sourcedState ? 'Skills found in their resume (they were sourced, so they didn’t tick any). A plain match, not a score.' : 'Skills the candidate ticked as having. A plain match, not a score.'}</p>
                 </section>
               )}
 

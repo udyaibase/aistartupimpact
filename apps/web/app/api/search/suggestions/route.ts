@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
         SELECT title as suggestion
         FROM "Article"
         WHERE 
-          status = 'PUBLISHED'
+          status = 'PUBLISHED' AND "deletedAt" IS NULL
           AND title ILIKE ${searchTerm + '%'}
         ORDER BY "publishedAt" DESC
         LIMIT 3
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
         SELECT name as suggestion
         FROM "AiTool"
         WHERE 
-          status = 'APPROVED'
+          status IN ('APPROVED', 'FEATURED') AND "deletedAt" IS NULL
           AND name ILIKE ${searchTerm + '%'}
         ORDER BY "avgRating" DESC, "reviewCount" DESC
         LIMIT 3
@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
       sql`
         SELECT name as suggestion
         FROM "Startup"
-        WHERE name ILIKE ${searchTerm + '%'}
+        WHERE "isApproved" = true AND "deletedAt" IS NULL AND name ILIKE ${searchTerm + '%'}
         ORDER BY "impactScore" DESC
         LIMIT 3
       `.catch(() => []),

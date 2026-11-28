@@ -1,4 +1,6 @@
 import { eventInstant, cleanTimeZone } from '@/lib/events/zoned-time';
+import SponsoredTag from '@/components/article/SponsoredTag';
+import { isSponsoredArticle } from '@/lib/seo';
 import { salaryText } from '@/lib/jobs/format';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -154,7 +156,7 @@ export default async function HomePage() {
         coverImage: heroArticle.coverImage ?? null,
         ctaUrl: heroArticle.type === 'STORY' ? `/stories/${heroArticle.slug}` : `/news/${heroArticle.slug}`,
         ctaLabel: 'Read Story',
-        badgeText: heroArticle.category?.name || 'Story',
+        badgeText: isSponsoredArticle(heroArticle) ? 'Sponsored' : heroArticle.category?.name || 'Story',
         authorName: heroArticle.author?.name ?? null,
         readTimeMinutes: heroArticle.readTimeMinutes ?? null,
       }];
@@ -266,6 +268,7 @@ export default async function HomePage() {
                     <span className="inline-block text-xs font-bold uppercase tracking-wider text-red-500">
                       {story.category?.name || 'News'}
                     </span>
+                    {isSponsoredArticle(story) && <SponsoredTag className="ml-2" />}
                   </div>
                   <p className="font-sora font-bold text-base sm:text-lg text-gray-900 dark:text-white leading-tight mb-3 group-hover:text-gray-700 dark:group-hover:text-gray-200 transition-colors line-clamp-2">
                     {story.title}
@@ -641,6 +644,7 @@ export default async function HomePage() {
                           <span className="inline-block text-xs font-bold uppercase tracking-wider text-red-500">
                             {item.category?.name || 'Ecosystem'}
                           </span>
+                          {isSponsoredArticle(item) && <SponsoredTag className="ml-2" />}
                         </div>
                         <p className="font-sora font-bold text-sm text-gray-900 dark:text-white leading-tight mb-2 group-hover:text-red-500 transition-colors">
                           {item.title}

@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
+import { ensureCatalog } from "@/lib/catalog";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "SENIOR_WRITER"];
 const ALL_ROLES = ["SUPER_ADMIN", "EDITOR_IN_CHIEF", "SENIOR_WRITER", "WRITER"];
@@ -26,6 +27,7 @@ export function twoFactorBlock(session: any): { status: 401 | 403; message: stri
 }
 
 export async function requireApiAuth(allowedRoles: string[] = ADMIN_ROLES, opts: AuthOptions = {}) {
+  await ensureCatalog(); // the plan catalog in force, before anything reads plans
   const session: any = await getServerSession(authOptions);
 
   // revoked: the account was deactivated or deleted after this session started (lib/auth.ts).
@@ -38,7 +40,8 @@ export async function requireApiAuth(allowedRoles: string[] = ADMIN_ROLES, opts:
     return { session: null, error: NextResponse.json({ error: block.message }, { status: block.status }) };
   }
 
-  const userRole = session.user.role;
+  // A session that still owes its 2FA step has no role (lib/auth.ts); only the 2FA endpoints may use the held-back one.
+  const userRole = session.user.role ?? (opts.allowPending2FA ? session.pendingRole : undefined);
   if (!allowedRoles.includes(userRole)) {
     return { session: null, error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
   }
@@ -47,6 +50,7 @@ export async function requireApiAuth(allowedRoles: string[] = ADMIN_ROLES, opts:
 }
 
 export async function requireActionAuth(allowedRoles: string[] = ADMIN_ROLES) {
+  await ensureCatalog(); // the plan catalog in force, before anything reads plans
   const session: any = await getServerSession(authOptions);
 
   // revoked: the account was deactivated or deleted after this session started (lib/auth.ts).

@@ -34,6 +34,8 @@ import { submitStartupAction } from '@/app/founder/startups/actions';
 
 const base = {
   name: 'Acme AI', tagline: 'AI for x', description: 'What it does', websiteUrl: 'https://acme.ai',
+  linkedinUrl: 'https://www.linkedin.com/company/acme-ai', headquartersCity: 'Bengaluru',
+  aiUseCase: 'Our product reads invoices with our own language model.',
   foundedYear: 2024, founders: ['Priya'], stage: 'SEED', contactEmail: 'priya@gmail.com', contactEmailProof: 'p',
 };
 const text = (call: unknown[]) => (call[0] as string[]).join('?');
@@ -110,5 +112,13 @@ describe('submitStartupAction', () => {
     founderFind.mockResolvedValue({ email: 'priya@gmail.com', companyEmail: 'priya@acme.ai' });
     const r = await submitStartupAction(base as never);
     expect(r).toMatchObject({ success: true, verified: false, workEmailHint: 'priya@acme.ai' });
+  });
+  it('refuses a startup with no LinkedIn page or no headquarters', async () => {
+    expect(await submitStartupAction({ ...base, linkedinUrl: '' } as never)).toMatchObject({ success: false, error: 'Add your LinkedIn page.' });
+    expect(await submitStartupAction({ ...base, headquartersCity: '' } as never)).toMatchObject({ success: false, error: 'Choose your headquarters.' });
+  });
+  it('refuses a startup that does not say how it uses AI', async () => {
+    expect(await submitStartupAction({ ...base, aiUseCase: '' } as never)).toMatchObject({ success: false, error: 'Tell us how your product uses AI.' });
+    expect(await submitStartupAction({ ...base, aiUseCase: 'We use AI.' } as never)).toMatchObject({ success: false, error: expect.stringMatching(/a little more/) });
   });
 });

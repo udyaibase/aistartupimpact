@@ -6,7 +6,7 @@ import { withPublicRefresh } from '@/lib/refresh-public';
 
 async function postHandler(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
-  const { error } = await requireApiAuth(['SUPER_ADMIN', 'EDITOR_IN_CHIEF']);
+  const { error, session } = await requireApiAuth(['SUPER_ADMIN', 'EDITOR_IN_CHIEF']);
   if (error) return error;
   try {
     const { id } = params;
@@ -15,8 +15,10 @@ async function postHandler(request: NextRequest, props: { params: Promise<{ id: 
     const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
     if (!reason) return NextResponse.json({ success: false, error: 'Add a reason for the founder.' }, { status: 400 });
 
-    const { found } = await rejectTool(id, reason);
+    const { found, error: problem } = await rejectTool(id, reason, session?.user?.email, session?.user?.role);
     if (!found) return NextResponse.json({ success: false, error: 'Tool not found' }, { status: 404 });
+    // A refused decision (for example a reason too short to help the founder) must not be reported as done.
+    if (problem) return NextResponse.json({ success: false, error: problem }, { status: 400 });
 
     return NextResponse.json({ success: true, message: 'Tool rejected successfully' });
   } catch (error: any) {

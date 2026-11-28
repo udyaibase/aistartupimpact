@@ -1,3 +1,4 @@
+import { claimAutoOffers } from '@/lib/offers/claim';
 import { prisma } from '@udyaibase/database';
 import { notifyEmployer } from '@/lib/employer/notify';
 import { setEmployerSession } from '@/lib/employer-auth';
@@ -125,6 +126,10 @@ export async function openFounderWorkspace(founderUserId: string, startupId: str
 
   // Jobs posted for this startup belong to its workspace.
   await prisma.jobBoardListing.updateMany({ where: { employerId, deletedAt: null }, data: { startupId: startup.id } });
+
+  // The founder has just verified this workspace: grant a running offer for verified startups (or for new
+  // workspaces, when this one was created a moment ago). Before the session below records the plan.
+  await claimAutoOffers(employerId, ['VERIFIED_STARTUPS', 'NEW_WORKSPACES']);
 
   const e = await prisma.jobBoardEmployer.findUniqueOrThrow({ where: { id: employerId } });
   const member = await ensureOwnerMember(e.id, { email: founder.email, name: founder.name });

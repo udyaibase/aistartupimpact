@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
             'article' as result_type
           FROM "Article"
           WHERE 
-            status = 'PUBLISHED'
+            status = 'PUBLISHED' AND "deletedAt" IS NULL
             AND "searchVector" @@ to_tsquery('english', ${tsQuery})
           ORDER BY rank DESC, "publishedAt" DESC
           LIMIT ${type === 'articles' ? limit : 10}
@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
             'tool' as result_type
           FROM "AiTool"
           WHERE 
-            status = 'APPROVED'
+            status IN ('APPROVED', 'FEATURED') AND "deletedAt" IS NULL
             AND "searchVector" @@ to_tsquery('english', ${tsQuery})
           ORDER BY rank DESC, "avgRating" DESC, "reviewCount" DESC
           LIMIT ${type === 'tools' ? limit : 10}
@@ -126,7 +126,8 @@ export async function GET(request: NextRequest) {
             'startup' as result_type
           FROM "Startup"
           WHERE 
-            "searchVector" @@ to_tsquery('english', ${tsQuery})
+            "isApproved" = true AND "deletedAt" IS NULL
+            AND "searchVector" @@ to_tsquery('english', ${tsQuery})
           ORDER BY rank DESC, "impactScore" DESC
           LIMIT ${type === 'startups' ? limit : 10}
           OFFSET ${type === 'startups' ? offset : 0}

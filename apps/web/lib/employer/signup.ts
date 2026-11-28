@@ -1,3 +1,4 @@
+import { claimAutoOffers } from '@/lib/offers/claim';
 import { jwtSecret } from '@/lib/jwt-secret';
 import { hashOtp } from '@/lib/otp';
 import crypto from 'crypto';
@@ -188,6 +189,8 @@ export async function createWorkspace(email: string, startup: StartupRow | null,
     throw err;
   }
   await markStep(made.employerId, 'WORKSPACE_CREATED', { path: 'signup' });
+  // A running offer for new workspaces (Admin → Billing → Offers) is granted before the session records the plan.
+  await claimAutoOffers(made.employerId, ['NEW_WORKSPACES']);
   await enter(made.employerId, made.memberId, email);
   return { employerId: made.employerId };
 }
@@ -217,6 +220,8 @@ export async function addCompany(email: string, name: string, website: string) {
     return w;
   });
   await markStep(made.employerId, 'WORKSPACE_CREATED', { path: 'signup' });
+  // A running offer for new workspaces (Admin → Billing → Offers) is granted before the session records the plan.
+  await claimAutoOffers(made.employerId, ['NEW_WORKSPACES']);
   await enter(made.employerId, made.memberId, email);
   return { created: { employerId: made.employerId } };
 }

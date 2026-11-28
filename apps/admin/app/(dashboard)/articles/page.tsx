@@ -1,5 +1,6 @@
 'use client';
 
+import { TYPE_LABEL } from './article-types';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Copy, Plus, Trash2 } from 'lucide-react';
@@ -25,7 +26,6 @@ const STATUS_STYLE: Record<string, string> = {
   PUBLISHED: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
   ARCHIVED: 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300',
 };
-const TYPE_LABEL: Record<string, string> = { NEWS: 'News', STORY: 'Founder story', GUIDE: 'Guide', COMPARISON: 'Comparison', OPINION: 'Opinion', REPORT: 'Report', SPONSORED: 'Sponsored' };
 /** The date that matters for an article's current state, for sorting and display. */
 const dateOf = (a: Article) => a.publishedAt || a.scheduledAt || a.updatedAt || null;
 
@@ -155,7 +155,10 @@ export default function ArticlesPage() {
             {articles.length.toLocaleString('en-IN')} articles across news, stories, opinion and guides{inReview > 0 ? `; ${inReview} waiting for review` : ''}.
           </p>
         </div>
-        <Link href="/articles/new" className="btn-brand text-sm gap-2 shrink-0"><Plus className="w-4 h-4" aria-hidden /> New article</Link>
+        <div className="flex gap-2 shrink-0">
+          {viewer?.canPublish && <Link href="/articles/categories" className="btn-outline text-sm">Categories</Link>}
+          <Link href="/articles/new" className="btn-brand text-sm gap-2"><Plus className="w-4 h-4" aria-hidden /> New article</Link>
+        </div>
       </div>
 
       <DataTable

@@ -9,6 +9,8 @@ import crypto from "crypto";
 import { logAuditEvent } from "@/lib/audit-log";
 import { withPublicRefresh } from '@/lib/refresh-public';
 import { publicError } from '@/lib/public-error';
+import { requireApiAuth } from '@/lib/api-auth';
+import { sectionRoles } from '@/lib/section-access';
 
 const SUPER_ROLES = ["SUPER_ADMIN", "EDITOR_IN_CHIEF"];
 
@@ -218,6 +220,9 @@ async function postHandler(request: NextRequest) {
 }
 
 export async function GET() {
+  // Read by the Settings screen only; checked here too, not just by the middleware.
+  const { error } = await requireApiAuth(sectionRoles('/settings'));
+  if (error) return error;
   try {
     const placeholders = BRAND_KEYS.map((_, i) => `$${i + 1}`).join(', ');
     const settings = await prisma.$queryRawUnsafe<Array<{ key: string; value: string }>>(

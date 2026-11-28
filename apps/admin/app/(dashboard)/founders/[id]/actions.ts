@@ -7,6 +7,7 @@ import { DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { eraseFounderRecords, findUnusedMedia, prisma } from '@udyaibase/database';
 import { mediaVariantKeys, ownMediaKey } from '@udyaibase/utils';
 import { requireActionAuth, twoFactorBlock } from '@/lib/api-auth';
+import { sectionRoles } from '@/lib/section-access';
 import { logAuditEvent } from '@/lib/audit-log';
 import { r2, R2_BUCKET } from '@/lib/media';
 import { refreshPublic } from '@/lib/refresh-public';
@@ -15,7 +16,8 @@ import { publicError } from '@/lib/public-error';
 const sql = neon(process.env.DATABASE_URL!);
 
 export async function getFounderByIdAction(founderId: string) {
-  const { error: authError } = await requireActionAuth();
+  // A founder's profile holds personal details: only the roles that can open the Founders section may read it.
+  const { error: authError } = await requireActionAuth(sectionRoles('/founders'));
   if (authError) return { success: false, error: authError };
   try {
     // Get founder details
@@ -75,6 +77,7 @@ export async function getFounderByIdAction(founderId: string) {
         "foundersData",
         "claimStatus" AS status,
         "isApproved",
+        "reviewStatus",
         "createdAt"::text AS "createdAt"
       FROM "Startup"
       WHERE "ownerId" = ${founderId} AND "deletedAt" IS NULL

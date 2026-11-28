@@ -1,4 +1,5 @@
 import { requireFounderAuth } from '@/lib/founder-auth';
+import { reviewStatusOf } from '@udyaibase/utils/startup-review';
 import { rolesByOwner, workspaceOwnerIds } from '@/lib/founder/access';
 import { pendingEditCounts } from '@/lib/founder/listing-access';
 import { prisma } from '@udyaibase/database';
@@ -19,13 +20,21 @@ export default async function ToolsPage() {
   // Fetch all tools owned by this founder using raw query
   const tools = await prisma.$queryRaw<any[]>`
     SELECT 
-      id, name, slug, tagline, "logoUrl", "claimStatus", "ownerId"
+      id, name, slug, tagline, "logoUrl", "claimStatus", "ownerId", status::text AS status, "reviewStatus"
     FROM "AiTool"
     WHERE "ownerId" = ANY(${ownerIds})
       AND "deletedAt" IS NULL
     ORDER BY "createdAt" DESC
   `;
 
+  // What the lists show is our review, not ownership: a verified tool we haven't approved is "In review", not "Live".
+  for (const t of tools) {
+    const live = t.status === 'APPROVED' || t.status === 'FEATURED';
+    const review = reviewStatusOf({ isApproved: live, reviewStatus: t.reviewStatus, claimStatus: t.claimStatus });
+    if (live) { if (t.claimStatus !== 'VERIFIED') t.claimStatus = 'CLAIMED'; }
+    else if (review === 'IN_REVIEW') t.claimStatus = 'PENDING';
+    else if (review !== 'APPROVED') t.claimStatus = 'REJECTED';
+  }
   const pendingCounts = await pendingEditCounts('tool', tools.map((l) => l.id));
   const rows = tools.map((l) => ({ ...l, role: roles.get(l.ownerId) ?? 'VIEWER', pendingEdits: pendingCounts.get(l.id) ?? 0 }));
   const ownsOne = tools.some((l) => l.ownerId === session.userId);

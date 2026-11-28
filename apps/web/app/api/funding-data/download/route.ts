@@ -1,3 +1,4 @@
+import { ensureCatalog } from '@/lib/catalog/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { checkRateLimit, strictRateLimit } from '@/lib/rate-limit';
@@ -16,6 +17,7 @@ const back = (request: NextRequest, reason: string) => NextResponse.redirect(new
  * Works only while the purchase is paid, not refunded and inside its access window, up to the pack's download count.
  */
 export async function GET(request: NextRequest) {
+  await ensureCatalog(); // pack sizes
   const id = verifyPurchaseToken(request.nextUrl.searchParams.get('t'));
   if (!id) return back(request, 'invalid');
   const p = await prisma.fundingDataPurchase.findUnique({ where: { id } });

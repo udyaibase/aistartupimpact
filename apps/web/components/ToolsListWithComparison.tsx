@@ -585,8 +585,8 @@ export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: 
   // Desktop: once the bar is stuck, it folds to one row (search, Filters, Sort) while scrolling down, and opens up
   // again on a deliberate scroll up. Phones and tablets already hide the whole bar on the way down.
   //
-  // The fold changes no sizes: the bar keeps its height, the category pills and count row fade out, the search and
-  // Filters rows slide up into one line, and the background is clipped to that line. Only transform, opacity and
+  // The fold changes no sizes: the bar keeps its height, the category pills and count row fade out, the search strip
+  // (search, Filters, Sort, the Search button) slides up into their place, and the background is clipped to that line. Only transform, opacity and
   // clip-path animate, so nothing on the page moves and the browser never has to correct the scroll (which, when the
   // bar resized itself, made it shake).
   const [isDesktop, setIsDesktop] = useState(false);
@@ -602,8 +602,7 @@ export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: 
   const barRef = useRef<HTMLDivElement>(null);
   const pillsRef = useRef<HTMLDivElement>(null);
   const searchRowRef = useRef<HTMLDivElement>(null);
-  const filtersRowRef = useRef<HTMLDivElement>(null);
-  const [fold, setFold] = useState<{ lift: number; dx: number; dy: number; filtersW: number; clip: number } | null>(null);
+  const [fold, setFold] = useState<{ lift: number; clip: number } | null>(null);
   const compactRef = useRef(compact);
   compactRef.current = compact;
   useEffect(() => {
@@ -613,16 +612,13 @@ export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: 
     const measure = () => {
       if (compactRef.current) return;
       const s = searchRowRef.current?.getBoundingClientRect();
-      const f = filtersRowRef.current?.getBoundingClientRect();
       const bRect = barEl.getBoundingClientRect();
-      if (!s || !f || !f.width) return;
+      if (!s || !s.width) return;
       const p = pillsRef.current?.getBoundingClientRect();
       const top = p && p.height ? p.top + 12 : s.top; // where the single row sits: the pills' first line
       const lift = s.top - top;
-      const dy = top + (s.height - f.height) / 2 - f.top;
-      const dx = s.right - f.width - f.left;
       const clip = Math.max(0, bRect.bottom - (top + s.height + 10));
-      setFold({ lift, dx, dy, filtersW: f.width, clip });
+      setFold({ lift, clip });
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -658,7 +654,7 @@ export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: 
           transform: bar.hidden ? `translate3d(0, calc(-100% - ${bar.headerOffset}px), 0)` : 'translate3d(0, 0, 0)',
           transition: 'transform 360ms cubic-bezier(0.32, 0.72, 0, 1)',
         }}
-        className={`sticky z-40 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 py-2 sm:pt-0 sm:pb-3 mb-0 sm:mb-5 flex flex-col gap-2 sm:block will-change-transform motion-reduce:!transition-none ${folded ? 'pointer-events-none' : ''}`}
+        className={`sticky z-40 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 py-2 sm:pt-0 sm:pb-2 mb-0 sm:mb-2 flex flex-col gap-2 sm:block will-change-transform motion-reduce:!transition-none ${folded ? 'pointer-events-none' : ''}`}
       >
       {/* Full-bleed backdrop: runs edge to edge of the window while the controls stay aligned with the content */}
       <div
@@ -739,15 +735,12 @@ export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: 
 
       {/* ── Search + Filters + Sort + View Toggle ── */}
       <div className="order-1 sm:order-none sm:pt-3 sm:space-y-3">
-        {/* Search Bar, with the phone filter button beside it */}
+        {/* One strip, the same as AI Jobs and AI Startups: search, Filters, Sort and the Search button (phones: search and
+            the filter button) */}
         <div
           ref={searchRowRef}
-          className="flex items-start gap-2 sm:block pointer-events-auto motion-reduce:!transition-none"
-          style={isDesktop ? {
-            transform: folded ? `translate3d(0, ${-fold!.lift}px, 0)` : 'translate3d(0, 0, 0)',
-            width: folded ? `calc(100% - ${fold!.filtersW + 12}px)` : '100%',
-            transition: `transform ${FOLD}, width ${FOLD}`,
-          } : undefined}
+          className="flex items-start sm:items-center gap-2 sm:gap-3 sm:rounded-lg sm:border sm:border-gray-200 dark:sm:border-gray-700 sm:bg-white dark:sm:bg-gray-900 sm:p-2 pointer-events-auto motion-reduce:!transition-none"
+          style={isDesktop ? { transform: folded ? `translate3d(0, ${-fold!.lift}px, 0)` : 'translate3d(0, 0, 0)', transition: `transform ${FOLD}` } : undefined}
         >
         <div className="flex-1 min-w-0">
         <SmartSearchBox
@@ -761,6 +754,7 @@ export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: 
           relaxed={searchResult?.relaxed}
           onRemoveChip={(chip) => handleSearchChange(removeChipFromQuery(searchQuery, chip))}
           onOpenChange={(open) => { setSearchOpen(open); if (open) ensureFull(); }}
+          look="filled"
         />
         </div>
         <button
@@ -777,24 +771,14 @@ export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: 
           <SlidersHorizontal className="w-4 h-4" aria-hidden />
           {filterCount > 0 && <span className="absolute -top-1.5 -right-1.5 w-5 h-5 flex items-center justify-center bg-brand text-white text-xs font-bold rounded-full">{filterCount}</span>}
         </button>
-        </div>
-
-        {/* Filters + Sort Row (phones use the sheet) */}
-        <div
-          ref={filtersRowRef}
-          className="hidden sm:flex w-max items-center gap-2 pointer-events-auto motion-reduce:!transition-none"
-          style={isDesktop ? {
-            transform: folded ? `translate3d(${fold!.dx}px, ${fold!.dy}px, 0)` : 'translate3d(0, 0, 0)',
-            transition: `transform ${FOLD}`,
-          } : undefined}
-        >
+        <div className="hidden sm:flex items-center gap-2 sm:gap-3 shrink-0">
           {/* Filters Button */}
           <button
             onClick={() => setShowMoreFilters(!showMoreFilters)}
-            className={`flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl border font-jakarta text-xs sm:text-sm font-semibold transition-all select-none ${
+            className={`flex items-center justify-center gap-1.5 sm:gap-2 h-11 px-4 rounded-md border font-jakarta text-sm font-semibold transition-all select-none ${
               showMoreFilters || selectedTagIds.length > 0 || selectedPricing !== 'all' || freeTrialOnly
                 ? 'border-brand bg-brand/5 text-brand shadow-sm'
-                : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                : 'border-transparent bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
             }`}
           >
             <SlidersHorizontal className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -812,10 +796,10 @@ export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: 
             <select
               value={effectiveSort}
               onChange={(e) => setSortBy(e.target.value as SortOption)}
-              className={`appearance-none flex items-center gap-1.5 sm:gap-2 pl-7 sm:pl-9 pr-6 sm:pr-8 py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl border font-jakarta text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand cursor-pointer ${
+              className={`appearance-none flex items-center gap-1.5 sm:gap-2 h-11 pl-9 pr-8 rounded-md border font-jakarta text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand cursor-pointer ${
                 sortBy !== 'rating' && sortBy !== 'relevance'
                   ? 'border-brand bg-brand/5 text-brand shadow-sm'
-                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+                  : 'border-transparent bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
               }`}
             >
               {searchQuery.trim() && <option value="relevance">Best match</option>}
@@ -828,15 +812,25 @@ export default function ToolsListWithComparison({ picks: firstPicks, tagGroups: 
             <ChevronDown className="absolute right-1.5 sm:right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 sm:w-3.5 sm:h-3.5 text-gray-400 pointer-events-none" />
           </div>
 
+
           {/* Clear Filters */}
           {(searchQuery || selectedCategory !== 'all' || selectedPricing !== 'all' || selectedTagIds.length > 0 || freeTrialOnly) && (
             <button
               onClick={() => { setSearchQuery(''); setSelectedCategory(defaultCategory); setSelectedSubcategory('all'); setSelectedPricing('all'); setSelectedTagIds([]); setFreeTrialOnly(false); setVisibleCount(ITEMS_PER_PAGE); }}
-              className="shrink-0 px-3 py-2 rounded-xl text-xs font-semibold text-brand hover:bg-brand/5 transition-colors font-jakarta active:scale-95"
+              className="shrink-0 px-2 py-2 rounded-md text-xs font-semibold text-brand hover:bg-brand/5 transition-colors font-jakarta active:scale-95"
             >
               Clear all
             </button>
           )}
+
+          {/* Same as "Search jobs": results already follow the text as it's typed, so this closes the suggestions and
+              brings the results into view. */}
+          <button type="button"
+            onClick={() => { (document.activeElement as HTMLElement | null)?.blur(); scrollToResults(); }}
+            className="inline-flex items-center h-11 px-6 rounded-md bg-brand text-white font-sora font-bold text-sm hover:bg-brand/90 transition-colors shrink-0">
+            Search tools
+          </button>
+        </div>
         </div>
 
         <div className="hidden sm:block transition-opacity duration-200 motion-reduce:transition-none" style={folded ? { opacity: 0 } : undefined} inert={folded ? true : undefined}>

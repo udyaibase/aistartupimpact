@@ -52,7 +52,7 @@ export default async function BillingPage() {
       }))}
       billing={profileFromRow(billing, billing?.email ?? session.email)}
       companyName={billing?.companyName ?? ''}
-      invoices={invoicesEnabled()}
+      invoices={await invoicesEnabled()}
       paymentsReady={!!process.env.RAZORPAY_KEY_ID && !!process.env.RAZORPAY_KEY_SECRET}
     />
   );

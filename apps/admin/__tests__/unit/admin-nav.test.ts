@@ -83,7 +83,7 @@ describe('needs attention', () => {
     db.supportTicket.count.mockRejectedValue(new Error('db down'));
     db.startup.count.mockResolvedValue(1);
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect(await getAttentionCounts('SUPER_ADMIN')).toEqual({ '/startups-dir': 1 });
+    expect(await getAttentionCounts('SUPER_ADMIN')).toEqual({ '/startups-dir/review': 1 });
   });
 
   it('words the count for one and for many', () => {

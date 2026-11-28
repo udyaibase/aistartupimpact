@@ -48,6 +48,8 @@ export async function generateStaticParams() {
   }
 }
 
+// A startup has a public page only once our team has approved it: the same rule as the directory and the sitemap.
+// Proving ownership of the domain (the verified badge) is not approval.
 const getStartup = cache(async (slug: string) => {
   try {
     let rows;
@@ -62,7 +64,7 @@ const getStartup = cache(async (slug: string) => {
                to_char("createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "createdAt",
                to_char("updatedAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "updatedAt"
         FROM "Startup"
-        WHERE slug = ${slug} AND "deletedAt" IS NULL
+        WHERE slug = ${slug} AND "deletedAt" IS NULL AND "isApproved" = true
         LIMIT 1
       `;
     } catch (columnError: any) {
@@ -77,7 +79,7 @@ const getStartup = cache(async (slug: string) => {
                  to_char("createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "createdAt",
                  to_char("updatedAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "updatedAt"
           FROM "Startup"
-          WHERE slug = ${slug} AND "deletedAt" IS NULL
+          WHERE slug = ${slug} AND "deletedAt" IS NULL AND "isApproved" = true
           LIMIT 1
         `;
       } else {
@@ -399,7 +401,7 @@ export default async function StartupDetailPage(props: { params: Promise<{ slug:
     try {
       const redirectCheck = await sql`
         SELECT slug FROM "Startup"
-        WHERE ${params.slug} = ANY("previousSlugs") AND "deletedAt" IS NULL
+        WHERE ${params.slug} = ANY("previousSlugs") AND "deletedAt" IS NULL AND "isApproved" = true
         LIMIT 1
       `;
       if (redirectCheck.length > 0) {

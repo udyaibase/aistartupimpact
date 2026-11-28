@@ -27,7 +27,10 @@ export default async function StartupsPage() {
   `;
 
   const pendingCounts = await pendingEditCounts('startup', startups.map((l) => l.id));
-  const rows = startups.map((l) => ({ ...l, role: roles.get(l.ownerId) ?? 'VIEWER', pendingEdits: pendingCounts.get(l.id) ?? 0 }));
+  // Proving ownership is not approval: a verified startup our team has not approved yet is still "In review", not "Live".
+  const shownStatus = (l: { claimStatus: string; isApproved: boolean }) =>
+    !l.isApproved && (l.claimStatus === 'CLAIMED' || l.claimStatus === 'VERIFIED') ? 'PENDING' : l.claimStatus;
+  const rows = startups.map((l) => ({ ...l, claimStatus: shownStatus(l), role: roles.get(l.ownerId) ?? 'VIEWER', pendingEdits: pendingCounts.get(l.id) ?? 0 }));
   const ownsOne = startups.some((l) => l.ownerId === session.userId);
 
   // Group by status

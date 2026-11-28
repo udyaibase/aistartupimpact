@@ -2,6 +2,10 @@
 
 import { neon } from '@neondatabase/serverless';
 import { requireActionAuth } from '@/lib/api-auth';
+import { sectionRoles } from '@/lib/section-access';
+
+// The Employers section is for editors and super admins; the default roles would also let a senior writer in.
+const ROLES = sectionRoles('/employers');
 import { logAuditEvent } from '@/lib/audit-log';
 
 const sql = neon(process.env.DATABASE_URL!);
@@ -11,7 +15,7 @@ const sql = neon(process.env.DATABASE_URL!);
  * and the reports job seekers sent. A report pauses that company's requests until someone here resumes them.
  */
 export async function getNetworkPilotAction() {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(ROLES);
   if (error) return { success: false as const, error };
   try {
     const [stats] = await sql`
@@ -56,7 +60,7 @@ export async function getNetworkPilotAction() {
 
 /** Add a company to the pilot, or take it out. */
 export async function setNetworkPilotAction(employerId: string, on: boolean) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(ROLES);
   if (error) return { success: false, error };
   try {
     await sql`UPDATE "JobBoardEmployer" SET "networkPilot" = ${on}, "updatedAt" = NOW() WHERE id = ${employerId}`;
@@ -69,7 +73,7 @@ export async function setNetworkPilotAction(employerId: string, on: boolean) {
 
 /** After reviewing a report: let the company send requests again. */
 export async function resumeNetworkAction(employerId: string) {
-  const { error } = await requireActionAuth();
+  const { error } = await requireActionAuth(ROLES);
   if (error) return { success: false, error };
   try {
     await sql`UPDATE "JobBoardEmployer" SET "networkPausedAt" = NULL, "updatedAt" = NOW() WHERE id = ${employerId}`;

@@ -73,7 +73,7 @@ export default async function HostBillingPage(props: { searchParams: Promise<{ b
       }))}
       billing={profileFromRow(billing, billing?.email ?? '')}
       accountName={billing?.company || billing?.name || ''}
-      invoices={invoicesEnabled()}
+      invoices={await invoicesEnabled()}
       highlight={sp.boost ?? null}
       paymentsReady={!!razorpayKeys()}
     />

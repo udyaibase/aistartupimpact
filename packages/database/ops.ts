@@ -12,6 +12,7 @@ export const CRON_JOBS: Record<string, { label: string; maxGapHours: number }> =
   'daily-digest': { label: 'Admin daily digest (daily)', maxGapHours: 26 },
   'india-ai-stats': { label: 'India AI stats refresh (every 6 hours)', maxGapHours: 8 },
   'publish-scheduled': { label: 'Publish scheduled articles (every 10 minutes)', maxGapHours: 1 },
+  'fast-approval': { label: 'Fast approval of startups and AI tools (every 5 minutes)', maxGapHours: 1 },
   'verification-lifecycle': { label: 'Startup verification re-checks and expiry (daily)', maxGapHours: 26 },
   'event-follow-ups': { label: 'Automatic event follow-up emails (every 15 minutes)', maxGapHours: 2 },
   'event-summaries': { label: 'Day-after event summary emails to hosts (daily)', maxGapHours: 26 },

@@ -1,3 +1,4 @@
+import { ensureCatalog } from '@/lib/catalog/server';
 import { prisma } from '@udyaibase/database';
 import { sendEmailFireAndForget } from '@/lib/email/send';
 import { button, esc, shell } from '@/lib/jobs/apply-emails';
@@ -17,6 +18,7 @@ export const downloadUrl = (purchaseId: string) => `/api/funding-data/download?t
  * newsletter at checkout, and sends the download link and GST invoice.
  */
 export async function activateFundingPurchase(orderId: string, paymentId: string): Promise<'activated' | 'already' | 'unknown'> {
+  await ensureCatalog({ fresh: true });
   const p = await prisma.fundingDataPurchase.findUnique({ where: { razorpayOrderId: orderId } });
   if (!p) return 'unknown';
   const now = new Date();
