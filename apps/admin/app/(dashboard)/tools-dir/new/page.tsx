@@ -1,29 +1,24 @@
 'use client';
 
+import { toolRequiredError } from '@udyaibase/utils/tool-required';
 import { notify } from '@/components/Toast';
-import { CityPicker, CountryPicker } from '@/components/LocationFields';
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Upload, Loader2, Save, Plus, X } from 'lucide-react';
-import { createToolAction, getCategoriesAction, updateToolProsConsAction } from '../actions';
+import { ArrowLeft, Upload, Loader2, Save } from 'lucide-react';
+import { getCategoriesAction } from '../actions';
+import { updateToolProsConsAction } from '../tool-content-actions';
+import { createToolAction } from '../tool-form-actions';
 import { FAQManager, type FAQ } from '@/components/shared/FAQManager';
-import CategoryCascadeSelect from '@/components/shared/CategoryCascadeSelect';
-import ToolTagSelector from '@/components/shared/ToolTagSelector';
-import ProsConsManager from '@/components/shared/ProsConsManager';
 import ScreenshotManager from '@/components/shared/ScreenshotManager';
 import { getTagGroupsWithTagsAction, updateToolTagsAction } from '../tags/actions';
-
-const pricingModels = ['FREE', 'FREEMIUM', 'PAID', 'ENTERPRISE', 'OPEN_SOURCE'];
-
-interface Category {
-  id: string;
-  name: string;
-  slug: string;
-  parentId?: string | null;
-  parentName?: string | null;
-  parentSlug?: string | null;
-  parentIcon?: string | null;
-}
+import { Category } from './types';
+import type { NewToolForm } from './types';
+import NewToolFeaturesSection from './NewToolFeaturesSection';
+import NewToolDetailsSection from './NewToolDetailsSection';
+import NewToolPricingSection from './NewToolPricingSection';
+import NewToolSocialLinksSection from './NewToolSocialLinksSection';
+import NewToolLogoUrlsSection from './NewToolLogoUrlsSection';
+import NewToolBasicInfoSection from './NewToolBasicInfoSection';
 
 export default function NewToolPage() {
   const router = useRouter();
@@ -61,7 +56,7 @@ export default function NewToolPage() {
     setDraftLoaded(true);
   }, []);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<NewToolForm>({
     name: '',
     slug: '',
     tagline: '',
@@ -174,22 +169,25 @@ export default function NewToolPage() {
       return;
     }
 
+    const featuresArray = (formData.features || '')
+      .split('\n')
+      .map(f => f.replace(/^[•\-*]\s*/, '').trim())
+      .filter(Boolean);
+
+    const useCasesArray = (formData.useCases || '')
+      .split('\n')
+      .map(u => u.replace(/^[•\-*]\s*/, '').trim())
+      .filter(Boolean);
+
+    const incomplete = toolRequiredError({ ...formData, features: featuresArray, useCases: useCasesArray });
+    if (incomplete) { notify(incomplete, 'error'); return; }
+
     setSaving(true);
 
     try {
       const founderNamesArray = (formData.founderNames || '')
         .split(',')
         .map(f => f.trim())
-        .filter(Boolean);
-
-      const featuresArray = (formData.features || '')
-        .split('\n')
-        .map(f => f.replace(/^[•\-*]\s*/, '').trim())
-        .filter(Boolean);
-
-      const useCasesArray = (formData.useCases || '')
-        .split('\n')
-        .map(u => u.replace(/^[•\-*]\s*/, '').trim())
         .filter(Boolean);
 
       const result = await createToolAction({
@@ -269,475 +267,12 @@ export default function NewToolPage() {
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Basic Information */}
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-6 space-y-6">
-          <h2 className="font-sora font-bold text-lg text-navy dark:text-white">Basic Information</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="md:col-span-2">
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta">
-                Tool Name *
-              </label>
-              <input
-                type="text"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                required
-                className="input-field text-sm"
-                placeholder="e.g. ChatGPT"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta">
-                Slug *
-              </label>
-              <input
-                type="text"
-                name="slug"
-                value={formData.slug}
-                onChange={handleChange}
-                required
-                className="input-field text-sm"
-                placeholder="e.g. chatgpt"
-              />
-            </div>
-
-            <div>
-              <CategoryCascadeSelect
-                categories={categories}
-                value={formData.categoryId}
-                onChange={(categoryId) => setFormData(prev => ({ ...prev, categoryId }))}
-                required
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta">
-                Tagline *
-              </label>
-              <input
-                type="text"
-                name="tagline"
-                value={formData.tagline}
-                onChange={handleChange}
-                required
-                maxLength={100}
-                className="input-field text-sm"
-                placeholder="A short, catchy description"
-              />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {formData.tagline.length}/100 characters
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta">
-              Description
-            </label>
-            <textarea
-              name="description"
-              value={formData.description}
-              onChange={handleChange}
-              rows={6}
-              maxLength={1000}
-              className="input-field text-sm"
-              placeholder="Detailed description of the tool..."
-            />
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              {formData.description.length}/1000 characters
-            </p>
-          </div>
-
-          {/* Tags — inline in Basic Info */}
-          <div>
-            {tagGroups.length > 0 ? (
-              <ToolTagSelector
-                groups={tagGroups}
-                selectedTagIds={selectedTagIds}
-                onChange={setSelectedTagIds}
-                maxTags={30}
-                isAdmin={true}
-              />
-            ) : (
-              <div className="flex items-center gap-2 py-2">
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
-                <span className="text-xs text-gray-500">Loading tags...</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Logo & URLs */}
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-6 space-y-6">
-          <h2 className="font-sora font-bold text-lg text-navy dark:text-white">Logo & URLs</h2>
-          
-          <div>
-            <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta">
-              Logo
-            </label>
-            <div className="flex gap-2 items-start">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleLogoUpload}
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={logoUploading}
-                className="shrink-0 flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 disabled:opacity-50"
-              >
-                {logoUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                {logoUploading ? 'Uploading…' : 'Upload'}
-              </button>
-              <input
-                type="url"
-                name="logoUrl"
-                value={formData.logoUrl}
-                onChange={(e) => { handleChange(e); setLogoPreviewError(false); }}
-                className="input-field text-sm flex-1"
-                placeholder="https://... or upload above"
-              />
-            </div>
-            {logoUploadError && (
-              <p className="mt-1.5 text-xs text-red-500 font-jakarta">{logoUploadError}</p>
-            )}
-            {formData.logoUrl && logoPreviewError && (
-              <p className="mt-1.5 text-xs text-amber-600 font-jakarta">
-                Logo URL could not be loaded. The image may not be publicly reachable — check the URL or the media domain.
-              </p>
-            )}
-            {formData.logoUrl && !logoPreviewError && (
-              <div className="mt-2 flex items-center gap-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={formData.logoUrl}
-                  alt="Logo preview"
-                  className="w-12 h-12 rounded-lg object-contain border border-gray-200 dark:border-gray-700 p-1 bg-white"
-                  onError={() => setLogoPreviewError(true)}
-                />
-                <span className="text-xs text-gray-400 font-jakarta">Preview</span>
-              </div>
-            )}
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta">
-              Website URL *
-            </label>
-            <input
-              type="url"
-              name="websiteUrl"
-              value={formData.websiteUrl}
-              onChange={handleChange}
-              required
-              className="input-field text-sm"
-              placeholder="https://..."
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta">
-              Affiliate/Referral URL
-            </label>
-            <input
-              type="url"
-              name="affiliateUrl"
-              value={formData.affiliateUrl}
-              onChange={handleChange}
-              className="input-field text-sm"
-              placeholder="https://..."
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta">
-              Demo Video URL
-            </label>
-            <input
-              type="url"
-              name="demoVideoUrl"
-              value={formData.demoVideoUrl}
-              onChange={handleChange}
-              className="input-field text-sm"
-              placeholder="https://youtube.com/watch?v=... or https://loom.com/..."
-            />
-          </div>
-        </div>
-
-        {/* Social Links */}
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-6 space-y-6">
-          <h2 className="font-sora font-bold text-lg text-navy dark:text-white">Social Links</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta">
-                Twitter / X URL
-              </label>
-              <input
-                type="url"
-                name="twitterUrl"
-                value={formData.twitterUrl}
-                onChange={handleChange}
-                className="input-field text-sm"
-                placeholder="https://x.com/..."
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta">
-                LinkedIn URL
-              </label>
-              <input
-                type="url"
-                name="linkedinUrl"
-                value={formData.linkedinUrl}
-                onChange={handleChange}
-                className="input-field text-sm"
-                placeholder="https://linkedin.com/company/..."
-              />
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta">
-              Additional Social Links
-            </label>
-            <div className="space-y-2">
-              {socialLinks.map((link, index) => (
-                <div key={index} className="flex gap-2 items-center">
-                  <select
-                    value={link.platform}
-                    onChange={(e) => {
-                      const updated = [...socialLinks];
-                      updated[index] = { ...updated[index], platform: e.target.value };
-                      setSocialLinks(updated);
-                    }}
-                    className="input-field text-sm w-40"
-                  >
-                    <option value="instagram">Instagram</option>
-                    <option value="github">GitHub</option>
-                    <option value="youtube">YouTube</option>
-                    <option value="facebook">Facebook</option>
-                    <option value="producthunt">Product Hunt</option>
-                    <option value="discord">Discord</option>
-                  </select>
-                  <input
-                    type="url"
-                    value={link.url}
-                    onChange={(e) => {
-                      const updated = [...socialLinks];
-                      updated[index] = { ...updated[index], url: e.target.value };
-                      setSocialLinks(updated);
-                    }}
-                    className="input-field text-sm flex-1"
-                    placeholder="https://..."
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setSocialLinks(prev => prev.filter((_, i) => i !== index))}
-                    className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => setSocialLinks(prev => [...prev, { platform: 'instagram', url: '' }])}
-                className="flex items-center gap-1.5 text-xs font-semibold text-brand hover:text-brand-600 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add Social Link
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Pricing */}
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-6 space-y-6">
-          <h2 className="font-sora font-bold text-lg text-navy dark:text-white">Pricing</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta">
-                Pricing Model
-              </label>
-              <select
-                name="pricingModel"
-                value={formData.pricingModel}
-                onChange={handleChange}
-                className="input-field text-sm"
-              >
-                {pricingModels.map(p => (
-                  <option key={p} value={p}>{p.replace('_', ' ')}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta">
-                Starting Price (USD/month)
-              </label>
-              <input
-                type="number"
-                name="startingPrice"
-                value={formData.startingPrice ?? ''}
-                onChange={handleChange}
-                min="0"
-                step="0.01"
-                className="input-field text-sm"
-                placeholder="9.99"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta">
-                Pricing Page URL
-              </label>
-              <input
-                type="url"
-                name="pricingUrl"
-                value={formData.pricingUrl}
-                onChange={handleChange}
-                className="input-field text-sm"
-                placeholder="https://..."
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta">
-                Free Trial Days
-              </label>
-              <input
-                type="number"
-                name="freeTrialDays"
-                value={formData.freeTrialDays ?? ''}
-                onChange={handleChange}
-                min="0"
-                className="input-field text-sm"
-                placeholder="14"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Tool Details */}
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-6 space-y-6">
-          <h2 className="font-sora font-bold text-lg text-navy dark:text-white">Tool Details</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta">
-                Launch Year
-              </label>
-              <input
-                type="number"
-                name="launchYear"
-                value={formData.launchYear}
-                onChange={handleChange}
-                min="1900"
-                max={new Date().getFullYear()}
-                className="input-field text-sm"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta">
-                Founder Names
-              </label>
-              <input
-                type="text"
-                name="founderNames"
-                value={formData.founderNames}
-                onChange={handleChange}
-                className="input-field text-sm"
-                placeholder="John Doe, Jane Smith"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta">
-                Headquarters
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <CountryPicker value={formData.headquartersCountry || ''} clearable placeholder="Country"
-                  onChange={(c) => setFormData((prev: any) => (prev ? { ...prev, headquartersCountry: c ?? '', headquartersCity: c === prev.headquartersCountry ? prev.headquartersCity : '' } : prev))} />
-                <CityPicker value={formData.headquartersCity || ''} country={formData.headquartersCountry || null} placeholder="City"
-                  onChange={(c) => setFormData((prev: any) => (prev ? { ...prev, headquartersCity: c?.city ?? '', headquartersCountry: prev.headquartersCountry || c?.country || '' } : prev))} />
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                name="hasApi"
-                checked={formData.hasApi}
-                onChange={handleChange}
-                className="w-4 h-4 text-brand bg-gray-100 border-gray-300 rounded focus:ring-brand"
-              />
-              <span className="text-sm font-medium text-navy dark:text-white font-jakarta">
-                Has API
-              </span>
-            </label>
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                name="hasMobileApp"
-                checked={formData.hasMobileApp}
-                onChange={handleChange}
-                className="w-4 h-4 text-brand bg-gray-100 border-gray-300 rounded focus:ring-brand"
-              />
-              <span className="text-sm font-medium text-navy dark:text-white font-jakarta">
-                Has Mobile App
-              </span>
-            </label>
-          </div>
-        </div>
-
-        {/* Features & Use Cases */}
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-6 space-y-6">
-          <h2 className="font-sora font-bold text-lg text-navy dark:text-white">Features & Use Cases</h2>
-
-          <div>
-            <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta">
-              Key Features
-            </label>
-            <textarea
-              name="features"
-              value={formData.features}
-              onChange={handleChange}
-              rows={4}
-              className="input-field text-sm"
-              placeholder="Paste features here — one per line, auto-formatted with bullet points"
-            />
-            <p className="text-xs text-gray-400 mt-1">One feature per line</p>
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1.5 block font-jakarta">
-              Use Cases
-            </label>
-            <textarea
-              name="useCases"
-              value={formData.useCases}
-              onChange={handleChange}
-              rows={4}
-              className="input-field text-sm"
-              placeholder="Paste use cases here — one per line"
-            />
-            <p className="text-xs text-gray-400 mt-1">One use case per line</p>
-          </div>
-        </div>
-
-        {/* Pros & Cons */}
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-6">
-          <ProsConsManager
-            pros={pros}
-            cons={cons}
-            onChangePros={setPros}
-            onChangeCons={setCons}
-          />
-        </div>
-
+        <NewToolBasicInfoSection formData={formData} setFormData={setFormData} handleChange={handleChange} tagGroups={tagGroups} categories={categories} selectedTagIds={selectedTagIds} setSelectedTagIds={setSelectedTagIds} />
+        <NewToolLogoUrlsSection formData={formData} handleChange={handleChange} logoUploading={logoUploading} fileInputRef={fileInputRef} logoPreviewError={logoPreviewError} logoUploadError={logoUploadError} setLogoPreviewError={setLogoPreviewError} handleLogoUpload={handleLogoUpload} />
+        <NewToolSocialLinksSection formData={formData} handleChange={handleChange} socialLinks={socialLinks} setSocialLinks={setSocialLinks} />
+        <NewToolPricingSection formData={formData} handleChange={handleChange} />
+        <NewToolDetailsSection formData={formData} setFormData={setFormData} handleChange={handleChange} />
+        <NewToolFeaturesSection formData={formData} handleChange={handleChange} pros={pros} cons={cons} setPros={setPros} setCons={setCons} />
         {/* Screenshots */}
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-6">
           <ScreenshotManager screenshots={screenshots} onChange={setScreenshots} />

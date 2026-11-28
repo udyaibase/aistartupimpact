@@ -1,3 +1,4 @@
+import { ensureCatalog } from '@/lib/catalog/server';
 import { prisma } from '@udyaibase/database';
 import { notifyEmployer } from '@/lib/employer/notify';
 import { ownerInboxes } from '@/lib/employer/team';
@@ -12,10 +13,12 @@ import { PLANS, TRIAL_AI_SCREENS, TRIAL_DAYS, TRIAL_PLAN, planFeaturedUntil } fr
  * Returns the trial end when one was started.
  */
 export async function maybeStartTrial(employerId: string, now = new Date()): Promise<Date | null> {
+  await ensureCatalog();
   const e = await prisma.jobBoardEmployer.findUnique({
     where: { id: employerId },
     select: { id: true, email: true, plan: true, planExpiresAt: true, trialStartedAt: true, startupId: true, verifiedCompanyDomain: true, passwordHash: true },
   });
+  if (TRIAL_DAYS <= 0) return null; // the trial is switched off in the admin's plan catalog
   if (!e || e.trialStartedAt || e.email.toLowerCase().endsWith('@udyaibase.com')) return null;
   if (e.plan !== 'FREE' && e.planExpiresAt && e.planExpiresAt > now) return null; // already paid
 

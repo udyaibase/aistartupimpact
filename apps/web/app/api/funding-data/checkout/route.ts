@@ -1,3 +1,4 @@
+import { ensureCatalog } from '@/lib/catalog/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { apiRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
@@ -46,6 +47,7 @@ function parseBilling(raw: unknown): { ok: true; data: Billing } | { ok: false; 
  * (no paying for a 1,000-startup pack when 300 match).
  */
 export async function POST(request: NextRequest) {
+  await ensureCatalog({ fresh: true }); // charge today's pack price, never a remembered one
   const { success } = await checkRateLimit(apiRateLimit, `funding-checkout:${getClientIdentifier(request)}`);
   if (!success) return NextResponse.json({ error: 'Too many attempts. Try again in a minute.' }, { status: 429 });
 

@@ -31,8 +31,12 @@ describe('client IP (spoof-resistant)', () => {
 describe('invoice numbering and tax split', () => {
   it('numbers invoices and credit notes per financial year with 4+ digits', async () => {
     const { formatInvoiceNumber } = await import('@/lib/billing/invoice');
-    expect(formatInvoiceNumber('UTPL', 'INV', '2026-27', 1)).toBe('UTPL/INV/2026-27/0001');
-    expect(formatInvoiceNumber('UTPL', 'CN', '2026-27', 12345)).toBe('UTPL/CN/2026-27/12345');
+    expect(formatInvoiceNumber('UTPL', 'INV', '2026-27', 1)).toBe('UTPL/26-27/0001');
+    expect(formatInvoiceNumber('UTPL', 'CN', '2026-27', 12345)).toBe('UTCN/26-27/12345');
+    // GST Rule 46: an invoice number is at most 16 characters. Holds up to 99,999 documents a year.
+    for (const kind of ['INV', 'CN'] as const) for (const n of [1, 9999, 99999]) expect(formatInvoiceNumber('UTPL', kind, '2026-27', n).length).toBeLessThanOrEqual(16);
+    // The two series can never produce the same number, whatever the prefix.
+    for (const p of ['UTPL', 'UTCN', 'AB', 'X']) expect(formatInvoiceNumber(p, 'INV', '2026-27', 1)).not.toBe(formatInvoiceNumber(p, 'CN', '2026-27', 1));
   });
   it('splits GST into CGST + SGST within the seller state, IGST otherwise (paise never lost)', async () => {
     const { taxSplit } = await import('@/lib/billing/invoice');

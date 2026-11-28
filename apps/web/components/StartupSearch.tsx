@@ -692,7 +692,7 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
         {/* Main Search Row */}
         <div
           ref={searchRowRef}
-          className="flex items-start gap-2 sm:gap-3 pointer-events-auto motion-reduce:!transition-none"
+          className="flex items-start sm:items-center gap-2 sm:gap-3 sm:rounded-lg sm:border sm:border-gray-200 dark:sm:border-gray-700 sm:bg-white dark:sm:bg-gray-900 sm:p-2 pointer-events-auto motion-reduce:!transition-none"
           style={isDesktop ? { transform: folded ? `translate3d(0, ${-fold!.lift}px, 0)` : 'translate3d(0, 0, 0)', transition: `transform ${FOLD}` } : undefined}
         >
           <div className="flex-1 min-w-0">
@@ -712,6 +712,7 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
               relaxed={understood?.relaxed}
               onRemoveChip={(chip) => { hasUserInteracted.current = true; setQuery(q => removeChipFromQuery(q, chip)); }}
               onOpenChange={setSearchOpen}
+              look="filled"
             />
           </div>
 
@@ -723,10 +724,10 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
             }}
             aria-label={activeFiltersCount > 0 ? `Filters, ${activeFiltersCount} on` : 'Filters'}
             aria-haspopup="dialog"
-            className={`relative flex items-center justify-center gap-2 w-10 h-10 sm:w-auto sm:px-4 sm:py-2.5 rounded-md sm:rounded-xl border font-jakarta text-sm font-semibold transition-colors duration-200 select-none sm:h-12 active:scale-95 motion-reduce:active:scale-100 ${
+            className={`relative flex items-center justify-center gap-2 w-10 h-10 sm:w-auto sm:px-4 sm:py-2.5 rounded-md border font-jakarta text-sm font-semibold transition-colors duration-200 select-none sm:h-11 active:scale-95 motion-reduce:active:scale-100 ${
               showAdvanced || activeFiltersCount > 0 || !!sort
                 ? 'border-brand bg-brand/5 text-brand shadow-sm'
-                : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                : 'border-gray-200 dark:border-gray-700 sm:border-transparent bg-white sm:bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 sm:hover:bg-gray-200 dark:hover:bg-gray-700'
             }`}
           >
             <SlidersHorizontal className="w-4 h-4" />
@@ -744,10 +745,10 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
             <select
               value={sort}
               onChange={e => { hasUserInteracted.current = true; setSort(e.target.value); setCurrentPage(1); }}
-              className={`appearance-none flex items-center gap-2 pl-9 pr-8 py-2 sm:py-2.5 rounded-xl border font-jakarta text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand cursor-pointer min-h-[44px] sm:min-h-0 sm:h-12 ${
+              className={`appearance-none flex items-center gap-2 pl-9 pr-8 py-2 sm:py-2.5 rounded-md border font-jakarta text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand cursor-pointer min-h-[44px] sm:min-h-0 sm:h-11 ${
                 sort
                   ? 'border-brand bg-brand/5 text-brand shadow-sm'
-                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+                  : 'border-transparent bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
               }`}
             >
               {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -755,12 +756,19 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
             <ArrowUpDown className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
           </div>
+          {/* Same as "Search jobs" on AI Jobs. Results already follow the text as it's typed, so this closes the
+              suggestions and brings the results into view. */}
+          <button type="button"
+            onClick={() => { (document.activeElement as HTMLElement | null)?.blur(); scrollToResults(); }}
+            className="hidden sm:inline-flex items-center h-11 px-6 rounded-md bg-brand text-white font-sora font-bold text-sm hover:bg-brand/90 transition-colors shrink-0">
+            Search startups
+          </button>
           </div>
         </div>
 
         {/* Collapsible Advanced Filters Grid */}
         {showAdvanced && (
-          <div className="bg-gray-50/50 dark:bg-gray-900/30 border border-gray-200/60 dark:border-gray-800 rounded-2xl p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-scale-in max-h-[45vh] overflow-y-auto overscroll-contain">
+          <div className="bg-gray-50/50 dark:bg-gray-900/30 border border-gray-200/60 dark:border-gray-800 rounded-lg p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-scale-in max-h-[45vh] overflow-y-auto overscroll-contain">
             {/* Stage Filter */}
             <div className="flex flex-col">
               <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1 font-jakarta">Funding Stage</label>
@@ -886,10 +894,10 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
         /* Skeleton loading — matches card layout exactly */
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
           {[1, 2, 3, 4, 5, 6].map(i => (
-            <div key={i} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-5 animate-pulse">
+            <div key={i} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4 sm:p-5 animate-pulse">
               {/* Header: logo + name */}
               <div className="flex items-start gap-2.5 sm:gap-3 mb-3 sm:mb-4">
-                <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-xl bg-gray-100 dark:bg-gray-800 shrink-0" />
+                <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-md bg-gray-100 dark:bg-gray-800 shrink-0" />
                 <div className="flex-1 min-w-0 pt-1">
                   <div className="h-4 sm:h-5 w-3/4 bg-gray-100 dark:bg-gray-800 rounded mb-2" />
                   <div className="h-3 w-1/2 bg-gray-100 dark:bg-gray-800 rounded" />
@@ -948,7 +956,7 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
           {startups.map(s => viewMode === 'list' ? (
             /* ── List View Card ── */
             <IntentLink key={s.slug} href={`/startups/${s.slug}`} className="group">
-              <div className="relative bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl sm:rounded-lg px-3.5 sm:px-4 py-3 active:bg-gray-50 dark:active:bg-gray-800/60 sm:active:bg-white sm:dark:active:bg-gray-900 hover:shadow-md hover:border-brand/30 dark:hover:border-brand/30 transition-all duration-200 flex items-center gap-3">
+              <div className="relative bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3.5 sm:px-4 py-3 active:bg-gray-50 dark:active:bg-gray-800/60 sm:active:bg-white sm:dark:active:bg-gray-900 hover:shadow-md hover:border-brand/30 dark:hover:border-brand/30 transition-all duration-200 flex items-center gap-3">
                 {/* Logo */}
                 <div className="relative shrink-0">
                   <div className="w-10 h-10 rounded-lg bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 overflow-hidden">
@@ -1015,7 +1023,7 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
           ) : (
             /* ── Grid View Card ── */
             <IntentLink key={s.slug} href={`/startups/${s.slug}`} className="group">
-              <div className="relative bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3.5 sm:p-5 active:bg-gray-50 dark:active:bg-gray-800/60 sm:active:bg-white sm:dark:active:bg-gray-900 hover:shadow-xl hover:border-brand/30 dark:hover:border-brand/30 transition-all duration-300 h-full flex flex-col">
+              <div className="relative bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3.5 sm:p-5 active:bg-gray-50 dark:active:bg-gray-800/60 sm:active:bg-white sm:dark:active:bg-gray-900 hover:shadow-xl hover:border-brand/30 dark:hover:border-brand/30 transition-all duration-300 h-full flex flex-col">
                 {/* Featured ribbon */}
                 {s.isFeatured && (
                   <div className="absolute -top-px -right-px bg-gradient-to-r from-red-500 to-rose-600 text-white text-[9px] font-bold font-jakarta uppercase tracking-wider px-2 py-px rounded-bl-md rounded-tr-xl">
@@ -1026,7 +1034,7 @@ export default function StartupSearch({ initialStartups, initialTotal, initialCo
                 {/* Header Section */}
                 <div className="flex items-center sm:items-start gap-2.5 sm:gap-3 mb-2 sm:mb-3">
                   <div className="relative shrink-0">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-white dark:bg-gray-800 border sm:border-2 border-gray-100 dark:border-gray-700 sm:shadow-sm overflow-hidden">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-md bg-white dark:bg-gray-800 border sm:border-2 border-gray-100 dark:border-gray-700 sm:shadow-sm overflow-hidden">
                       {s.logoUrl ? (
                         <Image src={s.logoUrl} alt={s.name} className="w-full h-full object-cover" width={48} height={48} sizes="48px" />
                       ) : (

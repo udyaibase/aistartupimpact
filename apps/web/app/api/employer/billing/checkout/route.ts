@@ -1,3 +1,6 @@
+import { ensureCatalog } from '@/lib/catalog/server';
+import { holdDiscount, quoteDiscount, type Quote } from '@/lib/offers/discount';
+import { withGst } from '@/lib/billing/razorpay';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { apiRateLimit, checkRateLimit } from '@/lib/rate-limit';
@@ -19,6 +22,7 @@ export async function POST(request: NextRequest) {
   const { success } = await checkRateLimit(apiRateLimit, `billing-checkout:${session.id}`);
   if (!success) return NextResponse.json({ error: 'Too many attempts. Try again in a minute.' }, { status: 429 });
 
+  await ensureCatalog({ fresh: true }); // charge today's price, never a remembered one
   const body = await request.json().catch(() => ({}));
   const plan = String(body.plan ?? '');
   if (!isPaidPlan(plan)) return NextResponse.json({ error: 'Choose a paid plan.' }, { status: 400 });
@@ -38,7 +42,16 @@ export async function POST(request: NextRequest) {
 
   const founding = cycle === 'ANNUAL'
     && foundingEligible(employer, employer.foundingMemberAt ? 0 : await prisma.jobBoardEmployer.count({ where: { foundingMemberAt: { not: null } } }));
-  const price = planPrice(plan, cycle, { founding });
+  let price = planPrice(plan, cycle, { founding });
+  // A discount code (Admin → Billing → Offers) comes off the price before GST, after the founding price.
+  const purchase = { plan, cycle, amountPaise: price.amount };
+  let quote: Extract<Quote, { ok: true }> | null = null;
+  if (typeof body.code === 'string' && body.code.trim()) {
+    const q = await quoteDiscount('EMPLOYER', session.id, body.code, purchase);
+    if (!q.ok) return NextResponse.json({ error: q.error, code: 'CODE_REJECTED' }, { status: 400 });
+    quote = q;
+    price = withGst(q.finalPaise);
+  }
   try {
     const Razorpay = (await import('razorpay')).default;
     const rzp = new Razorpay({ key_id: keyId, key_secret: keySecret });
@@ -46,8 +59,13 @@ export async function POST(request: NextRequest) {
       amount: price.total,
       currency: 'INR',
       receipt: `emp_${session.id.slice(-12)}_${Date.now()}`,
-      notes: { purpose: 'EMPLOYER_PLAN', employerId: session.id, plan, cycle, founding: founding ? 'yes' : 'no' },
+      notes: { purpose: 'EMPLOYER_PLAN', employerId: session.id, plan, cycle, founding: founding ? 'yes' : 'no', ...(quote ? { code: quote.code } : {}) },
     });
+    if (quote) {
+      // Hold one of the code's places for this order; nothing is recorded if there is none left.
+      const held = await holdDiscount(quote, purchase, order.id);
+      if (!held.ok) return NextResponse.json({ error: held.error, code: 'CODE_REJECTED' }, { status: 409 });
+    }
     await prisma.jobBoardPayment.create({
       data: {
         employerId: session.id, plan, cycle, foundingPrice: founding, amountPaise: price.amount, gstPaise: price.gst, totalPaise: price.total,
@@ -56,7 +74,8 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({
       keyId, orderId: order.id, amount: price.total, currency: 'INR',
-      name: 'Udyaibase', description: `${PLANS[plan].name} plan · ${cycle === 'ANNUAL' ? `1 year${founding ? ' · founding price' : ''}` : '30 days'}`,
+      name: 'Udyaibase', description: `${PLANS[plan].name} plan · ${cycle === 'ANNUAL' ? `1 year${founding ? ' · founding price' : ''}` : '30 days'}${quote ? ` · code ${quote.code}` : ''}`,
+      ...(quote ? { discount: { code: quote.code, label: quote.label, discountPaise: quote.discountPaise } } : {}),
       prefill: { email: session.email, name: session.memberName ?? employer.companyName },
     });
   } catch (err) {

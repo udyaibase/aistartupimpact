@@ -12,6 +12,14 @@ import { listingAccess } from '@/lib/founder/listing-access';
 import { refreshPublicListing } from '@/lib/founder/refresh-listing';
 import { logFounderActivity } from '@/lib/founder/activity';
 import { founderAtToolLimit, TOOL_LIMIT_MESSAGE } from '@/lib/founder/limits';
+import { toolRequiredError, toolEditError, founderMustHaveError } from '@udyaibase/utils/tool-required';
+import { after } from 'next/server';
+import { runToolAiCheck } from '@/lib/startups/ai-check';
+
+/** Run something once the response has gone out. Outside a request (scripts, tests) there is no "after", so run it now. */
+function later(work: () => Promise<unknown>) {
+  try { after(work); } catch { void work().catch(() => {}); }
+}
 
 interface ToolSubmission {
   name: string;
@@ -51,6 +59,9 @@ export async function submitToolAction(data: ToolSubmission) {
     const checked = validateInput(toolSubmissionSchema, data);
     if (!checked.success) return { success: false, error: checked.error };
     data = checked.data as unknown as ToolSubmission;
+    // A listing needs its logo, description, LinkedIn page, features, use cases, launch year and country.
+    const incomplete = toolRequiredError(data);
+    if (incomplete) return { success: false, error: incomplete };
     // Headquarters city and country only from the standard lists.
     if (data.headquartersCity || data.headquartersCountry) {
       const loc = await checkLocation({ city: data.headquartersCity ?? '', country: data.headquartersCountry ?? '' });
@@ -232,6 +243,9 @@ export async function submitToolAction(data: ToolSubmission) {
     }
 
     await logFounderActivity(session.userId, 'tool_submitted', { metadata: { name: data.name } });
+    // The automatic first look for the reviewer, once the founder has their answer.
+    await prisma.aiTool.update({ where: { id: toolId }, data: { reviewStatus: 'IN_REVIEW', submittedForReviewAt: new Date() }, select: { id: true } });
+    later(() => runToolAiCheck(toolId));
     revalidatePath('/founder/tools');
     revalidatePath('/founder/dashboard');
 
@@ -265,7 +279,21 @@ export async function updateToolAction(id: string, data: ToolSubmission) {
     }
 
     // The form's limits apply to what the founder changes; longer text already on the listing may stay.
-    const stored = await prisma.aiTool.findUnique({ where: { id }, select: { tagline: true, description: true } });
+    const stored = await prisma.aiTool.findUnique({
+      where: { id },
+      select: { tagline: true, description: true, logoUrl: true, linkedinUrl: true, launchYear: true, headquartersCountry: true },
+    });
+    // A tool listed before these details became required can still be edited; a detail it already has can't be removed.
+    const lines = await prisma.$queryRaw<Array<{ type: string; text: string }>>`SELECT type, text FROM "ToolUseCase" WHERE "toolId" = ${id}`;
+    const incomplete = toolEditError(data, {
+      ...stored,
+      features: lines.filter((l) => l.type === 'feature').map((l) => l.text),
+      useCases: lines.filter((l) => l.type === 'use_case').map((l) => l.text),
+    });
+    if (incomplete) return { success: false, error: incomplete };
+    // In the founder portal the LinkedIn page and the headquarters are asked for on every save, old tools included.
+    const mustHave = founderMustHaveError({ linkedinUrl: data.linkedinUrl, headquarters: data.headquartersCountry });
+    if (mustHave) return { success: false, error: mustHave };
     const limitProblem = overFormLimit('Tagline', data.tagline, TOOL_TAGLINE_MAX, stored?.tagline ?? null)
       ?? overFormLimit('Description', data.description, TOOL_DESCRIPTION_MAX, stored?.description ?? null);
     if (limitProblem) return { success: false, error: limitProblem };
@@ -315,6 +343,12 @@ export async function updateToolAction(id: string, data: ToolSubmission) {
       await logFounderActivity(access.ownerId, 'edit_submitted', { metadata: { fields, ...by } });
       if (access.role !== 'OWNER') await logFounderActivity(session.userId, 'edit_submitted', { metadata: { fields } });
       sendAdminReviewAlert({ entityType: 'tool', entityName: access.name, founderEmail: session.email, reason: 'edited' });
+    }
+    // Sent for another review: look again, and let fast approval judge it afresh.
+    if (result.published.length > 0 || result.resubmitted) {
+      // Same rule as startups: a waiting tool that changed is judged afresh.
+      const waiting = await prisma.aiTool.updateMany({ where: { id, status: 'PENDING' }, data: { aiCheckLabel: null, aiCheckReason: null, aiCheckedAt: null, autoApproveAt: null } });
+      if (waiting.count) later(() => runToolAiCheck(id));
     }
     if (result.resubmitted) sendAdminReviewAlert({ entityType: 'tool', entityName: data.name, founderEmail: session.email, reason: 'resubmitted' });
 

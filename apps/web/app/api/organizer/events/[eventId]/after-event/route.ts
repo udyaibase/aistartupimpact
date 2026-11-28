@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
 import { afterEventAccess } from '@/lib/events/after-event-access';
 import {
-  CERTIFICATE_PRICE_PAISE, certificateSettings, certificatesAllowed, eventPeople, followUpSettings, followUpsLeft,
+  certificatePricePaise, certificateSettings, certificatesAllowed, eventPeople, followUpSettings, followUpsLeft,
 } from '@/lib/events/after-event';
 import { logOrganizerActivity, organizerActor } from '@/lib/workspace-activity';
 import { refreshPaths } from '@/lib/revalidate';
@@ -54,7 +54,7 @@ export async function GET(_request: NextRequest, props: { params: Promise<{ even
     sources: summary.sources,
     counts: { registered: people.length, attended, missed: people.length - attended, optedOut: people.filter((p) => p.optedOut).length },
     certificates: {
-      allowed, paid: !!event.certificatesPaidAt, pricePaise: CERTIFICATE_PRICE_PAISE, issued,
+      allowed, paid: !!event.certificatesPaidAt, pricePaise: certificatePricePaise(), issued,
       configured: !!event.certificateSettings, settings: certificateSettings(event.certificateSettings),
       // What the form's live preview prints around the host's own choices.
       sample: {

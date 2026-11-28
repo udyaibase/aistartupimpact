@@ -1,3 +1,4 @@
+import { ensureCatalog } from '@/lib/catalog/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { apiRateLimit, checkRateLimit, getClientIdentifier } from '@/lib/rate-limit';
 import { facets, loadDataset, selectStartups } from '@/lib/funding/dataset';
@@ -10,6 +11,7 @@ export const dynamic = 'force-dynamic';
  * few names (a taste, not the data). With `facets: true`, also the sector, stage and city choices.
  */
 export async function POST(request: NextRequest) {
+  await ensureCatalog(); // pack prices and sizes
   const { success } = await checkRateLimit(apiRateLimit, `funding-preview:${getClientIdentifier(request)}`);
   if (!success) return NextResponse.json({ error: 'Too many requests. Try again in a minute.' }, { status: 429 });
   const body = await request.json().catch(() => ({}));

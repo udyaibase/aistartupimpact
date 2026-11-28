@@ -7,6 +7,9 @@ import { Clock, Calendar, ChevronRight } from 'lucide-react';
 import StorySaveButton from '@/components/StorySaveButton';
 import { sql, getArticleBySlugDirect, getArticlesDirect } from '@/lib/db';
 import { buildArticleMetadata, withArticleSeo, generateArticleSchema, generateBreadcrumbSchema } from '@/lib/seo';
+import SponsoredTag from '@/components/article/SponsoredTag';
+import { isSponsoredArticle } from '@/lib/seo';
+import { redirectOldArticleSlug } from '@/lib/article-redirect';
 import { articleBodyHtml } from '@/lib/article-body';
 import { getArticleEntityCards } from '@/lib/article-entities';
 import EntityHoverCards from '@/components/article/EntityHoverCards';
@@ -41,6 +44,7 @@ export async function generateStaticParams() {
 export default async function OpinionArticlePage(props: { params: Promise<{ slug: string }> }) {
   const params = await props.params;
   const article = await getArticleBySlugDirect(params.slug);
+  if (!article) await redirectOldArticleSlug(params.slug);
   if (!article) notFound();
 
   const related = await getArticlesDirect({ type: 'OPINION', limit: 4 });
@@ -95,6 +99,7 @@ export default async function OpinionArticlePage(props: { params: Promise<{ slug
       <div className="flex flex-col lg:flex-row gap-8 lg:gap-12">
         <article className="flex-1 min-w-0 max-w-3xl mx-auto lg:mx-0 w-full">
           <span className="badge-brand text-xs mb-4 inline-block">{article.category?.name || 'Opinion'}</span>
+          {isSponsoredArticle(article) && <SponsoredTag className="ml-2 mb-4" />}
 
           <h1 className="font-sora font-extrabold text-[22px] leading-[1.2] sm:text-3xl md:text-[36px] md:leading-[1.2] text-navy dark:text-white">
             {article.title}

@@ -1,3 +1,4 @@
+import SponsoredTag from '@/components/article/SponsoredTag';
 import Link from 'next/link';
 import Image from 'next/image';
 import { PenLine } from 'lucide-react';
@@ -54,10 +55,10 @@ export function Byline({ story, size = 'sm' }: { story: StoryCardData; size?: 's
  * One story. On phones it's a list row (text on the left, a small square picture on the right, like a news app),
  * from the sm breakpoint up a card with the picture on top.
  */
-export default function StoryCard({ story, sizes = '(max-width: 640px) 96px, (max-width: 1024px) 50vw, 33vw' }: { story: StoryCardData; sizes?: string }) {
+export default function StoryCard({ story, sizes = '(max-width: 640px) 96px, (max-width: 1024px) 50vw, 33vw', href }: { story: StoryCardData; sizes?: string; /** Where it opens; stories by default (news uses the same card). */ href?: string }) {
   const founder = isFounderWritten(story);
   return (
-    <Link href={`/stories/${story.slug}`}
+    <Link href={href ?? `/stories/${story.slug}`}
       className="group flex flex-row-reverse items-start gap-3 border-b border-gray-100 dark:border-gray-800 py-4 active:bg-gray-50 dark:active:bg-gray-900 max-sm:last:border-b-0
         sm:h-full sm:flex-col sm:items-stretch sm:gap-0 sm:overflow-hidden sm:rounded-[14px] sm:border sm:border-gray-200 sm:dark:border-gray-800 sm:bg-white sm:dark:bg-gray-900 sm:py-0 sm:active:bg-white
         transition-[border-color,box-shadow] duration-200 sm:hover:border-gray-300 sm:dark:hover:border-gray-700 sm:hover:shadow-[0_10px_30px_-18px_rgba(0,0,0,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">
@@ -68,6 +69,7 @@ export default function StoryCard({ story, sizes = '(max-width: 640px) 96px, (ma
         <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 sm:mb-2">
           <span className={`text-xs font-bold uppercase tracking-wider text-brand font-jakarta ${founder ? 'hidden sm:inline' : ''}`}>{storyTopic(story)}</span>
           {founder && <FounderBadge />}
+          {(story.type === 'SPONSORED' || (story as { isSponsored?: boolean }).isSponsored) && <SponsoredTag />}
         </div>
         <h3 className="font-sora text-base sm:text-[17px] font-bold leading-snug text-gray-900 dark:text-white line-clamp-3 sm:line-clamp-2 group-hover:text-brand transition-colors">
           {story.title}

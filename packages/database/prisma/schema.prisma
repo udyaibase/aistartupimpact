@@ -165,6 +165,25 @@ model AiTool {
   saveCount            Int                      @default(0)
   clicks               Int                      @default(0)
   isUrlVerified        Boolean                  @default(false)
+  /// Our team's review, kept apart from ownership (claimStatus): IN_REVIEW, CHANGES_REQUESTED, REJECTED, TAKEN_DOWN or APPROVED.
+  /// `status` still decides whether the tool is public.
+  reviewStatus         String                   @default("IN_REVIEW")
+  reviewReasonCode     String?
+  /// What the reviewer told the founder; shown in the founder portal.
+  reviewNote           String?
+  reviewedAt           DateTime?
+  reviewedByEmail      String?
+  submittedForReviewAt DateTime?
+  /// Automatic first look for the reviewer: LIKELY_AI, UNCLEAR or LIKELY_NOT_AI. Never decides anything by itself.
+  aiCheckLabel         String?
+  aiCheckReason        String?
+  aiCheckedAt          DateTime?
+  aiCheckModel         String?
+  /// Fast approval: when it will go live by itself, whether a reviewer held it, and when a person checked it afterwards.
+  autoApproveAt        DateTime?
+  autoApproveHeld      Boolean                  @default(false)
+  postCheckedAt        DateTime?
+  postCheckedByEmail   String?
   listingTier          ListingTier              @default(FREE)
   paymentStatus        PaymentStatus            @default(PENDING)
   pendingTier          ListingTier?
@@ -212,12 +231,14 @@ model AiTool {
   @@index([status, listingTier])
   @@index([deletedAt])
   @@index([createdAt])
+  @@index([status, reviewStatus], map: "AiTool_review_queue_idx")
 }
 
 model Article {
   id              String                   @id
   title           String
   slug            String                   @unique
+  previousSlugs   String[]                 @default([])
   excerpt         String?
   content         Json
   contentText     String?
@@ -1295,6 +1316,31 @@ model Startup {
   submittedBy                                String?
   isVerified                                 Boolean                    @default(false)
   isApproved                                 Boolean                    @default(false)
+  /// Our team's review, kept apart from ownership (claimStatus): IN_REVIEW, CHANGES_REQUESTED, REJECTED, TAKEN_DOWN or APPROVED.
+  /// isApproved still decides whether the startup is public.
+  reviewStatus                               String                     @default("IN_REVIEW")
+  reviewReasonCode                           String?
+  /// What the reviewer told the founder; shown in the founder portal.
+  reviewNote                                 String?
+  reviewedAt                                 DateTime?
+  reviewedByEmail                            String?
+  /// When it last entered the queue (first submit, or a resubmit after changes).
+  submittedForReviewAt                       DateTime?
+  /// The founder's answer to "How does your product use AI?"; for reviewers, not shown publicly.
+  aiUseCase                                  String?
+  /// Automatic first look for the reviewer: LIKELY_AI, UNCLEAR or LIKELY_NOT_AI, with one sentence why. Never decides anything.
+  aiCheckLabel                               String?
+  aiCheckReason                              String?
+  aiCheckedAt                                DateTime?
+  aiCheckModel                               String?
+  /// Fast approval: when it will go live by itself (null: not scheduled), and whether a reviewer put that on hold.
+  autoApproveAt                              DateTime?
+  autoApproveHeld                            Boolean                    @default(false)
+  /// Who approved it: a reviewer's email, or AUTO for fast approval.
+  approvedBy                                 String?
+  /// When a person looked at a fast approval afterwards.
+  postCheckedAt                              DateTime?
+  postCheckedByEmail                         String?
   contentReviewed                            Boolean                    @default(false)
   approvedAt                                 DateTime?
   verifiedAt                                 DateTime?
@@ -1362,6 +1408,7 @@ model Startup {
   @@index([businessType])
   @@index([employeeCount])
   @@index([createdAt])
+  @@index([isApproved, reviewStatus], map: "Startup_review_queue_idx")
 }
 
 model StartupFAQ {
@@ -5310,4 +5357,104 @@ model EmployerNotification {
 
   @@index([employerId, memberId, createdAt])
   @@index([employerId, memberId, read])
+}
+
+/// A promotion run from Admin → Billing → Offers: who gets what, when, and how many times.
+/// A paid plan free for a number of days, for the hiring portal or the event host portal: granted automatically to
+/// accounts that qualify, or claimed with a promo code.
+/// The rule lives here; each grant is a PlanOfferRedemption row, and `redeemedCount` is the locked running total
+/// that makes the cap exact (see apps/web/lib/offers/claim.ts).
+model PlanOffer {
+  id             String   @id @default(cuid())
+  /// Internal name, shown in the admin only.
+  name           String
+  /// What customers read, e.g. "Pro free for 3 months for the first 100 startups".
+  headline       String
+  /// EMPLOYER | HOST
+  portal         String
+  /// FREE_PLAN (a plan free for benefitDays) | PERCENT_OFF | AMOUNT_OFF (a discount on one payment, with a code).
+  benefit        String   @default("FREE_PLAN")
+  /// FREE_PLAN: the plan granted (GROWTH | PRO | SCALE for employers, PRO for hosts).
+  /// Discounts: the plan the code works on, or ANY.
+  plan           String
+  /// FREE_PLAN: length of the free period. Discounts: 0.
+  benefitDays    Int
+  /// PERCENT_OFF: 1 to 90.
+  percentOff     Int?
+  /// AMOUNT_OFF: taken off the price before GST, in paise.
+  amountOffPaise Int?
+  /// Discounts: the billing cycle the code works on (ANY | MONTHLY | ANNUAL).
+  cycle          String   @default("ANY")
+  /// Who qualifies; the choices depend on the portal (packages/utils/offers.ts): NEW_WORKSPACES, VERIFIED_STARTUPS,
+  /// NEW_HOSTS, VERIFIED_FOUNDERS, ANY_ACCOUNT.
+  audience       String   @default("NEW_WORKSPACES")
+  /// AUTO (applied when the account qualifies) | CODE (the customer types `code` on their billing page).
+  trigger        String   @default("AUTO")
+  /// The promo code for a CODE offer: capitals and digits, unique across offers.
+  code           String?  @unique
+  startsAt       DateTime
+  endsAt         DateTime
+  /// Null = no cap.
+  maxRedemptions Int?
+  redeemedCount  Int      @default(0)
+  /// DRAFT | ACTIVE | PAUSED | ENDED
+  status         String   @default("DRAFT")
+  /// Show the headline and places left on the employer sign-up page.
+  showPublicly   Boolean  @default(true)
+  createdByEmail String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  redemptions PlanOfferRedemption[]
+
+  @@index([portal, status, startsAt, endsAt])
+}
+
+/// One account's grant from one offer. Unique per (offer, account) and per (offer, company), so a company
+/// can't claim the same offer twice through a second workspace.
+model PlanOfferRedemption {
+  id            String   @id @default(cuid())
+  offerId       String
+  portal        String
+  /// JobBoardEmployer.id or EventOrganizer.id. No relation: the record outlives a deleted account.
+  accountId     String
+  accountName   String
+  accountEmail  String
+  /// startup:<id> or domain:<verified domain>; null when the company isn't identified.
+  companyKey    String?
+  plan          String
+  benefitDays   Int
+  startsAt      DateTime
+  endsAt        DateTime
+  /// ACTIVE | REVOKED, and for a discount PENDING while its checkout is open (the place is held, not yet used).
+  status        String   @default("ACTIVE")
+  /// Discounts: the Razorpay order the code was applied to.
+  paymentRef    String?
+  /// Discounts: what was taken off the price before GST, in paise.
+  discountPaise Int?
+  createdAt     DateTime @default(now())
+
+  offer PlanOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@unique([offerId, accountId])
+  @@unique([offerId, companyKey])
+  @@index([accountId])
+  @@index([offerId, createdAt])
+  @@index([paymentRef])
+}
+
+/// One saved version of plan prices and limits (Admin → Billing → Plans & prices). The version in force is the
+/// newest one whose effectiveFrom has passed; with no version, the values built into the code apply
+/// (packages/utils/employer-plans.ts, host-plans.ts, funding-packs.ts). `data` is the whole catalog, not a
+/// difference, so any version can be read or restored on its own.
+model PlanCatalogVersion {
+  id             String   @id @default(cuid())
+  data           Json
+  /// Why it was changed, in the admin's words.
+  note           String?
+  effectiveFrom  DateTime
+  createdByEmail String?
+  createdAt      DateTime @default(now())
+
+  @@index([effectiveFrom])
 }

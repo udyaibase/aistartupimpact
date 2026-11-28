@@ -195,3 +195,12 @@ describe('sourcing input', () => {
     expect(cleanSourced({ fullName: 'Asha', email: 'a@x.co', profileUrl: 'github.com/asha', channel: 'Naukri' })).toMatchObject({ ok: true, data: { portfolioUrl: 'https://github.com/asha', linkedinUrl: null, channel: 'Naukri' } });
   });
 });
+
+describe('sourced resumes: the job skills written in them', () => {
+  it('finds the job skills in the text, in the job’s wording, and nothing else', async () => {
+    const { jobSkillsInText } = await import('@/lib/employer/sourcing');
+    const text = 'Asha Rao\nSkills: python, PostgreSQL, Docker\nBuilt a recommendation model with PyTorch';
+    expect(jobSkillsInText(['Python', 'PyTorch', 'Kubernetes', 'Docker'], text)).toEqual(['Python', 'PyTorch', 'Docker']);
+    expect(jobSkillsInText(['Python'], '')).toEqual([]);
+  });
+});

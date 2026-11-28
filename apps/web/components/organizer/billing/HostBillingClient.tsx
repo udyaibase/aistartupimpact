@@ -1,5 +1,7 @@
 "use client";
 
+import { useCatalog } from "@/lib/catalog/use-catalog";
+import PromoCodeBox, { type AppliedDiscount } from "@/components/billing/PromoCodeBox";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, Sparkles, Star } from "lucide-react";
@@ -36,9 +38,11 @@ export default function HostBillingClient({ current, expiresAt, usage, cycle: cu
   accountName: string;
 }) {
   const router = useRouter();
+  useCatalog(); // the founding price rules set in the admin, not the copies in this bundle
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [discount, setDiscount] = useState<AppliedDiscount | null>(null);
   const [cycle, setCycle] = useState<HostBillingCycle>(current === "PRO" ? currentCycle : "MONTHLY");
   const plan = plans.find((p) => p.key === current)!;
   const yearly = cycle === "ANNUAL";
@@ -67,12 +71,12 @@ export default function HostBillingClient({ current, expiresAt, usage, cycle: cu
     setError("");
     setNotice("");
     try {
-      const res = await fetch("/api/organizer/billing/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, eventId, ...(kind === "PRO" ? { cycle } : {}) }) });
+      const res = await fetch("/api/organizer/billing/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, eventId, ...(kind === "PRO" ? { cycle, ...(discount ? { code: discount.code } : {}) } : {}) }) });
       const d = await res.json().catch(() => ({}));
       if (res.status === 409 && d.code === "BILLING_REQUIRED") { setBusy(null); setGate({ kind, eventId }); return; }
       if (!res.ok) { setError(d.error || "Couldn’t start the payment."); setBusy(null); return; }
       const out = await payWithRazorpay(d, "/api/organizer/billing/verify");
-      if (out.ok) { setNotice(kind === "PRO" ? "Payment received. Pro is active." : "Payment received. Your event is boosted."); router.refresh(); }
+      if (out.ok) { setNotice(kind === "PRO" ? (d.discount ? `Payment received with ${d.discount.code}. Pro is active.` : "Payment received. Pro is active.") : "Payment received. Your event is boosted."); if (kind === "PRO") setDiscount(null); router.refresh(); }
       else if (!out.cancelled) setError(out.error);
     } catch {
       setError("You seem to be offline.");
@@ -94,6 +98,8 @@ export default function HostBillingClient({ current, expiresAt, usage, cycle: cu
         <h1 className="portal-title">Plans &amp; billing</h1>
         <p className="portal-subtitle">Free covers small meetups. Boost one event when you need reach, or go Pro if you host often. No auto-renewal.</p>
       </div>
+
+      <PromoCodeBox endpoint="/api/organizer/billing/redeem" onApplied={() => router.refresh()} discount={discount} onDiscount={setDiscount} />
 
       {(error || notice) && (
         <p role={error ? "alert" : "status"} className={`text-sm rounded-[10px] px-3 py-2 ${error ? "bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-300" : "bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-300"}`}>{error || notice}</p>

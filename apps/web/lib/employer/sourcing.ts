@@ -3,11 +3,16 @@ import { prisma } from '@udyaibase/database';
 import { sendEmail } from '@/lib/email/send';
 import { button, esc, shell } from '@/lib/jobs/apply-emails';
 import { hashStatusToken } from '@/lib/jobs/candidate-status';
-import { deleteResume, putResume, resumeStorageReady } from '@/lib/jobs/resume-storage';
+import { deleteResume, putResume, readResume, resumeStorageReady } from '@/lib/jobs/resume-storage';
 import { MAX_RESUME_BYTES, resumeText, sniffResume } from '@/lib/jobs/resume-text';
 import { aiResumeFields, plainResumeFields, type ResumeFields } from '@/lib/jobs/resume-fields';
 import { employerContext } from '@/lib/employer/applications';
 import { SOURCING_CHANNELS } from '@/lib/employer/stages';
+import { after } from 'next/server';
+import { matchSkills, normalizeSkill } from '@/lib/jobs/skills';
+import { skillsInLine } from '@/lib/jobs/resume-score';
+import { ensureSkillOverrides } from '@/lib/jobs/skill-overrides';
+import { screenApplication } from '@/lib/jobs/ai-screen';
 
 /**
  * Sourcing: people the team found (a resume folder, LinkedIn, Naukri, a referral on WhatsApp, an event) and adds to a
@@ -27,6 +32,8 @@ const clip = (v: unknown, n: number) => (typeof v === 'string' ? v.trim().replac
 export interface SourcedInput {
   fullName?: unknown; email?: unknown; phone?: unknown; linkedinUrl?: unknown; profileUrl?: unknown; currentTitle?: unknown; currentCompany?: unknown;
   city?: unknown; experienceYears?: unknown; channel?: unknown; channelOther?: unknown; note?: unknown;
+  /** Skills the resume reader found (the add form sends what /sourced/read returned). Only the job's own skills are kept. */
+  skills?: unknown;
 }
 export interface CleanSourced {
   fullName: string; email: string; phone: string | null; linkedinUrl: string | null; portfolioUrl: string | null; currentTitle: string | null;
@@ -70,6 +77,19 @@ export function cleanSourced(i: SourcedInput): { ok: true; data: CleanSourced } 
       channel, note: clip(i.note, 2000) || null,
     },
   };
+}
+
+/** The job's skills written in a resume's text, in the job's own wording. No AI: the same skill reading as the resume score. */
+export function jobSkillsInText(jobSkills: string[], text: string): string[] {
+  const found = new Set<string>();
+  for (const line of text.split(/\r?\n/)) for (const k of skillsInLine(line)) found.add(k);
+  return jobSkills.filter((s) => found.has(normalizeSkill(s)));
+}
+
+/** Run after the response when inside a request; otherwise straight away. */
+function later(fn: () => Promise<unknown>) {
+  const run = () => fn().then(() => undefined).catch((e) => console.error('[sourcing] background task failed', e instanceof Error ? e.message : e));
+  try { after(run); } catch { void run(); }
 }
 
 /** Reads a resume the team uploaded: AI fills the form when the workspace allows it; otherwise just email and phone. */
@@ -136,26 +156,36 @@ export async function addSourced(opts: {
   if (!c.ok) return { ok: false, error: c.error, status: 400, field: c.field };
   const listing = await prisma.jobBoardListing.findFirst({
     where: { id: opts.listingId, employerId: opts.employerId, deletedAt: null, isGeneral: false, ...(opts.jobIds ? { id: { in: opts.jobIds } } : {}) },
-    select: { id: true },
+    select: { id: true, skills: true },
   });
   if (!listing) return { ok: false, error: 'Job not found.', status: 404 };
   const existing = await prisma.jobBoardApplication.findUnique({ where: { listingId_email: { listingId: listing.id, email: c.data.email } }, select: { id: true } });
   if (existing) return { ok: false, error: 'They’re already a candidate for this job.', status: 409, existingId: existing.id };
 
   let resumeKey: string | null = null;
+  // Skills for the match: the job's skills found in the resume, plus any the resume reader returned to the form.
+  // Applicants tick theirs; a sourced person never fills a form, so without this their match was always empty.
+  let fromResume: string[] = [];
   if (opts.resume?.byteLength) {
     const kind = sniffResume(opts.resume);
     if (!kind || opts.resume.byteLength > MAX_RESUME_BYTES) return { ok: false, error: 'The resume must be a PDF or Word file under 5 MB.', status: 400, field: 'resume' };
     if (!resumeStorageReady()) return { ok: false, error: 'Resume storage isn’t set up. Add them without the resume for now.', status: 503, field: 'resume' };
     resumeKey = `resumes/${listing.id}/${crypto.randomUUID()}.${kind.ext}`;
     await putResume(resumeKey, opts.resume, kind.mime);
+    try {
+      await ensureSkillOverrides();
+      fromResume = jobSkillsInText(listing.skills, await resumeText(opts.resume, kind));
+    } catch { fromResume = []; }
   }
+  const readerSkills = Array.isArray(opts.input.skills) ? opts.input.skills.filter((x): x is string => typeof x === 'string').slice(0, 60) : [];
+  const skills = matchSkills(listing.skills, [...fromResume, ...readerSkills]);
 
   const d = c.data;
   const app = await prisma.jobBoardApplication.create({
     data: {
       listingId: listing.id, fullName: d.fullName, email: d.email, phone: d.phone, linkedinUrl: d.linkedinUrl, portfolioUrl: d.portfolioUrl,
       currentTitle: d.currentTitle, currentCompany: d.currentCompany, city: d.city, experienceYears: d.experienceYears, resumeKey,
+      confirmedSkills: skills, matchedSkills: skills,
       source: 'SOURCED', sourcedState: 'ADDED', sourcedChannel: d.channel, sourcedBy: opts.actorEmail, appliedAt: now, reviewedAt: now,
     },
     select: { id: true },
@@ -220,7 +250,10 @@ export async function contactSourced(opts: { employerId: string; id: string; act
   return { ok: true };
 }
 
-/** They said they're interested (by replying, or with the button): they enter the pipeline as New. */
+/**
+ * They said they're interested (by replying, or with the button): they enter the pipeline as New, and get the same
+ * automatic AI review as an applicant (when the workspace has auto-review on and reviews left).
+ */
 export async function markInterested(opts: { employerId?: string; id: string; actor: string; now?: Date }): Promise<boolean> {
   const now = opts.now ?? new Date();
   const r = await prisma.jobBoardApplication.updateMany({
@@ -229,7 +262,28 @@ export async function markInterested(opts: { employerId?: string; id: string; ac
   });
   if (!r.count) return false;
   await prisma.jobBoardApplicationEvent.create({ data: { applicationId: opts.id, toStatus: 'APPLIED', actorEmail: opts.actor, reasonCode: 'SOURCED_INTERESTED' } });
+  const row = await prisma.jobBoardApplication.findUnique({
+    where: { id: opts.id },
+    select: { resumeKey: true, confirmedSkills: true, Listing: { select: { employerId: true, isGeneral: true, skills: true } } },
+  });
+  if (row && !row.Listing.isGeneral) {
+    later(async () => {
+      // Added before resume skills were saved: read them now so the match isn't empty.
+      if (!row.confirmedSkills.length && row.resumeKey) await fillSkillsFromResume(opts.id, row.resumeKey, row.Listing.skills);
+      await screenApplication(opts.id, row.Listing.employerId, { auto: true });
+    });
+  }
   return true;
+}
+
+/** The job's skills found in a stored resume, saved as the candidate's skills (only when they have none). */
+async function fillSkillsFromResume(id: string, resumeKey: string, jobSkills: string[]) {
+  const bytes = await readResume(resumeKey).catch(() => null);
+  const kind = bytes ? sniffResume(bytes) : null;
+  if (!bytes || !kind) return;
+  await ensureSkillOverrides();
+  const skills = jobSkillsInText(jobSkills, await resumeText(bytes, kind).catch(() => ''));
+  if (skills.length) await prisma.jobBoardApplication.updateMany({ where: { id, confirmedSkills: { isEmpty: true } }, data: { confirmedSkills: skills, matchedSkills: skills } });
 }
 
 /** Removes a sourced record completely (they never applied): the row, its notes and the resume. */

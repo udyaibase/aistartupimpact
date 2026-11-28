@@ -6,7 +6,7 @@ import { apiRateLimit, checkRateLimit } from '@/lib/rate-limit';
 const NOT_READY = () => NextResponse.json({ error: 'Invoices aren’t available yet. Email billing@udyaibase.com if you need one now.' }, { status: 503 });
 
 export async function invoicePdfResponse(table: InvoiceTable, paymentId: string, ownerId: string) {
-  if (!invoicesEnabled()) return NOT_READY();
+  if (!(await invoicesEnabled())) return NOT_READY();
   const inv = await issueInvoice(table, paymentId);
   if (!inv || inv.ownerId !== ownerId) return NextResponse.json({ error: 'Invoice not found.' }, { status: 404 });
   const pdf = await buildInvoicePdf(inv);
@@ -16,7 +16,7 @@ export async function invoicePdfResponse(table: InvoiceTable, paymentId: string,
 }
 
 export async function invoiceEmailResponse(table: InvoiceTable, paymentId: string, ownerId: string) {
-  if (!invoicesEnabled()) return NOT_READY();
+  if (!(await invoicesEnabled())) return NOT_READY();
   const { success } = await checkRateLimit(apiRateLimit, `invoice-email:${ownerId}`);
   if (!success) return NextResponse.json({ error: 'Too many emails. Try again in a minute.' }, { status: 429 });
   const inv = await issueInvoice(table, paymentId);
@@ -26,7 +26,7 @@ export async function invoiceEmailResponse(table: InvoiceTable, paymentId: strin
 }
 
 export async function creditNotePdfResponse(table: InvoiceTable, paymentId: string, ownerId: string) {
-  if (!invoicesEnabled()) return NOT_READY();
+  if (!(await invoicesEnabled())) return NOT_READY();
   const cn = await issueCreditNote(table, paymentId);
   if (!cn || cn.invoice.ownerId !== ownerId) return NextResponse.json({ error: 'Credit note not found.' }, { status: 404 });
   const pdf = await buildCreditNotePdf(cn);

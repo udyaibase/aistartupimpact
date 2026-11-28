@@ -23,6 +23,18 @@ const PUBLISHERS = ["SUPER_ADMIN", "EDITOR_IN_CHIEF"];
 const STATUSES = ["DRAFT", "IN_REVIEW", "SCHEDULED", "PUBLISHED", "ARCHIVED"] as const;
 const TYPES = ["NEWS", "STORY", "OPINION", "TOOL_REVIEW", "GUIDE", "COMPARISON", "REPORT", "SPONSORED", "FOUNDER_STORY", "STARTUP_UPDATE"];
 const LOCKED_FOR_WRITERS = ["PUBLISHED", "SCHEDULED"];
+/** Written by founders in their own portal: the staff publishing checklist (category, cover, subtitle) does not apply. */
+const FOUNDER_TYPES = ["FOUNDER_STORY", "STARTUP_UPDATE"];
+
+/** What a staff article must have before it goes live, as a sentence for the editor; null when nothing is missing. */
+function missingToPublish(a: { type: string; categoryId: string | null; coverImage: string | null; excerpt: string | null }) {
+  if (FOUNDER_TYPES.includes(a.type)) return null;
+  const missing = [!a.categoryId && "a category", !a.coverImage && "a cover image", !a.excerpt?.trim() && "a subtitle"].filter(Boolean) as string[];
+  if (!missing.length) return null;
+  const list = missing.length === 1 ? missing[0] : `${missing.slice(0, -1).join(", ")} and ${missing[missing.length - 1]}`;
+  return `Before this goes live, add ${list}. Readers and search results show them.`;
+}
+
 const PUBLIC_SECTIONS: PublicSection[] = ['news', 'stories', 'opinions', 'authors', 'home'];
 
 type Status = (typeof STATUSES)[number];
@@ -47,6 +59,13 @@ async function uniqueSlug(base: string, articleId?: string | null) {
   const taken: { slug: string }[] = await prisma.$queryRaw`
     SELECT slug FROM "Article" WHERE (slug = ${base} OR slug LIKE ${base + "-%"}) AND id <> ${articleId ?? ""}`;
   const used = new Set(taken.map((t) => t.slug));
+  // Another article's old link still redirects to it, so that address is taken too.
+  try {
+    const old: { slug: string }[] = await prisma.$queryRaw`
+      SELECT s AS slug FROM "Article" a, unnest(a."previousSlugs") s
+      WHERE a.id <> ${articleId ?? ""} AND a."deletedAt" IS NULL AND (s = ${base} OR s LIKE ${base + "-%"})`;
+    for (const o of old) used.add(o.slug);
+  } catch { /* slug history not available yet */ }
   if (!used.has(base)) return base;
   for (let n = 1; ; n++) if (!used.has(`${base}-${n}`)) return `${base}-${n}`;
 }
@@ -119,12 +138,14 @@ export async function saveArticleAction(payload: ArticlePayload, articleId?: str
 
   const title = text(payload.title, 300);
   if (!title) return { success: false as const, error: "Add a title first." };
-  const type = TYPES.includes(String(payload.type)) ? String(payload.type) : "NEWS";
+  // An unknown type used to be saved as News without a word; say so instead.
+  if (payload.type && !TYPES.includes(String(payload.type))) return { success: false as const, error: "Pick an article type from the list." };
+  const type = payload.type ? String(payload.type) : "NEWS";
   let status: Status = isStatus(payload.status) ? payload.status : "DRAFT";
 
   const existing = articleId
     ? (await prisma.$queryRaw<any[]>`
-        SELECT "authorId", status::text AS status, to_char("publishedAt", 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "publishedAt", "isFeatured", "isPinned", "isSponsored"
+        SELECT "authorId", slug, status::text AS status, to_char("publishedAt", 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "publishedAt", "isFeatured", "isPinned", "isSponsored", "canonicalUrl"
         FROM "Article" WHERE id = ${articleId} AND "deletedAt" IS NULL LIMIT 1`)[0]
     : null;
   if (articleId && !existing) return { success: false as const, error: "Article not found." };
@@ -156,12 +177,19 @@ export async function saveArticleAction(payload: ArticlePayload, articleId?: str
   const categoryId = categoryName
     ? (await prisma.$queryRaw<{ id: string }[]>`SELECT id FROM "Category" WHERE name = ${categoryName} OR id = ${categoryName} LIMIT 1`)[0]?.id ?? null
     : null;
+  // A category that no longer exists used to be dropped silently, leaving the article uncategorised.
+  if (categoryName && !categoryId) return { success: false as const, error: `The category "${categoryName}" no longer exists. Pick another one.` };
+  if (status === "PUBLISHED" || status === "SCHEDULED") {
+    if (htmlWordCount(html) === 0) return { success: false as const, error: "Write the article before publishing it." };
+    const missing = missingToPublish({ type, categoryId, coverImage: httpUrl(payload.coverImage), excerpt: text(payload.subtitle, 500) });
+    if (missing) return { success: false as const, error: missing };
+  }
   const takeaways = Array.isArray(payload.keyTakeaways)
     ? payload.keyTakeaways.map((t) => text(t, 300)).filter(Boolean).slice(0, 10)
     : [];
   const flags = publisher
-    ? { isFeatured: !!payload.isFeatured, isPinned: !!payload.isPinned, isSponsored: !!payload.isSponsored }
-    : { isFeatured: !!existing?.isFeatured, isPinned: !!existing?.isPinned, isSponsored: !!existing?.isSponsored };
+    ? { isFeatured: !!payload.isFeatured, isPinned: !!payload.isPinned, isSponsored: !!payload.isSponsored || type === "SPONSORED" }
+    : { isFeatured: !!existing?.isFeatured, isPinned: !!existing?.isPinned, isSponsored: !!existing?.isSponsored || type === "SPONSORED" };
   // A published article keeps its first publish date; republishing doesn't move it.
   const firstPublished = existing?.publishedAt ? new Date(existing.publishedAt) : null;
   const publishedAt = status === "PUBLISHED" ? firstPublished ?? new Date() : firstPublished;
@@ -171,7 +199,9 @@ export async function saveArticleAction(payload: ArticlePayload, articleId?: str
     noIndex: !!payload.noIndex, ...flags, categoryId, scheduledAt, publishedAt, readTime,
     coverImage: httpUrl(payload.coverImage), thumbnailImage: httpUrl(payload.thumbnailImage),
     seoTitle: text(payload.seoTitle, 120) || null, seoDescription: text(payload.seoDescription, 320) || null,
-    focusKeyword: text(payload.focusKeyword, 100) || null, canonicalUrl: httpUrl(payload.canonicalUrl), ogImage: httpUrl(payload.ogImage),
+    focusKeyword: text(payload.focusKeyword, 100) || null, ogImage: httpUrl(payload.ogImage),
+    // Pointing the canonical at another site gives that site the search credit, so only editors set it.
+    canonicalUrl: publisher ? httpUrl(payload.canonicalUrl) : httpUrl(existing?.canonicalUrl),
     keyTakeaways: takeaways.length ? JSON.stringify(takeaways) : null,
   };
   const id = articleId ?? crypto.randomUUID();
@@ -208,6 +238,23 @@ export async function saveArticleAction(payload: ArticlePayload, articleId?: str
     console.error("[articles] save failed:", error?.code ?? "", error?.message);
     return { success: false as const, error: "Couldn't save the article. Try again." };
   }
+  // A published article's old address keeps working: remember it so the website can redirect to the new one.
+  const oldSlug: string | null = existing && existing.slug && existing.slug !== slug ? existing.slug : null;
+  let redirected = false;
+  if (oldSlug) {
+    try {
+      if (existing.publishedAt) {
+        await prisma.$executeRaw`
+          UPDATE "Article" SET "previousSlugs" = array_append(array_remove(array_remove(COALESCE("previousSlugs", ARRAY[]::text[]), ${slug}), ${oldSlug}), ${oldSlug})
+          WHERE id = ${id}`;
+        redirected = true;
+      } else {
+        await prisma.$executeRaw`UPDATE "Article" SET "previousSlugs" = array_remove(COALESCE("previousSlugs", ARRAY[]::text[]), ${slug}) WHERE id = ${id}`;
+      }
+    } catch (e: any) {
+      console.error("[articles] slug history not saved:", e?.message);
+    }
+  }
   // Startups and tools @-tagged in the body, for their profile pages. A failure here never loses the article.
   const profilePaths = await syncArticleMentions(id, html).catch((e) => {
     console.error("[articles] mention sync failed:", e?.message);
@@ -224,11 +271,13 @@ export async function saveArticleAction(payload: ArticlePayload, articleId?: str
       });
     }
     if (statusChanged) revalidatePath("/articles");
-    if (touchesSite) await refreshPublic(PUBLIC_SECTIONS, profilePaths);
+    // The page cached at the old address must go too, or it would keep showing instead of redirecting.
+    const oldPaths = oldSlug ? [`/news/${oldSlug}`, `/stories/${oldSlug}`, `/opinions/${oldSlug}`, `/opinion/${oldSlug}`] : [];
+    if (touchesSite) await refreshPublic(PUBLIC_SECTIONS, [...profilePaths, ...oldPaths]);
   }
   const notice = !publisher && status === "IN_REVIEW" && payload.status !== "IN_REVIEW" && payload.status !== "DRAFT"
     ? "Sent for review. An editor will publish it."
-    : undefined;
+    : redirected && !payload.autosave ? "Link changed. The old link now redirects to the new one." : undefined;
   return {
     success: true as const,
     data: { id, slug, status, publishedAt: publishedAt?.toISOString() ?? null, readTime },
@@ -313,13 +362,19 @@ export async function updateArticleStatusAction(id: string, status: string) {
   if (!user) return { success: false as const, error: "Unauthorized" };
   if (!isStatus(status)) return { success: false as const, error: "Unknown status." };
   const rows: any[] = await prisma.$queryRaw`
-    SELECT title, "authorId", status::text AS status, "scheduledAt" FROM "Article" WHERE id = ${id} AND "deletedAt" IS NULL LIMIT 1`;
+    SELECT title, "authorId", status::text AS status, "scheduledAt", type::text AS type, "categoryId", "coverImage", excerpt
+    FROM "Article" WHERE id = ${id} AND "deletedAt" IS NULL LIMIT 1`;
   const a = rows[0];
   if (!a) return { success: false as const, error: "Article not found." };
 
   if (!isPublisher(user)) {
     const allowed = a.authorId === user.id && ["DRAFT", "IN_REVIEW"].includes(a.status) && ["DRAFT", "IN_REVIEW"].includes(status);
     if (!allowed) return { success: false as const, error: "Only editors can publish, schedule or archive articles." };
+  }
+  // Publishing from the list goes through the same checklist as publishing from the editor.
+  if ((status === "PUBLISHED" || status === "SCHEDULED") && a.status !== "PUBLISHED") {
+    const missing = missingToPublish(a);
+    if (missing) return { success: false as const, error: `${missing} Open the article to add them.` };
   }
   if (status === "SCHEDULED" && !(a.scheduledAt && new Date(a.scheduledAt).getTime() > Date.now())) {
     return { success: false as const, error: "Open the article and pick a publish time first." };

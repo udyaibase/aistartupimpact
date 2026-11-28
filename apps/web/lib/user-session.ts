@@ -49,6 +49,32 @@ export async function verifyUserToken(token: string | undefined | null): Promise
 }
 
 /** verifyUserToken for the current request's cookie. */
+/**
+ * For the few places that must recognise a site sign-in even when the account is deactivated (reactivating it, opening
+ * a workspace from it): the cookie's signature AND its session record, without the "account is active" condition.
+ *
+ * The session record is what makes a password change, a sign-out or "sign out everywhere" take effect: all three
+ * delete it. Checking only the signature let a copy of the cookie keep working for up to 7 days afterwards. A cookie
+ * with no session id (issued before sessions had records) is refused here: there is nothing to revoke it by.
+ * Returns the ids and the email from the token, or null.
+ */
+export async function verifyUserTokenSession(token: string | undefined | null): Promise<{ userId: string; email: string; sessionId: string } | null> {
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const userId = typeof payload.userId === 'string' ? payload.userId : null;
+    const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : null;
+    const email = typeof payload.email === 'string' ? payload.email.toLowerCase() : null;
+    if (!userId || !sessionId || !email) return null;
+    const rows = await sql`
+      SELECT 1 FROM "WebUserSession" WHERE id = ${sessionId} AND "webUserId" = ${userId} AND "expiresAt" > NOW() LIMIT 1
+    `;
+    return rows.length ? { userId, email, sessionId } : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getUserIds(): Promise<UserIds | null> {
   return verifyUserToken((await cookies()).get('user-token')?.value);
 }

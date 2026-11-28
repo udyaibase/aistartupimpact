@@ -8,8 +8,9 @@ import { canOpen } from '@/lib/section-access';
  */
 const COUNTERS: Record<string, () => Promise<number>> = {
   '/articles': () => prisma.article.count({ where: { deletedAt: null, status: 'IN_REVIEW' } }),
-  '/startups-dir': () => prisma.startup.count({ where: { deletedAt: null, isApproved: false } }),
-  '/tools-dir': () => prisma.aiTool.count({ where: { deletedAt: null, status: 'PENDING' } }),
+  // Waiting for a decision only: ones sent back to the founder or turned down are not ours to act on.
+  '/startups-dir/review': () => prisma.startup.count({ where: { deletedAt: null, isApproved: false, reviewStatus: 'IN_REVIEW', claimStatus: { not: 'REJECTED' } } }),
+  '/tools-dir': () => prisma.aiTool.count({ where: { deletedAt: null, status: 'PENDING', reviewStatus: 'IN_REVIEW', claimStatus: { not: 'REJECTED' } } }),
   '/tool-reviews': () => prisma.toolReview.count({ where: { status: 'PENDING' } }),
   '/startup-reviews': () => prisma.startupReview.count({ where: { status: 'PENDING' } }),
   '/events/review': () => prisma.event.count({ where: { deletedAt: null, status: 'PENDING_REVIEW' } }),

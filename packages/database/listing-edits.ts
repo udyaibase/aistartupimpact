@@ -228,11 +228,11 @@ async function publishFields(tx: Tx, type: ListingType, id: string, current: Lis
 
 async function listingState(type: ListingType, id: string) {
   if (type === 'startup') {
-    const s = await prisma.startup.findUnique({ where: { id }, select: { isApproved: true, isVerified: true, claimStatus: true } });
-    return s && { isLive: s.isApproved, isVerified: s.isVerified, claimStatus: s.claimStatus };
+    const s = await prisma.startup.findUnique({ where: { id }, select: { isApproved: true, isVerified: true, claimStatus: true, reviewStatus: true } });
+    return s && { isLive: s.isApproved, isVerified: s.isVerified, claimStatus: s.claimStatus, reviewStatus: s.reviewStatus };
   }
-  const t = await prisma.aiTool.findUnique({ where: { id }, select: { status: true, isUrlVerified: true, claimStatus: true } });
-  return t && { isLive: t.status === 'APPROVED' || t.status === 'FEATURED', isVerified: t.isUrlVerified, claimStatus: t.claimStatus };
+  const t = await prisma.aiTool.findUnique({ where: { id }, select: { status: true, isUrlVerified: true, claimStatus: true, reviewStatus: true } });
+  return t && { isLive: t.status === 'APPROVED' || t.status === 'FEATURED', isVerified: t.isUrlVerified, claimStatus: t.claimStatus, reviewStatus: t.reviewStatus };
 }
 
 export type ListingEditResult = { published: string[]; pending: string[]; resubmitted: boolean; badgeRemoved: boolean };
@@ -251,7 +251,9 @@ export async function saveListingEdit(type: ListingType, id: string, incomingRaw
     : f);
   const changed = changedListingFields(comparable(current), comparable(incoming));
   const { publish, review } = decideListingEdit(state, changed);
-  const resubmitted = state.claimStatus === 'REJECTED';
+  // Sent back, turned down or taken down by a reviewer: saving sends it for another review. The review field is the
+  // one to trust; the ownership field can be overwritten when the founder verifies their domain afterwards.
+  const resubmitted = !state.isLive && (state.claimStatus === 'REJECTED' || ['CHANGES_REQUESTED', 'REJECTED', 'TAKEN_DOWN'].includes(state.reviewStatus));
 
   const result = await prisma.$transaction(async (tx) => {
     // Going back to the live value withdraws what was waiting for that field.
@@ -282,8 +284,10 @@ export async function saveListingEdit(type: ListingType, id: string, incomingRaw
     }
 
     if (resubmitted) {
-      if (type === 'startup') await tx.startup.update({ where: { id }, data: { claimStatus: 'PENDING' }, select: { id: true } });
-      else await tx.aiTool.update({ where: { id }, data: { claimStatus: 'PENDING', status: 'PENDING' }, select: { id: true } });
+      // Back into the review queue, at today's date. What the reviewer said stays on record until the next decision.
+      if (type === 'startup') await tx.startup.update({ where: { id }, data: { claimStatus: 'PENDING', reviewStatus: 'IN_REVIEW', submittedForReviewAt: new Date(), autoApproveAt: null }, select: { id: true } });
+      // A tool a reviewer turned down goes back to a person, never to fast approval.
+      else await tx.aiTool.update({ where: { id }, data: { claimStatus: 'PENDING', status: 'PENDING', reviewStatus: 'IN_REVIEW', submittedForReviewAt: new Date(), autoApproveAt: null, autoApproveHeld: true }, select: { id: true } });
     }
     return { badgeRemoved };
   }, TX);

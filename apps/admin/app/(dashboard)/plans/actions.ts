@@ -6,7 +6,7 @@ import { requireActionAuth } from '@/lib/api-auth';
 import { logAuditEvent } from '@/lib/audit-log';
 import { GRACE_DAYS, GST_RATE, isPaidPlan, planKeyOf, PLANS } from '@udyaibase/utils/employer-plans';
 import { refreshPublic } from '@/lib/refresh-public';
-import { tooMany } from '@/lib/rate-limit';
+import { tooManyShared } from '@/lib/rate-limit';
 import { sectionRoles } from '@/lib/section-access';
 
 /**
@@ -56,7 +56,7 @@ export async function listPlanAccountsAction(q: string) {
 export async function grantPlanAction(input: { kind: 'EMPLOYER' | 'HOST'; id: string; plan: string; days: number; amountRupees: number; reference: string }) {
   const { session, error } = await requireActionAuth(sectionRoles('/plans'));
   if (error) return { success: false as const, error };
-  const paused = tooMany(session?.user?.id, 'planChange');
+  const paused = await tooManyShared(session?.user?.id, 'planChange');
   if (paused) return { success: false as const, error: paused };
   const days = Math.round(Number(input.days));
   if (!Number.isFinite(days) || days < 1 || days > 400) return { success: false as const, error: 'Days must be between 1 and 400.' };

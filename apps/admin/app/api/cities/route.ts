@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@udyaibase/database';
+import { requireApiAuth } from '@/lib/api-auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  // Any signed-in staff member may read the city list; checked here too, not just by the middleware.
+  const { error } = await requireApiAuth(['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER', 'WRITER', 'AD_MANAGER', 'CONTRIBUTOR', 'EVENT_ORGANIZER']);
+  if (error) return error;
   try {
     const cities = await prisma.indiaAICity.findMany({
       where: { isActive: true },

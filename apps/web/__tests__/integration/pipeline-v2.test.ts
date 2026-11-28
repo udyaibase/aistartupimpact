@@ -27,6 +27,9 @@ vi.mock('@/lib/employer/pipeline', async () => ({ ...(await vi.importActual<any>
 vi.mock('@/lib/employer/applications', () => ({ employerContext: async () => ({ company: 'Acme', bookingUrl: null, email: 'hr@acme.ai' }) }));
 vi.mock('@/lib/employer/job-stages', async () => ({ ...(await vi.importActual<any>('@/lib/employer/job-stages')), closeFilledJobs: filled.close, hiresByJob: filled.hires }));
 vi.mock('@/lib/employer/interviews', () => ({ cancelInterview: cancels.interview }));
+const screen = vi.hoisted(() => vi.fn(async () => ({ ok: true })));
+vi.mock('@/lib/jobs/ai-screen', () => ({ screenApplication: screen }));
+vi.mock('@/lib/jobs/skill-overrides', () => ({ ensureSkillOverrides: async () => undefined }));
 vi.mock('@/lib/jobs/resume-storage', () => ({ putResume: vi.fn(), deleteResume: vi.fn(async () => undefined), resumeStorageReady: () => false, resumeDownloadUrl: vi.fn() }));
 
 import { recordDecision } from '@/lib/employer/decisions';
@@ -228,14 +231,15 @@ describe('assessment', () => {
 
 describe('sourcing', () => {
   it('adds to the lane (not the pipeline) and refuses someone already on the job', async () => {
-    db.jobBoardListing.findFirst.mockResolvedValueOnce({ id: 'j1' });
+    db.jobBoardListing.findFirst.mockResolvedValueOnce({ id: 'j1', skills: ['Python', 'SQL'] });
     db.jobBoardApplication.findUnique.mockResolvedValueOnce(null);
-    const r = await addSourced({ employerId: 'emp1', listingId: 'j1', actorEmail: 'rec@acme.ai', jobIds: null, input: { fullName: 'Asha Rao', email: 'asha@x.co', channel: 'LinkedIn', note: 'Met at an event' }, now });
+    // Skills the resume reader returned to the form: only the job's own are kept, in the job's wording.
+    const r = await addSourced({ employerId: 'emp1', listingId: 'j1', actorEmail: 'rec@acme.ai', jobIds: null, input: { fullName: 'Asha Rao', email: 'asha@x.co', channel: 'LinkedIn', note: 'Met at an event', skills: ['python', 'Rust'] }, now });
     expect(r).toMatchObject({ ok: true, id: 'new1' });
-    expect(db.jobBoardApplication.create.mock.calls[0][0].data).toMatchObject({ source: 'SOURCED', sourcedState: 'ADDED', sourcedChannel: 'LinkedIn', sourcedBy: 'rec@acme.ai', resumeKey: null });
+    expect(db.jobBoardApplication.create.mock.calls[0][0].data).toMatchObject({ source: 'SOURCED', sourcedState: 'ADDED', sourcedChannel: 'LinkedIn', sourcedBy: 'rec@acme.ai', resumeKey: null, confirmedSkills: ['Python'], matchedSkills: ['Python'] });
     expect(db.jobBoardApplicationNote.create).toHaveBeenCalled();
 
-    db.jobBoardListing.findFirst.mockResolvedValueOnce({ id: 'j1' });
+    db.jobBoardListing.findFirst.mockResolvedValueOnce({ id: 'j1', skills: [] });
     db.jobBoardApplication.findUnique.mockResolvedValueOnce({ id: 'old' });
     expect(await addSourced({ employerId: 'emp1', listingId: 'j1', actorEmail: 'rec@acme.ai', jobIds: null, input: { fullName: 'Asha Rao', email: 'asha@x.co' }, now })).toMatchObject({ ok: false, status: 409, existingId: 'old' });
   });
@@ -253,8 +257,11 @@ describe('sourcing', () => {
   });
 
   it('interested: enters the pipeline as New; the retention sweep targets only stale sourced records', async () => {
+    db.jobBoardApplication.findUnique.mockResolvedValueOnce({ resumeKey: null, confirmedSkills: ['Python'], Listing: { employerId: 'emp1', isGeneral: false, skills: ['Python'] } });
     expect(await markInterested({ employerId: 'emp1', id: 'a1', actor: 'candidate', now })).toBe(true);
     expect(db.jobBoardApplication.updateMany.mock.calls[0][0]).toMatchObject({ where: { id: 'a1', sourcedState: { in: ['ADDED', 'CONTACTED'] } }, data: { sourcedState: 'INTERESTED', status: 'APPLIED' } });
+    // Same automatic AI review as an applicant (it still checks the plan, quota and the auto-review switch itself).
+    await vi.waitFor(() => expect(screen).toHaveBeenCalledWith('a1', 'emp1', { auto: true }));
     await sweepSourced(now);
     const or = db.jobBoardApplication.findMany.mock.calls[0][0].where.OR;
     expect(or[0]).toEqual({ sourcedState: 'ADDED', appliedAt: { lt: new Date(now.getTime() - 90 * 864e5) } });

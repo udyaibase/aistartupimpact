@@ -1,5 +1,6 @@
 "use client";
 
+import { toCsv } from "@/lib/csv";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -85,7 +86,7 @@ export default function EventDashboard({ event, registrations, timeline, stats }
       r.registeredAt,
       r.checkedInAt || "",
     ]);
-    const csv = [headers.join(","), ...rows.map((r: string[]) => r.map(v => `"${v}"`).join(","))].join("\n");
+    const csv = toCsv(headers, rows); // quotes escaped, and cells that look like formulas made plain text
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   if (!internalAuthorized(request)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const { table, paymentId } = await request.json().catch(() => ({}));
   if (!['employer', 'organizer', 'funding'].includes(table) || typeof paymentId !== 'string') return NextResponse.json({ error: 'Bad request' }, { status: 400 });
-  if (!invoicesEnabled()) return NextResponse.json({ skipped: 'invoices_off' });
+  if (!(await invoicesEnabled())) return NextResponse.json({ skipped: 'invoices_off' });
   const r = await emailCreditNote(table, paymentId);
   return r.ok ? NextResponse.json({ sent: true, to: r.to }) : NextResponse.json({ error: r.error }, { status: 409 });
 }

@@ -20,4 +20,6 @@ export const AI_MODELS = {
   jobParse: process.env.JOB_PARSE_MODEL || 'gpt-4o-mini',
   /** Weekly suggestions for unknown skills (admin approves each). */
   skillSuggestions: process.env.SKILL_SUGGEST_MODEL || 'gpt-4.1-mini',
+  /** First look at a startup submission: does the product look built on AI? A hint for the reviewer only. */
+  startupCheck: process.env.STARTUP_AI_CHECK_MODEL || 'gpt-4.1-mini',
 } as const;

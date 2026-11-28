@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   Activity, Award, BarChart3, BellRing, BookOpen, Briefcase, Building, CalendarDays, ClipboardList, Contact, Cpu,
-  CreditCard, FileCheck, FileText, Flag, Gem, Globe, GraduationCap, Handshake, HeartPulse, Image, IndianRupee,
+  CreditCard, FileCheck, Inbox, FileText, Flag, Gem, Globe, GraduationCap, Handshake, HeartPulse, Image, IndianRupee,
   Landmark, Layers, LayoutTemplate, LifeBuoy, LineChart, Lock, Mail, Map, MapPin, Megaphone, MessageSquare,
   Newspaper, Package, PencilLine, Quote, Radio, Receipt, Rocket, Settings, Shield, ShieldAlert, ShieldCheck,
   Sparkles, Star, Terminal, UserCog, Users, Wallet, Wrench,
@@ -18,7 +18,7 @@ export interface NavGroup { id: string; label: string; items: NavItem[] }
 
 export const NAV_GROUPS: NavGroup[] = [
   { id: 'content', label: 'Content', items: [
-    { label: 'Articles', href: '/articles', icon: FileText, words: 'news stories posts write editor' },
+    { label: 'Articles', href: '/articles', icon: FileText, words: 'news stories posts write editor categories' },
     { label: 'Hero slots', href: '/hero-slots', icon: Layers, words: 'homepage featured cover' },
     { label: 'Tickers', href: '/tickers', icon: Radio, words: 'breaking live strip' },
     { label: 'Media library', href: '/media', icon: Image, words: 'images uploads photos' },
@@ -34,6 +34,7 @@ export const NAV_GROUPS: NavGroup[] = [
     { label: 'Reports', href: '/reports', icon: ShieldAlert, words: 'flagged abuse scam complaints' },
   ] },
   { id: 'directories', label: 'Directories', items: [
+    { label: 'Submissions', href: '/startups-dir/review', icon: Inbox, words: 'approve reject founder new startup ai tool review queue take down fast approval' },
     { label: 'AI tools', href: '/tools-dir', icon: Wrench, words: 'tools directory categories tags' },
     { label: 'Startups', href: '/startups-dir', icon: Rocket, words: 'companies directory' },
     { label: 'Funding digests', href: '/funding-dir', icon: IndianRupee, words: 'rounds investment' },
@@ -81,7 +82,7 @@ export const NAV_GROUPS: NavGroup[] = [
     { label: 'Team activity', href: '/activity', icon: Activity, words: 'audit log history' },
   ] },
   { id: 'system', label: 'Billing & system', items: [
-    { label: 'Billing & revenue', href: '/billing', icon: Receipt, words: 'payments invoices refunds revenue failed subscribers plans monthly yearly gst reconciliation tax filing' },
+    { label: 'Billing & revenue', href: '/billing', icon: Receipt, words: 'payments plans prices pricing limits catalog offers promotions free plan launch offer invoices invoice settings sac hsn seller gstin host payouts razorpay route refunds revenue failed subscribers plans monthly yearly gst reconciliation tax filing' },
     { label: 'Plans', href: '/plans', icon: CreditCard, words: 'pricing subscriptions' },
     { label: 'Monitoring', href: '/monitoring', icon: HeartPulse, words: 'cron jobs health alerts ai spend' },
     { label: 'Consent logs', href: '/consent-logs', icon: Lock, words: 'privacy cookies' },

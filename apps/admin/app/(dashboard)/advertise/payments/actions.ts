@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@udyaibase/database";
 import { logAuditEvent } from "@/lib/audit-log";
 import { publicError } from '@/lib/public-error';
-import { tooMany } from '@/lib/rate-limit';
+import { tooManyShared } from '@/lib/rate-limit';
 import { sectionRoles } from '@/lib/section-access';
 
 const ALLOWED = sectionRoles('/advertise/payments');
@@ -76,7 +76,7 @@ export async function markRefundAction(paymentId: string, refundAmountPaise: num
   const session: any = await getServerSession(authOptions);
   if (!session?.user || !["SUPER_ADMIN"].includes(session.user.role))
     return { success: false, error: "Only Super Admins can process refunds" };
-  const paused = tooMany(session.user.id, 'refund');
+  const paused = await tooManyShared(session.user.id, 'refund');
   if (paused) return { success: false, error: paused };
 
   try {

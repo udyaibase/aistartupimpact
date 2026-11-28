@@ -10,7 +10,7 @@ import { signEventUnsubscribeToken } from "@udyaibase/utils/event-campaigns";
 import { createHmac } from 'crypto';
 import { sectionRoles } from '@/lib/section-access';
 import { publicError } from '@/lib/public-error';
-import { tooMany } from '@/lib/rate-limit';
+import { tooManyShared } from '@/lib/rate-limit';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -178,7 +178,7 @@ export async function sendCampaignAction(id: string) {
   const session: any = await getServerSession(authOptions);
   if (!session?.user || !sectionRoles('/newsletter-admin').includes(session.user.role))
     return { success: false, error: "Unauthorized" };
-  const paused = tooMany(session.user.id, 'bulkEmail');
+  const paused = await tooManyShared(session.user.id, 'bulkEmail');
   if (paused) return { success: false, error: paused };
 
   try {
@@ -300,7 +300,7 @@ export async function sendTestEmailAction(id: string, testEmail: string) {
   const session: any = await getServerSession(authOptions);
   if (!session?.user || !sectionRoles('/newsletter-admin').includes(session.user.role))
     return { success: false, error: "Unauthorized" };
-  const paused = tooMany(session.user.id, 'testEmail');
+  const paused = await tooManyShared(session.user.id, 'testEmail');
   if (paused) return { success: false, error: paused };
 
   try {

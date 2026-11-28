@@ -1,5 +1,6 @@
 'use client';
 
+import { toCsv } from '@/lib/csv';
 import { useState, useEffect } from 'react';
 import { 
   MousePointerClick, TrendingUp, Users, Zap, Monitor, Smartphone, 
@@ -109,10 +110,7 @@ export default function ToolAnalyticsPage() {
           row.country
         ]);
         
-        const csv = [
-          headers.join(','),
-          ...rows.map((row: any[]) => row.map(cell => `"${cell}"`).join(','))
-        ].join('\n');
+        const csv = toCsv(headers, rows); // quotes escaped, and cells that look like formulas made plain text
 
         // Download
         const blob = new Blob([csv], { type: 'text/csv' });

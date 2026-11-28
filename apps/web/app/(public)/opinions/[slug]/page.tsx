@@ -6,6 +6,9 @@ import { notFound } from 'next/navigation';
 import { Clock, Calendar, ChevronRight, MapPin, Briefcase, Star, ExternalLink } from 'lucide-react';
 import { sql, getOpinionBySlugDirect, getRelatedContentForOpinion } from '@/lib/db';
 import { generateArticleSchema, generateBreadcrumbSchema, generatePersonSchema, withArticleSeo } from '@/lib/seo';
+import SponsoredTag from '@/components/article/SponsoredTag';
+import { isSponsoredArticle } from '@/lib/seo';
+import { redirectOldArticleSlug } from '@/lib/article-redirect';
 import { articleBodyHtml } from '@/lib/article-body';
 import { getArticleEntityCards } from '@/lib/article-entities';
 import EntityHoverCards from '@/components/article/EntityHoverCards';
@@ -87,6 +90,7 @@ const formatSalary = (min?: number | null, max?: number | null) => {
 export default async function OpinionDetailPage(props: { params: Promise<{ slug: string }> }) {
   const params = await props.params;
   const article = await getOpinionBySlugDirect(params.slug);
+  if (!article) await redirectOldArticleSlug(params.slug);
   if (!article) notFound();
 
   const tagIds = [
@@ -175,6 +179,7 @@ export default async function OpinionDetailPage(props: { params: Promise<{ slug:
                 {article.primaryTag.name}
               </Link>
             )}
+            {isSponsoredArticle(article) && <SponsoredTag />}
           </div>
 
           <h1 className="font-sora font-extrabold text-[22px] leading-[1.2] sm:text-3xl md:text-[36px] md:leading-[1.2] text-navy dark:text-white">

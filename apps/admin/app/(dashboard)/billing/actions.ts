@@ -6,7 +6,7 @@ import { logAuditEvent } from '@/lib/audit-log';
 import { sendEmailFireAndForget } from '@/lib/email-send';
 import { endPlanNow } from '../plans/actions';
 import { refreshPublic, requestCreditNote } from '@/lib/refresh-public';
-import { tooMany } from '@/lib/rate-limit';
+import { tooManyShared } from '@/lib/rate-limit';
 import { sectionRoles } from '@/lib/section-access';
 
 /**
@@ -43,7 +43,7 @@ const rupees = (paise: number) => `₹${(paise / 100).toLocaleString('en-IN', { 
 export async function refundPaymentAction(input: { source: 'EMPLOYER' | 'HOST' | 'FUNDING'; id: string; amountRupees: number; reason: string; endAccess: boolean }) {
   const { session, error } = await requireActionAuth(sectionRoles('/billing'));
   if (error) return { success: false as const, error };
-  const paused = tooMany(session?.user?.id, 'refund');
+  const paused = await tooManyShared(session?.user?.id, 'refund');
   if (paused) return { success: false as const, error: paused };
   const reason = input.reason.trim().slice(0, 300);
   if (reason.length < 3) return { success: false as const, error: 'Add a short reason (it’s kept in the audit log).' };
@@ -180,7 +180,7 @@ const FEE_SYNC_BATCH = 120;
 export async function syncRazorpayFeesAction() {
   const { session, error } = await requireActionAuth(sectionRoles('/billing'));
   if (error) return { success: false as const, error };
-  const paused = tooMany(session?.user?.id, 'feeSync');
+  const paused = await tooManyShared(session?.user?.id, 'feeSync');
   if (paused) return { success: false as const, error: paused };
   const keyId = process.env.RAZORPAY_KEY_ID, secret = process.env.RAZORPAY_KEY_SECRET;
   if (!keyId || !secret) return { success: false as const, error: 'Razorpay keys aren’t set on the admin app (RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET).' };

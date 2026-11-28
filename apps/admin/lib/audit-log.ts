@@ -59,6 +59,8 @@ export type ResourceType =
   | 'ADV_SOCIAL_POST'
   | 'ADV_PAYMENT'
   | 'BILLING_PAYMENT'
+  | 'PLAN_OFFER'
+  | 'ARTICLE_CATEGORY'
   | 'SUBSCRIBER'
   | 'APPLICATION'
   | 'REVIEW'

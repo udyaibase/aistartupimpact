@@ -7,20 +7,9 @@ import { Plus, Wrench, Edit3, Trash2, Crown, CheckCircle, XCircle, X, Camera } f
 import DataTable, { type BulkAction, type Column, type TableFilter } from '@/components/ui/DataTable';
 import { ask } from '@/components/Ask';
 import RejectToolDialog from '@/components/RejectToolDialog';
-import {
-  getToolsAction,
-  getCategoriesAction,
-  deleteToolAction,
-  approveToolAction,
-  rejectToolAction,
-  setListingTierAction,
-  scheduleToolFeaturedCampaignAction,
-  cancelToolFeaturedCampaignAction,
-  bulkApproveToolsAction,
-  bulkArchiveToolsAction,
-  bulkDeleteToolsAction,
-  toggleToolContentReviewedAction,
-} from './actions';
+import { getToolsAction, getCategoriesAction, deleteToolAction, approveToolAction, rejectToolAction, toggleToolContentReviewedAction } from './actions';
+import { bulkApproveToolsAction, bulkArchiveToolsAction, bulkDeleteToolsAction } from './tool-bulk-actions';
+import { setListingTierAction, scheduleToolFeaturedCampaignAction, cancelToolFeaturedCampaignAction } from './tool-featured-actions';
 import { notify } from '@/components/Toast';
 
 interface Tool {

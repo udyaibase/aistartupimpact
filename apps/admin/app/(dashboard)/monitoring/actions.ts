@@ -5,6 +5,7 @@ import { CRON_JOBS, aiSpendUsd, emailUsage } from '@udyaibase/database/ops';
 import { aiBudgets } from '@udyaibase/utils/ai-cost';
 import { requireActionAuth } from '@/lib/api-auth';
 import { sectionRoles } from '@/lib/section-access';
+import { loadSystemChecks } from '@/lib/monitoring/systems';
 
 /** Scheduled jobs, email usage against the Resend plan, and OpenAI spend and failures. Super admins only. */
 export async function monitoringAction() {
@@ -52,8 +53,12 @@ export async function monitoringAction() {
   const daysIn = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate();
   const dayOfMonth = now.getUTCDate() - 1 + now.getUTCHours() / 24;
 
+  // The money path: never let one failing check take the whole screen down.
+  const systems = await loadSystemChecks(now).catch(() => []);
+
   return {
     success: true as const,
+    systems,
     jobs,
     email,
     ai: {

@@ -24,6 +24,10 @@
       "schedule": "*/10 * * * *"
     },
     {
+      "path": "/api/admin/fast-approval",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/admin/verification-lifecycle",
       "schedule": "30 3 * * *"
     },

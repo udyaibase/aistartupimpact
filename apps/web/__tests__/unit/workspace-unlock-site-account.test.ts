@@ -11,13 +11,16 @@ vi.mock('@/lib/unified-auth', () => ({ getUnifiedSession: async () => null }));
 vi.mock('@/lib/unified-auth/workspace', () => ({ unlockWorkspace: unlock }));
 vi.mock('@/lib/rate-limit', () => ({ checkRateLimit: async () => ({ success: true }), getClientIdentifier: () => 'ip', authRateLimit: {} }));
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => ({ value: 'tok' }) }) }));
-vi.mock('jose', () => ({ jwtVerify: async () => ({ payload: { userId: 'w1', email: 'Asha@Example.in' } }) }));
+vi.mock('jose', () => ({ jwtVerify: async () => ({ payload: { userId: 'w1', email: 'Asha@Example.in', sessionId: 's1' } }) }));
+// The site session behind the cookie: present unless a test says the password was changed or the person signed out.
+const session = vi.hoisted(() => ({ exists: true }));
+vi.mock('@/lib/db', () => ({ sql: () => Promise.resolve(session.exists ? [{ ok: 1 }] : []) }));
 
 import { POST } from '@/app/api/workspace/unlock/route';
 
 const call = () => POST(new NextRequest('http://localhost/api/workspace/unlock', { method: 'POST', body: JSON.stringify({ workspace: 'organizer' }) }));
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => { vi.clearAllMocks(); session.exists = true; });
 
 describe('opening a workspace from a site (Google or email) account', () => {
   it('creates the missing unified account from the signed-in site account, then unlocks', async () => {
@@ -36,6 +39,13 @@ describe('opening a workspace from a site (Google or email) account', () => {
       expect((await call()).status).toBe(401);
     }
     expect(db.unifiedUser.upsert).not.toHaveBeenCalled();
+    expect(unlock).not.toHaveBeenCalled();
+  });
+  it('refuses a cookie whose session was ended by a password change or a sign-out', async () => {
+    session.exists = false;
+    db.unifiedUser.findUnique.mockResolvedValue({ id: 'u1' });
+    expect((await call()).status).toBe(401);
+    expect(db.unifiedUser.findUnique).not.toHaveBeenCalled();
     expect(unlock).not.toHaveBeenCalled();
   });
 });

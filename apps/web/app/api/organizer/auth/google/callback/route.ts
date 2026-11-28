@@ -1,3 +1,4 @@
+import { claimHostAutoOffers } from '@/lib/offers/claim';
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@udyaibase/database";
 import crypto from "crypto";
@@ -100,6 +101,8 @@ export async function GET(request: NextRequest) {
           status: "ACTIVE",
         },
       });
+      // Google has confirmed the email, so a running offer for new hosts or verified founders is granted now.
+      await claimHostAutoOffers(organizer.id);
     }
 
     if (organizer.status === "SUSPENDED") {

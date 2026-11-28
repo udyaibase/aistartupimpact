@@ -128,7 +128,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       await prisma.$executeRaw`
         UPDATE "AiTool"
         SET "isUrlVerified" = true,
-            "claimStatus" = 'VERIFIED'::"ClaimStatus",
+            "claimStatus" = CASE WHEN "claimStatus" = 'REJECTED' THEN "claimStatus" ELSE 'VERIFIED'::"ClaimStatus" END,
             "updatedAt" = NOW()
         WHERE id = ${id}
       `;

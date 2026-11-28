@@ -2,8 +2,8 @@ import { jsonLd } from "@/lib/json-ld";
 import Link from 'next/link';
 import { Metadata } from 'next';
 import { ArrowUpRight } from 'lucide-react';
-import { getArticlesDirect, getActiveCreativeForZone } from '@/lib/db';
-import { generateCollectionPageSchema, generateItemListSchema, generateBreadcrumbSchema } from '@/lib/seo';
+import { getArticlesDirect, getActiveCreativeForZone, getArticleCategoriesDirect } from '@/lib/db';
+import { generateCollectionPageSchema, generateItemListSchema, generateBreadcrumbSchema, NEWS_EDITORIAL_TYPES } from '@/lib/seo';
 import ArticlesListClient from '@/components/ArticlesListClient';
 import SubscribeForm from '@/components/SubscribeForm';
 import EmptyState from '@/components/ui/EmptyState';
@@ -36,9 +36,10 @@ const formatDate = (d: string) =>
 export const revalidate = 300;
 
 export default async function NewsPage() {
-  const [articles, inArticleAd] = await Promise.all([
-    getArticlesDirect({ type: 'NEWS', limit: 100 }) as Promise<any[]>,
+  const [articles, inArticleAd, categories] = await Promise.all([
+    getArticlesDirect({ types: NEWS_EDITORIAL_TYPES, limit: 100 }) as Promise<any[]>,
     getActiveCreativeForZone('A1_IN_ARTICLE'),
+    getArticleCategoriesDirect(),
   ]);
   const allArticles = articles || [];
   const featured = allArticles.filter((a) => a.isFeatured).slice(0, 2);
@@ -117,6 +118,22 @@ export default async function NewsPage() {
             </p>
             <SubscribeForm source="sidebar" buttonText="Subscribe Free" />
           </div>
+
+          {categories.length > 0 && (
+            <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-5">
+              <h3 className="font-sora font-bold text-sm text-navy dark:text-white mb-4">Browse by category</h3>
+              <ul className="space-y-2">
+                {categories.map((c) => (
+                  <li key={c.slug}>
+                    <Link href={`/news/category/${c.slug}`} className="flex items-center justify-between text-sm font-jakarta text-gray-600 dark:text-gray-300 hover:text-brand transition-colors">
+                      <span>{c.name}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">{c.articles.toLocaleString('en-IN')}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Categories — link to filtered view */}
           <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-5">

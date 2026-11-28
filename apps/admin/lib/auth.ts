@@ -23,6 +23,11 @@ async function isOrgWide2FARequired(): Promise<boolean> {
   }
 }
 
+/** True while a signed-in admin still has to enter a 2FA code, or has to set 2FA up before using the admin. */
+export function sessionOwesTwoFactor(s: { twoFactorEnabled?: boolean; twoFactorVerified?: boolean; require2FA?: boolean }): boolean {
+  return (!!s.twoFactorEnabled && !s.twoFactorVerified) || (!!s.require2FA && !s.twoFactorEnabled);
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
@@ -124,11 +129,20 @@ export const authOptions: NextAuthOptions = {
       if (token && session.user) {
         (session as any).revoked = token.revoked === true;
         session.user.id = token.id as string;
-        session.user.role = token.role as UserRole;
         session.user.slug = token.slug as string;
-        (session as any).twoFactorEnabled = token.twoFactorEnabled ?? false;
-        (session as any).twoFactorVerified = token.twoFactorVerified ?? !token.twoFactorEnabled;
-        (session as any).require2FA = token.require2FA ?? false;
+        const twoFactorEnabled = token.twoFactorEnabled ?? false;
+        const twoFactorVerified = token.twoFactorVerified ?? !token.twoFactorEnabled;
+        const require2FA = token.require2FA ?? false;
+        (session as any).twoFactorEnabled = twoFactorEnabled;
+        (session as any).twoFactorVerified = twoFactorVerified;
+        (session as any).require2FA = require2FA;
+        // Until the second sign-in step is done, the session carries no role. Every role check then fails, whichever
+        // way a handler reads the session: many actions call getServerSession themselves and check only the role,
+        // and a server action can be posted to a path the middleware does not cover (/login, /verify-2fa).
+        // The 2FA endpoints themselves read `pendingRole` (lib/api-auth.ts, allowPending2FA).
+        const pending = sessionOwesTwoFactor({ twoFactorEnabled, twoFactorVerified, require2FA });
+        session.user.role = (pending ? undefined : token.role) as UserRole;
+        (session as any).pendingRole = pending ? token.role : undefined;
       }
       return session;
     },

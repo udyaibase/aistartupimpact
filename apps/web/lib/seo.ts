@@ -402,7 +402,17 @@ export interface ArticleData {
   publisherLogoUrl?: string;
 }
 
+/** Article types whose page is /news/<slug>. Sponsored pieces open there too but stay out of the editorial listing. */
+export const NEWS_EDITORIAL_TYPES = ['NEWS', 'TOOL_REVIEW', 'GUIDE', 'COMPARISON', 'REPORT'];
+export const NEWS_SECTION_TYPES = [...NEWS_EDITORIAL_TYPES, 'SPONSORED'];
+/** Types that open under /stories (a founder's own story or update is redirected there from /news). */
+const STORY_TYPES = ['STORY', 'FOUNDER_STORY', 'STARTUP_UPDATE'];
+
+/** Paid for by a sponsor: by type, or by the editor's Sponsored switch. Must be labelled wherever it is shown. */
+export const isSponsoredArticle = (a: { type?: string | null; isSponsored?: boolean | null }) =>
+  a.type === 'SPONSORED' || !!a.isSponsored;
+
 /** Public path of an article: stories and opinions have their own sections, everything else is under /news. */
 export function articlePath(type: string | null | undefined, slug: string): string {
-  return type === 'OPINION' ? `/opinions/${slug}` : type === 'STORY' ? `/stories/${slug}` : `/news/${slug}`;
+  return type === 'OPINION' ? `/opinions/${slug}` : STORY_TYPES.includes(type || '') ? `/stories/${slug}` : `/news/${slug}`;
 }

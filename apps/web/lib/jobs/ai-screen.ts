@@ -240,7 +240,8 @@ export async function screenApplication(applicationId: string, employerId: strin
         && `Work experience from the resume's dates: ${profile.experience.years} years across ${profile.experience.datedRoles} dated role${profile.experience.datedRoles === 1 ? '' : 's'}${profile.experience.internMonths ? ` (plus ${profile.experience.internMonths} months of internships)` : ''}`,
       app.city && `City: ${app.city}`,
       app.noticePeriodDays != null && `Notice period: ${app.noticePeriodDays} days`,
-      app.confirmedSkills.length && `Skills they ticked: ${app.confirmedSkills.join(', ')}`,
+      // A sourced person never filled a form: their skills were found in the resume by our reader, not ticked by them.
+      app.confirmedSkills.length && `${app.sourcedState ? 'Job skills found in their resume' : 'Skills they ticked'}: ${app.confirmedSkills.join(', ')}`,
     ].filter(Boolean).join('\n');
 
     // A resume with almost no text (a scan, an image, a near-empty file) isn't read at all: it is neither sent nor

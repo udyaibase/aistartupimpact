@@ -126,12 +126,10 @@ export async function POST(request: NextRequest) {
 
     const { writeFile, mkdir } = await import('fs/promises');
     const { join } = await import('path');
-    const { existsSync } = await import('fs');
 
     const uploadsDir = join(process.cwd(), 'public', 'uploads');
-    if (!existsSync(uploadsDir)) {
-      await mkdir(uploadsDir, { recursive: true });
-    }
+    // recursive: no error when it already exists, so there's no separate exists check to race against.
+    await mkdir(uploadsDir, { recursive: true });
 
     const localFilename = `${timestamp}-${randomString}.${extension}`;
     const filepath = join(uploadsDir, localFilename);

@@ -77,6 +77,9 @@ export async function getSettingsAction() {
   }
 }
 
+/** Site settings that only their own action may write. */
+const RESERVED_KEYS = new Set(['invoiceSettings', 'autoApprove']);
+
 export async function saveSettingsAction(settings: Record<string, any>) {
   const session: any = await getServerSession(authOptions);
   if (!session?.user || !ALLOWED.includes(session.user.role))
@@ -102,6 +105,9 @@ export async function saveSettingsAction(settings: Record<string, any>) {
   try {
     for (const [key, value] of Object.entries(settings)) {
       if (key === 'require2FA' && session.user.role !== 'SUPER_ADMIN') continue;
+      // Settings with their own screen and safeguards are never written from here, whatever the request carries:
+      // invoice settings must first lock issued invoices (Billing → Invoice settings).
+      if (RESERVED_KEYS.has(key)) continue;
       const jsonValue = JSON.stringify(value);
       const id = `setting_${key}_${crypto.randomUUID()}`;
       await prisma.$executeRaw`

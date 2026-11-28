@@ -1,3 +1,5 @@
+import { TICKET_FEE } from '@udyaibase/utils/host-plans';
+import { ensureCatalog } from '@/lib/catalog/server';
 import { prisma } from '@udyaibase/database';
 import { cleanRegistrationInput, RegistrationInputError } from '@/lib/events/registration-input';
 import { razorpayApi, RazorpayApiError, razorpayKeys, refundPayment } from '@/lib/billing/razorpay';
@@ -21,8 +23,9 @@ import { opsAlert } from '@/lib/ops/alert';
 export const HOLD_MINUTES = 15;
 const SITE = (process.env.NEXT_PUBLIC_SITE_URL || 'https://udyaibase.com').replace(/\/$/, '');
 
+/** Our share of each paid ticket: the percentage saved in the admin's plan catalog, else the server setting, else 5. */
 export function ticketFeePct(): number {
-  const n = Number(process.env.TICKET_PLATFORM_FEE_PCT ?? 5);
+  const n = TICKET_FEE.pct ?? Number(process.env.TICKET_PLATFORM_FEE_PCT ?? 5);
   return Number.isFinite(n) && n >= 0 && n <= 30 ? n : 5;
 }
 
@@ -42,6 +45,7 @@ export interface CheckoutParams {
 }
 
 export async function startTicketCheckout(p: CheckoutParams) {
+  await ensureCatalog();
   if (!razorpayKeys()) throw new TicketError('Ticket payments are not available right now.', 503);
   const now = new Date();
   // Same rules as free registration and the widget: lowercase email, one phone format, this event's answers only.

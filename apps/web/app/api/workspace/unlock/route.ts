@@ -1,8 +1,7 @@
-import { jwtSecret } from '@/lib/jwt-secret';
 import { NextRequest, NextResponse } from "next/server";
 import { clientIp } from '@/lib/client-ip';
 import { cookies } from "next/headers";
-import { jwtVerify } from "jose";
+import { verifyUserTokenSession } from "@/lib/user-session";
 import { prisma } from "@udyaibase/database";
 import { getUnifiedSession } from "@/lib/unified-auth";
 import { unlockWorkspace } from "@/lib/unified-auth/workspace";
@@ -10,7 +9,6 @@ import { checkRateLimit, getClientIdentifier, authRateLimit } from "@/lib/rate-l
 
 export const dynamic = "force-dynamic";
 
-const USER_JWT_SECRET = jwtSecret(process.env.USER_JWT_SECRET, 'USER_JWT_SECRET');
 
 /**
  * Get the UnifiedUser ID from either the unified session or legacy user-token.
@@ -26,10 +24,11 @@ async function getAuthenticatedUnifiedUserId(): Promise<string | null> {
   if (!userToken) return null;
 
   try {
-    const { payload } = await jwtVerify(userToken, USER_JWT_SECRET);
-    const userId = (payload as any).userId;
-    const email = typeof (payload as any).email === 'string' ? ((payload as any).email as string).toLowerCase() : '';
-    if (!email || typeof userId !== 'string') return null;
+    // The site session behind the cookie must still exist. A password change or a sign-out deletes it; checking only
+    // the signature let an old copy of the cookie open a workspace, and get a brand-new session, for up to 7 days.
+    const live = await verifyUserTokenSession(userToken);
+    if (!live) return null;
+    const { userId, email } = live;
 
     const unifiedUser = await prisma.unifiedUser.findUnique({ where: { email } });
     if (unifiedUser) return unifiedUser.id;

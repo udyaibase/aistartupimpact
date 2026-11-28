@@ -1,5 +1,6 @@
 'use client';
 
+import { useCatalog } from '@/lib/catalog/use-catalog';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useHumanCheck } from '@/components/shared/useHumanCheck';
 import { Check, Download, FileSpreadsheet, FileText, Loader2, Lock, Mail, Search } from 'lucide-react';
@@ -205,6 +206,7 @@ function MultiPick({ label, options, value, onChange }: { label: string; options
 const BILL_TO_KEY = 'udyaibase:funding-bill-to';
 
 export default function FundingDownloads() {
+  useCatalog(); // plan prices and limits set in the admin, not the copies in this bundle
   const [mode, setMode] = useState<null | 'free' | 'paid'>(null);
   const [verified, setVerified] = useState<{ pass: string; email: string } | null>(null);
   const [consent, setConsent] = useState(false);

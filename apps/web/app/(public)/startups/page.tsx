@@ -7,6 +7,7 @@ import { generateBreadcrumbSchema, generateCollectionPageSchema, generateItemLis
 import { parseDirectoryQuery, searchDirectory } from '@/lib/startups/directory';
 import { Suspense } from 'react';
 import FounderActionButton from '@/components/auth/FounderActionButton';
+import { ChevronRight, Plus } from 'lucide-react';
 
 const StartupSearch = dynamic(() => import('@/components/StartupSearch'));
 
@@ -95,25 +96,30 @@ export default async function StartupsPage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(collectionSchema) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbSchema) }} />
       {itemListSchema && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(itemListSchema) }} />}
-      <div className="mb-3 sm:mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-3 sm:gap-4">
+      {/* Breadcrumb, title and the founder action: the same header as AI Jobs */}
+      <nav className="hidden sm:flex items-center gap-1.5 text-xs font-jakarta text-gray-400 dark:text-gray-500 mb-4">
+        <Link href="/" className="hover:text-brand transition-colors">Home</Link>
+        <ChevronRight className="w-3 h-3" aria-hidden />
+        <span className="text-gray-600 dark:text-gray-300">AI Startups</span>
+      </nav>
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
         <div>
-          <h1 className="font-sora font-bold sm:font-extrabold text-[22px] sm:text-3xl md:text-4xl text-navy dark:text-white leading-[1.2] sm:leading-tight tracking-tight">
-            Discover AI startups.{' '}
-            <span className="text-brand">Before everyone else.</span>
+          <h1 className="font-sora font-extrabold text-2xl sm:text-3xl text-navy dark:text-white">
+            AI Startups Directory
           </h1>
-          <p className="text-gray-500 dark:text-gray-400 font-jakarta text-[13px] sm:text-sm leading-snug sm:leading-normal max-w-2xl mt-1 sm:mt-2">
-            Browse {directorySize || counts.all}+ startups by sector, stage, and city — from bootstrapped to Series C, across the globe.
+          <p className="text-gray-500 dark:text-gray-400 font-jakarta text-sm mt-1">
+            {(directorySize || counts.all) > 0 ? `${directorySize || counts.all} AI startups` : 'AI startups'} by sector, stage and city, with their founders and funding. Updated daily.
           </p>
         </div>
         <FounderActionButton
           href="/founder/startups/new"
-          className="border border-brand text-brand bg-brand/5 hover:bg-brand/10 px-4 sm:px-5 py-2.5 rounded-xl font-semibold sm:font-bold font-jakarta text-sm transition-colors whitespace-nowrap text-center shrink-0"
+          className="self-start sm:self-auto shrink-0 inline-flex items-center justify-center gap-1.5 min-h-[40px] px-4 rounded-md border border-brand text-brand bg-transparent font-jakarta text-sm font-semibold hover:bg-brand/5 transition-colors whitespace-nowrap"
         >
-          + Add Startup
+          <Plus className="w-4 h-4" aria-hidden /> Submit startup
         </FounderActionButton>
       </div>
 
-      <Suspense fallback={<div className="h-12 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse" />}>
+      <Suspense fallback={<div className="h-12 bg-gray-100 dark:bg-gray-800 rounded-md animate-pulse" />}>
         <StartupSearch
           initialStartups={initial.startups as any}
           initialTotal={total}

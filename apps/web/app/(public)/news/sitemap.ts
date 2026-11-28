@@ -1,6 +1,7 @@
 import { MetadataRoute } from 'next';
 import { sql } from '@/lib/db';
 import { isBuildPhase } from '@/lib/build-fallback';
+import { NEWS_SECTION_TYPES } from '@/lib/seo';
 
 export const revalidate = 3600;
 
@@ -20,7 +21,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       SELECT slug, "updatedAt", "publishedAt"
       FROM "Article"
       WHERE status = 'PUBLISHED' AND "deletedAt" IS NULL AND "noIndex" = false
-        AND type = 'NEWS'
+        AND type::text = ANY(${NEWS_SECTION_TYPES}::text[])
       ORDER BY "publishedAt" DESC
       LIMIT 5000
     `;
@@ -32,7 +33,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.7,
     }));
 
-    return [listingPage, ...newsRoutes];
+    // Category pages that have something published.
+    const categories = await sql`
+      SELECT c.slug, MAX(a."updatedAt") AS "updatedAt"
+      FROM "Category" c
+      JOIN "Article" a ON a."categoryId" = c.id AND a.status = 'PUBLISHED' AND a."deletedAt" IS NULL
+        AND a."noIndex" = false AND a.type <> 'STARTUP_UPDATE'
+      GROUP BY c.slug
+    `;
+    const categoryRoutes: MetadataRoute.Sitemap = (categories as any[]).map((c) => ({
+      url: `${SITE_URL}/news/category/${c.slug}`,
+      lastModified: new Date(c.updatedAt),
+      changeFrequency: 'daily' as const,
+      priority: 0.6,
+    }));
+
+    return [listingPage, ...categoryRoutes, ...newsRoutes];
   } catch (error) {
     console.error('Error generating news sitemap:', error);
     // At runtime keep serving the last good sitemap; only the build falls back.

@@ -1,3 +1,5 @@
+import { ensureCatalog } from '@/lib/catalog/server';
+import { confirmDiscount } from '@/lib/offers/discount';
 import { prisma } from '@udyaibase/database';
 import { openJobsWhere } from '@/lib/employer/counts';
 import { notifyEmployer } from '@/lib/employer/notify';
@@ -53,6 +55,7 @@ export { checkoutSignatureValid, webhookSignatureValid } from '@/lib/billing/raz
  * The first annual purchase at the founding price makes the workspace a founding member.
  */
 export async function activatePayment(orderId: string, paymentId: string): Promise<'activated' | 'already' | 'unknown'> {
+  await ensureCatalog({ fresh: true }); // the limits switched on are today's
   let paidId: string | null = null;
   type Paid = { employerId: string; plan: string; cycle: string; totalPaise: number; by: string | null };
   let paid: Paid | null = null;
@@ -102,6 +105,8 @@ export async function activatePayment(orderId: string, paymentId: string): Promi
   // Invoice (number, frozen bill-to, email) after the payment is committed; a failure here never undoes it,
   // and the daily cron retries anything not yet emailed.
   const id = paidId as string | null;
+  // A discount code used at this checkout is now spent (before the invoice, which prints it).
+  if (result === 'activated') await confirmDiscount(orderId);
   if (result === 'activated' && id) await emailInvoice('employer', id).catch((e) => console.error('[invoice] employer', e));
   return result;
 }
@@ -122,6 +127,7 @@ export async function featuredFor(employerId: string): Promise<{ isFeatured: boo
  * Featured placement stops on its own date (plan end, plus grace for paid plans).
  */
 export async function runPlanMaintenance(now = new Date(), opts: { onlyEmployerId?: string } = {}) {
+  await ensureCatalog();
   const only = opts.onlyEmployerId ? { id: opts.onlyEmployerId } : {};
   const hasInbox = { passwordHash: { not: '' }, deletedAt: null };
   const DAY = 864e5;

@@ -10,12 +10,14 @@
  */
 export const SECTION_ROLES: Record<string, readonly string[]> = {
   '/articles': ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER', 'WRITER', 'CONTRIBUTOR'],
+  '/articles/categories': ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'],
   '/hero-slots': ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'],
   '/media': ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER', 'WRITER'],
   '/tickers': ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'],
   '/tools-dir': ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER'],
   '/tool-reviews': ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER'],
   '/startups-dir': ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER'],
+  '/startups-dir/review': ['SUPER_ADMIN', 'EDITOR_IN_CHIEF'],
   '/startup-reviews': ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER'],
   '/funding-dir': ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER'],
   '/india-ai/stats': ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER'],

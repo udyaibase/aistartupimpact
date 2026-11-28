@@ -1,3 +1,4 @@
+import { onStartupVerified } from '@/lib/offers/claim';
 import { founderAtStartupLimit, STARTUP_LIMIT_MESSAGE } from '@/lib/founder/limits';
 import { logFounderActivity } from '@/lib/founder/activity';
 import { NextRequest, NextResponse } from 'next/server';
@@ -81,5 +82,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   });
   await refreshPublicListing('startup', startup.id); // verified badge
   await logFounderActivity(session.userId, 'startup_claim_verified', { request, metadata: { startupId: startup.id, method: 'email' } });
+  await onStartupVerified(startup.id, session.userId); // a running verified-founder offer
   return NextResponse.json({ success: true, startup: { id: startup.id, name: startup.name } });
 }

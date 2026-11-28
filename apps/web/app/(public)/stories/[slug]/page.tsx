@@ -11,6 +11,9 @@ import StorySaveButton from '@/components/StorySaveButton';
 import { sql, getArticleBySlugDirect, getRelatedArticlesDirect } from '@/lib/db';
 import { defaultFounderSpotlights } from '@/lib/fallbacks';
 import { buildArticleMetadata, generateArticleSchema, generateBreadcrumbSchema } from '@/lib/seo';
+import SponsoredTag from '@/components/article/SponsoredTag';
+import { isSponsoredArticle } from '@/lib/seo';
+import { redirectOldArticleSlug } from '@/lib/article-redirect';
 import { articleBodyHtml } from '@/lib/article-body';
 import { addHeadingIds, comparableText } from '@/lib/article-headings';
 import { getArticleEntityCards } from '@/lib/article-entities';
@@ -68,6 +71,7 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
     }
   }
 
+  if (!story) await redirectOldArticleSlug(params.slug);
   if (!story) notFound();
 
   const founder = isFounderWritten(story);
@@ -135,6 +139,7 @@ export default async function StoryDetailPage(props: { params: Promise<{ slug: s
           {founder
             ? <FounderBadge />
             : <span className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-800 px-2.5 py-0.5 text-xs font-semibold text-gray-600 dark:text-gray-300 font-jakarta">Editorial</span>}
+          {isSponsoredArticle(story) && <SponsoredTag />}
         </div>
 
         <h1 className="font-sora font-extrabold text-[26px] leading-[1.2] sm:text-[36px] sm:leading-[1.15] tracking-tight text-navy dark:text-white">

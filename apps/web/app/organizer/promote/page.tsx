@@ -1,5 +1,6 @@
 "use client";
 
+import { useCatalog } from "@/lib/catalog/use-catalog";
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -15,6 +16,7 @@ const card = "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-
 const fmt = (iso: string) => new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 
 export default function PromotePage() {
+  useCatalog(); // plan prices and limits set in the admin, not the copies in this bundle
   return <Suspense><Promote /></Suspense>;
 }
 

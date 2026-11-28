@@ -1,3 +1,4 @@
+import { EVENT_CERTIFICATES } from '@udyaibase/utils/host-plans';
 import { MAX_CUSTOM_SVG } from './certificate-custom';
 import { PARTNER_PLACEMENTS, type PartnerPlacement } from './certificate-logos';
 import crypto from 'crypto';
@@ -12,7 +13,8 @@ import { effectiveHostPlan, isPlatformOrganizer } from '@/lib/events/plans';
  *   Free hosts get one per event, Pro unlimited. Everyone who opted out of this host's emails is skipped.
  */
 
-export const CERTIFICATE_PRICE_PAISE = 49_900;
+/** Certificates for one event, before GST: set in Admin → Billing → Plans & prices (read it when used, it can change). */
+export const certificatePricePaise = () => EVENT_CERTIFICATES.pricePaise;
 export const FREE_FOLLOW_UPS_PER_EVENT = 1;
 export const FOLLOW_UP_AUTO_DELAY_MS = 2 * 60 * 60 * 1000;
 

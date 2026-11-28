@@ -1,3 +1,4 @@
+import { ensureCatalog } from '@/lib/catalog/server';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Check, Sparkles } from 'lucide-react';
@@ -24,7 +25,8 @@ const EVERY_PLAN = [
   'GST invoice for every payment',
 ];
 
-const FAQ: { q: string; a: string }[] = [
+/** Built when the page renders, not when the file loads: the trial, grace and founding figures can be changed in the admin. */
+const faq = (): { q: string; a: string }[] => [
   { q: 'Are prices inclusive of GST?', a: 'No. Prices are shown before GST; 18% GST is added at checkout and shown separately on your GST invoice. Add your GSTIN in Billing details to claim input tax credit.' },
   { q: 'Is there a free trial?', a: `Yes. Your first published job starts a free ${TRIAL_DAYS}-day ${PLANS[TRIAL_PLAN].name} trial. No card is needed and nothing is charged; when it ends you move to Free unless you choose a plan.` },
   { q: 'Do plans renew automatically?', a: `No. Monthly plans last 30 days and yearly plans 365 days. We email you before yours ends, and you get ${GRACE_DAYS} grace days to renew without losing anything.` },
@@ -34,7 +36,9 @@ const FAQ: { q: string; a: string }[] = [
   { q: 'Can I get a refund?', a: 'If you haven’t used a paid feature, you can get a full refund within 7 days of paying (14 days for yearly plans). See the Refund Policy for details.' },
 ];
 
-export default function HirePricingPage() {
+export default async function HirePricingPage() {
+  // Prices and limits come from the admin's plan catalog; this page is rebuilt when a new version is saved.
+  await ensureCatalog({ fresh: true });
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-20 font-jakarta">
       <header className="max-w-3xl">
@@ -96,7 +100,7 @@ export default function HirePricingPage() {
       <section aria-labelledby="faq" className="mt-14 max-w-3xl">
         <h2 id="faq" className="font-sora text-2xl font-bold text-navy dark:text-white">Questions</h2>
         <div className="mt-4 divide-y divide-gray-200 dark:divide-gray-800 border-y border-gray-200 dark:border-gray-800">
-          {FAQ.map((f) => (
+          {faq().map((f) => (
             <details key={f.q} className="group py-4">
               <summary className="cursor-pointer list-none font-semibold text-gray-900 dark:text-white flex items-center justify-between gap-4">
                 {f.q}<span aria-hidden className="text-gray-400 group-open:rotate-45 transition-transform">+</span>

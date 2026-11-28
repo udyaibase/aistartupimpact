@@ -1,3 +1,4 @@
+import { ensureCatalog } from '@/lib/catalog/server';
 import { jwtSecret } from '@/lib/jwt-secret';
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
@@ -108,6 +109,7 @@ async function readSessionToken() {
  * from the cookie: removals, role changes, sign-outs, renames and plan changes all apply on the next request.
  */
 export const getEmployerSession = cache(async (): Promise<EmployerSession | null> => {
+  await ensureCatalog(); // every hiring-portal request reads plans: make sure the admin's prices and limits are in force
   try {
     const token = await readSessionToken();
     if (!token) return null;

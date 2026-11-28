@@ -1,3 +1,4 @@
+import { claimHostAutoOffers } from '@/lib/offers/claim';
 import { prisma } from "@udyaibase/database";
 import crypto from "crypto";
 
@@ -108,6 +109,8 @@ async function unlockOrganizer(user: any, userId: string, ipAddress?: string) {
         unifiedUserId: userId,
       },
     });
+    // A new host account with a confirmed email: a running offer for new hosts or verified founders is granted now.
+    await claimHostAutoOffers(newOrganizer.id);
 
     await prisma.workspaceLinkLog.create({
       data: { userId, workspace: "organizer", action: "created_fresh", linkedId: newOrganizer.id, emailMatch: false, verified: true, ipAddress },

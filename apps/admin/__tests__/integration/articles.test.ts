@@ -20,6 +20,8 @@ const db = vi.hoisted(() => {
     state,
     $queryRaw: vi.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
       const sql = text(strings);
+      // One category exists ("Funding"); any other name is a category that has been removed.
+      if (sql.includes('FROM "Category" WHERE name')) return values[0] === 'Funding' ? [{ id: 'c-funding' }] : [];
       return state.rows.find((r) => sql.includes(r.match))?.rows ?? [];
     }),
     $executeRaw: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => {
@@ -34,7 +36,7 @@ vi.mock('@udyaibase/database', async () => ({ prisma: db, Prisma: (await import(
 
 const as = (role: string, id = 'u-writer') => mockSession.mockResolvedValue({ user: { id, role, name: 'Asha', email: 'asha@udyaibase.com' } });
 const existingArticle = (o: Record<string, unknown> = {}) =>
-  db.state.rows.unshift({ match: 'SELECT "authorId", status::text', rows: [{ authorId: 'u-writer', status: 'DRAFT', publishedAt: null, isFeatured: false, isPinned: false, isSponsored: false, ...o }] });
+  db.state.rows.unshift({ match: 'SELECT "authorId", slug, status::text', rows: [{ authorId: 'u-writer', slug: 'sarvam-raises-series-b', status: 'DRAFT', publishedAt: null, isFeatured: false, isPinned: false, isSponsored: false, ...o }] });
 const articleWrite = (): Call => db.state.executed.find((c) => /INSERT INTO "Article"|UPDATE "Article" SET\s+title/.test(c.sql))!;
 const valueAfter = (c: Call, column: string) => {
   // The value bound right after `column = ` (UPDATE) — enough to check what was written.
@@ -44,7 +46,7 @@ const valueAfter = (c: Call, column: string) => {
 };
 const save = async (payload: Record<string, unknown>, id?: string) => {
   const { saveArticleAction } = await import('@/app/(dashboard)/articles/actions');
-  return saveArticleAction({ title: 'Sarvam raises Series B', content: '<p>Body</p>', ...payload } as any, id);
+  return saveArticleAction({ title: 'Sarvam raises Series B', content: '<p>Body</p>', subtitle: 'A short summary', coverImage: 'https://media.udyaibase.com/c.png', category: 'Funding', ...payload } as any, id);
 };
 
 beforeEach(() => {
@@ -75,7 +77,7 @@ describe('article status changes', () => {
 
   it('editors publish with a publish date (kept if it already had one) and every change is audited', async () => {
     const { updateArticleStatusAction } = await import('@/app/(dashboard)/articles/actions');
-    db.state.rows.push({ match: 'SELECT title, "authorId"', rows: [{ title: 'T', authorId: 'u-writer', status: 'IN_REVIEW', scheduledAt: null }] });
+    db.state.rows.push({ match: 'SELECT title, "authorId"', rows: [{ title: 'T', authorId: 'u-writer', status: 'IN_REVIEW', scheduledAt: null, type: 'NEWS', categoryId: 'c1', coverImage: 'https://media.udyaibase.com/c.png', excerpt: 'Summary' }] });
     as('EDITOR_IN_CHIEF', 'u-editor');
     expect((await updateArticleStatusAction('a1', 'PUBLISHED')).success).toBe(true);
     expect(db.state.executed[0].sql).toContain('"publishedAt" = COALESCE("publishedAt", NOW())');
@@ -160,6 +162,69 @@ describe('saving articles', () => {
     expect(tagInsert).toBeTruthy();
     const link = db.state.executed.find((c) => c.sql.includes('INSERT INTO "ArticleTag"'))!;
     expect(link.values[1]).toEqual(['ai', 'llm', 'india']);
+  });
+
+  it('changing the link of a published article remembers the old one and clears its cached page', async () => {
+    as('EDITOR_IN_CHIEF', 'u-editor');
+    existingArticle({ status: 'PUBLISHED', publishedAt: '2026-10-01T10:00:00Z', slug: 'old-link' });
+    const res = await save({ status: 'PUBLISHED', slug: 'new-link' }, 'a1');
+    expect(res.success && res.notice).toMatch(/old link now redirects/);
+    const history = db.state.executed.find((c) => c.sql.includes('"previousSlugs" = array_append'))!;
+    expect(history.values).toEqual(['new-link', 'old-link', 'old-link', 'a1']);
+    expect(refreshPublic.mock.calls[0][1]).toEqual(expect.arrayContaining(['/news/old-link', '/stories/old-link', '/opinions/old-link']));
+  });
+
+  it('a draft that was never published leaves no redirect behind', async () => {
+    as('EDITOR_IN_CHIEF', 'u-editor');
+    existingArticle({ slug: 'old-link' });
+    expect((await save({ status: 'DRAFT', slug: 'new-link' }, 'a1')).success).toBe(true);
+    expect(db.state.executed.some((c) => c.sql.includes('array_append'))).toBe(false);
+  });
+
+  it('refuses an unknown type, a missing category and publishing an empty article', async () => {
+    as('EDITOR_IN_CHIEF', 'u-editor');
+    expect(await save({ type: 'PODCAST' })).toMatchObject({ success: false, error: expect.stringMatching(/type/) });
+    expect(await save({ category: 'Gone' })).toMatchObject({ success: false, error: expect.stringMatching(/no longer exists/) });
+    expect(await save({ status: 'PUBLISHED', content: '<p> </p>' })).toMatchObject({ success: false, error: expect.stringMatching(/Write the article/) });
+    expect(db.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('publishing from the list is held to the same checklist', async () => {
+    const { updateArticleStatusAction } = await import('@/app/(dashboard)/articles/actions');
+    db.state.rows.push({ match: 'SELECT title, "authorId"', rows: [{ title: 'T', authorId: 'u-writer', status: 'IN_REVIEW', scheduledAt: null, type: 'NEWS', categoryId: null, coverImage: null, excerpt: 'Summary' }] });
+    as('EDITOR_IN_CHIEF', 'u-editor');
+    expect(await updateArticleStatusAction('a1', 'PUBLISHED')).toMatchObject({ success: false, error: expect.stringMatching(/a category and a cover image/) });
+    expect(db.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it('will not publish without a category, a cover image and a subtitle; founder content is exempt', async () => {
+    as('EDITOR_IN_CHIEF', 'u-editor');
+    const bare = { category: '', coverImage: '', subtitle: '' };
+    expect(await save({ status: 'PUBLISHED', ...bare })).toMatchObject({ success: false, error: expect.stringMatching(/a category, a cover image and a subtitle/) });
+    expect(await save({ status: 'PUBLISHED', coverImage: '' })).toMatchObject({ success: false, error: expect.stringMatching(/add a cover image\./) });
+    expect((await save({ status: 'DRAFT', ...bare })).success).toBe(true);
+    expect((await save({ status: 'PUBLISHED', type: 'FOUNDER_STORY', ...bare })).success).toBe(true);
+  });
+
+  it('only an editor changes the canonical address', async () => {
+    as('WRITER');
+    existingArticle({ canonicalUrl: 'https://example.com/original' });
+    await save({ status: 'DRAFT', canonicalUrl: 'https://other.example/steal' }, 'a1');
+    expect(articleWrite().values).toContain('https://example.com/original');
+    expect(articleWrite().values).not.toContain('https://other.example/steal');
+
+    db.state.executed = [];
+    as('EDITOR_IN_CHIEF', 'u-editor');
+    await save({ status: 'DRAFT', canonicalUrl: 'https://other.example/moved' }, 'a1');
+    expect(articleWrite().values).toContain('https://other.example/moved');
+  });
+
+  it('a sponsored type always carries the sponsored flag', async () => {
+    as('EDITOR_IN_CHIEF', 'u-editor');
+    expect((await save({ type: 'SPONSORED', isSponsored: false })).success).toBe(true);
+    const write = articleWrite();
+    expect(write.values).toContain('SPONSORED');
+    expect(write.sql).toContain('"isSponsored"');
   });
 
   it('autosaving a draft writes no audit entry and does not refresh the website', async () => {

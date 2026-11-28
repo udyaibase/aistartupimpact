@@ -1,5 +1,7 @@
 'use client';
 
+import { useCatalog } from '@/lib/catalog/use-catalog';
+import PromoCodeBox, { type AppliedDiscount } from '@/components/billing/PromoCodeBox';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, Loader2, Sparkles } from 'lucide-react';
@@ -34,10 +36,12 @@ export default function BillingClient({ current, expiresAt, ai, aiAutoScreen, op
   /** Prefills the invoice name the first time. */
   companyName: string;
 }) {
+  useCatalog(); // the founding price rules set in the admin, not the copies in this bundle
   const router = useRouter();
   const [busy, setBusy] = useState<PlanKey | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [discount, setDiscount] = useState<AppliedDiscount | null>(null);
   const [auto, setAuto] = useState(aiAutoScreen);
   const [cycle, setCycle] = useState<BillingCycle>(current !== 'FREE' ? currentCycle : 'MONTHLY');
   const plan = plans.find((p) => p.key === current)!;
@@ -64,12 +68,12 @@ export default function BillingClient({ current, expiresAt, ai, aiAutoScreen, op
     setError('');
     setNotice('');
     try {
-      const res = await fetch('/api/employer/billing/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: key, cycle }) });
+      const res = await fetch('/api/employer/billing/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: key, cycle, ...(discount ? { code: discount.code } : {}) }) });
       const d = await res.json().catch(() => ({}));
       if (res.status === 409 && d.code === 'BILLING_REQUIRED') { setBusy(null); setGate(key); return; }
       if (!res.ok) { setError(d.error || 'Couldn’t start the payment.'); setBusy(null); return; }
       const out = await payWithRazorpay(d, '/api/employer/billing/verify');
-      if (out.ok) { setNotice('Payment received. Your plan is active.'); router.refresh(); }
+      if (out.ok) { setNotice(d.discount ? `Payment received with ${d.discount.code}. Your plan is active.` : 'Payment received. Your plan is active.'); setDiscount(null); router.refresh(); }
       else if (!out.cancelled) setError(out.error);
       setBusy(null);
     } catch {
@@ -90,6 +94,8 @@ export default function BillingClient({ current, expiresAt, ai, aiAutoScreen, op
         <h1 className="portal-title">Plans &amp; billing</h1>
         <p className="portal-subtitle">Pay monthly or yearly. Plans never renew automatically: we remind you before yours ends.</p>
       </div>
+
+      <PromoCodeBox endpoint="/api/employer/billing/redeem" onApplied={() => router.refresh()} discount={discount} onDiscount={setDiscount} />
 
       {(error || notice) && (
         <p role={error ? 'alert' : 'status'} className={`text-sm rounded-[10px] px-3 py-2 ${error ? 'bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-300' : 'bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-300'}`}>

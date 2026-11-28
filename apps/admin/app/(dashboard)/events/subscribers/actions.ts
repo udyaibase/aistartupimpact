@@ -8,7 +8,7 @@ import { eventPromotionHtml } from "@udyaibase/utils";
 import { eventUnsubscribeUrl } from "@/lib/event-unsubscribe";
 import { EVENT_CAMPAIGN_COOLDOWN_DAYS as COOLDOWN_DAYS } from "@udyaibase/utils/event-campaigns";
 import { logAuditEvent } from '@/lib/audit-log';
-import { tooMany } from '@/lib/rate-limit';
+import { tooManyShared } from '@/lib/rate-limit';
 import { sectionRoles } from '@/lib/section-access';
 
 const EVENT_ROLES = sectionRoles('/events/subscribers');
@@ -84,7 +84,7 @@ export async function sendCampaignAction(data: { subject: string; body: string }
   if (!session?.user || !EVENT_ROLES.includes(session.user.role)) return { success: false, error: "Unauthorized" };
   const client = getResend();
   if (!client) return { success: false, error: "Email not configured" };
-  const paused = tooMany(session.user.id, 'bulkEmail');
+  const paused = await tooManyShared(session.user.id, 'bulkEmail');
   if (paused) return { success: false, error: paused };
   if (!data.subject?.trim() || !data.body?.trim()) return { success: false, error: "Subject and message are required" };
 
