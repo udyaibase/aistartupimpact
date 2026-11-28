@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { SECTION_ROLES } from '@/lib/section-access';
 
@@ -8,11 +8,12 @@ const DASH = join(ROOT, 'app/(dashboard)');
 const src = (p: string) => readFileSync(join(ROOT, p), 'utf8');
 const DEFAULT_ROLES = ['SUPER_ADMIN', 'EDITOR_IN_CHIEF', 'SENIOR_WRITER'];
 
+// The directory listing carries each entry's type, so nothing is checked first and opened later (no stat-then-read race).
 function serverActionFiles(dir: string, out: string[] = []): string[] {
-  for (const name of readdirSync(dir)) {
-    const p = join(dir, name);
-    if (statSync(p).isDirectory()) serverActionFiles(p, out);
-    else if (/\.tsx?$/.test(name) && /^\s*['"]use server['"]/.test(readFileSync(p, 'utf8'))) out.push(p);
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, entry.name);
+    if (entry.isDirectory()) serverActionFiles(p, out);
+    else if (entry.isFile() && /\.tsx?$/.test(entry.name) && /^\s*['"]use server['"]/.test(readFileSync(p, 'utf8'))) out.push(p);
   }
   return out;
 }
